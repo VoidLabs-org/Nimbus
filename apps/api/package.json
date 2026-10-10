@@ -1,0 +1,9 @@
+{
+  "name": "api",
+  "private": true,
+  "scripts": {
+    "dev": "node run-gradle.mjs bootRun",
+    "build": "node run-gradle.mjs bootJar",
+    "test": "node run-gradle.mjs test"
+  }
+}

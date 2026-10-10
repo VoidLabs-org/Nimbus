@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: nimbus-postgres
+    environment:
+      POSTGRES_DB: nimbus
+      POSTGRES_USER: nimbus
+      POSTGRES_PASSWORD: nimbus
+    ports:
+      # 5433 on the host, so it doesn't clash with a locally installed Postgres on 5432
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nimbus -d nimbus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

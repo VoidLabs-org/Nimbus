@@ -24,9 +24,16 @@ export default function LoginPage() {
 
   const form = useForm<LoginInput>({
     initialValues: { email: "", password: "" },
+    // Same limits as the server, so oversized input is caught before submitting.
     validate: {
-      email: (value) => (value.trim() ? null : "Enter your email"),
-      password: (value) => (value ? null : "Enter your password"),
+      email: (value) => {
+        if (!value.trim()) return "Enter your email";
+        return value.trim().length > 254 ? "Email must be at most 254 characters" : null;
+      },
+      password: (value) => {
+        if (!value) return "Enter your password";
+        return value.length > 128 ? "Passwords are at most 128 characters" : null;
+      },
     },
   });
 
@@ -40,6 +47,10 @@ export default function LoginPage() {
         setFormError("Invalid email or password.");
       } else if (error instanceof ApiError && error.status === 429) {
         setFormError(tooManyAttemptsMessage(error.retryAfterSeconds));
+      } else if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {
+        form.setErrors(error.fieldErrors);
+      } else if (error instanceof ApiError && error.status === 400) {
+        setFormError(error.message);
       } else {
         setFormError("Something went wrong. Please try again.");
       }

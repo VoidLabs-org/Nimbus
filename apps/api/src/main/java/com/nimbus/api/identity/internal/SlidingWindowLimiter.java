@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Counts attempts per key (an email, an IP address) over a sliding window. Kept in memory, which is enough while
@@ -24,7 +25,7 @@ class SlidingWindowLimiter {
 
 	private final ConcurrentHashMap<String, Deque<Instant>> attempts = new ConcurrentHashMap<>();
 
-	private volatile Instant nextSweep;
+	private final AtomicReference<Instant> nextSweep;
 
 	SlidingWindowLimiter(int limit, Duration window, Clock clock) {
 		if (limit < 1) {
@@ -33,16 +34,17 @@ class SlidingWindowLimiter {
 		this.limit = limit;
 		this.window = window;
 		this.clock = clock;
-		this.nextSweep = clock.instant().plus(SWEEP_INTERVAL);
+		this.nextSweep = new AtomicReference<>(clock.instant().plus(SWEEP_INTERVAL));
 	}
 
 	/**
 	 * Counts one attempt for {@code key}, in a single atomic step, so parallel requests can't all slip past the
 	 * limit.
 	 *
+	 * @return the attempt that was counted, which {@link #release} can take back
 	 * @throws LimitExceededException when {@code key} already used up its attempts; nothing is counted then
 	 */
-	void acquire(String key, String message) {
+	Instant acquire(String key, String message) {
 		var now = clock.instant();
 		var wait = new Duration[1];
 		attempts.compute(key, (k, times) -> {
@@ -60,18 +62,26 @@ class SlidingWindowLimiter {
 		if (wait[0] != null) {
 			throw new LimitExceededException(message, wait[0]);
 		}
+		return now;
 	}
 
-	/** Forgets every attempt counted for {@code key}. */
-	void reset(String key) {
-		attempts.remove(key);
+	/**
+	 * Takes back one attempt returned by {@link #acquire}, e.g. when it turned out to be a success. Other attempts
+	 * for the key, including other requests' failures, stay counted.
+	 */
+	void release(String key, Instant attempt) {
+		attempts.computeIfPresent(key, (k, times) -> {
+			times.removeLastOccurrence(attempt);
+			return times.isEmpty() ? null : times;
+		});
 	}
 
 	private void sweepIfDue(Instant now) {
-		if (now.isBefore(nextSweep)) {
+		var due = nextSweep.get();
+		// Only the thread that wins the compare-and-set sweeps; the others carry on.
+		if (now.isBefore(due) || !nextSweep.compareAndSet(due, now.plus(SWEEP_INTERVAL))) {
 			return;
 		}
-		nextSweep = now.plus(SWEEP_INTERVAL);
 		attempts.keySet().forEach(key -> attempts.computeIfPresent(key, (k, times) -> {
 			dropExpired(times, now);
 			return times.isEmpty() ? null : times;

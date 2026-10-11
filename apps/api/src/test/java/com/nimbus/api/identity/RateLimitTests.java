@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 
 @Import({ TestcontainersConfiguration.class, RateLimitTests.MovableClockConfiguration.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-		properties = "nimbus.auth.registrations-per-address=3")
+		properties = { "nimbus.auth.registrations-per-address=3", "nimbus.auth.sign-ins-per-address=15" })
 @AutoConfigureRestTestClient
 class RateLimitTests {
 
@@ -79,6 +79,46 @@ class RateLimitTests {
 	}
 
 	@Test
+	void signingInDoesNotEraseEarlierFailures() {
+		clock.advance(Duration.ofHours(4));
+		register("Pia", "pia@example.com");
+
+		for (var attempt = 1; attempt <= 4; attempt++) {
+			signIn("pia@example.com", "wrong horse").expectStatus().isUnauthorized();
+		}
+		signIn("pia@example.com", "correct horse").expectStatus().isOk();
+		signIn("pia@example.com", "wrong horse").expectStatus().isUnauthorized();
+
+		// Five failures in the window now, so the email is blocked even though a sign-in succeeded in between.
+		signIn("pia@example.com", "correct horse").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+	}
+
+	// Password spraying: a few guesses for each of many emails never trips the per-email limit.
+	@Test
+	void oneAddressCannotSprayGuessesAcrossManyEmails() {
+		clock.advance(Duration.ofHours(5));
+
+		for (var i = 1; i <= 15; i++) {
+			signIn("sprayed" + i + "@example.com", "guess").expectStatus().isUnauthorized();
+		}
+
+		signIn("sprayed16@example.com", "guess").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS)
+			.expectHeader().exists("Retry-After");
+	}
+
+	// Behind a trusted proxy (here: loopback), each client is counted by its forwarded address, not the proxy's.
+	@Test
+	void clientsBehindATrustedProxyAreCountedSeparately() {
+		clock.advance(Duration.ofHours(6));
+		for (var i = 1; i <= 3; i++) {
+			registerVia("10.0.0.1", "Quinn" + i, "quinn" + i + "@example.com").expectStatus().isCreated();
+		}
+		registerVia("10.0.0.1", "Quinn4", "quinn4@example.com").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+
+		registerVia("10.0.0.2", "Rosa", "rosa@example.com").expectStatus().isCreated();
+	}
+
+	@Test
 	void registrationsFromOneAddressAreLimited() {
 		clock.advance(Duration.ofHours(2)); // a fresh window, whatever other tests registered
 		register("Kim", "kim@example.com");
@@ -98,6 +138,13 @@ class RateLimitTests {
 
 	private RestTestClient.ResponseSpec registerRequest(String displayName, String email) {
 		return client.post().uri("/api/auth/register")
+			.body(Map.of("displayName", displayName, "email", email, "password", "correct horse"))
+			.exchange();
+	}
+
+	private RestTestClient.ResponseSpec registerVia(String clientAddress, String displayName, String email) {
+		return client.post().uri("/api/auth/register")
+			.header("X-Forwarded-For", clientAddress)
 			.body(Map.of("displayName", displayName, "email", email, "password", "correct horse"))
 			.exchange();
 	}

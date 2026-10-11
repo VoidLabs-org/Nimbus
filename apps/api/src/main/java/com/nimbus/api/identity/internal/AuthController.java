@@ -39,8 +39,8 @@ class AuthController {
 	}
 
 	@PostMapping("/login")
-	AuthResponse login(@Valid @RequestBody LoginRequest request) {
-		var user = signIn.signIn(request.email(), request.password());
+	AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+		var user = signIn.signIn(request.email(), request.password(), http.getRemoteAddr());
 		return new AuthResponse(accessTokens.issueFor(user), UserResponse.from(user));
 	}
 

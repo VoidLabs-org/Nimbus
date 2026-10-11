@@ -43,12 +43,15 @@ Contract: [openapi.yaml](openapi.yaml).
 
 Counted in memory over a sliding 15-minute window (`nimbus.auth.limit-window`), which is enough while the API runs as one instance. Over a limit, the endpoint answers `429` with `Retry-After` in seconds.
 
-| Limit                                                                                                                                                                   | Default | Setting                                 |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------- |
-| Failed sign-ins per email. Further attempts, even with the right password, get `429` until the oldest failure leaves the window. A successful sign-in clears the count. | 5       | `nimbus.auth.failed-sign-ins-per-email` |
-| Registration attempts per IP address                                                                                                                                    | 10      | `nimbus.auth.registrations-per-address` |
+| Limit                                                                                                                                                                                                                                                                                             | Default | Setting                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------- |
+| Failed sign-ins per email. Further attempts, even with the right password, get `429` until the oldest failure leaves the window. A successful sign-in doesn't count, but doesn't erase earlier failures either. Known trade-off: anyone who knows an email can keep it locked out (spec #1, Q19). | 5       | `nimbus.auth.failed-sign-ins-per-email` |
+| Failed sign-ins per IP address, across all emails (stops one client spraying guesses over many emails)                                                                                                                                                                                            | 20      | `nimbus.auth.sign-ins-per-address`      |
+| Registration attempts per IP address                                                                                                                                                                                                                                                              | 10      | `nimbus.auth.registrations-per-address` |
 
-The IP address is the connection's remote address. Behind a reverse proxy every request would share the proxy's address, so a deployment behind one must enable forwarded headers (`server.forward-headers-strategy`).
+Attempts are counted before the password check, so parallel requests can't race past a limit.
+
+The IP address comes from `X-Forwarded-For` only when the request arrives from a trusted proxy (`server.forward-headers-strategy=native`; Tomcat trusts private and loopback addresses by default). Otherwise it is the connection's address, so internet clients can't fake it. A proxy with a public address must be added to `server.tomcat.remoteip.internal-proxies`, or every client would share its limit.
 
 ## Tables
 

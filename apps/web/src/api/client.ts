@@ -7,21 +7,27 @@ export type User = {
 
 export type RegisterInput = { displayName: string; email: string; password: string };
 
+export type LoginInput = { email: string; password: string };
+
 type AuthResponse = { accessToken: string; user: User };
 
 /** A failed API call, carrying the server's problem details (RFC 9457). */
 export class ApiError extends Error {
   readonly status: number;
   readonly fieldErrors: Record<string, string>;
+  /** From Retry-After on a 429: how long until another attempt may succeed. */
+  readonly retryAfterSeconds: number | null;
 
   constructor(
     status: number,
     detail: string | undefined,
     fieldErrors: Record<string, string> = {},
+    retryAfterSeconds: number | null = null,
   ) {
     super(detail ?? `Request failed with status ${status}`);
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -45,7 +51,13 @@ export function createApiClient(fetchFn: typeof fetch = fetch) {
     const response = await fetchFn(path, { ...init, headers });
     const body = await response.json().catch(() => undefined);
     if (!response.ok) {
-      throw new ApiError(response.status, body?.detail, body?.errors);
+      const retryAfter = Number(response.headers.get("Retry-After"));
+      throw new ApiError(
+        response.status,
+        body?.detail,
+        body?.errors,
+        retryAfter > 0 ? retryAfter : null,
+      );
     }
     return body as T;
   }
@@ -55,6 +67,17 @@ export function createApiClient(fetchFn: typeof fetch = fetch) {
     async register(input: RegisterInput): Promise<User> {
       const { accessToken: token, user } = await request<AuthResponse>(
         "/api/auth/register",
+        { method: "POST", body: JSON.stringify(input) },
+        { authenticated: false },
+      );
+      accessToken = token;
+      return user;
+    },
+
+    /** Signs in with email and password. Whoever was signed in stays so if it fails. */
+    async login(input: LoginInput): Promise<User> {
+      const { accessToken: token, user } = await request<AuthResponse>(
+        "/api/auth/login",
         { method: "POST", body: JSON.stringify(input) },
         { authenticated: false },
       );

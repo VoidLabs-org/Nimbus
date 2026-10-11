@@ -43,6 +43,37 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Sign in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          description: Invalid email or password (the same for an unknown email, a wrong password and a User without a password)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
 
   /api/users/me:
     get:
@@ -83,6 +114,16 @@ components:
           type: string
           minLength: 8
           maxLength: 128
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          description: Case-insensitive
+        password:
+          type: string
 
     AuthResponse:
       type: object
@@ -140,5 +181,16 @@ components:
                     description: Message per invalid field
                     additionalProperties:
                       type: string
+    TooManyAttempts:
+      description: Rate limited (failed sign-ins per email, or registrations per IP address)
+      headers:
+        Retry-After:
+          description: Seconds until another attempt may succeed
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     Unauthorized:
       description: Missing, expired or invalid access token

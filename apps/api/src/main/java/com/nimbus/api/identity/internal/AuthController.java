@@ -1,5 +1,6 @@
 package com.nimbus.api.identity.internal;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -19,18 +20,39 @@ class AuthController {
 
 	private final Registration registration;
 
+	private final SignIn signIn;
+
 	private final AccessTokens accessTokens;
 
-	AuthController(Registration registration, AccessTokens accessTokens) {
+	AuthController(Registration registration, SignIn signIn, AccessTokens accessTokens) {
 		this.registration = registration;
+		this.signIn = signIn;
 		this.accessTokens = accessTokens;
 	}
 
 	@PostMapping("/register")
 	@ResponseStatus(HttpStatus.CREATED)
-	AuthResponse register(@Valid @RequestBody RegisterRequest request) {
-		var user = registration.register(request.displayName(), request.email(), request.password());
+	AuthResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+		var user = registration.register(request.displayName(), request.email(), request.password(),
+				http.getRemoteAddr());
 		return new AuthResponse(accessTokens.issueFor(user), UserResponse.from(user));
+	}
+
+	@PostMapping("/login")
+	AuthResponse login(@Valid @RequestBody LoginRequest request) {
+		var user = signIn.signIn(request.email(), request.password());
+		return new AuthResponse(accessTokens.issueFor(user), UserResponse.from(user));
+	}
+
+	/** Capped like registration, so oversized input never reaches the limiter or the password hash. */
+	record LoginRequest(
+			@NotBlank @Size(max = 254) String email,
+			@NotNull @Size(max = 128) String password) {
+
+		LoginRequest {
+			email = email == null ? null : email.strip();
+		}
+
 	}
 
 	/** Surrounding whitespace is dropped before validation; passwords are kept exactly as typed. */

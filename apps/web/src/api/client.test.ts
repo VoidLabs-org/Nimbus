@@ -80,6 +80,54 @@ describe("api client", () => {
     expect(authorization(server.calls[2])).toBe("Bearer token-1");
   });
 
+  it("signs the User in with email and password and sends their access token afterwards", async () => {
+    const server = fakeServer(
+      json(201, { accessToken: "token-1", user: alice }),
+      json(200, { accessToken: "token-2", user: alice }),
+      json(200, alice),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.register({
+      displayName: "Alice",
+      email: "alice@example.com",
+      password: "correct horse",
+    });
+
+    const user = await api.login({ email: "alice@example.com", password: "correct horse" });
+    await api.me();
+
+    expect(user).toEqual(alice);
+    expect(server.calls[1].url).toBe("/api/auth/login");
+    expect(server.calls[1].init.method).toBe("POST");
+    expect(JSON.parse(String(server.calls[1].init.body))).toEqual({
+      email: "alice@example.com",
+      password: "correct horse",
+    });
+    expect(authorization(server.calls[1])).toBeNull();
+    expect(authorization(server.calls[2])).toBe("Bearer token-2");
+  });
+
+  it("tells how long to wait when the server is limiting attempts", async () => {
+    const server = fakeServer(
+      new Response(
+        JSON.stringify({ status: 429, detail: "Too many failed sign-ins. Try again later." }),
+        {
+          status: 429,
+          headers: { "Content-Type": "application/problem+json", "Retry-After": "120" },
+        },
+      ),
+    );
+    const api = createApiClient(server.fetchFn);
+
+    const error = await api
+      .login({ email: "alice@example.com", password: "wrong horse" })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(429);
+    expect((error as ApiError).retryAfterSeconds).toBe(120);
+  });
+
   it("reports field errors from the server", async () => {
     const server = fakeServer(
       json(400, {

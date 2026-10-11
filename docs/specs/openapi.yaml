@@ -102,8 +102,8 @@ paths:
         Signs the User in or creates them, linking the Google login (see the identity module spec for the rules).
         On success it sets the refresh cookie and redirects to `/auth/callback` on the public URL (`PUBLIC_URL`), where the web app calls
         `POST /api/auth/refresh` for an access token; no token is ever in a URL. On failure it redirects to
-        `/login?error=<code>` on the public URL with `email_unverified` (Google did not verify the email), `cancelled` (the person
-        declined at Google) or `failed` (anything else).
+        `/login?error=<code>&provider=google` on the public URL with `email_unverified` (Google did not verify the email),
+        `cancelled` (the person declined at Google) or `failed` (anything else).
       security: []
       parameters:
         - name: code
@@ -118,6 +118,52 @@ paths:
         - name: error
           in: query
           description: Set by Google instead of `code`, e.g. `access_denied`
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to `/auth/callback` (with the refresh cookie set) or to `/login?error=<code>`
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+
+  /api/auth/oauth2/github:
+    get:
+      tags: [auth]
+      summary: Start "Continue with GitHub"
+      description: >-
+        Open it with a full page load (a link, not `fetch`): the browser is redirected to GitHub and back. The
+        handshake keeps a short-lived HTTP session; nothing else in the API does. Only available when
+        `GITHUB_CLIENT_ID` is set.
+      security: []
+      responses:
+        "302":
+          description: Redirect to GitHub's sign-in page
+
+  /api/auth/oauth2/callback/github:
+    get:
+      tags: [auth]
+      summary: Where GitHub sends the browser back to (not called by the web app)
+      description: >-
+        Signs the User in or creates them, linking the GitHub login (see the identity module spec for the rules).
+        On success it sets the refresh cookie and redirects to `/auth/callback` on the public URL (`PUBLIC_URL`), where the web app calls
+        `POST /api/auth/refresh` for an access token; no token is ever in a URL. On failure it redirects to
+        `/login?error=<code>&provider=github` on the public URL with `email_unverified` (the GitHub account has no verified primary email),
+        `cancelled` (the person declined at GitHub) or `failed` (anything else).
+      security: []
+      parameters:
+        - name: code
+          in: query
+          description: Authorization code from GitHub
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: error
+          in: query
+          description: Set by GitHub instead of `code`, e.g. `access_denied`
           schema:
             type: string
       responses:

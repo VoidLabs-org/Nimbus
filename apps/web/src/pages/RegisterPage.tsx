@@ -15,7 +15,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type RegisterInput } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
-import { GoogleButton } from "../auth/GoogleButton";
+import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
 
@@ -88,7 +88,7 @@ export default function RegisterPage() {
             </Button>
           </Stack>
         </form>
-        <GoogleButton />
+        <ProviderButtons />
       </Paper>
       <Text ta="center" mt="md" size="sm">
         Already have an account?{" "}

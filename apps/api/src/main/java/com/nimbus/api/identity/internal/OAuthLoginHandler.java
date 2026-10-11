@@ -44,8 +44,10 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
 			Authentication authentication) throws IOException {
 		endHandshake(request);
+		var provider = "";
 		try {
 			var login = (OAuth2AuthenticationToken) authentication;
+			provider = login.getAuthorizedClientRegistrationId();
 			var user = externalSignIn.signIn(profileOf(login));
 			var refreshToken = sessions.start(user);
 			response.addHeader(HttpHeaders.SET_COOKIE,
@@ -53,11 +55,11 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			redirect(response, "/auth/callback");
 		}
 		catch (ExternalSignIn.EmailUnverifiedException e) {
-			redirect(response, "/login?error=email_unverified");
+			redirect(response, loginError("email_unverified", provider));
 		}
 		catch (RuntimeException e) {
 			log.warn("Sign-in with a provider failed", e);
-			redirect(response, "/login?error=failed");
+			redirect(response, loginError("failed", provider));
 		}
 	}
 
@@ -65,13 +67,26 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
 			AuthenticationException exception) throws IOException {
 		endHandshake(request);
-		// Google reports "access_denied" when the person declines on its consent screen.
+		// The provider reports "access_denied" when the person declines on its consent screen.
 		var declined = exception instanceof OAuth2AuthenticationException oauth
 				&& "access_denied".equals(oauth.getError().getErrorCode());
 		if (!declined) {
 			log.warn("Sign-in with a provider failed", exception);
 		}
-		redirect(response, declined ? "/login?error=cancelled" : "/login?error=failed");
+		var provider = providerOf(request);
+		redirect(response, loginError(declined ? "cancelled" : "failed", provider));
+	}
+
+	// Tells the login page which provider the error is about, so it can say "Google" or "GitHub". The failure
+	// handler only has the callback URL (/api/auth/oauth2/callback/<provider>) to tell; anything unknown is left out.
+	private static String loginError(String code, String provider) {
+		var known = GoogleProfiles.PROVIDER.equals(provider) || GithubProfiles.PROVIDER.equals(provider);
+		return "/login?error=" + code + (known ? "&provider=" + provider : "");
+	}
+
+	private static String providerOf(HttpServletRequest request) {
+		var path = request.getRequestURI();
+		return path == null ? "" : path.substring(path.lastIndexOf('/') + 1);
 	}
 
 	// Always to the public URL: behind the dev proxy or a load balancer the request's own host is the API's,
@@ -84,6 +99,9 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		var provider = login.getAuthorizedClientRegistrationId();
 		if (GoogleProfiles.PROVIDER.equals(provider)) {
 			return GoogleProfiles.from(login.getPrincipal().getAttributes());
+		}
+		if (GithubProfiles.PROVIDER.equals(provider)) {
+			return GithubProfiles.from(login.getPrincipal().getAttributes());
 		}
 		throw new IllegalStateException("No profile mapping for provider " + provider);
 	}

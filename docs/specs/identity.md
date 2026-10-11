@@ -1,6 +1,6 @@
 # identity
 
-Owns **Users** and sign-in: registration, passwords, access tokens, refresh-token sessions and Linked identities (Google). Terms are defined in [GLOSSARY.md](../../GLOSSARY.md). Users are global, not owned by a workspace ([ADR 0001](../adr/0001-global-users-tenancy-deferred.md)).
+Owns **Users** and sign-in: registration, passwords, access tokens, refresh-token sessions and Linked identities (Google, GitHub). Terms are defined in [GLOSSARY.md](../../GLOSSARY.md). Users are global, not owned by a workspace ([ADR 0001](../adr/0001-global-users-tenancy-deferred.md)).
 
 ## Public interface
 
@@ -24,7 +24,7 @@ At startup, when `NIMBUS_ADMIN_EMAIL` and `NIMBUS_ADMIN_PASSWORD` (in `apps/api/
 
 ## Authentication
 
-- Every request needs a valid access token in `Authorization: Bearer <token>`, except the public endpoints below. Requests without one get `401`, except a browser page load (`Accept: text/html`) of an API URL while Google sign-in is enabled, which is redirected to start it.
+- Every request needs a valid access token in `Authorization: Bearer <token>`, except the public endpoints below. Requests without one get `401`, except a browser page load (`Accept: text/html`) of an API URL while a provider sign-in is enabled, which is redirected to start it.
 - Access token: HS256 JWT, valid 15 minutes, `sub` = User id. Signed with `JWT_SECRET` from `apps/api/.env` (base64, at least 32 bytes). The app refuses to start without it.
 - Public endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, and the two OAuth endpoints under `/api/auth/oauth2/` below.
 - The API is stateless: no HTTP session, no CSRF tokens (Bearer tokens can't be forged cross-site). The one exception is the OAuth handshake below, which uses a short-lived HTTP session that is dropped when the handshake ends.
@@ -54,15 +54,17 @@ Contract: [openapi.yaml](openapi.yaml).
 | `POST /api/auth/refresh`               | Needs the refresh cookie and `X-Requested-With: nimbus`. Rotates the cookie: `200 {accessToken, user}`. `401` when the cookie is missing, unknown, expired, revoked or already used (the last also revokes its session). `403` without the header. `429` over the per-IP limit.                        |
 | `POST /api/auth/logout`                | Needs `X-Requested-With: nimbus` (`403` without it). Ends the session of the refresh cookie's token, even a rotated one, and clears the cookie: `204` with `Cache-Control: no-store`. Other sessions of the User keep working. Also `204` with no cookie, an unknown cookie or a session already over. |
 | `GET /api/auth/oauth2/google`          | Starts "Continue with Google" (redirect to Google). A full page load, not a `fetch`. Only exists when `GOOGLE_CLIENT_ID` is set.                                                                                                                                                                       |
-| `GET /api/auth/oauth2/callback/google` | Google's redirect back. Success: sets the refresh cookie and redirects to `/auth/callback`. Failure: redirects to `/login?error=<code>` (`email_unverified`, `cancelled` or `failed`).                                                                                                                 |
+| `GET /api/auth/oauth2/callback/google` | Google's redirect back. Success: sets the refresh cookie and redirects to `/auth/callback`. Failure: redirects to `/login?error=<code>&provider=<google or github>` (`email_unverified`, `cancelled` or `failed`).                                                                                     |
+| `GET /api/auth/oauth2/github`          | Starts "Continue with GitHub" (redirect to GitHub). A full page load, not a `fetch`. Only exists when `GITHUB_CLIENT_ID` is set.                                                                                                                                                                       |
+| `GET /api/auth/oauth2/callback/github` | GitHub's redirect back. Same outcomes as the Google callback.                                                                                                                                                                                                                                          |
 | `GET /api/users/me`                    | The signed-in User. `401` (`invalid_token`) if the token's User no longer exists.                                                                                                                                                                                                                      |
 | `PATCH /api/users/me`                  | Body `{displayName}`: changes the display name and returns the User (`200`). `400` with `errors` per field if it is blank, too long or has control characters. Email, password and avatar cannot be changed here; other properties in the body are ignored. `401` without a valid access token.        |
 
-## Linked identities (Google)
+## Linked identities (Google, GitHub)
 
-"Continue with Google" is a backend-driven authorization-code flow (Spring Security `oauth2Login`) with scopes `openid profile email`. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` come from `apps/api/.env` (see `.env.example`); without the id the feature is off. The redirect URI to register at Google is `<PUBLIC_URL>/api/auth/oauth2/callback/google`. `PUBLIC_URL` (setting `nimbus.auth.public-url`, default `http://localhost:3000`, the Vite server) is the address people open Nimbus at. It is configured rather than read from the request, because behind the dev proxy or a load balancer the request's host is not the browser's. The redirects after the handshake (`/auth/callback`, `/login?error=...`) go to it as well. Provider tokens are never stored. The handshake's HTTP session (`server.servlet.session.timeout`, 5 minutes, `SameSite=Lax`) is invalidated as soon as the handshake ends.
+"Continue with Google" and "Continue with GitHub" are backend-driven authorization-code flows (Spring Security `oauth2Login`). Google uses scopes `openid profile email`; GitHub uses `read:user user:email`. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` come from `apps/api/.env` (see `.env.example`); without a provider's id that provider is off, and with neither there is no OAuth wiring at all. The redirect URI to register at each provider is `<PUBLIC_URL>/api/auth/oauth2/callback/<google or github>`. `PUBLIC_URL` (setting `nimbus.auth.public-url`, default `http://localhost:3000`, the Vite server) is the address people open Nimbus at. It is configured rather than read from the request, because behind the dev proxy or a load balancer the request's host is not the browser's. The redirects after the handshake (`/auth/callback`, `/login?error=...`) go to it as well. Provider tokens are never stored. The handshake's HTTP session (`server.servlet.session.timeout`, 5 minutes, `SameSite=Lax`) is invalidated as soon as the handshake ends.
 
-Google's ID-token claims become an **external profile**: provider, provider user id (`sub`), email (lower-cased), email verified (`email_verified`), name, avatar URL. A provider maps only to this shape; the rules below don't know about Google, so GitHub only needs its own mapping.
+Google's ID-token claims become an **external profile**: provider, provider user id (`sub`), email (lower-cased), email verified (`email_verified`), name, avatar URL. GitHub is plain OAuth 2 without an ID token, so its profile is read from two API calls made with the provider token (which is then dropped): `GET /user` gives the id (provider user id), `login` and `avatar_url`, and the name, which falls back to the username (`login`) when empty; `GET /user/emails` gives the email, which is the **primary** address, verified only if GitHub marks that address verified (a verified non-primary address doesn't count). A GitHub account with no verified primary email is refused with `email_unverified`. If the emails call fails the login fails (`failed`). A provider maps only to this shape; the rules below don't know about Google or GitHub.
 
 Resolution, in this order:
 
@@ -71,11 +73,11 @@ Resolution, in this order:
 3. A User with that email exists: the login is linked to them and their email is marked verified. If their email was **never verified** (they registered with a password), their password is removed and **all their sessions are revoked**, so whoever registered the email first loses access. A User whose email was already verified keeps their password and sessions.
 4. Otherwise a verified User with no password is created, the login is linked, and `UserRegistered` is published (only here; linking an existing User does not publish it).
 
-Every sign-in with a provider updates the avatar URL (when the provider sends one); the display name is never overwritten. A new User's display name is the provider's name (control characters removed, at most 100 characters), or the part of the email before `@` when there is none. A race that would create the same User or link twice ends in a unique-constraint violation and shows as `failed`.
+Every sign-in with a provider updates the avatar URL (when the provider sends one), so the avatar follows the provider last used; the display name is never overwritten. A new User's display name is the provider's name (control characters removed, at most 100 characters), or the part of the email before `@` when there is none. A race that would create the same User or link twice ends in a unique-constraint violation and shows as `failed`.
 
 On success the User gets a session and the refresh cookie like any other sign-in; no token is in a URL.
 
-In the web app, **Continue with Google** is a plain link on `/login` and `/register` (a full page load to `GET /api/auth/oauth2/google`). On success the browser lands on `/auth/callback`, which waits for the app's load-time refresh to turn the cookie into an access token and then goes to `/`. On failure `/login` shows a message for the `error` code.
+In the web app, **Continue with Google** and **Continue with GitHub** are plain links on `/login` and `/register` (full page loads to `GET /api/auth/oauth2/<provider>`). On success the browser lands on `/auth/callback`, which waits for the app's load-time refresh to turn the cookie into an access token and then goes to `/`. On failure `/login` shows a message for the `error` code, naming the `provider` (an unknown provider is not echoed).
 
 ## Rules
 

@@ -54,6 +54,7 @@ class SecurityConfig {
 				.authorizationEndpoint(endpoint -> endpoint.baseUri("/api/auth/oauth2"))
 				.redirectionEndpoint(endpoint -> endpoint.baseUri("/api/auth/oauth2/callback/*"))
 				.authorizedClientRepository(authorizedClients.getObject())
+				.userInfoEndpoint(endpoint -> endpoint.userService(new GithubUserService()))
 				.successHandler(oauthLogin)
 				.failureHandler(oauthLogin));
 		}

@@ -1,0 +1,14 @@
+[
+  {
+    "email": "pending@example.com",
+    "primary": true,
+    "verified": false,
+    "visibility": null
+  },
+  {
+    "email": "other@example.com",
+    "primary": false,
+    "verified": true,
+    "visibility": null
+  }
+]

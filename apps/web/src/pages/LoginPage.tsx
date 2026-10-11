@@ -15,7 +15,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
 import { providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
-import { GoogleButton } from "../auth/GoogleButton";
+import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
 
@@ -24,11 +24,11 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
-  // Set by the server when "Continue with Google" ended back here with a reason. It describes the last Google
+  // Set by the server when a provider sign-in ended back here with a reason. It describes the last provider
   // attempt only, so it goes away once the User tries the form instead.
   const [providerErrorShown, setProviderErrorShown] = useState(true);
   const providerError = providerErrorShown
-    ? providerSignInErrorMessage(searchParams.get("error"))
+    ? providerSignInErrorMessage(searchParams.get("error"), searchParams.get("provider"))
     : null;
 
   const form = useForm<LoginInput>({
@@ -93,7 +93,7 @@ export default function LoginPage() {
             </Button>
           </Stack>
         </form>
-        <GoogleButton />
+        <ProviderButtons />
       </Paper>
       <Text ta="center" mt="md" size="sm">
         New to Nimbus?{" "}

@@ -12,7 +12,7 @@ security:
 
 tags:
   - name: auth
-    description: Registration and sign-in (identity module)
+    description: Registration, sign-in and sessions (identity module)
   - name: users
     description: User profiles (identity module)
 
@@ -31,6 +31,9 @@ paths:
       responses:
         "201":
           description: User created and signed in
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
           content:
             application/json:
               schema:
@@ -60,6 +63,9 @@ paths:
       responses:
         "200":
           description: Signed in
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
           content:
             application/json:
               schema:
@@ -68,6 +74,48 @@ paths:
           $ref: "#/components/responses/InvalidFields"
         "401":
           description: Invalid email or password (the same for an unknown email, a wrong password and a User without a password)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
+
+  /api/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Renew the session from the refresh cookie and get a new access token
+      description: >-
+        Exchanges the refresh cookie for a new one (rotation). A refresh token works once: presenting a used one
+        revokes its whole session.
+      security:
+        - refreshCookie: []
+      parameters:
+        - name: X-Requested-With
+          in: header
+          required: true
+          description: Must be `nimbus`. Cross-site forms can't set it, so other sites can't use the cookie.
+          schema:
+            type: string
+            const: nimbus
+      responses:
+        "200":
+          description: Session renewed
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: The cookie is missing, unknown, expired, revoked or already used
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The X-Requested-With header is missing or not `nimbus`
           content:
             application/problem+json:
               schema:
@@ -95,6 +143,18 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+
+  headers:
+    RefreshCookie:
+      description: >-
+        Starts or rotates the session: `refresh_token=<opaque>; HttpOnly; Secure; SameSite=Strict; Path=/api/auth;
+        Max-Age=<seconds until it expires>`. Expires 30 days after issue, and never later than 90 days after sign-in.
+      schema:
+        type: string
 
   schemas:
     RegisterRequest:
@@ -182,7 +242,7 @@ components:
                     additionalProperties:
                       type: string
     TooManyAttempts:
-      description: Rate limited (failed sign-ins per email, or registrations per IP address)
+      description: Rate limited (failed sign-ins per email or IP address, or registrations or refreshes per IP address)
       headers:
         Retry-After:
           description: Seconds until another attempt may succeed

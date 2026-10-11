@@ -12,14 +12,16 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type RegisterInput } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
+import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
 
 export default function RegisterPage() {
   const { register } = useSession();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
 
   // Mirrors the server's rules so most mistakes show before submitting; the server stays the authority.
@@ -42,7 +44,7 @@ export default function RegisterPage() {
         displayName: values.displayName.trim(),
         email: values.email.trim(),
       });
-      navigate("/", { replace: true });
+      navigate(safeReturnPath(searchParams.get("returnTo")), { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         form.setFieldError("email", error.message);
@@ -88,7 +90,7 @@ export default function RegisterPage() {
       </Paper>
       <Text ta="center" mt="md" size="sm">
         Already have an account?{" "}
-        <Anchor component={Link} to="/login">
+        <Anchor component={Link} to={{ pathname: "/login", search: searchParams.toString() }}>
           Sign in
         </Anchor>
       </Text>

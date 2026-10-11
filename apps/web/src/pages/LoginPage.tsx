@@ -12,14 +12,16 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
+import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
 
 export default function LoginPage() {
   const { login } = useSession();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm<LoginInput>({
@@ -41,7 +43,7 @@ export default function LoginPage() {
     setFormError(null);
     try {
       await login({ ...values, email: values.email.trim() });
-      navigate("/", { replace: true });
+      navigate(safeReturnPath(searchParams.get("returnTo")), { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setFormError("Invalid email or password.");
@@ -85,7 +87,7 @@ export default function LoginPage() {
       </Paper>
       <Text ta="center" mt="md" size="sm">
         New to Nimbus?{" "}
-        <Anchor component={Link} to="/register">
+        <Anchor component={Link} to={{ pathname: "/register", search: searchParams.toString() }}>
           Create an account
         </Anchor>
       </Text>

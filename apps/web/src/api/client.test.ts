@@ -17,6 +17,18 @@ function fakeServer(...responses: Response[]) {
   return { fetchFn, calls };
 }
 
+// Stands in for the network: answers each request by what it asks for, whatever the order.
+function routedServer(answer: (call: Call) => Response | Promise<Response>) {
+  const calls: Call[] = [];
+  const fetchFn = async (url: string | URL | Request, init: RequestInit = {}) => {
+    const call = { url: String(url), init };
+    calls.push(call);
+    await Promise.resolve();
+    return answer(call);
+  };
+  return { fetchFn, calls };
+}
+
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -24,8 +36,11 @@ const authorization = (call: Call) => new Headers(call.init.headers).get("Author
 
 describe("api client", () => {
   it("sends no access token before the User is signed in", async () => {
-    const server = fakeServer(json(401, { status: 401 }));
-    const api = createApiClient(server.fetchFn);
+    const server = fakeServer(json(401, { status: 401 }), json(401, { status: 401 }));
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: () => {},
+      currentPath: () => "/",
+    });
 
     await expect(api.me()).rejects.toBeInstanceOf(ApiError);
     expect(authorization(server.calls[0])).toBeNull();
@@ -126,6 +141,176 @@ describe("api client", () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(429);
     expect((error as ApiError).retryAfterSeconds).toBe(120);
+  });
+
+  it("renews the session from the refresh cookie, proving the request comes from the app", async () => {
+    const server = fakeServer(json(200, { accessToken: "token-1", user: alice }), json(200, alice));
+    const api = createApiClient(server.fetchFn);
+
+    const user = await api.refresh();
+    await api.me();
+
+    expect(user).toEqual(alice);
+    expect(server.calls[0].url).toBe("/api/auth/refresh");
+    expect(server.calls[0].init.method).toBe("POST");
+    expect(new Headers(server.calls[0].init.headers).get("X-Requested-With")).toBe("nimbus");
+    expect(authorization(server.calls[0])).toBeNull();
+    expect(authorization(server.calls[1])).toBe("Bearer token-1");
+  });
+
+  it("renews an expired access token and retries the request", async () => {
+    const server = fakeServer(
+      json(200, { accessToken: "token-1", user: alice }),
+      json(401, { status: 401 }),
+      json(200, { accessToken: "token-2", user: alice }),
+      json(200, alice),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.refresh();
+
+    const me = await api.me();
+
+    expect(me).toEqual(alice);
+    expect(server.calls.map((call) => call.url)).toEqual([
+      "/api/auth/refresh",
+      "/api/users/me",
+      "/api/auth/refresh",
+      "/api/users/me",
+    ]);
+    expect(authorization(server.calls[3])).toBe("Bearer token-2");
+  });
+
+  // Each refresh rotates the cookie, so a second one with the same cookie would look like a stolen token.
+  it("runs one refresh for all requests that fail at the same time", async () => {
+    const server = routedServer((call) => {
+      if (call.url === "/api/auth/refresh") return json(200, { accessToken: "fresh", user: alice });
+      return authorization(call) === "Bearer fresh" ? json(200, alice) : json(401, { status: 401 });
+    });
+    const api = createApiClient(server.fetchFn);
+
+    const results = await Promise.all([api.me(), api.me(), api.me()]);
+
+    expect(results).toEqual([alice, alice, alice]);
+    expect(server.calls.filter((call) => call.url === "/api/auth/refresh")).toHaveLength(1);
+    expect(server.calls.filter((call) => call.url === "/api/users/me")).toHaveLength(6);
+  });
+
+  it("shares one refresh between callers asking at the same time", async () => {
+    const server = routedServer(() => json(200, { accessToken: "fresh", user: alice }));
+    const api = createApiClient(server.fetchFn);
+
+    await Promise.all([api.refresh(), api.refresh()]);
+
+    expect(server.calls).toHaveLength(1);
+  });
+
+  it("retries a request only once", async () => {
+    const server = routedServer((call) =>
+      call.url === "/api/auth/refresh"
+        ? json(200, { accessToken: "fresh", user: alice })
+        : json(401, { status: 401 }),
+    );
+    const api = createApiClient(server.fetchFn);
+
+    await expect(api.me()).rejects.toMatchObject({ status: 401 });
+    expect(server.calls.map((call) => call.url)).toEqual([
+      "/api/users/me",
+      "/api/auth/refresh",
+      "/api/users/me",
+    ]);
+  });
+
+  it("sends the User to sign in, and back here afterwards, when the session can't be renewed", async () => {
+    const server = routedServer(() => json(401, { status: 401 }));
+    const lost: string[] = [];
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: (loginPath) => lost.push(loginPath),
+      currentPath: () => "/projects/7?tab=board",
+    });
+
+    await expect(api.me()).rejects.toMatchObject({ status: 401 });
+
+    expect(lost).toEqual(["/login?returnTo=%2Fprojects%2F7%3Ftab%3Dboard"]);
+  });
+
+  it("keeps the User signed in when renewing fails for a reason other than an ended session", async () => {
+    const server = routedServer((call) =>
+      call.url === "/api/auth/refresh"
+        ? json(429, { status: 429, detail: "Too many requests" })
+        : json(401, { status: 401 }),
+    );
+    const lost: string[] = [];
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: (loginPath) => lost.push(loginPath),
+      currentPath: () => "/",
+    });
+
+    await expect(api.me()).rejects.toMatchObject({ status: 429 });
+
+    expect(lost).toEqual([]);
+  });
+
+  // The other request's refresh already rotated the cookie; a second refresh would only cost another rotation.
+  it("retries without refreshing again when the token was renewed while the request was out", async () => {
+    let releaseSlow: () => void = () => {};
+    const slowAnswer = new Promise<void>((resolve) => (releaseSlow = resolve));
+    let meCalls = 0;
+    const server = routedServer(async (call) => {
+      if (call.url === "/api/auth/refresh") return json(200, { accessToken: "fresh", user: alice });
+      if (authorization(call) === "Bearer fresh") return json(200, alice);
+      if (++meCalls === 1) await slowAnswer;
+      return json(401, { status: 401 });
+    });
+    const api = createApiClient(server.fetchFn);
+
+    const slow = api.me();
+    await api.me();
+    releaseSlow();
+    await slow;
+
+    expect(server.calls.filter((call) => call.url === "/api/auth/refresh")).toHaveLength(1);
+  });
+
+  // A refresh answered after sign-in would replace the new session's token (and cookie) with the old one's.
+  it("signs in only after a renewal under way has finished, so the new session wins", async () => {
+    let answerRefresh: () => void = () => {};
+    const refreshAnswered = new Promise<void>((resolve) => (answerRefresh = resolve));
+    const server = routedServer(async (call) => {
+      if (call.url === "/api/auth/refresh") {
+        await refreshAnswered;
+        return json(200, { accessToken: "old-session", user: alice });
+      }
+      if (call.url === "/api/auth/login")
+        return json(200, { accessToken: "new-session", user: alice });
+      return json(200, alice);
+    });
+    const api = createApiClient(server.fetchFn);
+
+    const restoring = api.refresh();
+    const signingIn = api.login({ email: "alice@example.com", password: "correct horse" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    answerRefresh();
+    await Promise.all([restoring, signingIn]);
+    await api.me();
+
+    expect(server.calls.map((call) => call.url)).toEqual([
+      "/api/auth/refresh",
+      "/api/auth/login",
+      "/api/users/me",
+    ]);
+    expect(authorization(server.calls[2])).toBe("Bearer new-session");
+  });
+
+  it("does not send anyone to sign in when renewing on app load fails", async () => {
+    const server = routedServer(() => json(401, { status: 401 }));
+    const lost: string[] = [];
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: (loginPath) => lost.push(loginPath),
+    });
+
+    await expect(api.refresh()).rejects.toMatchObject({ status: 401 });
+
+    expect(lost).toEqual([]);
   });
 
   it("reports field errors from the server", async () => {

@@ -202,6 +202,10 @@ export function createApiClient(
     login: (input: LoginInput) => startSession("/api/auth/login", input),
 
     me: () => request<User>("/api/users/me"),
+
+    /** Changes the display name and returns the updated User. */
+    updateProfile: (input: { displayName: string }) =>
+      request<User>("/api/users/me", { method: "PATCH", body: JSON.stringify(input) }),
   };
 }
 

@@ -71,6 +71,104 @@ class SignedInUserTests {
 	}
 
 	@Test
+	void signedInUserCanChangeTheirDisplayName() {
+		var accessToken = registerAndGetAccessToken("rename@example.com");
+
+		client.patch().uri("/api/users/me")
+			.header("Authorization", "Bearer " + accessToken)
+			.body(Map.of("displayName", "  Dana Scully  "))
+			.exchange()
+			.expectStatus().isOk()
+			.expectBody()
+			.jsonPath("$.displayName").isEqualTo("Dana Scully")
+			.jsonPath("$.email").isEqualTo("rename@example.com");
+
+		client.get().uri("/api/users/me")
+			.header("Authorization", "Bearer " + accessToken)
+			.exchange()
+			.expectBody()
+			.jsonPath("$.displayName").isEqualTo("Dana Scully");
+	}
+
+	@Test
+	void blankDisplayNameIsRejectedAndTheNameStays() {
+		var accessToken = registerAndGetAccessToken("blank@example.com");
+
+		client.patch().uri("/api/users/me")
+			.header("Authorization", "Bearer " + accessToken)
+			.body(Map.of("displayName", "   "))
+			.exchange()
+			.expectStatus().isBadRequest()
+			.expectBody()
+			.jsonPath("$.errors.displayName").exists();
+
+		client.get().uri("/api/users/me")
+			.header("Authorization", "Bearer " + accessToken)
+			.exchange()
+			.expectBody()
+			.jsonPath("$.displayName").isEqualTo("Dana");
+	}
+
+	@Test
+	void displayNameOverOneHundredCharactersOrWithControlCharactersIsRejected() {
+		var accessToken = registerAndGetAccessToken("invalid@example.com");
+
+		for (var invalid : new String[] { "x".repeat(101), "Da\nna" }) {
+			client.patch().uri("/api/users/me")
+				.header("Authorization", "Bearer " + accessToken)
+				.body(Map.of("displayName", invalid))
+				.exchange()
+				.expectStatus().isBadRequest()
+				.expectBody()
+				.jsonPath("$.errors.displayName").exists();
+		}
+
+		client.get().uri("/api/users/me")
+			.header("Authorization", "Bearer " + accessToken)
+			.exchange()
+			.expectBody()
+			.jsonPath("$.displayName").isEqualTo("Dana");
+	}
+
+	@Test
+	void emailPasswordAndAvatarCannotBeChangedThroughTheProfileEndpoint() {
+		var accessToken = registerAndGetAccessToken("fixed@example.com");
+
+		client.patch().uri("/api/users/me")
+			.header("Authorization", "Bearer " + accessToken)
+			.body(Map.of("displayName", "Dana S", "email", "other@example.com", "password", "new password!",
+					"avatarUrl", "https://example.com/a.png"))
+			.exchange()
+			.expectStatus().isOk()
+			.expectBody()
+			.jsonPath("$.displayName").isEqualTo("Dana S")
+			.jsonPath("$.email").isEqualTo("fixed@example.com")
+			.jsonPath("$.avatarUrl").doesNotExist();
+
+		client.post().uri("/api/auth/login")
+			.body(Map.of("email", "fixed@example.com", "password", "correct horse"))
+			.exchange()
+			.expectStatus().isOk();
+	}
+
+	@Test
+	void profileCannotBeChangedWithoutSigningIn() {
+		client.patch().uri("/api/users/me")
+			.body(Map.of("displayName", "Mallory"))
+			.exchange()
+			.expectStatus().isUnauthorized();
+	}
+
+	private String registerAndGetAccessToken(String email) {
+		var registration = client.post().uri("/api/auth/register")
+			.body(Map.of("displayName", "Dana", "email", email, "password", "correct horse"))
+			.exchange()
+			.expectStatus().isCreated()
+			.expectBody(String.class).returnResult().getResponseBody();
+		return JsonPath.read(registration, "$.accessToken");
+	}
+
+	@Test
 	void protectedEndpointsRejectRequestsWithoutAValidAccessToken() {
 		client.get().uri("/api/users/me").exchange().expectStatus().isUnauthorized();
 

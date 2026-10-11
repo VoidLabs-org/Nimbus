@@ -22,18 +22,18 @@ A project management app where teams create projects, issues, boards and sprints
 
 ## Getting started
 
-```bash
-pnpm install
-docker compose up -d   # PostgreSQL + pgvector
-pnpm dev               # API and website
-```
+1. `pnpm install`
+2. **Database:** copy `apps/api/.env.example` to `apps/api/.env` and fill in the shared dev database values (ask the team). Never commit `.env`.
+   To use a local database instead, skip the `.env` and run `docker compose up -d`.
+3. `pnpm dev` to start the API and website.
 
-| What       | Where                                       |
-| ---------- | ------------------------------------------- |
-| Website    | http://localhost:3000                       |
-| API        | http://localhost:8080                       |
-| API health | http://localhost:8080/actuator/health       |
-| Database   | `localhost:5433`, db/user/password `nimbus` |
+| What       | Where                                 |
+| ---------- | ------------------------------------- |
+| Website    | http://localhost:3000                 |
+| API        | http://localhost:8080                 |
+| API health | http://localhost:8080/actuator/health |
+
+Backend tests (`pnpm test`) start their own throwaway database with Docker, so Docker Desktop must be running.
 
 The website forwards `/api/*` calls to the API, so the browser only talks to port 3000.
 

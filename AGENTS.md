@@ -23,7 +23,7 @@ Project management app (projects, issues, boards, sprints) with AI features. Tea
 
 ## Commands
 
-- `docker compose up -d`: Postgres + pgvector on port 5433
+- Database: shared dev DB via `apps/api/.env` (git-ignored, see `.env.example`), or `docker compose up -d` for a local one on port 5433. Never commit `.env` or put credentials in tracked files.
 - `pnpm dev`: API (8080) + web (3000). `pnpm dev:desktop` also opens Electron.
 - `pnpm build`, `pnpm lint`, `pnpm check-types`, `pnpm test`, `pnpm format`
 

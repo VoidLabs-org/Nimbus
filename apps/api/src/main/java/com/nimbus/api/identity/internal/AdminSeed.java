@@ -1,7 +1,5 @@
 package com.nimbus.api.identity.internal;
 
-import java.util.Locale;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,16 +22,13 @@ class AdminSeed implements ApplicationRunner {
 
 	private final Registration registration;
 
-	private final UserRepository users;
-
 	private final String email;
 
 	private final String password;
 
-	AdminSeed(Registration registration, UserRepository users, @Value("${nimbus.admin.email:}") String email,
+	AdminSeed(Registration registration, @Value("${nimbus.admin.email:}") String email,
 			@Value("${nimbus.admin.password:}") String password) {
 		this.registration = registration;
-		this.users = users;
 		this.email = email.strip();
 		this.password = password;
 	}
@@ -50,16 +45,12 @@ class AdminSeed implements ApplicationRunner {
 		if (password.length() < 8 || password.length() > 128) {
 			throw new IllegalStateException("NIMBUS_ADMIN_PASSWORD must be 8 to 128 characters");
 		}
-		if (users.existsByEmail(email.toLowerCase(Locale.ROOT))) {
-			log.info("Admin seed skipped: {} already exists", email);
-			return;
-		}
 		try {
 			registration.create(DISPLAY_NAME, email, password);
 			log.info("Created the admin User {}", email);
 		}
 		catch (Registration.EmailAlreadyRegisteredException e) {
-			// Another instance seeded it between the check and the insert.
+			log.info("Admin seed skipped: {} already exists", email);
 		}
 	}
 

@@ -16,7 +16,7 @@ Everything under `identity.internal` is private to the module.
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | `UserRegistered` | A User is created: registration, or the admin seed below. Published in the same transaction as the insert. Never on sign-in or refresh. | `userId`, `email`, `displayName` |
 
-Other modules react to it (e.g. `access` for a default group). `identity` does not know who listens.
+Other modules react to it (e.g. `access` for a default group). `identity` does not know who listens. Listeners should use `@ApplicationModuleListener`, which runs after the commit: a plain synchronous `@EventListener` that throws rolls the sign-up back.
 
 ## Admin seed
 

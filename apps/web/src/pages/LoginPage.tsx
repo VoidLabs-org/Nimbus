@@ -14,7 +14,8 @@ import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
-import { tooManyAttemptsMessage } from "../api/messages";
+import { providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
+import { GoogleButton } from "../auth/GoogleButton";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
 
@@ -23,6 +24,12 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
+  // Set by the server when "Continue with Google" ended back here with a reason. It describes the last Google
+  // attempt only, so it goes away once the User tries the form instead.
+  const [providerErrorShown, setProviderErrorShown] = useState(true);
+  const providerError = providerErrorShown
+    ? providerSignInErrorMessage(searchParams.get("error"))
+    : null;
 
   const form = useForm<LoginInput>({
     initialValues: { email: "", password: "" },
@@ -41,6 +48,7 @@ export default function LoginPage() {
 
   async function submit(values: LoginInput) {
     setFormError(null);
+    setProviderErrorShown(false);
     try {
       await login({ ...values, email: values.email.trim() });
       navigate(safeReturnPath(searchParams.get("returnTo")), { replace: true });
@@ -67,6 +75,7 @@ export default function LoginPage() {
       <Paper withBorder p="lg" mt="lg" radius="md">
         <form onSubmit={form.onSubmit(submit)}>
           <Stack>
+            {providerError && <Alert color="red">{providerError}</Alert>}
             {formError && <Alert color="red">{formError}</Alert>}
             <TextInput
               label="Email"
@@ -84,6 +93,7 @@ export default function LoginPage() {
             </Button>
           </Stack>
         </form>
+        <GoogleButton />
       </Paper>
       <Text ta="center" mt="md" size="sm">
         New to Nimbus?{" "}

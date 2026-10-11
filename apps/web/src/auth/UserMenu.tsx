@@ -47,8 +47,15 @@ export function UserMenu() {
         <Menu.Target>
           <UnstyledButton>
             <Group gap="xs">
-              {/* Falls back to initials of the name when there is no image. */}
-              <Avatar src={user.avatarUrl} name={user.displayName} color="initials" size="sm" />
+              {/* Falls back to initials of the name when there is no image, or it fails to load. No referrer:
+                  Google's image host refuses some requests that carry one. */}
+              <Avatar
+                src={user.avatarUrl}
+                imageProps={{ referrerPolicy: "no-referrer" }}
+                name={user.displayName}
+                color="initials"
+                size="sm"
+              />
               {user.displayName}
             </Group>
           </UnstyledButton>

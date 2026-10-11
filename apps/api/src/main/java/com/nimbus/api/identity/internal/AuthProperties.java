@@ -21,6 +21,8 @@ import org.springframework.validation.annotation.Validated;
  * @param registrationsPerAddress registration attempts allowed from one IP address within {@code limitWindow}
  * @param refreshesPerAddress refresh attempts allowed from one IP address within {@code limitWindow}
  * @param limitWindow the sliding window all limits count over
+ * @param publicUrl the origin browsers use to reach Nimbus (PUBLIC_URL), without a trailing slash; Google and the
+ * post-login redirects use it instead of the request's host, which behind a proxy is the API's own
  */
 @ConfigurationProperties("nimbus.auth")
 @Validated
@@ -33,5 +35,11 @@ record AuthProperties(
 		@DefaultValue("20") @Positive int signInsPerAddress,
 		@DefaultValue("10") @Positive int registrationsPerAddress,
 		@DefaultValue("60") @Positive int refreshesPerAddress,
-		@DefaultValue("15m") Duration limitWindow) {
+		@DefaultValue("15m") Duration limitWindow,
+		@DefaultValue("http://localhost:3000") String publicUrl) {
+
+	AuthProperties {
+		publicUrl = publicUrl.strip().replaceAll("/+$", "");
+	}
+
 }

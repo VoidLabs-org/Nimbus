@@ -54,7 +54,8 @@ export function createApiClient(
 ) {
   let accessToken: string | null = null;
   let refreshing: Promise<User> | null = null;
-  let starting: Promise<User> | null = null;
+  // The sign-in or sign-out under way, if any. Refreshes and failed requests wait for it.
+  let starting: Promise<unknown> | null = null;
   // Counts changes to the credentials (every finished refresh, every sign-in). A request that failed
   // before the latest change is judged against that change, not by starting yet another refresh.
   let credentialChanges = 0;
@@ -79,21 +80,28 @@ export function createApiClient(
     return body as T;
   }
 
+  // Endpoints the refresh cookie alone authenticates. The header is what keeps other sites from using it.
+  function cookieOnlyPost<T>(path: string): Promise<T> {
+    return send<T>(path, { method: "POST", headers: { "X-Requested-With": "nimbus" } }, false);
+  }
+
+  // Marks a sign-in or sign-out as under way until it settles.
+  function inFlight<T>(operation: Promise<T>): Promise<T> {
+    starting = operation;
+    return operation.finally(() => {
+      if (starting === operation) starting = null;
+    });
+  }
+
   /**
    * Each refresh rotates the cookie, and the server treats a reused cookie as stolen and ends the
    * session. So everyone asking while one is under way waits for that one instead of starting another.
-   * A sign-in under way finishes first: a refresh with the old cookie answered after it would replace
-   * the new session's token and cookie.
+   * A sign-in or sign-out under way finishes first: a refresh answered after it would replace the new
+   * session's token and cookie, or bring back the one just ended.
    */
   function refresh(): Promise<User> {
     refreshing ??= (starting?.catch(() => {}) ?? Promise.resolve())
-      .then(() =>
-        send<AuthResponse>(
-          "/api/auth/refresh",
-          { method: "POST", headers: { "X-Requested-With": "nimbus" } },
-          false,
-        ),
-      )
+      .then(() => cookieOnlyPost<AuthResponse>("/api/auth/refresh"))
       .then(({ accessToken: token, user }) => {
         accessToken = token;
         lostReported = false;
@@ -118,6 +126,10 @@ export function createApiClient(
     } catch (error) {
       if (!authenticated || !(error instanceof ApiError) || error.status !== 401) throw error;
       await starting?.catch(() => {});
+      if (lostReported) {
+        // Signed out, or the session was lost and reported: there is nothing to renew.
+        throw error;
+      }
       if (credentialChanges === changesWhenSent) {
         await renew();
       } else if (accessToken === null) {
@@ -144,27 +156,44 @@ export function createApiClient(
 
   // Waits for a refresh under way, so it can't answer after this and replace the new session.
   function startSession(path: string, input: RegisterInput | LoginInput): Promise<User> {
-    const started = (async () => {
-      await refreshing?.catch(() => {});
-      const { accessToken: token, user } = await request<AuthResponse>(
-        path,
-        { method: "POST", body: JSON.stringify(input) },
-        { authenticated: false },
-      );
-      accessToken = token;
-      lostReported = false;
-      credentialChanges++;
-      return user;
-    })();
-    starting = started;
-    return started.finally(() => {
-      if (starting === started) starting = null;
-    });
+    return inFlight(
+      (async () => {
+        await refreshing?.catch(() => {});
+        const { accessToken: token, user } = await request<AuthResponse>(
+          path,
+          { method: "POST", body: JSON.stringify(input) },
+          { authenticated: false },
+        );
+        accessToken = token;
+        lostReported = false;
+        credentialChanges++;
+        return user;
+      })(),
+    );
   }
 
   return {
     /** Renews the session from the refresh cookie, e.g. on app load. Rejects when there is none. */
     refresh,
+
+    /**
+     * Ends this browser's session on the server and forgets the access token. If the server can't be
+     * reached the User stays signed in, because the session would otherwise live on and a reload would
+     * sign them straight back in. A sign-in or refresh under way finishes first, so it can't bring the
+     * session back. Afterwards the User is gone on purpose: failing requests are not renewed and send no
+     * one to sign in, until the next sign-in.
+     */
+    logout: () =>
+      inFlight(
+        (async () => {
+          await starting?.catch(() => {});
+          await refreshing?.catch(() => {});
+          await cookieOnlyPost<void>("/api/auth/logout");
+          accessToken = null;
+          lostReported = true;
+          credentialChanges++;
+        })(),
+      ),
 
     /** Creates a User and signs them in. Whoever was signed in stays so if it fails. */
     register: (input: RegisterInput) => startSession("/api/auth/register", input),

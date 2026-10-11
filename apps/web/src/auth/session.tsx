@@ -11,6 +11,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [restoring, setRestoring] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
+  const [signedOutOnPurpose, setSignedOutOnPurpose] = useState(false);
 
   // Only a 401 means there is no session. A rate limit or an outage says nothing about it, so the User
   // keeps their place and can retry instead of being sent to sign in again.
@@ -35,14 +36,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   async function register(input: RegisterInput) {
     setUser(await api.register(input));
+    setSignedOutOnPurpose(false);
   }
 
   async function login(input: LoginInput) {
     setUser(await api.login(input));
+    setSignedOutOnPurpose(false);
+  }
+
+  async function logout() {
+    await api.logout();
+    setSignedOutOnPurpose(true);
+    setUser(null);
   }
 
   return (
-    <SessionContext value={{ user, restoring, unavailable, retry, register, login }}>
+    <SessionContext
+      value={{
+        user,
+        restoring,
+        unavailable,
+        signedOutOnPurpose,
+        retry,
+        register,
+        login,
+        logout,
+      }}
+    >
       {children}
     </SessionContext>
   );
@@ -53,7 +73,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
  * them back here afterwards.
  */
 export function RequireUser({ children }: { children: ReactNode }) {
-  const { user, restoring, unavailable, retry } = useSession();
+  const { user, restoring, unavailable, signedOutOnPurpose, retry } = useSession();
   const location = useLocation();
 
   if (restoring) {
@@ -73,5 +93,7 @@ export function RequireUser({ children }: { children: ReactNode }) {
       </Center>
     );
   }
-  return user ? children : <Navigate to={loginPath(location.pathname + location.search)} replace />;
+  if (user) return children;
+  const to = signedOutOnPurpose ? "/login" : loginPath(location.pathname + location.search);
+  return <Navigate to={to} replace />;
 }

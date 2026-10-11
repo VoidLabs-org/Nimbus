@@ -63,11 +63,34 @@ class AuthController {
 	ResponseEntity<AuthResponse> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
 			@RequestHeader(name = "X-Requested-With", required = false) String requestedWith,
 			HttpServletRequest http) {
+		requireNimbusHeader(requestedWith);
+		var refreshed = sessions.refresh(refreshToken, http.getRemoteAddr());
+		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token());
+	}
+
+	/**
+	 * Ends this browser's session only and clears its cookie. Like {@code /refresh} the cookie is the only
+	 * credential, so it needs the same header. Succeeds even if there was no session left to end.
+	 */
+	@PostMapping("/logout")
+	ResponseEntity<Void> logout(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
+			@RequestHeader(name = "X-Requested-With", required = false) String requestedWith) {
+		requireNimbusHeader(requestedWith);
+		sessions.end(refreshToken);
+		return ResponseEntity.noContent()
+			.header(HttpHeaders.SET_COOKIE, clearedRefreshCookie().toString())
+			.build();
+	}
+
+	/**
+	 * Endpoints that the refresh cookie alone authenticates must come from the Nimbus app: cross-site forms
+	 * can't set this header. Call it first in every such endpoint. When a third one appears, move the check
+	 * into a filter for those routes.
+	 */
+	private static void requireNimbusHeader(String requestedWith) {
 		if (!"nimbus".equals(requestedWith)) {
 			throw new NotFromAppException();
 		}
-		var refreshed = sessions.refresh(refreshToken, http.getRemoteAddr());
-		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token());
 	}
 
 	/** Starts a session: the access token goes in the body, the refresh token only in the cookie. */

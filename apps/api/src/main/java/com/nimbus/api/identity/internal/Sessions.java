@@ -90,6 +90,18 @@ class Sessions {
 		return refreshed;
 	}
 
+	/**
+	 * Ends the session a refresh token belongs to, whether or not that token is still the current one. Does
+	 * nothing when the token is missing or unknown or its session is already over, so signing out never fails.
+	 */
+	@Transactional
+	void end(String presented) {
+		if (presented == null || presented.isBlank()) {
+			return;
+		}
+		tokens.findByTokenHash(hash(presented)).ifPresent(token -> token.session().revoke(now()));
+	}
+
 	private IssuedToken issue(Session session, Instant now) {
 		var bytes = new byte[32];
 		RANDOM.nextBytes(bytes);

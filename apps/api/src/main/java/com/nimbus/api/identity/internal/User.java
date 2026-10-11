@@ -65,6 +65,10 @@ class User implements Persistable<UUID> {
 		return isNew;
 	}
 
+	void rename(String displayName) {
+		this.displayName = displayName;
+	}
+
 	String email() {
 		return email;
 	}

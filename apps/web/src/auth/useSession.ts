@@ -14,6 +14,8 @@ export type Session = {
   retry: () => void;
   register: (input: RegisterInput) => Promise<void>;
   login: (input: LoginInput) => Promise<void>;
+  /** Changes the signed-in User's display name. Rejects with an ApiError (field errors for 400) if refused. */
+  updateDisplayName: (displayName: string) => Promise<void>;
   /** Ends this browser's session. Rejects, leaving the User signed in, if the server can't be reached. */
   logout: () => Promise<void>;
 };

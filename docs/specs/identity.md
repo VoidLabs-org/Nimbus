@@ -46,6 +46,7 @@ Contract: [openapi.yaml](openapi.yaml).
 | `POST /api/auth/refresh`  | Needs the refresh cookie and `X-Requested-With: nimbus`. Rotates the cookie: `200 {accessToken, user}`. `401` when the cookie is missing, unknown, expired, revoked or already used (the last also revokes its session). `403` without the header. `429` over the per-IP limit.                        |
 | `POST /api/auth/logout`   | Needs `X-Requested-With: nimbus` (`403` without it). Ends the session of the refresh cookie's token, even a rotated one, and clears the cookie: `204` with `Cache-Control: no-store`. Other sessions of the User keep working. Also `204` with no cookie, an unknown cookie or a session already over. |
 | `GET /api/users/me`       | The signed-in User. `401` (`invalid_token`) if the token's User no longer exists.                                                                                                                                                                                                                      |
+| `PATCH /api/users/me`     | Body `{displayName}`: changes the display name and returns the User (`200`). `400` with `errors` per field if it is blank, too long or has control characters. Email, password and avatar cannot be changed here; other properties in the body are ignored. `401` without a valid access token.        |
 
 ## Rules
 

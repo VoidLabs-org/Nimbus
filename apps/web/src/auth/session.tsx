@@ -44,6 +44,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setSignedOutOnPurpose(false);
   }
 
+  async function updateDisplayName(displayName: string) {
+    const updated = await api.updateProfile({ displayName });
+    // A sign-out that finished meanwhile must not be undone by the slower rename.
+    setUser((current) => (current ? updated : null));
+  }
+
   async function logout() {
     await api.logout();
     setSignedOutOnPurpose(true);
@@ -60,6 +66,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         retry,
         register,
         login,
+        updateDisplayName,
         logout,
       }}
     >

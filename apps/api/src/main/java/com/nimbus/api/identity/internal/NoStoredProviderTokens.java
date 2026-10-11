@@ -9,7 +9,7 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepo
 /**
  * Keeps nothing. After a successful login Spring hands the provider's access (and refresh) token to an
  * authorized-client repository, whose default holds them in memory per User. We only need the ID token's claims to
- * sign the User in, so Google's tokens are dropped as soon as the handshake ends.
+ * sign the User in, so the provider's tokens (Google's, GitHub's) are dropped as soon as the handshake ends.
  */
 class NoStoredProviderTokens implements OAuth2AuthorizedClientRepository {
 

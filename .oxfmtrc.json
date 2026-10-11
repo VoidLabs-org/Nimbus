@@ -1,0 +1,5 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  // AGENTS.md is generated and rewritten by turbo; formatting it would cause churn.
+  "ignorePatterns": ["AGENTS.md"]
+}

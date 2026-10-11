@@ -1,6 +1,6 @@
-import babel from '@rolldown/plugin-babel'
-import react, { reactCompilerPreset } from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -10,7 +10,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       // Forward API calls to Spring Boot in dev, so the browser sees one origin (no CORS).
-      '/api': 'http://localhost:8080',
+      "/api": "http://localhost:8080",
     },
   },
-})
+});

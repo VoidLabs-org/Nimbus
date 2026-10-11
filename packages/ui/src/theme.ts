@@ -18,7 +18,6 @@ const nimbus: MantineColorsTuple = [
 export const theme = createTheme({
   primaryColor: "nimbus",
   colors: { nimbus },
-  fontFamily:
-    "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  fontFamily: "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
   defaultRadius: "md",
 });

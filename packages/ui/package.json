@@ -7,22 +7,21 @@
     "./*": "./src/*.tsx"
   },
   "scripts": {
-    "lint": "eslint . --max-warnings 0",
+    "lint": "oxlint --max-warnings 0",
     "generate:component": "turbo gen react-component",
     "check-types": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
-    "@types/node": "26.4.1",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "eslint": "10.9.1",
-    "typescript": "7.0.2"
   },
   "dependencies": {
     "@mantine/core": "^9.7.1",
     "react": "19.2.8",
     "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "26.4.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "oxlint": "^1.87.0",
+    "typescript": "7.0.2"
   }
 }

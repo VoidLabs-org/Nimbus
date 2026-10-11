@@ -1,8 +1,8 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "extends": ["../../.oxlintrc.json"],
   "rules": {
-    "react/rules-of-hooks": "error",
+    // Keeps Vite hot reload working: component files should only export components
     "react/only-export-components": ["warn", { "allowConstantExport": true }]
   }
 }

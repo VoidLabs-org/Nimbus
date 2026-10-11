@@ -1,0 +1,10 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "dev": {
+      "with": ["web#dev", "api#dev"],
+      "dependsOn": ["web#dev:ready"]
+    }
+  }
+}

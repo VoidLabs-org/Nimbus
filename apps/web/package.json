@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:ready": "node scripts/wait-for-ready.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint --max-warnings 0",
     "check-types": "tsc -b",

@@ -23,6 +23,8 @@ export function UserMenu() {
   const { user, logout } = useSession();
   const [signingOut, setSigningOut] = useState(false);
   const [editing, setEditing] = useState(false);
+  // True while a rename is in flight; the dialog can't be dismissed then, or Cancel would be a lie.
+  const [saving, setSaving] = useState(false);
 
   async function signOut() {
     setSigningOut(true);
@@ -58,14 +60,36 @@ export function UserMenu() {
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
-      <Modal opened={editing} onClose={() => setEditing(false)} title="Change display name">
-        <DisplayNameForm current={user.displayName} onDone={() => setEditing(false)} />
+      <Modal
+        opened={editing}
+        onClose={() => setEditing(false)}
+        title="Change display name"
+        closeOnEscape={!saving}
+        closeOnClickOutside={!saving}
+        withCloseButton={!saving}
+      >
+        <DisplayNameForm
+          current={user.displayName}
+          saving={saving}
+          onSavingChange={setSaving}
+          onDone={() => setEditing(false)}
+        />
       </Modal>
     </>
   );
 }
 
-function DisplayNameForm({ current, onDone }: { current: string; onDone: () => void }) {
+function DisplayNameForm({
+  current,
+  saving,
+  onSavingChange,
+  onDone,
+}: {
+  current: string;
+  saving: boolean;
+  onSavingChange: (saving: boolean) => void;
+  onDone: () => void;
+}) {
   const { updateDisplayName } = useSession();
   const form = useForm({
     initialValues: { displayName: current },
@@ -74,6 +98,7 @@ function DisplayNameForm({ current, onDone }: { current: string; onDone: () => v
   });
 
   async function submit({ displayName }: { displayName: string }) {
+    onSavingChange(true);
     try {
       await updateDisplayName(displayName.trim());
       onDone();
@@ -83,6 +108,8 @@ function DisplayNameForm({ current, onDone }: { current: string; onDone: () => v
       } else {
         form.setFieldError("displayName", "Couldn't save your name. Please try again.");
       }
+    } finally {
+      onSavingChange(false);
     }
   }
 
@@ -97,10 +124,10 @@ function DisplayNameForm({ current, onDone }: { current: string; onDone: () => v
           {...form.getInputProps("displayName")}
         />
         <Group justify="flex-end">
-          <Button variant="default" onClick={onDone} disabled={form.submitting}>
+          <Button variant="default" onClick={onDone} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" loading={form.submitting}>
+          <Button type="submit" loading={saving}>
             Save
           </Button>
         </Group>

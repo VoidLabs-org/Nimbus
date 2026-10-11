@@ -110,6 +110,27 @@ class SignedInUserTests {
 	}
 
 	@Test
+	void displayNameOverOneHundredCharactersOrWithControlCharactersIsRejected() {
+		var accessToken = registerAndGetAccessToken("invalid@example.com");
+
+		for (var invalid : new String[] { "x".repeat(101), "Da\nna" }) {
+			client.patch().uri("/api/users/me")
+				.header("Authorization", "Bearer " + accessToken)
+				.body(Map.of("displayName", invalid))
+				.exchange()
+				.expectStatus().isBadRequest()
+				.expectBody()
+				.jsonPath("$.errors.displayName").exists();
+		}
+
+		client.get().uri("/api/users/me")
+			.header("Authorization", "Bearer " + accessToken)
+			.exchange()
+			.expectBody()
+			.jsonPath("$.displayName").isEqualTo("Dana");
+	}
+
+	@Test
 	void emailPasswordAndAvatarCannotBeChangedThroughTheProfileEndpoint() {
 		var accessToken = registerAndGetAccessToken("fixed@example.com");
 

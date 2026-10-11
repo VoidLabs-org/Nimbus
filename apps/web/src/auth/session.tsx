@@ -46,8 +46,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   async function updateDisplayName(displayName: string) {
     const updated = await api.updateProfile({ displayName });
-    // A sign-out that finished meanwhile must not be undone by the slower rename.
-    setUser((current) => (current ? updated : null));
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower rename.
+    setUser((current) => (current?.id === updated.id ? updated : current));
   }
 
   async function logout() {

@@ -1,0 +1,144 @@
+openapi: 3.1.0
+info:
+  title: Nimbus API
+  version: 0.1.0
+  description: "REST contract for Nimbus. Every endpoint needs a Bearer access token unless it says `security: []`."
+
+servers:
+  - url: /
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+    description: Registration and sign-in (identity module)
+  - name: users
+    description: User profiles (identity module)
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [auth]
+      summary: Register with email and password, and sign in straight away
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User created and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "409":
+          description: The email is already registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/users/me:
+    get:
+      tags: [users]
+      summary: The signed-in User
+      responses:
+        "200":
+          description: The signed-in User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [displayName, email, password]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: Case-insensitive; stored lower-cased
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+
+    AuthResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+          description: HS256 JWT, valid 15 minutes. Keep it in memory only.
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      required: [id, email, displayName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        avatarUrl:
+          type: [string, "null"]
+          format: uri
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+  responses:
+    InvalidFields:
+      description: Some fields are invalid
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - type: object
+                properties:
+                  errors:
+                    type: object
+                    description: Message per invalid field
+                    additionalProperties:
+                      type: string
+    Unauthorized:
+      description: Missing, expired or invalid access token

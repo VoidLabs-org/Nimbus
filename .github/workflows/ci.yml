@@ -13,9 +13,12 @@ concurrency:
 permissions:
   contents: read
 
+# Job names are the required checks in the "Protect main" ruleset. Keep them stable;
+# renaming one means updating the ruleset in the same change.
 jobs:
+  # Format, lint, types, tests and build for everything except the API.
   frontend:
-    name: Frontend (format, lint, types, build)
+    name: Frontend
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -31,10 +34,11 @@ jobs:
       - run: pnpm format:check
 
       # The API is checked by the backend job with Gradle.
-      - run: pnpm exec turbo run lint check-types build --filter=!api
+      - run: pnpm exec turbo run lint check-types test build --filter=!api
 
+  # Build, tests (Testcontainers Postgres) and Modulith verification for the API.
   backend:
-    name: Backend (build, tests, module verification)
+    name: Backend
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:

@@ -77,4 +77,9 @@ class User implements Persistable<UUID> {
 		return avatarUrl;
 	}
 
+	/** Null for Users who only sign in with a Linked identity. */
+	String passwordHash() {
+		return passwordHash;
+	}
+
 }

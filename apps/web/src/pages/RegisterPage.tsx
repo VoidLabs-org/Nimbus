@@ -1,17 +1,20 @@
 import {
   Alert,
+  Anchor,
   Button,
   Container,
   Paper,
   PasswordInput,
   Stack,
+  Text,
   TextInput,
   Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { ApiError, type RegisterInput } from "../api/client";
+import { tooManyAttemptsMessage } from "../api/messages";
 import { useSession } from "../auth/useSession";
 
 export default function RegisterPage() {
@@ -45,6 +48,8 @@ export default function RegisterPage() {
         form.setFieldError("email", error.message);
       } else if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {
         form.setErrors(error.fieldErrors);
+      } else if (error instanceof ApiError && error.status === 429) {
+        setFormError(tooManyAttemptsMessage(error.retryAfterSeconds));
       } else if (error instanceof ApiError && error.status === 400) {
         setFormError(error.message);
       } else {
@@ -81,6 +86,12 @@ export default function RegisterPage() {
           </Stack>
         </form>
       </Paper>
+      <Text ta="center" mt="md" size="sm">
+        Already have an account?{" "}
+        <Anchor component={Link} to="/login">
+          Sign in
+        </Anchor>
+      </Text>
     </Container>
   );
 }

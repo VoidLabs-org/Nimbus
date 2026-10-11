@@ -3,8 +3,10 @@ package com.nimbus.api.identity.internal;
 import java.util.Map;
 import java.util.TreeMap;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -16,6 +18,19 @@ class IdentityErrors {
 	@ExceptionHandler
 	ProblemDetail emailAlreadyRegistered(Registration.EmailAlreadyRegisteredException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+	}
+
+	@ExceptionHandler
+	ResponseEntity<ProblemDetail> limitExceeded(SlidingWindowLimiter.LimitExceededException e) {
+		var seconds = Math.max(1, (e.retryAfter().toMillis() + 999) / 1000);
+		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+			.header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
+			.body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage()));
+	}
+
+	@ExceptionHandler
+	ProblemDetail invalidCredentials(SignIn.InvalidCredentialsException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
 	}
 
 	/** Lists each invalid field with its message under {@code errors}, so forms can show them. */

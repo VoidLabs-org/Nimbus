@@ -18,17 +18,25 @@ class Registration {
 
 	private final Clock clock;
 
-	Registration(UserRepository users, PasswordEncoder passwordEncoder, Clock clock) {
+	private final SlidingWindowLimiter attemptsByAddress;
+
+	Registration(UserRepository users, PasswordEncoder passwordEncoder, AuthProperties properties, Clock clock) {
 		this.users = users;
 		this.passwordEncoder = passwordEncoder;
 		this.clock = clock;
+		this.attemptsByAddress = new SlidingWindowLimiter(properties.registrationsPerAddress(),
+				properties.limitWindow(), clock);
 	}
 
 	/**
 	 * Deliberately not one transaction: Argon2 hashing is slow and must not hold a database connection.
 	 * The unique constraint, not the up-front check, is what guarantees one User per email.
+	 *
+	 * @param fromAddress the caller's IP address; each address gets a limited number of attempts
 	 */
-	User register(String displayName, String email, String password) {
+	User register(String displayName, String email, String password, String fromAddress) {
+		attemptsByAddress.acquire(fromAddress, "Too many sign-ups from this network. Try again later.");
+
 		var normalizedEmail = email.toLowerCase(Locale.ROOT);
 		if (users.existsByEmail(normalizedEmail)) {
 			throw new EmailAlreadyRegisteredException();

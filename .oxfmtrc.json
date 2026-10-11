@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  // AGENTS.md is generated and rewritten by turbo; formatting it would cause churn.
-  "ignorePatterns": ["AGENTS.md"]
+  // Files written by other tools: AGENTS.md (turbo block) and installed skills (npx skills).
+  // Formatting them would cause churn on every update.
+  "ignorePatterns": ["AGENTS.md", ".agents/**", ".claude/skills/**", "skills-lock.json"]
 }

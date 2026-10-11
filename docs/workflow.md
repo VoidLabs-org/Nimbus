@@ -4,6 +4,18 @@ Every feature goes from an idea to `main` through the same loop. Agent skills do
 
 Terms used here (feature spec, ticket, module spec) are defined in [GLOSSARY.md](../GLOSSARY.md).
 
+## Who does what
+
+| AI does                                                          | People do                                                      |
+| ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| Asks clarifying questions                                        | Decide what the feature should be                              |
+| Writes feature specs, tickets and PR descriptions                | Approve feature specs (Gate 1)                                 |
+| Writes tests and code, and commits them (with your approval)     | Create branches, push, open PRs, move cards                    |
+| Reviews code for bugs (`/implement` self-review, `/code-review`) | Read and understand the code; review each other's PRs (Gate 2) |
+|                                                                  | Merge, and own the result                                      |
+
+The AI is fast but can confidently build the wrong thing or write code that only looks right. The two gates are where people catch that.
+
 ## The feature loop
 
 ```mermaid

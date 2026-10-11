@@ -1,0 +1,15 @@
+{
+  "iss": "https://accounts.google.com",
+  "azp": "1234567890-example.apps.googleusercontent.com",
+  "aud": "1234567890-example.apps.googleusercontent.com",
+  "sub": "110169484474386276334",
+  "email": "Ada.Lovelace@Example.com",
+  "email_verified": true,
+  "at_hash": "kH2xk3mGqT0cVn8jW1sZ4A",
+  "name": "Ada Lovelace",
+  "picture": "https://lh3.googleusercontent.com/a/ACg8ocKexample=s96-c",
+  "given_name": "Ada",
+  "family_name": "Lovelace",
+  "iat": 1760000000,
+  "exp": 1760003600
+}

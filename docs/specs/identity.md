@@ -1,6 +1,6 @@
 # identity
 
-Owns **Users** and sign-in: registration, passwords, access tokens, refresh-token sessions and (later) Linked identities. Terms are defined in [GLOSSARY.md](../../GLOSSARY.md). Users are global, not owned by a workspace ([ADR 0001](../adr/0001-global-users-tenancy-deferred.md)).
+Owns **Users** and sign-in: registration, passwords, access tokens, refresh-token sessions and Linked identities (Google). Terms are defined in [GLOSSARY.md](../../GLOSSARY.md). Users are global, not owned by a workspace ([ADR 0001](../adr/0001-global-users-tenancy-deferred.md)).
 
 ## Public interface
 
@@ -24,10 +24,10 @@ At startup, when `NIMBUS_ADMIN_EMAIL` and `NIMBUS_ADMIN_PASSWORD` (in `apps/api/
 
 ## Authentication
 
-- Every request needs a valid access token in `Authorization: Bearer <token>`, except the public endpoints below. Requests without one get `401`.
+- Every request needs a valid access token in `Authorization: Bearer <token>`, except the public endpoints below. Requests without one get `401`, except a browser page load (`Accept: text/html`) of an API URL while Google sign-in is enabled, which is redirected to start it.
 - Access token: HS256 JWT, valid 15 minutes, `sub` = User id. Signed with `JWT_SECRET` from `apps/api/.env` (base64, at least 32 bytes). The app refuses to start without it.
-- Public endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`.
-- The API is stateless: no HTTP session, no CSRF tokens (Bearer tokens can't be forged cross-site).
+- Public endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, and the two OAuth endpoints under `/api/auth/oauth2/` below.
+- The API is stateless: no HTTP session, no CSRF tokens (Bearer tokens can't be forged cross-site). The one exception is the OAuth handshake below, which uses a short-lived HTTP session that is dropped when the handshake ends.
 - Responses carry `Cache-Control: no-store`.
 
 ## Sessions and refresh tokens
@@ -47,14 +47,35 @@ At startup, when `NIMBUS_ADMIN_EMAIL` and `NIMBUS_ADMIN_PASSWORD` (in `apps/api/
 
 Contract: [openapi.yaml](openapi.yaml).
 
-| Endpoint                  | Behaviour                                                                                                                                                                                                                                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /api/auth/register` | Creates a User and signs them in: `201 {accessToken, user}`. `409` if the email is registered (case-insensitive), `400` with `errors` per field when invalid.                                                                                                                                          |
-| `POST /api/auth/login`    | Signs in with email (any case) and password: `200 {accessToken, user}`. Wrong password, unknown email and a User without a password all get the same `401` "Invalid email or password". `429` with `Retry-After` while the email is blocked.                                                           |
-| `POST /api/auth/refresh`  | Needs the refresh cookie and `X-Requested-With: nimbus`. Rotates the cookie: `200 {accessToken, user}`. `401` when the cookie is missing, unknown, expired, revoked or already used (the last also revokes its session). `403` without the header. `429` over the per-IP limit.                        |
-| `POST /api/auth/logout`   | Needs `X-Requested-With: nimbus` (`403` without it). Ends the session of the refresh cookie's token, even a rotated one, and clears the cookie: `204` with `Cache-Control: no-store`. Other sessions of the User keep working. Also `204` with no cookie, an unknown cookie or a session already over. |
-| `GET /api/users/me`       | The signed-in User. `401` (`invalid_token`) if the token's User no longer exists.                                                                                                                                                                                                                      |
-| `PATCH /api/users/me`     | Body `{displayName}`: changes the display name and returns the User (`200`). `400` with `errors` per field if it is blank, too long or has control characters. Email, password and avatar cannot be changed here; other properties in the body are ignored. `401` without a valid access token.        |
+| Endpoint                               | Behaviour                                                                                                                                                                                                                                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /api/auth/register`              | Creates a User and signs them in: `201 {accessToken, user}`. `409` if the email is registered (case-insensitive), `400` with `errors` per field when invalid.                                                                                                                                          |
+| `POST /api/auth/login`                 | Signs in with email (any case) and password: `200 {accessToken, user}`. Wrong password, unknown email and a User without a password all get the same `401` "Invalid email or password". `429` with `Retry-After` while the email is blocked.                                                           |
+| `POST /api/auth/refresh`               | Needs the refresh cookie and `X-Requested-With: nimbus`. Rotates the cookie: `200 {accessToken, user}`. `401` when the cookie is missing, unknown, expired, revoked or already used (the last also revokes its session). `403` without the header. `429` over the per-IP limit.                        |
+| `POST /api/auth/logout`                | Needs `X-Requested-With: nimbus` (`403` without it). Ends the session of the refresh cookie's token, even a rotated one, and clears the cookie: `204` with `Cache-Control: no-store`. Other sessions of the User keep working. Also `204` with no cookie, an unknown cookie or a session already over. |
+| `GET /api/auth/oauth2/google`          | Starts "Continue with Google" (redirect to Google). A full page load, not a `fetch`. Only exists when `GOOGLE_CLIENT_ID` is set.                                                                                                                                                                       |
+| `GET /api/auth/oauth2/callback/google` | Google's redirect back. Success: sets the refresh cookie and redirects to `/auth/callback`. Failure: redirects to `/login?error=<code>` (`email_unverified`, `cancelled` or `failed`).                                                                                                                 |
+| `GET /api/users/me`                    | The signed-in User. `401` (`invalid_token`) if the token's User no longer exists.                                                                                                                                                                                                                      |
+| `PATCH /api/users/me`                  | Body `{displayName}`: changes the display name and returns the User (`200`). `400` with `errors` per field if it is blank, too long or has control characters. Email, password and avatar cannot be changed here; other properties in the body are ignored. `401` without a valid access token.        |
+
+## Linked identities (Google)
+
+"Continue with Google" is a backend-driven authorization-code flow (Spring Security `oauth2Login`) with scopes `openid profile email`. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` come from `apps/api/.env` (see `.env.example`); without the id the feature is off. The redirect URI to register at Google is `<PUBLIC_URL>/api/auth/oauth2/callback/google`. `PUBLIC_URL` (setting `nimbus.auth.public-url`, default `http://localhost:3000`, the Vite server) is the address people open Nimbus at. It is configured rather than read from the request, because behind the dev proxy or a load balancer the request's host is not the browser's. The redirects after the handshake (`/auth/callback`, `/login?error=...`) go to it as well. Provider tokens are never stored. The handshake's HTTP session (`server.servlet.session.timeout`, 5 minutes, `SameSite=Lax`) is invalidated as soon as the handshake ends.
+
+Google's ID-token claims become an **external profile**: provider, provider user id (`sub`), email (lower-cased), email verified (`email_verified`), name, avatar URL. A provider maps only to this shape; the rules below don't know about Google, so GitHub only needs its own mapping.
+
+Resolution, in this order:
+
+1. The login is already linked (same provider and provider user id): sign in that User, whatever email the provider reports now.
+2. The email is not verified (or missing): refused, `email_unverified`. Nothing is created.
+3. A User with that email exists: the login is linked to them and their email is marked verified. If their email was **never verified** (they registered with a password), their password is removed and **all their sessions are revoked**, so whoever registered the email first loses access. A User whose email was already verified keeps their password and sessions.
+4. Otherwise a verified User with no password is created, the login is linked, and `UserRegistered` is published (only here; linking an existing User does not publish it).
+
+Every sign-in with a provider updates the avatar URL (when the provider sends one); the display name is never overwritten. A new User's display name is the provider's name (control characters removed, at most 100 characters), or the part of the email before `@` when there is none. A race that would create the same User or link twice ends in a unique-constraint violation and shows as `failed`.
+
+On success the User gets a session and the refresh cookie like any other sign-in; no token is in a URL.
+
+In the web app, **Continue with Google** is a plain link on `/login` and `/register` (a full page load to `GET /api/auth/oauth2/google`). On success the browser lands on `/auth/callback`, which waits for the app's load-time refresh to turn the cookie into an access token and then goes to `/`. On failure `/login` shows a message for the `error` code.
 
 ## Rules
 
@@ -80,8 +101,9 @@ The IP address comes from `X-Forwarded-For` only when the request arrives from a
 
 ## Tables
 
-| Table            | Columns                                                                                                                                                                                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users`          | `id` (UUID), `email` (unique, lower-case), `display_name`, `password_hash` (null for Google/GitHub-only Users), `avatar_url`, `email_verified` (false for password sign-ups), `created_at`                                                              |
-| `sessions`       | `id` (UUID), `user_id` (→ `users`, cascade delete), `started_at`, `expires_at` (absolute cap, sign-in + 90 days), `revoked_at` (set when the session ends early, e.g. on token reuse)                                                                   |
-| `refresh_tokens` | `id` (UUID), `session_id` (→ `sessions`, cascade delete), `token_hash` (unique SHA-256 hex), `issued_at`, `expires_at` (issue + 30 days, capped at the session's `expires_at`), `used_at` (set when exchanged; presenting it again revokes the session) |
+| Table               | Columns                                                                                                                                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`             | `id` (UUID), `email` (unique, lower-case), `display_name`, `password_hash` (null for Google/GitHub-only Users), `avatar_url`, `email_verified` (false for password sign-ups), `created_at`                                                              |
+| `linked_identities` | `id` (UUID), `user_id` (→ `users`, cascade delete), `provider` (`google`), `provider_user_id`, `created_at`. Unique on (`provider`, `provider_user_id`) and on (`user_id`, `provider`).                                                                 |
+| `sessions`          | `id` (UUID), `user_id` (→ `users`, cascade delete), `started_at`, `expires_at` (absolute cap, sign-in + 90 days), `revoked_at` (set when the session ends early, e.g. on token reuse)                                                                   |
+| `refresh_tokens`    | `id` (UUID), `session_id` (→ `sessions`, cascade delete), `token_hash` (unique SHA-256 hex), `issued_at`, `expires_at` (issue + 30 days, capped at the session's `expires_at`), `used_at` (set when exchanged; presenting it again revokes the session) |

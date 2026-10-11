@@ -49,6 +49,19 @@ class User implements Persistable<UUID> {
 		return user;
 	}
 
+	/** A User created from a provider login. The provider vouched for the email, so it starts verified. */
+	static User fromProvider(String email, String displayName, String avatarUrl, Instant now) {
+		var user = new User();
+		user.id = UUID.randomUUID();
+		user.email = email;
+		user.displayName = displayName;
+		user.avatarUrl = avatarUrl;
+		user.emailVerified = true;
+		user.createdAt = now;
+		user.isNew = true;
+		return user;
+	}
+
 	@PostPersist
 	@PostLoad
 	void markNotNew() {
@@ -69,6 +82,20 @@ class User implements Persistable<UUID> {
 		this.displayName = displayName;
 	}
 
+	void changeAvatar(String avatarUrl) {
+		this.avatarUrl = avatarUrl;
+	}
+
+	/** A provider proved the User owns the email. */
+	void verifyEmail() {
+		this.emailVerified = true;
+	}
+
+	/** After this the User can only sign in with a Linked identity, until a password is set again. */
+	void removePassword() {
+		this.passwordHash = null;
+	}
+
 	String email() {
 		return email;
 	}
@@ -79,6 +106,10 @@ class User implements Persistable<UUID> {
 
 	String avatarUrl() {
 		return avatarUrl;
+	}
+
+	boolean emailVerified() {
+		return emailVerified;
 	}
 
 	/** Null for Users who only sign in with a Linked identity. */

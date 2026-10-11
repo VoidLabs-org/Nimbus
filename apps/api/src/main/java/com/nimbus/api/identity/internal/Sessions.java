@@ -102,6 +102,12 @@ class Sessions {
 		tokens.findByTokenHash(hash(presented)).ifPresent(token -> token.session().revoke(now()));
 	}
 
+	/** Ends every session of a User, on every browser. Their access tokens still work until they expire. */
+	@Transactional
+	void endAll(User user) {
+		sessions.revokeAllOf(user.getId(), now());
+	}
+
 	private IssuedToken issue(Session session, Instant now) {
 		var bytes = new byte[32];
 		RANDOM.nextBytes(bytes);

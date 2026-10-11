@@ -1,0 +1,8 @@
+{
+  "iss": "https://accounts.google.com",
+  "sub": "208169484474386276999",
+  "email": "grace@example.com",
+  "email_verified": false,
+  "name": "Grace Hopper",
+  "picture": "https://lh3.googleusercontent.com/a/ACg8ocGrace=s96-c"
+}

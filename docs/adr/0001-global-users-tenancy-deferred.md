@@ -1,0 +1,3 @@
+# Users are global; workspaces come later
+
+v1 is a single shared Nimbus with no tenants or workspaces. We expect to add workspaces later (one login, many workspaces, like GitHub organizations), so a User is global: one per email across all of Nimbus, never owned by a workspace. Adding workspaces then means putting a layer above projects, memberships and grants, while login, tokens and Linked identities stay unchanged. We rejected per-tenant Users (the same email signing up separately in each tenant) because email uniqueness, the login flow, token claims and social-login linking would all have to be redone when tenancy arrives.

@@ -62,13 +62,14 @@ class OAuthLoginHandlerTests {
 		handler.onAuthenticationSuccess(new MockHttpServletRequest(), response,
 				google(recorded("unverified-user")));
 
-		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/login?error=email_unverified");
+		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/login?error=email_unverified&provider=google");
 		assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
 	}
 
 	@Test
-	void theUserDecliningAtGoogleRedirectsToLoginAsCancelled() throws Exception {
+	void theUserDecliningAtTheProviderRedirectsToLoginAsCancelled() throws Exception {
 		var request = new MockHttpServletRequest();
+		request.setRequestURI("/api/auth/oauth2/callback/github");
 		var oauthSession = new MockHttpSession();
 		request.setSession(oauthSession);
 		var response = new MockHttpServletResponse();
@@ -76,7 +77,7 @@ class OAuthLoginHandlerTests {
 		handler.onAuthenticationFailure(request, response,
 				new OAuth2AuthenticationException(new OAuth2Error("access_denied")));
 
-		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/login?error=cancelled");
+		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/login?error=cancelled&provider=github");
 		assertThat(oauthSession.isInvalid()).isTrue();
 	}
 

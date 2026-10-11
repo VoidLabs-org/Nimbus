@@ -181,6 +181,61 @@ class SessionTests {
 	}
 
 	@Test
+	void signingOutEndsOnlyThisBrowsersSession() {
+		register("Lovelace", "lovelace@example.com");
+		var laptop = signedInToken("lovelace@example.com");
+		var phone = signedInToken("lovelace@example.com");
+
+		var result = logout(laptop).expectStatus().isNoContent()
+			.expectHeader().value(HttpHeaders.CACHE_CONTROL, value -> assertThat(value).contains("no-store"))
+			.expectBody(String.class).returnResult();
+
+		var cookie = RefreshCookies.of(result);
+		assertThat(cookie.getValue()).isEmpty();
+		assertThat(cookie.getMaxAge()).isZero();
+		assertThat(cookie.getPath()).isEqualTo("/api/auth");
+		refresh(laptop).expectStatus().isUnauthorized();
+		refresh(phone).expectStatus().isOk();
+	}
+
+	// The token may have been rotated since the browser last used it; the session is what ends.
+	@Test
+	void signingOutWithARotatedTokenStillEndsTheSession() {
+		register("Mauchly", "mauchly@example.com");
+		var first = signedInToken("mauchly@example.com");
+		var current = refreshedToken(first);
+
+		logout(first).expectStatus().isNoContent();
+
+		refresh(current).expectStatus().isUnauthorized();
+	}
+
+	@Test
+	void signingOutNeedsTheNimbusRequestHeader() {
+		register("Noyce", "noyce@example.com");
+		var token = signedInToken("noyce@example.com");
+
+		client.post().uri("/api/auth/logout")
+			.cookie("refresh_token", token)
+			.exchange()
+			.expectStatus().isForbidden();
+
+		refresh(token).expectStatus().isOk();
+	}
+
+	@Test
+	void signingOutSucceedsEvenWhenThereIsNoSessionToEnd() {
+		register("Pascal", "pascal@example.com");
+		var token = signedInToken("pascal@example.com");
+
+		client.post().uri("/api/auth/logout").header("X-Requested-With", "nimbus").exchange()
+			.expectStatus().isNoContent();
+		logout("not-a-token").expectStatus().isNoContent();
+		logout(token).expectStatus().isNoContent();
+		logout(token).expectStatus().isNoContent();
+	}
+
+	@Test
 	void missingOrUnknownRefreshTokenIsRejected() {
 		client.post().uri("/api/auth/refresh")
 			.header("X-Requested-With", "nimbus")
@@ -197,6 +252,13 @@ class SessionTests {
 	private String refreshedToken(String refreshToken) {
 		return RefreshCookies.of(refresh(refreshToken).expectStatus().isOk().expectBody(String.class).returnResult())
 			.getValue();
+	}
+
+	private RestTestClient.ResponseSpec logout(String refreshToken) {
+		return client.post().uri("/api/auth/logout")
+			.header("X-Requested-With", "nimbus")
+			.cookie("refresh_token", refreshToken)
+			.exchange();
 	}
 
 	private RestTestClient.ResponseSpec refresh(String refreshToken) {

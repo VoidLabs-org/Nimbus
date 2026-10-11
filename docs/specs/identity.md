@@ -18,7 +18,7 @@ None yet.
 
 - Every request needs a valid access token in `Authorization: Bearer <token>`, except the public endpoints below. Requests without one get `401`.
 - Access token: HS256 JWT, valid 15 minutes, `sub` = User id. Signed with `JWT_SECRET` from `apps/api/.env` (base64, at least 32 bytes). The app refuses to start without it.
-- Public endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`.
+- Public endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`.
 - The API is stateless: no HTTP session, no CSRF tokens (Bearer tokens can't be forged cross-site).
 - Responses carry `Cache-Control: no-store`.
 
@@ -29,6 +29,7 @@ None yet.
 - Each refresh token works once. `POST /api/auth/refresh` marks it used and sets a new one in the same session (rotation).
 - Presenting a used token means it was copied: the whole session is revoked, so neither copy works any more. Other sessions of the same User are not affected.
 - Expiry: a token expires 30 days after it was issued (`nimbus.auth.session-idle-timeout`), so a session lives as long as it is used at least every 30 days, but never more than 90 days after sign-in (`nimbus.auth.session-max-age`).
+- Sign-out revokes the session (`sessions.revoked_at`), so every token of it stops working, then clears the cookie. Access tokens already issued stay valid until they expire (up to 15 minutes); they are not denylisted.
 - A `401` from `/refresh` also clears the cookie (`Max-Age=0`), so the browser stops sending a dead token.
 - The cookie is the only credential for `/refresh`, so it also requires `X-Requested-With: nimbus` (`403` without it). Cross-site forms can't set that header.
 - Known trade-off: two refreshes sent at once with the same cookie (e.g. several tabs restored together) count as reuse and end the session. The web client sends one refresh at a time per tab, and only a `401` from `/refresh` sends the User to sign in (a `429` or an outage doesn't).
@@ -38,12 +39,13 @@ None yet.
 
 Contract: [openapi.yaml](openapi.yaml).
 
-| Endpoint                  | Behaviour                                                                                                                                                                                                                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/auth/register` | Creates a User and signs them in: `201 {accessToken, user}`. `409` if the email is registered (case-insensitive), `400` with `errors` per field when invalid.                                                                                                                   |
-| `POST /api/auth/login`    | Signs in with email (any case) and password: `200 {accessToken, user}`. Wrong password, unknown email and a User without a password all get the same `401` "Invalid email or password". `429` with `Retry-After` while the email is blocked.                                    |
-| `POST /api/auth/refresh`  | Needs the refresh cookie and `X-Requested-With: nimbus`. Rotates the cookie: `200 {accessToken, user}`. `401` when the cookie is missing, unknown, expired, revoked or already used (the last also revokes its session). `403` without the header. `429` over the per-IP limit. |
-| `GET /api/users/me`       | The signed-in User. `401` (`invalid_token`) if the token's User no longer exists.                                                                                                                                                                                               |
+| Endpoint                  | Behaviour                                                                                                                                                                                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /api/auth/register` | Creates a User and signs them in: `201 {accessToken, user}`. `409` if the email is registered (case-insensitive), `400` with `errors` per field when invalid.                                                                                                                                          |
+| `POST /api/auth/login`    | Signs in with email (any case) and password: `200 {accessToken, user}`. Wrong password, unknown email and a User without a password all get the same `401` "Invalid email or password". `429` with `Retry-After` while the email is blocked.                                                           |
+| `POST /api/auth/refresh`  | Needs the refresh cookie and `X-Requested-With: nimbus`. Rotates the cookie: `200 {accessToken, user}`. `401` when the cookie is missing, unknown, expired, revoked or already used (the last also revokes its session). `403` without the header. `429` over the per-IP limit.                        |
+| `POST /api/auth/logout`   | Needs `X-Requested-With: nimbus` (`403` without it). Ends the session of the refresh cookie's token, even a rotated one, and clears the cookie: `204` with `Cache-Control: no-store`. Other sessions of the User keep working. Also `204` with no cookie, an unknown cookie or a session already over. |
+| `GET /api/users/me`       | The signed-in User. `401` (`invalid_token`) if the token's User no longer exists.                                                                                                                                                                                                                      |
 
 ## Rules
 

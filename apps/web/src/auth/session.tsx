@@ -41,8 +41,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser(await api.login(input));
   }
 
+  async function logout() {
+    await api.logout();
+    setUser(null);
+  }
+
   return (
-    <SessionContext value={{ user, restoring, unavailable, retry, register, login }}>
+    <SessionContext value={{ user, restoring, unavailable, retry, register, login, logout }}>
       {children}
     </SessionContext>
   );

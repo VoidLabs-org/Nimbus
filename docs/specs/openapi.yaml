@@ -123,6 +123,39 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyAttempts"
 
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Sign out of this browser
+      description: >-
+        Ends the session the refresh cookie belongs to, even if that token was already rotated, and clears the
+        cookie. Other sessions of the same User are not affected. Succeeds with no cookie, an unknown cookie or
+        a session that is already over.
+      security:
+        - refreshCookie: []
+      parameters:
+        - name: X-Requested-With
+          in: header
+          required: true
+          description: Must be `nimbus`. Cross-site forms can't set it, so other sites can't sign a User out.
+          schema:
+            type: string
+            const: nimbus
+      responses:
+        "204":
+          description: Signed out; the refresh cookie is cleared (`Max-Age=0`)
+          headers:
+            Set-Cookie:
+              description: "`refresh_token=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0`"
+              schema:
+                type: string
+        "403":
+          description: The X-Requested-With header is missing or not `nimbus`
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /api/users/me:
     get:
       tags: [users]

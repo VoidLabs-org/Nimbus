@@ -70,6 +70,22 @@ class AuthController {
 		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token());
 	}
 
+	/**
+	 * Ends this browser's session only and clears its cookie. Like {@code /refresh} the cookie is the only
+	 * credential, so it needs the same header. Succeeds even if there was no session left to end.
+	 */
+	@PostMapping("/logout")
+	ResponseEntity<Void> logout(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
+			@RequestHeader(name = "X-Requested-With", required = false) String requestedWith) {
+		if (!"nimbus".equals(requestedWith)) {
+			throw new NotFromAppException();
+		}
+		sessions.end(refreshToken);
+		return ResponseEntity.noContent()
+			.header(HttpHeaders.SET_COOKIE, clearedRefreshCookie().toString())
+			.build();
+	}
+
 	/** Starts a session: the access token goes in the body, the refresh token only in the cookie. */
 	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user) {
 		return withSession(status, user, sessions.start(user));

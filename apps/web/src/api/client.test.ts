@@ -352,6 +352,65 @@ describe("api client", () => {
     expect(lost).toHaveLength(1);
   });
 
+  it("signs out on the server, proving the request comes from the app, and drops the access token", async () => {
+    const server = fakeServer(
+      json(200, { accessToken: "token-1", user: alice }),
+      new Response(null, { status: 204 }),
+      json(401, { status: 401 }),
+    );
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: () => {},
+      currentPath: () => "/",
+    });
+    await api.refresh();
+
+    await api.logout();
+    await api.me().catch(() => {});
+
+    expect(server.calls[1].url).toBe("/api/auth/logout");
+    expect(server.calls[1].init.method).toBe("POST");
+    expect(new Headers(server.calls[1].init.headers).get("X-Requested-With")).toBe("nimbus");
+    expect(authorization(server.calls[2])).toBeNull();
+  });
+
+  // The server session is still alive then, and a reload would sign the User straight back in.
+  it("stays signed in when signing out fails", async () => {
+    const server = fakeServer(
+      json(200, { accessToken: "token-1", user: alice }),
+      json(503, { status: 503 }),
+      json(200, alice),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.refresh();
+
+    await expect(api.logout()).rejects.toMatchObject({ status: 503 });
+    await api.me();
+
+    expect(authorization(server.calls[2])).toBe("Bearer token-1");
+  });
+
+  // A refresh answered after sign-out would hand the User a new token and cookie.
+  it("lets a refresh under way finish before signing out", async () => {
+    let answerRefresh: () => void = () => {};
+    const refreshAnswered = new Promise<void>((resolve) => (answerRefresh = resolve));
+    const server = routedServer(async (call) => {
+      if (call.url === "/api/auth/refresh") {
+        await refreshAnswered;
+        return json(200, { accessToken: "token-1", user: alice });
+      }
+      return new Response(null, { status: 204 });
+    });
+    const api = createApiClient(server.fetchFn);
+
+    const refreshing = api.refresh();
+    const signingOut = api.logout();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    answerRefresh();
+    await Promise.all([refreshing, signingOut]);
+
+    expect(server.calls.map((call) => call.url)).toEqual(["/api/auth/refresh", "/api/auth/logout"]);
+  });
+
   it("does not send anyone to sign in when renewing on app load fails", async () => {
     const server = routedServer(() => json(401, { status: 401 }));
     const lost: string[] = [];

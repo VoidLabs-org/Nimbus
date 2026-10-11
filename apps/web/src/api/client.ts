@@ -166,6 +166,22 @@ export function createApiClient(
     /** Renews the session from the refresh cookie, e.g. on app load. Rejects when there is none. */
     refresh,
 
+    /**
+     * Ends this browser's session on the server and forgets the access token. If the server can't be
+     * reached the User stays signed in, because the session would otherwise live on and a reload would
+     * sign them straight back in. A refresh under way finishes first, so it can't hand out a new token.
+     */
+    async logout(): Promise<void> {
+      await refreshing?.catch(() => {});
+      await send<void>(
+        "/api/auth/logout",
+        { method: "POST", headers: { "X-Requested-With": "nimbus" } },
+        false,
+      );
+      accessToken = null;
+      credentialChanges++;
+    },
+
     /** Creates a User and signs them in. Whoever was signed in stays so if it fails. */
     register: (input: RegisterInput) => startSession("/api/auth/register", input),
 

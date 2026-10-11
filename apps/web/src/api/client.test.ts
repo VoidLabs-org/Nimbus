@@ -411,6 +411,90 @@ describe("api client", () => {
     expect(server.calls.map((call) => call.url)).toEqual(["/api/auth/refresh", "/api/auth/logout"]);
   });
 
+  // Otherwise the sign-in lands after sign-out and puts the session, token and cookie back.
+  it("lets a sign-in under way finish before signing out", async () => {
+    let finishLogin: () => void = () => {};
+    const loginGate = new Promise<void>((resolve) => (finishLogin = resolve));
+    const server = routedServer(async (call) => {
+      if (call.url === "/api/auth/login") {
+        await loginGate;
+        return json(200, { accessToken: "new-session", user: alice });
+      }
+      return call.url === "/api/auth/logout" ? new Response(null, { status: 204 }) : json(401, {});
+    });
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: () => {},
+      currentPath: () => "/",
+    });
+
+    const signingIn = api.login({ email: "alice@example.com", password: "correct horse" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const signingOut = api.logout();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    finishLogin();
+    await Promise.all([signingIn, signingOut]);
+    await api.me().catch(() => {});
+
+    expect(server.calls.map((call) => call.url)).toEqual([
+      "/api/auth/login",
+      "/api/auth/logout",
+      "/api/users/me",
+    ]);
+    expect(authorization(server.calls[2])).toBeNull();
+  });
+
+  // A refresh now would use the cookie being cleared, or race the logout and write a token back.
+  it("does not renew a request that failed while signing out", async () => {
+    let finishLogout: () => void = () => {};
+    const logoutGate = new Promise<void>((resolve) => (finishLogout = resolve));
+    const server = routedServer(async (call) => {
+      if (call.url === "/api/auth/refresh")
+        return json(200, { accessToken: "token-1", user: alice });
+      if (call.url === "/api/auth/logout") {
+        await logoutGate;
+        return new Response(null, { status: 204 });
+      }
+      return json(401, { status: 401 });
+    });
+    const lost: string[] = [];
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: (loginPath) => lost.push(loginPath),
+      currentPath: () => "/",
+    });
+    await api.refresh();
+
+    const signingOut = api.logout();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const me = api.me();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    finishLogout();
+    await signingOut;
+
+    await expect(me).rejects.toMatchObject({ status: 401 });
+    expect(server.calls.filter((call) => call.url === "/api/auth/refresh")).toHaveLength(1);
+    expect(lost).toEqual([]);
+  });
+
+  // The User left on purpose, and the page is already navigating, so no hard reload and no new refresh.
+  it("does not renew or redirect when a request fails after signing out", async () => {
+    const server = routedServer((call) =>
+      call.url === "/api/auth/logout"
+        ? new Response(null, { status: 204 })
+        : json(401, { status: 401 }),
+    );
+    const lost: string[] = [];
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: (loginPath) => lost.push(loginPath),
+      currentPath: () => "/",
+    });
+    await api.logout();
+
+    await expect(api.me()).rejects.toMatchObject({ status: 401 });
+
+    expect(server.calls.map((call) => call.url)).toEqual(["/api/auth/logout", "/api/users/me"]);
+    expect(lost).toEqual([]);
+  });
+
   it("does not send anyone to sign in when renewing on app load fails", async () => {
     const server = routedServer(() => json(401, { status: 401 }));
     const lost: string[] = [];

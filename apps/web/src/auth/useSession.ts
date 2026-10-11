@@ -8,6 +8,8 @@ export type Session = {
   restoring: boolean;
   /** True when the session could not be checked (rate limit, outage); not the same as signed out. */
   unavailable: boolean;
+  /** True after the User chose to sign out, so they go to a plain sign-in page, not one that returns here. */
+  signedOutOnPurpose: boolean;
   /** Checks the session again after it was unavailable. */
   retry: () => void;
   register: (input: RegisterInput) => Promise<void>;

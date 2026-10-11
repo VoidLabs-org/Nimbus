@@ -1,22 +1,26 @@
 import { Button, Menu } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useNavigate } from "react-router";
+import { useState } from "react";
 import { useSession } from "./useSession";
 
-/** The signed-in User's menu. Signing out ends this browser's session only. */
+/**
+ * The signed-in User's menu. Signing out ends this browser's session only. Once it succeeds, RequireUser
+ * sends the User to the sign-in page; this menu doesn't navigate itself.
+ */
 export function UserMenu() {
   const { user, logout } = useSession();
-  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
 
   async function signOut() {
+    setSigningOut(true);
     try {
       await logout();
-      navigate("/login", { replace: true });
     } catch {
       notifications.show({
         color: "red",
         message: "Couldn't sign out. Check your connection and try again.",
       });
+      setSigningOut(false);
     }
   }
 
@@ -26,7 +30,9 @@ export function UserMenu() {
         <Button variant="subtle">{user?.displayName}</Button>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item onClick={signOut}>Sign out</Menu.Item>
+        <Menu.Item onClick={signOut} disabled={signingOut}>
+          Sign out
+        </Menu.Item>
       </Menu.Dropdown>
     </Menu>
   );

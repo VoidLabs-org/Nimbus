@@ -12,7 +12,15 @@ Everything under `identity.internal` is private to the module.
 
 ## Events published
 
-None yet.
+| Event            | When                                                                                                                                    | Payload                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `UserRegistered` | A User is created: registration, or the admin seed below. Published in the same transaction as the insert. Never on sign-in or refresh. | `userId`, `email`, `displayName` |
+
+Other modules react to it (e.g. `access` for a default group). `identity` does not know who listens.
+
+## Admin seed
+
+At startup, when `NIMBUS_ADMIN_EMAIL` and `NIMBUS_ADMIN_PASSWORD` (in `apps/api/.env`, see `.env.example`) are both set and no User has that email, identity creates that User (display name `Admin`) and publishes `UserRegistered`. Otherwise it does nothing, so restarts never create a duplicate and changing the password in `.env` later does not change an existing User. The seed gives no role by itself; `access` decides what an admin may do.
 
 ## Authentication
 

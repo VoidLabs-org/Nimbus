@@ -32,10 +32,15 @@ export class ApiError extends Error {
 export function createApiClient(fetchFn: typeof fetch = fetch) {
   let accessToken: string | null = null;
 
-  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // Public endpoints go without the token: the server rejects an expired one even where none is needed.
+  async function request<T>(
+    path: string,
+    init: RequestInit = {},
+    { authenticated = true } = {},
+  ): Promise<T> {
     const headers = new Headers(init.headers);
     if (init.body !== undefined) headers.set("Content-Type", "application/json");
-    if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+    if (authenticated && accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
     const response = await fetchFn(path, { ...init, headers });
     const body = await response.json().catch(() => undefined);
@@ -46,13 +51,13 @@ export function createApiClient(fetchFn: typeof fetch = fetch) {
   }
 
   return {
-    /** Creates a User and signs them in, replacing whoever was signed in before. */
+    /** Creates a User and signs them in. Whoever was signed in stays so if it fails. */
     async register(input: RegisterInput): Promise<User> {
-      accessToken = null;
-      const { accessToken: token, user } = await request<AuthResponse>("/api/auth/register", {
-        method: "POST",
-        body: JSON.stringify(input),
-      });
+      const { accessToken: token, user } = await request<AuthResponse>(
+        "/api/auth/register",
+        { method: "POST", body: JSON.stringify(input) },
+        { authenticated: false },
+      );
       accessToken = token;
       return user;
     },

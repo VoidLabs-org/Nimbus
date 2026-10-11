@@ -64,6 +64,22 @@ describe("api client", () => {
     expect(authorization(server.calls[1])).toBeNull();
   });
 
+  it("keeps the current session when registering again fails", async () => {
+    const server = fakeServer(
+      json(201, { accessToken: "token-1", user: alice }),
+      json(409, { status: 409, detail: "This email is already registered" }),
+      json(200, alice),
+    );
+    const api = createApiClient(server.fetchFn);
+    const input = { displayName: "Alice", email: "alice@example.com", password: "correct horse" };
+
+    await api.register(input);
+    await expect(api.register(input)).rejects.toBeInstanceOf(ApiError);
+    await api.me();
+
+    expect(authorization(server.calls[2])).toBe("Bearer token-1");
+  });
+
   it("reports field errors from the server", async () => {
     const server = fakeServer(
       json(400, {

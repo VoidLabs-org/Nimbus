@@ -2,7 +2,10 @@ package com.nimbus.api.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.nimbus.api.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
@@ -59,6 +62,42 @@ class RegistrationTests {
 			.expectBody().jsonPath("$.errors.password").isNotEmpty();
 
 		register("Carol", "carol@example.com", "a".repeat(128)).expectStatus().isCreated();
+	}
+
+	@Test
+	void displayNameCannotContainControlCharacters() {
+		register("\u0001", "dave@example.com", "correct horse").expectStatus().isBadRequest()
+			.expectBody().jsonPath("$.errors.displayName").isNotEmpty();
+
+		register("Da\u0000ve", "dave@example.com", "correct horse").expectStatus().isBadRequest()
+			.expectBody().jsonPath("$.errors.displayName").isNotEmpty();
+	}
+
+	@Test
+	void surroundingSpacesAreIgnored() {
+		register("  Erin  ", "  Erin@Example.com ", "correct horse").expectStatus().isCreated()
+			.expectBody()
+			.jsonPath("$.user.email").isEqualTo("erin@example.com")
+			.jsonPath("$.user.displayName").isEqualTo("Erin");
+	}
+
+	// Hashing is slow, so simultaneous requests all pass the "is it taken?" check and race to insert.
+	@Test
+	void simultaneousRegistrationsForOneEmailCreateOnlyOneUser() throws Exception {
+		var attempts = 6;
+		try (var pool = Executors.newFixedThreadPool(attempts)) {
+			var statuses = new ArrayList<Future<Integer>>();
+			for (var i = 0; i < attempts; i++) {
+				statuses.add(pool.submit(() -> register("Frank", "frank@example.com", "correct horse")
+					.expectBody(String.class).returnResult().getStatus().value()));
+			}
+			var results = new ArrayList<Integer>();
+			for (var status : statuses) {
+				results.add(status.get());
+			}
+
+			assertThat(results).containsOnly(201, 409).containsOnlyOnce(201);
+		}
 	}
 
 	private RestTestClient.ResponseSpec register(String displayName, String email, String password) {

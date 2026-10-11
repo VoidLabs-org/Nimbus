@@ -1,6 +1,10 @@
 package com.nimbus.api.identity;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.TestcontainersConfiguration;
@@ -9,6 +13,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 @Import(TestcontainersConfiguration.class)
@@ -18,6 +27,27 @@ class SignedInUserTests {
 
 	@Autowired
 	RestTestClient client;
+
+	@Autowired
+	JwtEncoder jwtEncoder;
+
+	@Test
+	void validTokenForAUserWhoNoLongerExistsIsRejectedAsAnInvalidToken() {
+		var now = Instant.now();
+		var claims = JwtClaimsSet.builder()
+			.subject(UUID.randomUUID().toString())
+			.issuedAt(now)
+			.expiresAt(now.plusSeconds(60))
+			.build();
+		var token = jwtEncoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
+			.getTokenValue();
+
+		client.get().uri("/api/users/me")
+			.header("Authorization", "Bearer " + token)
+			.exchange()
+			.expectStatus().isUnauthorized()
+			.expectHeader().value("WWW-Authenticate", value -> assertThat(value).contains("invalid_token"));
+	}
 
 	@Test
 	void signedInUserCanSeeWhoTheyAre() {

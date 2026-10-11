@@ -7,7 +7,6 @@ import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /** Creates Users who sign up with email and password. */
 @Service
@@ -25,14 +24,16 @@ class Registration {
 		this.clock = clock;
 	}
 
-	@Transactional
+	/**
+	 * Deliberately not one transaction: Argon2 hashing is slow and must not hold a database connection.
+	 * The unique constraint, not the up-front check, is what guarantees one User per email.
+	 */
 	User register(String displayName, String email, String password) {
-		var normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+		var normalizedEmail = email.toLowerCase(Locale.ROOT);
 		if (users.existsByEmail(normalizedEmail)) {
 			throw new EmailAlreadyRegisteredException();
 		}
-		var user = User.withPassword(normalizedEmail, displayName.trim(), passwordEncoder.encode(password),
-				clock.instant());
+		var user = User.withPassword(normalizedEmail, displayName, passwordEncoder.encode(password), clock.instant());
 		try {
 			return users.saveAndFlush(user);
 		}
@@ -45,9 +46,11 @@ class Registration {
 		}
 	}
 
+	// The reported name may be schema-qualified or quoted, e.g. "public.users_email_key".
 	private static boolean violates(DataIntegrityViolationException e, String constraint) {
 		return e.getCause() instanceof ConstraintViolationException violation
-				&& constraint.equals(violation.getConstraintName());
+				&& violation.getConstraintName() != null
+				&& violation.getConstraintName().toLowerCase(Locale.ROOT).contains(constraint);
 	}
 
 	static class EmailAlreadyRegisteredException extends RuntimeException {

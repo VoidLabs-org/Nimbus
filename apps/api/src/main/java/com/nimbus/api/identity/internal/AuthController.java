@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,10 +33,18 @@ class AuthController {
 		return new AuthResponse(accessTokens.issueFor(user), UserResponse.from(user));
 	}
 
+	/** Surrounding whitespace is dropped before validation; passwords are kept exactly as typed. */
 	record RegisterRequest(
-			@NotBlank @Size(max = 100) String displayName,
+			@NotBlank @Size(max = 100)
+			@Pattern(regexp = "\\P{Cntrl}*", message = "must not contain control characters") String displayName,
 			@NotBlank @Email @Size(max = 254) String email,
 			@NotNull @Size(min = 8, max = 128) String password) {
+
+		RegisterRequest {
+			displayName = displayName == null ? null : displayName.strip();
+			email = email == null ? null : email.strip();
+		}
+
 	}
 
 	record AuthResponse(String accessToken, UserResponse user) {

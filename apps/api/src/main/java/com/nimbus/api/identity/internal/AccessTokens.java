@@ -28,7 +28,7 @@ class AccessTokens {
 	String issueFor(User user) {
 		var now = clock.instant();
 		var claims = JwtClaimsSet.builder()
-			.subject(user.id().toString())
+			.subject(user.getId().toString())
 			.issuedAt(now)
 			.expiresAt(now.plus(properties.accessTokenTtl()))
 			.build();

@@ -1,7 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import com.nimbus.api.identity.CurrentUser;
-import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,13 +19,12 @@ class UsersController {
 		this.currentUser = currentUser;
 	}
 
-	/** The signed-in User's profile; 401 if their token outlived the User. */
+	/** The signed-in User's profile; an invalid-token 401 if their token outlived the User. */
 	@GetMapping("/me")
-	ResponseEntity<UserResponse> me() {
+	UserResponse me() {
 		return users.findById(currentUser.id())
 			.map(UserResponse::from)
-			.map(ResponseEntity::ok)
-			.orElseGet(() -> ResponseEntity.status(401).build());
+			.orElseThrow(() -> new InvalidBearerTokenException("The User for this token no longer exists"));
 	}
 
 }

@@ -65,10 +65,6 @@ class User implements Persistable<UUID> {
 		return isNew;
 	}
 
-	UUID id() {
-		return id;
-	}
-
 	String email() {
 		return email;
 	}

@@ -4,9 +4,9 @@ Owns **Users** and sign-in: registration, passwords, access tokens and (later) r
 
 ## Public interface
 
-| Type          | Use                                                                                                                                         |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CurrentUser` | Inject it and call `id()` for the signed-in User's id (UUID) in a request. Throws `IllegalStateException` outside an authenticated request. |
+| Type          | Use                                                                                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CurrentUser` | Inject it and call `id()` for the signed-in User's id (UUID) in a request. Outside an authenticated request it throws `AuthenticationCredentialsNotFoundException`, which becomes a `401`. |
 
 Everything under `identity.internal` is private to the module.
 
@@ -29,13 +29,14 @@ Contract: [openapi.yaml](openapi.yaml).
 | Endpoint                  | Behaviour                                                                                                                                                     |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /api/auth/register` | Creates a User and signs them in: `201 {accessToken, user}`. `409` if the email is registered (case-insensitive), `400` with `errors` per field when invalid. |
-| `GET /api/users/me`       | The signed-in User.                                                                                                                                           |
+| `GET /api/users/me`       | The signed-in User. `401` (`invalid_token`) if the token's User no longer exists.                                                                             |
 
 ## Rules
 
-- Email is unique and stored lower-cased.
-- Password: 8–128 characters, no composition rules. Hashed with Argon2id (stored with an `{argon2}` prefix so the algorithm can change later). Not bcrypt, because bcrypt only uses the first 72 bytes.
-- Display name: required, at most 100 characters.
+- Email and display name have surrounding whitespace removed before validation.
+- Email is unique and stored lower-cased. The unique constraint, not the up-front check, guarantees one User per email when registrations race.
+- Password: 8–128 characters, no composition rules, kept exactly as typed. Hashed with Argon2id (stored with an `{argon2}` prefix so the algorithm can change later), outside any database transaction because it is slow. Not bcrypt, because bcrypt only uses the first 72 bytes.
+- Display name: required, at most 100 characters, no control characters.
 
 ## Tables
 

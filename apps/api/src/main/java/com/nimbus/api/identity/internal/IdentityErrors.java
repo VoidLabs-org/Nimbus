@@ -33,6 +33,18 @@ class IdentityErrors {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
 	}
 
+	@ExceptionHandler
+	ProblemDetail notFromApp(AuthController.NotFromAppException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
+	}
+
+	@ExceptionHandler
+	ResponseEntity<ProblemDetail> invalidRefreshToken(Sessions.InvalidRefreshTokenException e) {
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+			.header(HttpHeaders.SET_COOKIE, AuthController.clearedRefreshCookie().toString())
+			.body(ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage()));
+	}
+
 	/** Lists each invalid field with its message under {@code errors}, so forms can show them. */
 	@ExceptionHandler
 	ProblemDetail invalidRequest(MethodArgumentNotValidException e) {

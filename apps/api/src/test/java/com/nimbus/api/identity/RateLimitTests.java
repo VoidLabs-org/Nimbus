@@ -2,11 +2,7 @@ package com.nimbus.api.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -17,16 +13,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
-@Import({ TestcontainersConfiguration.class, RateLimitTests.MovableClockConfiguration.class })
+@Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-		properties = { "nimbus.auth.registrations-per-address=3", "nimbus.auth.sign-ins-per-address=15" })
+		properties = { "nimbus.auth.registrations-per-address=3", "nimbus.auth.sign-ins-per-address=15",
+				"nimbus.auth.refreshes-per-address=5" })
 @AutoConfigureRestTestClient
 class RateLimitTests {
 
@@ -118,6 +112,47 @@ class RateLimitTests {
 		registerVia("10.0.0.2", "Rosa", "rosa@example.com").expectStatus().isCreated();
 	}
 
+	// Coarse: refresh tokens can't be guessed, this only keeps one client from hammering the endpoint.
+	@Test
+	void refreshesFromOneAddressAreLimited() {
+		clock.advance(Duration.ofHours(7));
+		for (var i = 1; i <= 5; i++) {
+			refreshVia("10.0.1.1").expectStatus().isUnauthorized();
+		}
+
+		refreshVia("10.0.1.1").expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS)
+			.expectHeader().exists("Retry-After");
+		refreshVia("10.0.1.2").expectStatus().isUnauthorized();
+	}
+
+	// The web app calls /refresh on every load, signed in or not, so visitors without a cookie are routine.
+	@Test
+	void signedOutVisitorsDoNotUseUpTheRefreshLimit() {
+		clock.advance(Duration.ofHours(9));
+		for (var i = 1; i <= 8; i++) {
+			client.post().uri("/api/auth/refresh")
+				.header("X-Forwarded-For", "10.0.3.1")
+				.header("X-Requested-With", "nimbus")
+				.exchange()
+				.expectStatus().isUnauthorized();
+		}
+
+		refreshVia("10.0.3.1").expectStatus().isUnauthorized();
+	}
+
+	// Everyone behind one office NAT shares an address, and each of them refreshes every 15 minutes.
+	@Test
+	void successfulRefreshesDoNotUseUpTheLimit() {
+		clock.advance(Duration.ofHours(8));
+		var token = RefreshCookies.valueOf(registerVia("10.0.2.1", "Uma", "uma@example.com").expectStatus().isCreated()
+			.expectBody(String.class).returnResult());
+
+		for (var i = 1; i <= 6; i++) {
+			token = RefreshCookies.valueOf(refreshVia("10.0.2.1", token).expectStatus().isOk()
+				.expectBody(String.class).returnResult());
+		}
+	}
+
 	@Test
 	void registrationsFromOneAddressAreLimited() {
 		clock.advance(Duration.ofHours(2)); // a fresh window, whatever other tests registered
@@ -149,51 +184,22 @@ class RateLimitTests {
 			.exchange();
 	}
 
+	private RestTestClient.ResponseSpec refreshVia(String clientAddress) {
+		return refreshVia(clientAddress, "not-a-token");
+	}
+
+	private RestTestClient.ResponseSpec refreshVia(String clientAddress, String refreshToken) {
+		return client.post().uri("/api/auth/refresh")
+			.header("X-Forwarded-For", clientAddress)
+			.header("X-Requested-With", "nimbus")
+			.cookie("refresh_token", refreshToken)
+			.exchange();
+	}
+
 	private RestTestClient.ResponseSpec signIn(String email, String password) {
 		return client.post().uri("/api/auth/login")
 			.body(Map.of("email", email, "password", password))
 			.exchange();
-	}
-
-	@TestConfiguration(proxyBeanMethods = false)
-	static class MovableClockConfiguration {
-
-		@Bean
-		@Primary
-		MovableClock movableClock() {
-			return new MovableClock(Instant.now());
-		}
-
-	}
-
-	/** Lets a test move time forward instead of waiting. */
-	static class MovableClock extends Clock {
-
-		private volatile Instant now;
-
-		MovableClock(Instant start) {
-			this.now = start;
-		}
-
-		void advance(Duration duration) {
-			now = now.plus(duration);
-		}
-
-		@Override
-		public Instant instant() {
-			return now;
-		}
-
-		@Override
-		public ZoneId getZone() {
-			return ZoneOffset.UTC;
-		}
-
-		@Override
-		public Clock withZone(ZoneId zone) {
-			return this;
-		}
-
 	}
 
 }

@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "node run-gradle.mjs bootRun",
+    "dev:watch": "node run-gradle.mjs compileJava --continuous",
     "build": "node run-gradle.mjs bootJar",
     "test": "node run-gradle.mjs test"
   }

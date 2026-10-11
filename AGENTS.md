@@ -35,17 +35,23 @@ Project management app (projects, issues, boards, sprints) with AI features. Tea
 - Permissions are enforced server-side; the UI only hides what a user can't use.
 - Lint with oxlint, format with oxfmt. No ESLint or Prettier.
 
-## Specs and tickets
+## Workflow
 
-- Plans for a change (feature specs, tickets) are GitHub Issues.
-- `docs/specs/` describes how the system works now. When a change touches a module's public API, events, tables or REST endpoints, update its file in `docs/specs/` in the same PR.
+Full loop: `docs/workflow.md`. Terms: `GLOSSARY.md`.
+
+- Feature specs and tickets are GitHub issues. In docs, call them "feature spec" and "ticket"; "Issue" means the Nimbus product concept.
+- Branch from `main` before implementing, named `<ticket#>-<short-name>` (e.g. `42-roles-page`).
+- Every PR description includes `Closes #<ticket>`, also when written with `/pr`. Take the ticket number from the start of the branch name.
+- Run `/to-tickets` with the feature spec number (`/to-tickets #<feature-spec>`) so tickets become its sub-issues.
+- The `ready-for-agent` label means "written for an agent", not "approved". Approval is the Nimbus Board's Ready column.
+- Module specs in `docs/specs/` describe how the system works now. When a change touches a module's public API, events, tables or REST endpoints, update its module spec in the same PR.
 - Record hard-to-reverse decisions in `docs/adr/`.
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues and specs are GitHub Issues on VoidLabs-org/Nimbus, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Feature specs and tickets are GitHub issues on VoidLabs-org/Nimbus, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 

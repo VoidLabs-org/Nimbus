@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Feature specs and tickets for this repo live as GitHub issues (see `GLOSSARY.md`; in our docs, "Issue" alone means the Nimbus product concept). Use the `gh` CLI for all operations.
 
 ## Conventions
 

@@ -24,8 +24,12 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
-  // Set by the server when "Continue with Google" ended back here with a reason.
-  const providerError = providerSignInErrorMessage(searchParams.get("error"));
+  // Set by the server when "Continue with Google" ended back here with a reason. It describes the last Google
+  // attempt only, so it goes away once the User tries the form instead.
+  const [providerErrorShown, setProviderErrorShown] = useState(true);
+  const providerError = providerErrorShown
+    ? providerSignInErrorMessage(searchParams.get("error"))
+    : null;
 
   const form = useForm<LoginInput>({
     initialValues: { email: "", password: "" },
@@ -44,6 +48,7 @@ export default function LoginPage() {
 
   async function submit(values: LoginInput) {
     setFormError(null);
+    setProviderErrorShown(false);
     try {
       await login({ ...values, email: values.email.trim() });
       navigate(safeReturnPath(searchParams.get("returnTo")), { replace: true });

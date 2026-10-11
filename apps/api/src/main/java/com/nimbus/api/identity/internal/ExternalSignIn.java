@@ -90,7 +90,8 @@ class ExternalSignIn {
 		if (name.isEmpty()) {
 			name = profile.email().substring(0, profile.email().indexOf('@'));
 		}
-		return name.length() > 100 ? name.substring(0, 100) : name;
+		// 100 characters as people count them: cutting UTF-16 units could split an emoji in half.
+		return name.codePointCount(0, name.length()) > 100 ? name.substring(0, name.offsetByCodePoints(0, 100)) : name;
 	}
 
 	/** The provider didn't confirm the person owns the email, so it can't be used to find or create a User. */

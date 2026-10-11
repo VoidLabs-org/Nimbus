@@ -126,6 +126,16 @@ class ExternalSignInTests {
 		assertThat(recorder.registered).filteredOn(event -> event.userId().equals(squatted.getId())).hasSize(1);
 	}
 
+	@Test
+	void aLongNameIsCutBetweenCharactersNeverInsideAnEmoji() {
+		var emoji = new String(Character.toChars(0x1F600));
+		var name = "a".repeat(99) + emoji + "bcd";
+
+		var user = externalSignIn.signIn(google("g-fay", "fay@example.com", true, name, null));
+
+		assertThat(user.displayName()).isEqualTo("a".repeat(99) + emoji);
+	}
+
 	private static ExternalProfile google(String id, String email, boolean verified, String name, String avatar) {
 		return new ExternalProfile("google", id, email, verified, name, avatar);
 	}

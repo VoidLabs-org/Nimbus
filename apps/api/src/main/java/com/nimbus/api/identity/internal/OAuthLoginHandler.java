@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -35,11 +34,10 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	/** Where the browser sees Nimbus, without a trailing slash. */
 	private final String publicUrl;
 
-	OAuthLoginHandler(ExternalSignIn externalSignIn, Sessions sessions,
-			@Value("${nimbus.auth.public-url}") String publicUrl) {
+	OAuthLoginHandler(ExternalSignIn externalSignIn, Sessions sessions, AuthProperties properties) {
 		this.externalSignIn = externalSignIn;
 		this.sessions = sessions;
-		this.publicUrl = publicUrl.strip().replaceAll("/+$", "");
+		this.publicUrl = properties.publicUrl();
 	}
 
 	@Override

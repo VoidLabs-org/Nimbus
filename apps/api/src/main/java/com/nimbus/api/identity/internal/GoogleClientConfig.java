@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 
 /**
  * Registers Google as a sign-in provider when {@code GOOGLE_CLIENT_ID} is set; without it "Continue with
@@ -23,14 +24,20 @@ class GoogleClientConfig {
 	@Bean
 	@ConditionalOnExpression("!'${nimbus.auth.google.client-id:}'.isBlank()")
 	ClientRegistrationRepository googleClientRegistrations(@Value("${nimbus.auth.google.client-id}") String clientId,
-			@Value("${nimbus.auth.google.client-secret:}") String clientSecret,
-			@Value("${nimbus.auth.public-url}") String publicUrl) {
+			@Value("${nimbus.auth.google.client-secret:}") String clientSecret, AuthProperties properties) {
 		var google = CommonOAuth2Provider.GOOGLE.getBuilder(GoogleProfiles.PROVIDER)
 			.clientId(clientId.strip())
 			.clientSecret(clientSecret.strip())
-			.redirectUri(publicUrl.strip().replaceAll("/+$", "") + CALLBACK_PATH)
+			.redirectUri(properties.publicUrl() + CALLBACK_PATH)
 			.build();
 		return new InMemoryClientRegistrationRepository(google);
+	}
+
+	/** Provider tokens are never stored (see {@link NoStoredProviderTokens}). */
+	@Bean
+	@ConditionalOnExpression("!'${nimbus.auth.google.client-id:}'.isBlank()")
+	OAuth2AuthorizedClientRepository authorizedClientRepository() {
+		return new NoStoredProviderTokens();
 	}
 
 }

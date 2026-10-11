@@ -19,6 +19,7 @@ import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -36,7 +37,7 @@ class SecurityConfig {
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectProvider<ClientRegistrationRepository> providers,
-			OAuthLoginHandler oauthLogin) {
+			ObjectProvider<OAuth2AuthorizedClientRepository> authorizedClients, OAuthLoginHandler oauthLogin) {
 		http.csrf(csrf -> csrf.disable())
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(requests -> requests
@@ -52,6 +53,7 @@ class SecurityConfig {
 			http.oauth2Login(login -> login
 				.authorizationEndpoint(endpoint -> endpoint.baseUri("/api/auth/oauth2"))
 				.redirectionEndpoint(endpoint -> endpoint.baseUri("/api/auth/oauth2/callback/*"))
+				.authorizedClientRepository(authorizedClients.getObject())
 				.successHandler(oauthLogin)
 				.failureHandler(oauthLogin));
 		}

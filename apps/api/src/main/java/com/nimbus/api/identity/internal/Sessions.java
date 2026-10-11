@@ -67,10 +67,12 @@ class Sessions {
 	 */
 	@Transactional(noRollbackFor = InvalidRefreshTokenException.class)
 	Refreshed refresh(String presented, String fromAddress) {
-		var attempt = attemptsByAddress.acquire(fromAddress, "Too many requests from this network. Try again later.");
+		// The web app asks on every load, signed in or not. A request without a cookie costs nothing and
+		// proves nothing, so it must not use up the limit that signed-in Users on the same network share.
 		if (presented == null || presented.isBlank()) {
 			throw new InvalidRefreshTokenException();
 		}
+		var attempt = attemptsByAddress.acquire(fromAddress, "Too many requests from this network. Try again later.");
 		var now = now();
 		var token = tokens.findByTokenHash(hash(presented)).orElseThrow(InvalidRefreshTokenException::new);
 		var session = token.session();

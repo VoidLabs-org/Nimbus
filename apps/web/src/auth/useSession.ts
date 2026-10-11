@@ -6,6 +6,10 @@ export type Session = {
   user: User | null;
   /** True while the session is being renewed on app load, before anyone knows who is signed in. */
   restoring: boolean;
+  /** True when the session could not be checked (rate limit, outage); not the same as signed out. */
+  unavailable: boolean;
+  /** Checks the session again after it was unavailable. */
+  retry: () => void;
   register: (input: RegisterInput) => Promise<void>;
   login: (input: LoginInput) => Promise<void>;
 };

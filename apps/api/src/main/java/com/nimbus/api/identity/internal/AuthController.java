@@ -81,6 +81,11 @@ class AuthController {
 			.body(new AuthResponse(accessTokens.issueFor(user), UserResponse.from(user)));
 	}
 
+	/** Tells the browser to drop a refresh token the server rejected, instead of resending it on every load. */
+	static ResponseCookie clearedRefreshCookie() {
+		return refreshCookie("", Duration.ZERO);
+	}
+
 	private static ResponseCookie refreshCookie(String value, Duration maxAge) {
 		return ResponseCookie.from(REFRESH_COOKIE, value)
 			.httpOnly(true)

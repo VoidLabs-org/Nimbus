@@ -2,7 +2,6 @@ package com.nimbus.api.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.net.HttpCookie;
 import java.time.Duration;
 import java.util.Map;
 
@@ -14,7 +13,6 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTe
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
-import org.springframework.test.web.servlet.client.EntityExchangeResult;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 @Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class })
@@ -37,7 +35,7 @@ class SessionTests {
 		var setCookie = result.getResponseHeaders().getFirst(HttpHeaders.SET_COOKIE);
 		assertThat(setCookie).contains("HttpOnly").contains("Secure").contains("SameSite=Strict")
 			.contains("Path=/api/auth");
-		var cookie = refreshCookie(result);
+		var cookie = RefreshCookies.of(result);
 		assertThat(cookie.getValue()).isNotBlank();
 		assertThat(cookie.getMaxAge()).isPositive();
 		assertThat(result.getResponseBody()).doesNotContain(cookie.getValue());
@@ -53,20 +51,20 @@ class SessionTests {
 
 		assertThat(result.getResponseHeaders().getFirst(HttpHeaders.SET_COOKIE)).contains("HttpOnly")
 			.contains("Secure").contains("SameSite=Strict").contains("Path=/api/auth");
-		refresh(refreshCookie(result).getValue()).expectStatus().isOk()
+		refresh(RefreshCookies.of(result).getValue()).expectStatus().isOk()
 			.expectBody().jsonPath("$.user.displayName").isEqualTo("Ida");
 	}
 
 	@Test
 	void refreshingRotatesTheCookieAndReturnsAWorkingAccessToken() {
 		register("Babbage", "babbage@example.com");
-		var signedIn = refreshCookie(signIn("babbage@example.com").expectBody(String.class).returnResult());
+		var signedIn = RefreshCookies.of(signIn("babbage@example.com").expectBody(String.class).returnResult());
 
 		var result = refresh(signedIn.getValue()).expectStatus().isOk()
 			.expectHeader().value("Cache-Control", value -> assertThat(value).contains("no-store"))
 			.expectBody(String.class).returnResult();
 
-		var rotated = refreshCookie(result);
+		var rotated = RefreshCookies.of(result);
 		assertThat(rotated.getValue()).isNotBlank().isNotEqualTo(signedIn.getValue());
 		assertThat(result.getResponseBody()).doesNotContain(rotated.getValue());
 		assertThat(JsonPath.<String>read(result.getResponseBody(), "$.user.email")).isEqualTo("babbage@example.com");
@@ -141,7 +139,7 @@ class SessionTests {
 			clock.advance(Duration.ofDays(20));
 			token = refreshedToken(token);
 		}
-		var cookie = refreshCookie(refresh(token).expectStatus().isOk().expectBody(String.class).returnResult());
+		var cookie = RefreshCookies.of(refresh(token).expectStatus().isOk().expectBody(String.class).returnResult());
 
 		assertThat(cookie.getMaxAge()).isEqualTo(Duration.ofDays(10).toSeconds());
 	}
@@ -165,6 +163,23 @@ class SessionTests {
 		refresh(token).expectStatus().isOk();
 	}
 
+	// Otherwise the browser keeps sending the dead token on every load until it expires.
+	@Test
+	void rejectedRefreshTokenIsClearedFromTheBrowser() {
+		register("Knuth", "knuth@example.com");
+		var token = signedInToken("knuth@example.com");
+		refresh(token).expectStatus().isOk();
+
+		var reused = refresh(token).expectStatus().isUnauthorized().expectBody(String.class).returnResult();
+
+		var cookie = RefreshCookies.of(reused);
+		assertThat(cookie.getValue()).isEmpty();
+		assertThat(cookie.getMaxAge()).isZero();
+		assertThat(cookie.getPath()).isEqualTo("/api/auth");
+		refresh("not-a-token").expectStatus().isUnauthorized()
+			.expectHeader().value(HttpHeaders.SET_COOKIE, value -> assertThat(value).contains("Max-Age=0"));
+	}
+
 	@Test
 	void missingOrUnknownRefreshTokenIsRejected() {
 		client.post().uri("/api/auth/refresh")
@@ -176,11 +191,11 @@ class SessionTests {
 	}
 
 	private String signedInToken(String email) {
-		return refreshCookie(signIn(email).expectStatus().isOk().expectBody(String.class).returnResult()).getValue();
+		return RefreshCookies.of(signIn(email).expectStatus().isOk().expectBody(String.class).returnResult()).getValue();
 	}
 
 	private String refreshedToken(String refreshToken) {
-		return refreshCookie(refresh(refreshToken).expectStatus().isOk().expectBody(String.class).returnResult())
+		return RefreshCookies.of(refresh(refreshToken).expectStatus().isOk().expectBody(String.class).returnResult())
 			.getValue();
 	}
 
@@ -204,12 +219,5 @@ class SessionTests {
 			.exchange();
 	}
 
-	private static HttpCookie refreshCookie(EntityExchangeResult<?> result) {
-		return result.getResponseHeaders().getValuesAsList(HttpHeaders.SET_COOKIE).stream()
-			.flatMap(header -> HttpCookie.parse(header).stream())
-			.filter(cookie -> cookie.getName().equals("refresh_token"))
-			.findFirst()
-			.orElseThrow(() -> new AssertionError("no refresh_token cookie was set"));
-	}
 
 }

@@ -29,6 +29,7 @@ None yet.
 - Each refresh token works once. `POST /api/auth/refresh` marks it used and sets a new one in the same session (rotation).
 - Presenting a used token means it was copied: the whole session is revoked, so neither copy works any more. Other sessions of the same User are not affected.
 - Expiry: a token expires 30 days after it was issued (`nimbus.auth.session-idle-timeout`), so a session lives as long as it is used at least every 30 days, but never more than 90 days after sign-in (`nimbus.auth.session-max-age`).
+- A `401` from `/refresh` also clears the cookie (`Max-Age=0`), so the browser stops sending a dead token.
 - The cookie is the only credential for `/refresh`, so it also requires `X-Requested-With: nimbus` (`403` without it). Cross-site forms can't set that header.
 - Known trade-off: two refreshes sent at once with the same cookie (e.g. several tabs restored together) count as reuse and end the session. The web client sends one refresh at a time per tab, and only a `401` from `/refresh` sends the User to sign in (a `429` or an outage doesn't).
 - Expired and revoked rows are not cleaned up yet.
@@ -60,7 +61,7 @@ Counted in memory over a sliding 15-minute window (`nimbus.auth.limit-window`), 
 | Failed sign-ins per email. Further attempts, even with the right password, get `429` until the oldest failure leaves the window. A successful sign-in doesn't count, but doesn't erase earlier failures either. Known trade-off: anyone who knows an email can keep it locked out (spec #1, Q19). | 5       | `nimbus.auth.failed-sign-ins-per-email` |
 | Failed sign-ins per IP address, across all emails (stops one client spraying guesses over many emails)                                                                                                                                                                                            | 20      | `nimbus.auth.sign-ins-per-address`      |
 | Registration attempts per IP address                                                                                                                                                                                                                                                              | 10      | `nimbus.auth.registrations-per-address` |
-| Failed refreshes per IP address (coarse: refresh tokens can't be guessed; this only stops one client hammering the endpoint). Successful refreshes don't count, because everyone behind one office network shares an address.                                                                     | 60      | `nimbus.auth.refreshes-per-address`     |
+| Failed refreshes per IP address (coarse: refresh tokens can't be guessed; this only stops one client hammering the endpoint). Successful refreshes and requests without a cookie (signed-out page loads) don't count, because everyone behind one office network shares an address.               | 60      | `nimbus.auth.refreshes-per-address`     |
 
 Attempts are counted before the password check, so parallel requests can't race past a limit.
 

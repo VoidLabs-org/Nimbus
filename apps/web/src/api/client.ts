@@ -54,6 +54,11 @@ export function createApiClient(
 ) {
   let accessToken: string | null = null;
   let refreshing: Promise<User> | null = null;
+  let starting: Promise<User> | null = null;
+  // Counts changes to the credentials (every finished refresh, every sign-in). A request that failed
+  // before the latest change is judged against that change, not by starting yet another refresh.
+  let credentialChanges = 0;
+  let lostReported = false;
 
   async function send<T>(path: string, init: RequestInit, authenticated: boolean): Promise<T> {
     const headers = new Headers(init.headers);
@@ -77,18 +82,25 @@ export function createApiClient(
   /**
    * Each refresh rotates the cookie, and the server treats a reused cookie as stolen and ends the
    * session. So everyone asking while one is under way waits for that one instead of starting another.
+   * A sign-in under way finishes first: a refresh with the old cookie answered after it would replace
+   * the new session's token and cookie.
    */
   function refresh(): Promise<User> {
-    refreshing ??= send<AuthResponse>(
-      "/api/auth/refresh",
-      { method: "POST", headers: { "X-Requested-With": "nimbus" } },
-      false,
-    )
+    refreshing ??= (starting?.catch(() => {}) ?? Promise.resolve())
+      .then(() =>
+        send<AuthResponse>(
+          "/api/auth/refresh",
+          { method: "POST", headers: { "X-Requested-With": "nimbus" } },
+          false,
+        ),
+      )
       .then(({ accessToken: token, user }) => {
         accessToken = token;
+        lostReported = false;
         return user;
       })
       .finally(() => {
+        credentialChanges++;
         refreshing = null;
       });
     return refreshing;
@@ -100,39 +112,54 @@ export function createApiClient(
     init: RequestInit = {},
     { authenticated = true } = {},
   ): Promise<T> {
-    const sentWith = accessToken;
+    const changesWhenSent = credentialChanges;
     try {
       return await send<T>(path, init, authenticated);
     } catch (error) {
       if (!authenticated || !(error instanceof ApiError) || error.status !== 401) throw error;
-    }
-    // Another request may have renewed the token while this one was out; then just use the new one.
-    if (accessToken === sentWith || accessToken === null) {
-      try {
-        await refresh();
-      } catch (error) {
-        // Only a 401 means the session is gone; a rate limit or an outage may pass.
-        if (error instanceof ApiError && error.status === 401) {
-          accessToken = null;
-          onSessionLost(loginPath(currentPath()));
-        }
+      await starting?.catch(() => {});
+      if (credentialChanges === changesWhenSent) {
+        await renew();
+      } else if (accessToken === null) {
+        // The session was lost, and reported, while this request was out.
         throw error;
       }
     }
     return send<T>(path, init, authenticated);
   }
 
-  // A refresh under way finishes first; answered later, it would replace the new session's token and
-  // cookie with the old session's.
-  async function startSession(path: string, input: RegisterInput | LoginInput): Promise<User> {
-    await refreshing?.catch(() => {});
-    const { accessToken: token, user } = await request<AuthResponse>(
-      path,
-      { method: "POST", body: JSON.stringify(input) },
-      { authenticated: false },
-    );
-    accessToken = token;
-    return user;
+  async function renew() {
+    try {
+      await refresh();
+    } catch (error) {
+      // Only a 401 means the session is gone; a rate limit or an outage may pass.
+      if (error instanceof ApiError && error.status === 401 && !lostReported) {
+        lostReported = true;
+        accessToken = null;
+        onSessionLost(loginPath(currentPath()));
+      }
+      throw error;
+    }
+  }
+
+  // Waits for a refresh under way, so it can't answer after this and replace the new session.
+  function startSession(path: string, input: RegisterInput | LoginInput): Promise<User> {
+    const started = (async () => {
+      await refreshing?.catch(() => {});
+      const { accessToken: token, user } = await request<AuthResponse>(
+        path,
+        { method: "POST", body: JSON.stringify(input) },
+        { authenticated: false },
+      );
+      accessToken = token;
+      lostReported = false;
+      credentialChanges++;
+      return user;
+    })();
+    starting = started;
+    return started.finally(() => {
+      if (starting === started) starting = null;
+    });
   }
 
   return {

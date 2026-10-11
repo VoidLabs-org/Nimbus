@@ -125,18 +125,31 @@ class RateLimitTests {
 		refreshVia("10.0.1.2").expectStatus().isUnauthorized();
 	}
 
+	// The web app calls /refresh on every load, signed in or not, so visitors without a cookie are routine.
+	@Test
+	void signedOutVisitorsDoNotUseUpTheRefreshLimit() {
+		clock.advance(Duration.ofHours(9));
+		for (var i = 1; i <= 8; i++) {
+			client.post().uri("/api/auth/refresh")
+				.header("X-Forwarded-For", "10.0.3.1")
+				.header("X-Requested-With", "nimbus")
+				.exchange()
+				.expectStatus().isUnauthorized();
+		}
+
+		refreshVia("10.0.3.1").expectStatus().isUnauthorized();
+	}
+
 	// Everyone behind one office NAT shares an address, and each of them refreshes every 15 minutes.
 	@Test
 	void successfulRefreshesDoNotUseUpTheLimit() {
 		clock.advance(Duration.ofHours(8));
-		var token = registerVia("10.0.2.1", "Uma", "uma@example.com").expectStatus().isCreated()
-			.expectBody(String.class).returnResult().getResponseHeaders().getFirst("Set-Cookie")
-			.replaceFirst("^refresh_token=([^;]*);.*$", "$1");
+		var token = RefreshCookies.valueOf(registerVia("10.0.2.1", "Uma", "uma@example.com").expectStatus().isCreated()
+			.expectBody(String.class).returnResult());
 
 		for (var i = 1; i <= 6; i++) {
-			token = refreshVia("10.0.2.1", token).expectStatus().isOk()
-				.expectBody(String.class).returnResult().getResponseHeaders().getFirst("Set-Cookie")
-				.replaceFirst("^refresh_token=([^;]*);.*$", "$1");
+			token = RefreshCookies.valueOf(refreshVia("10.0.2.1", token).expectStatus().isOk()
+				.expectBody(String.class).returnResult());
 		}
 	}
 

@@ -301,6 +301,57 @@ describe("api client", () => {
     expect(authorization(server.calls[2])).toBe("Bearer new-session");
   });
 
+  // The old cookie's refresh would rotate it and replace the cookie the sign-in just set.
+  it("lets a sign-in under way finish before renewing, so the old session can't replace the new one", async () => {
+    let finishLogin: () => void = () => {};
+    const loginGate = new Promise<void>((resolve) => (finishLogin = resolve));
+    const server = routedServer(async (call) => {
+      if (call.url === "/api/auth/login") {
+        await loginGate;
+        return json(200, { accessToken: "new-session", user: alice });
+      }
+      if (call.url === "/api/auth/refresh")
+        return json(200, { accessToken: "old-session", user: alice });
+      return authorization(call) === "Bearer new-session"
+        ? json(200, alice)
+        : json(401, { status: 401 });
+    });
+    const api = createApiClient(server.fetchFn);
+
+    const signingIn = api.login({ email: "alice@example.com", password: "correct horse" });
+    const me = api.me();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    finishLogin();
+    await Promise.all([signingIn, me]);
+
+    expect(server.calls.map((call) => call.url)).not.toContain("/api/auth/refresh");
+    expect(authorization(server.calls[server.calls.length - 1])).toBe("Bearer new-session");
+  });
+
+  it("reports a lost session once, however late the other failing requests arrive", async () => {
+    let releaseLate: () => void = () => {};
+    const lateGate = new Promise<void>((resolve) => (releaseLate = resolve));
+    let meCalls = 0;
+    const server = routedServer(async (call) => {
+      if (call.url === "/api/users/me" && ++meCalls === 2) await lateGate;
+      return json(401, { status: 401 });
+    });
+    const lost: string[] = [];
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: (loginPath) => lost.push(loginPath),
+      currentPath: () => "/",
+    });
+
+    const first = api.me();
+    const late = api.me();
+    await expect(first).rejects.toMatchObject({ status: 401 });
+    releaseLate();
+    await expect(late).rejects.toMatchObject({ status: 401 });
+
+    expect(server.calls.filter((call) => call.url === "/api/auth/refresh")).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+  });
+
   it("does not send anyone to sign in when renewing on app load fails", async () => {
     const server = routedServer(() => json(401, { status: 401 }));
     const lost: string[] = [];

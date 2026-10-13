@@ -4,7 +4,6 @@ import java.time.Duration;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -132,8 +131,8 @@ class AuthController {
 	/** Surrounding whitespace is dropped before validation; passwords are kept exactly as typed. */
 	record RegisterRequest(
 			@ValidDisplayName String displayName,
-			@NotBlank @Email @Size(max = 254) String email,
-			@NotNull @Size(min = 8, max = 128) String password) {
+			@ValidEmail String email,
+			@ValidPassword String password) {
 
 		RegisterRequest {
 			displayName = DisplayName.normalize(displayName);

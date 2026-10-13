@@ -34,6 +34,10 @@ class Session {
 		this.expiresAt = expiresAt;
 	}
 
+	UUID id() {
+		return id;
+	}
+
 	UUID userId() {
 		return userId;
 	}
@@ -41,6 +45,11 @@ class Session {
 	/** When the session ends at the latest, however active it is. */
 	Instant expiresAt() {
 		return expiresAt;
+	}
+
+	/** Not revoked and not past its absolute cap. */
+	boolean isActiveAt(Instant now) {
+		return revokedAt == null && now.isBefore(expiresAt);
 	}
 
 	boolean isRevoked() {

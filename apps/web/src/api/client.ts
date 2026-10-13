@@ -5,9 +5,17 @@ export type User = {
   email: string;
   displayName: string;
   avatarUrl: string | null;
+  /** False for Users who only sign in with Google or GitHub; they set a password without giving a current one. */
+  hasPassword: boolean;
 };
 
 export type RegisterInput = { displayName: string; email: string; password: string };
+
+export type ChangePasswordInput = {
+  /** Required when the User has a password. */
+  currentPassword?: string;
+  newPassword: string;
+};
 
 export type LoginInput = { email: string; password: string };
 
@@ -206,6 +214,13 @@ export function createApiClient(
     /** Changes the display name and returns the updated User. */
     updateProfile: (input: { displayName: string }) =>
       request<User>("/api/users/me", { method: "PATCH", body: JSON.stringify(input) }),
+
+    /**
+     * Sets the signed-in User's first password, or changes it (the current one is then required). The
+     * server ends their other sessions; this one stays.
+     */
+    changePassword: (input: ChangePasswordInput) =>
+      request<void>("/api/users/me/password", { method: "PUT", body: JSON.stringify(input) }),
   };
 }
 

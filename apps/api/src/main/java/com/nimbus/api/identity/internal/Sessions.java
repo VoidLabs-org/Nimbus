@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.UUID;
 
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
 import org.springframework.stereotype.Service;
@@ -108,6 +109,20 @@ class Sessions {
 		sessions.revokeAllOf(user.getId(), now());
 	}
 
+	/** Whether the session is the User's own and still running. */
+	@Transactional(readOnly = true)
+	boolean isActive(UUID sessionId, UUID userId) {
+		return sessions.findById(sessionId)
+			.filter(session -> session.userId().equals(userId) && session.isActiveAt(now()))
+			.isPresent();
+	}
+
+	/** Ends every session of a User except one, on every other browser. */
+	@Transactional
+	void endAllExcept(UUID userId, UUID keepSessionId) {
+		sessions.revokeAllOfExcept(userId, keepSessionId, now());
+	}
+
 	private IssuedToken issue(Session session, Instant now) {
 		var bytes = new byte[32];
 		RANDOM.nextBytes(bytes);
@@ -115,7 +130,7 @@ class Sessions {
 		var idleExpiry = now.plus(properties.sessionIdleTimeout());
 		var expiresAt = idleExpiry.isBefore(session.expiresAt()) ? idleExpiry : session.expiresAt();
 		tokens.save(new RefreshToken(session, hash(value), now, expiresAt));
-		return new IssuedToken(value, Duration.between(now, expiresAt));
+		return new IssuedToken(value, Duration.between(now, expiresAt), session.id());
 	}
 
 	// Postgres keeps microseconds and rounds anything finer, which could push a stored expiry past the instant
@@ -135,8 +150,8 @@ class Sessions {
 		}
 	}
 
-	/** A refresh token to hand to the browser, and how long it keeps working. */
-	record IssuedToken(String value, Duration lifetime) {
+	/** A refresh token to hand to the browser, how long it keeps working, and the session it belongs to. */
+	record IssuedToken(String value, Duration lifetime, UUID sessionId) {
 	}
 
 	/** The session's User and the refresh token that replaces the presented one. */

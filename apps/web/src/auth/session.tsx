@@ -1,7 +1,14 @@
 import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
-import { api, ApiError, type LoginInput, type RegisterInput, type User } from "../api/client";
+import {
+  api,
+  ApiError,
+  type ChangePasswordInput,
+  type LoginInput,
+  type RegisterInput,
+  type User,
+} from "../api/client";
 import { loginPath } from "./returnPath";
 import { SessionContext, useSession } from "./useSession";
 
@@ -50,6 +57,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser((current) => (current?.id === updated.id ? updated : current));
   }
 
+  async function changePassword(input: ChangePasswordInput) {
+    const signedIn = user?.id;
+    await api.changePassword(input);
+    // A sign-out, or another User signing in, meanwhile must not be marked by the slower request.
+    setUser((current) =>
+      current && current.id === signedIn ? { ...current, hasPassword: true } : current,
+    );
+  }
+
   async function logout() {
     await api.logout();
     setSignedOutOnPurpose(true);
@@ -67,6 +83,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         register,
         login,
         updateDisplayName,
+        changePassword,
         logout,
       }}
     >

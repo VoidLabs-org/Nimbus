@@ -38,6 +38,7 @@ class User implements Persistable<UUID> {
 	protected User() {
 	}
 
+	/** A User who signed up with a password. Nothing has proved they own the email yet, so it starts unverified. */
 	static User withPassword(String email, String displayName, String passwordHash, Instant now) {
 		var user = new User();
 		user.id = UUID.randomUUID();
@@ -46,6 +47,13 @@ class User implements Persistable<UUID> {
 		user.passwordHash = passwordHash;
 		user.createdAt = now;
 		user.isNew = true;
+		return user;
+	}
+
+	/** A User the operator vouches for, e.g. the admin seed: the email is verified from the start. */
+	static User verifiedWithPassword(String email, String displayName, String passwordHash, Instant now) {
+		var user = withPassword(email, displayName, passwordHash, now);
+		user.emailVerified = true;
 		return user;
 	}
 
@@ -89,6 +97,11 @@ class User implements Persistable<UUID> {
 	/** A provider proved the User owns the email. */
 	void verifyEmail() {
 		this.emailVerified = true;
+	}
+
+	/** @param passwordHash an already hashed password */
+	void changePassword(String passwordHash) {
+		this.passwordHash = passwordHash;
 	}
 
 	/** After this the User can only sign in with a Linked identity, until a password is set again. */

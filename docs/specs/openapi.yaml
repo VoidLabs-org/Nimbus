@@ -248,6 +248,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/auth/providers:
+    get:
+      tags: [auth]
+      summary: Which sign-in providers are enabled
+      description: >-
+        Public, no access token needed. The providers whose client id is set (`GOOGLE_CLIENT_ID`,
+        `GITHUB_CLIENT_ID`), in the order to show them: `google`, then `github`. The web app shows "Continue with
+        ..." only for these, and each listed provider has its `/api/auth/oauth2/<provider>` address.
+      security: []
+      responses:
+        "200":
+          description: The enabled providers; empty when none is set up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers]
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: string
+                      enum: [google, github]
+                example:
+                  providers: [google, github]
+
   /api/users/me:
     get:
       tags: [users]

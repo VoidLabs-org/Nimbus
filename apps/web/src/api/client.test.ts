@@ -507,6 +507,41 @@ describe("api client", () => {
     expect(lost).toEqual([]);
   });
 
+  // The server rejects any invalid Bearer token, even on a public endpoint, so a stale one must not go along.
+  it("asks which sign-in providers are enabled without an access token, even when signed in", async () => {
+    const server = fakeServer(
+      json(201, { accessToken: "token-1", user: alice }),
+      json(200, { providers: ["google", "github"] }),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.register({
+      displayName: "Alice",
+      email: "alice@example.com",
+      password: "correct horse",
+    });
+
+    const providers = await api.providers();
+
+    expect(providers).toEqual(["google", "github"]);
+    expect(server.calls[1].url).toBe("/api/auth/providers");
+    expect(authorization(server.calls[1])).toBeNull();
+  });
+
+  // Buttons are optional; the sign-in form still works, so a failure here must not look like a lost session.
+  it("does not renew or redirect when asking for providers fails", async () => {
+    const server = routedServer(() => json(401, { status: 401 }));
+    const lost: string[] = [];
+    const api = createApiClient(server.fetchFn, {
+      onSessionLost: (loginPath) => lost.push(loginPath),
+      currentPath: () => "/login",
+    });
+
+    await expect(api.providers()).rejects.toMatchObject({ status: 401 });
+
+    expect(server.calls.map((call) => call.url)).toEqual(["/api/auth/providers"]);
+    expect(lost).toEqual([]);
+  });
+
   it("reports field errors from the server", async () => {
     const server = fakeServer(
       json(400, {

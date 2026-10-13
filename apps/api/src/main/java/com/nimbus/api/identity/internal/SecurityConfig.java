@@ -44,6 +44,7 @@ class SecurityConfig {
 				.requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh",
 					"/api/auth/logout")
 				.permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
 				.requestMatchers("/error").permitAll()
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()));

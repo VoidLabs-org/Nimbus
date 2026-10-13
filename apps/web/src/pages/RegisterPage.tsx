@@ -15,6 +15,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type RegisterInput } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
+import { displayNameError } from "../auth/displayName";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -29,7 +30,7 @@ export default function RegisterPage() {
   const form = useForm<RegisterInput>({
     initialValues: { displayName: "", email: "", password: "" },
     validate: {
-      displayName: (value) => (value.trim() ? null : "Enter your name"),
+      displayName: displayNameError,
       email: (value) =>
         /^\S+@\S+\.\S+$/.test(value.trim()) ? null : "Enter a valid email address",
       password: (value) =>

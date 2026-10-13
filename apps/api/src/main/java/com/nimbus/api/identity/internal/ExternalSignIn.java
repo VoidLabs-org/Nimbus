@@ -84,14 +84,17 @@ class ExternalSignIn {
 		return user;
 	}
 
-	/** A provider may send no name, or one that registration would reject. */
+	/**
+	 * A provider may send no name, or one that registration would reject. The sign-in can't be refused over it,
+	 * so the name is made valid ({@link DisplayName#clean}), or is the start of the email when nothing usable is
+	 * left. The email's start is cleaned the same way, and a last fallback keeps the name from ever being empty.
+	 */
 	private static String displayNameOf(ExternalProfile profile) {
-		var name = profile.name() == null ? "" : profile.name().replaceAll("\\p{Cntrl}", "").strip();
+		var name = DisplayName.clean(profile.name());
 		if (name.isEmpty()) {
-			name = profile.email().substring(0, profile.email().indexOf('@'));
+			name = DisplayName.clean(profile.email().substring(0, profile.email().indexOf('@')));
 		}
-		// 100 characters as people count them: cutting UTF-16 units could split an emoji in half.
-		return name.codePointCount(0, name.length()) > 100 ? name.substring(0, name.offsetByCodePoints(0, 100)) : name;
+		return name.isEmpty() ? "User" : name;
 	}
 
 	/** The provider didn't confirm the person owns the email, so it can't be used to find or create a User. */

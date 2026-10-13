@@ -4,9 +4,7 @@ import java.util.UUID;
 
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -70,13 +68,11 @@ class UsersController {
 			@NotNull @Size(min = 8, max = 128) String newPassword) {
 	}
 
-	/** Same rules and trimming as the display name at registration. */
-	record UpdateProfileRequest(
-			@NotBlank @Size(max = 100)
-			@Pattern(regexp = "\\P{Cntrl}*", message = "must not contain control characters") String displayName) {
+	/** The same display name rule as at registration. */
+	record UpdateProfileRequest(@ValidDisplayName String displayName) {
 
 		UpdateProfileRequest {
-			displayName = displayName == null ? null : displayName.strip();
+			displayName = DisplayName.normalize(displayName);
 		}
 
 	}

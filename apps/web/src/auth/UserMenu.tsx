@@ -236,6 +236,8 @@ function DisplayNameForm({
     } catch (error) {
       if (error instanceof ApiError && error.fieldErrors.displayName) {
         form.setFieldError("displayName", error.fieldErrors.displayName);
+      } else if (error instanceof ApiError && error.status === 429) {
+        form.setFieldError("displayName", tooManyAttemptsMessage(error.retryAfterSeconds));
       } else {
         form.setFieldError("displayName", "Couldn't save your name. Please try again.");
       }

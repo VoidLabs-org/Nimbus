@@ -1,5 +1,8 @@
 package com.nimbus.api.identity.internal;
 
+import java.util.stream.Collectors;
+
+import jakarta.validation.Validator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,15 +26,36 @@ class AdminSeed implements ApplicationRunner {
 
 	private final Registration registration;
 
+	private final Validator validator;
+
 	private final String email;
 
 	private final String password;
 
-	AdminSeed(Registration registration, @Value("${nimbus.admin.email:}") String email,
+	AdminSeed(Registration registration, Validator validator, @Value("${nimbus.admin.email:}") String email,
 			@Value("${nimbus.admin.password:}") String password) {
 		this.registration = registration;
+		this.validator = validator;
 		this.email = email.strip();
 		this.password = password;
+	}
+
+	/**
+	 * Checks the email and password against the rules registration uses, not a copy of them: a mistyped email or a
+	 * weak password should stop startup, not ship. The messages never repeat the password.
+	 */
+	void validate() {
+		var violated = validator.validate(new Credentials(email, password)).stream()
+			.map(violation -> violation.getPropertyPath().toString())
+			.collect(Collectors.toSet());
+		if (violated.contains("email")) {
+			throw new IllegalStateException("NIMBUS_ADMIN_EMAIL is not a valid email address (at most "
+					+ ValidEmail.MAX_LENGTH + " characters)");
+		}
+		if (violated.contains("password")) {
+			throw new IllegalStateException("NIMBUS_ADMIN_PASSWORD must be " + ValidPassword.MIN_LENGTH + " to "
+					+ ValidPassword.MAX_LENGTH + " characters");
+		}
 	}
 
 	@Override
@@ -39,13 +63,7 @@ class AdminSeed implements ApplicationRunner {
 		if (email.isEmpty() || password.isEmpty()) {
 			return;
 		}
-		// Same limits as registration: a weak or unusable admin password should stop startup, not ship.
-		if (email.length() > 254 || !email.matches("\\S+@\\S+\\.\\S+")) {
-			throw new IllegalStateException("NIMBUS_ADMIN_EMAIL is not a valid email address");
-		}
-		if (password.length() < 8 || password.length() > 128) {
-			throw new IllegalStateException("NIMBUS_ADMIN_PASSWORD must be 8 to 128 characters");
-		}
+		validate();
 		try {
 			registration.createVerified(DISPLAY_NAME, email, password);
 			log.info("Created the admin User {}", email);

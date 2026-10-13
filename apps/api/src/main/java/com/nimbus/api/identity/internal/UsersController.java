@@ -4,7 +4,6 @@ import java.util.UUID;
 
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -64,8 +63,8 @@ class UsersController {
 
 	/** Same length rules as registration; passwords are kept exactly as typed. */
 	record ChangePasswordRequest(
-			@Size(max = 128) String currentPassword,
-			@NotNull @Size(min = 8, max = 128) String newPassword) {
+			@Size(max = ValidPassword.MAX_LENGTH) String currentPassword,
+			@ValidPassword String newPassword) {
 	}
 
 	/** The same display name rule as at registration. */

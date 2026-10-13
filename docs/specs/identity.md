@@ -20,7 +20,7 @@ Other modules react to it (e.g. `access` for a default group). `identity` does n
 
 ## Admin seed
 
-At startup, when `NIMBUS_ADMIN_EMAIL` and `NIMBUS_ADMIN_PASSWORD` (in `apps/api/.env`, see `.env.example`) are both set and no User has that email, identity creates that User (display name `Admin`) and publishes `UserRegistered`. Otherwise it does nothing, so restarts never create a duplicate and changing the password in `.env` later does not change an existing User. The seeded admin's email counts as **verified**: whoever controls the deployment's configuration owns that address, so continuing with Google or GitHub later keeps their password and sessions. (An admin created by an earlier version stays unverified.) The seed gives no role by itself; `access` decides what an admin may do.
+At startup, when `NIMBUS_ADMIN_EMAIL` and `NIMBUS_ADMIN_PASSWORD` (in `apps/api/.env`, see `.env.example`) are both set and no User has that email, identity creates that User (display name `Admin`) and publishes `UserRegistered`. Otherwise it does nothing, so restarts never create a duplicate and changing the password in `.env` later does not change an existing User. The seeded admin's email counts as **verified**: whoever controls the deployment's configuration owns that address, so continuing with Google or GitHub later keeps their password and sessions. (An admin created by an earlier version stays unverified.) The seed gives no role by itself; `access` decides what an admin may do. The email and password must pass the same rules as registration (see Rules): one definition, the `@ValidEmail` and `@ValidPassword` constraints, is used by both, so the seed accepts exactly what registration accepts. A value that fails stops startup with a message naming `NIMBUS_ADMIN_EMAIL` or `NIMBUS_ADMIN_PASSWORD` (the password is never printed).
 
 ## Authentication
 
@@ -86,7 +86,7 @@ In the web app, **Continue with Google** and **Continue with GitHub** are plain 
 
 ## Rules
 
-- Email and display name have surrounding whitespace removed before validation.
+- Email and display name have surrounding whitespace removed before validation. A valid email is not blank, passes Jakarta Validation's `@Email` and is at most 254 characters (`@ValidEmail`); `@ValidPassword` is the password rule below. Registration, changing a password and the admin seed all use these two constraints.
 - Email is unique and stored lower-cased. The unique constraint, not the up-front check, guarantees one User per email when registrations race.
 - Password: 8–128 characters, no composition rules, kept exactly as typed. Hashed with Argon2id (stored with an `{argon2}` prefix so the algorithm can change later), outside any database transaction because it is slow. Not bcrypt, because bcrypt only uses the first 72 bytes.
 - Setting or changing a password follows the same rules. The current password is checked and the new one hashed outside any transaction; wrong current passwords are counted per User (`nimbus.auth.failed-sign-ins-per-email`, same window), and a correct one takes its attempt back. This count is separate from failed sign-ins on purpose: sharing it would let anyone who knows an email block a signed-in User from changing their password. A stolen access token therefore gets that many guesses here as well. The update runs under a lock on the User's row, so it cannot interleave with a provider sign-in that removes the password.

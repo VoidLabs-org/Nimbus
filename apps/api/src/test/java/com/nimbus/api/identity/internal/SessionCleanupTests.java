@@ -16,6 +16,8 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTe
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
@@ -27,6 +29,9 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 @Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
+// Its own application context, so its clock moves months ahead without affecting other test classes; the tiny
+// batch size makes a handful of sessions take several deletes.
+@TestPropertySource(properties = "nimbus.auth.session-cleanup-batch-size=2")
 class SessionCleanupTests {
 
 	@Autowired
@@ -51,13 +56,44 @@ class SessionCleanupTests {
 		assertThat(sessionsOf(user)).isEqualTo(3);
 
 		clock.advance(Duration.ofDays(7).plusMinutes(1));
+		var before = allSessions();
 		var removed = cleanup.run();
 
-		assertThat(removed).isGreaterThanOrEqualTo(1);
+		assertThat(removed).isGreaterThanOrEqualTo(1).isEqualTo(before - allSessions());
 		assertThat(sessionsOf(user)).isEqualTo(2);
 		assertThat(tokensOf(user)).isEqualTo(2);
 		refresh(signedOut).expectStatus().isUnauthorized();
 		refresh(other).expectStatus().isOk();
+	}
+
+	// What the scheduler calls, not run(): going through the registered task is what the hourly job really does.
+	@Test
+	void theRegisteredScheduledTaskDeletesEndedSessions() {
+		var user = register("scheduled@example.com");
+		logout(signedInToken("scheduled@example.com"));
+		var registrar = new ScheduledTaskRegistrar();
+		cleanup.configureTasks(registrar);
+		clock.advance(Duration.ofDays(7).plusMinutes(1));
+
+		registrar.getFixedDelayTaskList().getFirst().getRunnable().run();
+
+		assertThat(sessionsOf(user)).isEqualTo(1);
+	}
+
+	// With batches of two, five ended sessions take three deletes.
+	@Test
+	void aBacklogLargerThanOneBatchIsClearedInFull() {
+		var user = register("backlog@example.com");
+		for (var i = 0; i < 5; i++) {
+			logout(signedInToken("backlog@example.com"));
+		}
+		assertThat(sessionsOf(user)).isEqualTo(6);
+
+		clock.advance(Duration.ofDays(7).plusMinutes(1));
+		cleanup.run();
+
+		assertThat(sessionsOf(user)).isEqualTo(1);
+		assertThat(tokensOf(user)).isEqualTo(1);
 	}
 
 	@Test
@@ -103,6 +139,10 @@ class SessionCleanupTests {
 		cleanup.run();
 		assertThat(sessionsOf(user)).isZero();
 		assertThat(tokensOf(user)).isZero();
+	}
+
+	private int allSessions() {
+		return jdbc.queryForObject("select count(*) from sessions", Integer.class);
 	}
 
 	private int sessionsOf(UUID userId) {

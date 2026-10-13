@@ -18,6 +18,8 @@ import org.springframework.validation.annotation.Validated;
  * @param sessionRetention how long after a session ended (revoked, or past {@code sessionMaxAge}) its rows are
  * kept before the cleanup job deletes them
  * @param sessionCleanupInterval how long the cleanup job waits after a run before the next one
+ * @param sessionCleanupBatchSize how many ended sessions one delete removes; a larger backlog is cleared in
+ * several deletes, so no transaction holds many rows locked
  * @param failedSignInsPerEmail failed sign-ins allowed for one email within {@code limitWindow}
  * @param signInsPerAddress failed sign-ins allowed from one IP address within {@code limitWindow}, across all
  * emails
@@ -36,6 +38,7 @@ record AuthProperties(
 		@DefaultValue("90d") Duration sessionMaxAge,
 		@DefaultValue("7d") Duration sessionRetention,
 		@DefaultValue("1h") Duration sessionCleanupInterval,
+		@DefaultValue("1000") @Positive int sessionCleanupBatchSize,
 		@DefaultValue("5") @Positive int failedSignInsPerEmail,
 		@DefaultValue("20") @Positive int signInsPerAddress,
 		@DefaultValue("10") @Positive int registrationsPerAddress,

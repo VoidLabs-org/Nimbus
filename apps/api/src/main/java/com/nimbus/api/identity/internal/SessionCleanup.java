@@ -6,20 +6,19 @@ import java.time.temporal.ChronoUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
-import org.springframework.scheduling.config.IntervalTask;
+import org.springframework.scheduling.config.FixedDelayTask;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Deletes sessions that ended more than {@code nimbus.auth.session-retention} ago, so the {@code sessions} and
  * {@code refresh_tokens} tables stop growing. It runs on a fixed delay ({@code nimbus.auth.session-cleanup-interval}).
- * Meant for a single API instance: two running it at once only repeat the same deletes.
+ * Each delete takes at most {@code nimbus.auth.session-cleanup-batch-size} sessions and commits on its own, so a
+ * large backlog never becomes one long transaction. Meant for a single API instance: two running it at once only
+ * repeat the same deletes. Scheduling itself is switched on in {@code ApiApplication}.
  */
 @Component
-@EnableScheduling
 class SessionCleanup implements SchedulingConfigurer {
 
 	private static final Logger log = LoggerFactory.getLogger(SessionCleanup.class);
@@ -39,7 +38,7 @@ class SessionCleanup implements SchedulingConfigurer {
 	@Override
 	public void configureTasks(ScheduledTaskRegistrar registrar) {
 		var interval = properties.sessionCleanupInterval();
-		registrar.addFixedDelayTask(new IntervalTask(this::runAndLog, interval, interval));
+		registrar.addFixedDelayTask(new FixedDelayTask(this::runAndLog, interval, interval));
 	}
 
 	private void runAndLog() {
@@ -53,11 +52,17 @@ class SessionCleanup implements SchedulingConfigurer {
 	}
 
 	/** @return how many sessions were deleted */
-	@Transactional
 	int run() {
 		// Microseconds, like the stored times (see Sessions), so a session ending exactly at the cutoff compares right.
 		var cutoff = clock.instant().truncatedTo(ChronoUnit.MICROS).minus(properties.sessionRetention());
-		var removed = sessions.deleteEndedBefore(cutoff);
+		var batchSize = properties.sessionCleanupBatchSize();
+		var removed = 0;
+		int batch;
+		do {
+			batch = sessions.deleteEndedBefore(cutoff, batchSize);
+			removed += batch;
+		}
+		while (batch == batchSize);
 		log.info("Removed {} ended sessions (ended before {})", removed, cutoff);
 		return removed;
 	}

@@ -136,6 +136,40 @@ class ExternalSignInTests {
 		assertThat(user.displayName()).isEqualTo("a".repeat(99) + emoji);
 	}
 
+	// A provider can't be refused over a name, so the name is made valid instead: the same rule as for a typed one.
+	@Test
+	void invisibleAndDirectionalCharactersAreDroppedFromAProviderName() {
+		var user = externalSignIn.signIn(google("g-gus", "gus@example.com", true, "Gu\u200bs\u202e \u0085Hall\u2028", null));
+
+		assertThat(user.displayName()).isEqualTo("Gus Hall");
+	}
+
+	@Test
+	void aProviderNameKeepsJoinersBetweenVisibleCharactersButNotStrayOnes() {
+		var family = "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67";
+
+		var user = externalSignIn.signIn(google("g-hal", "hal@example.com", true, "\u200d" + family + "\u200d", null));
+
+		assertThat(user.displayName()).isEqualTo(family);
+	}
+
+	@Test
+	void aProviderNameWithNothingVisibleFallsBackToTheStartOfTheEmail() {
+		var user = externalSignIn.signIn(google("g-ivy", "ivy@example.com", true, "\u200b\u200d \u202e", null));
+
+		assertThat(user.displayName()).isEqualTo("ivy");
+	}
+
+	@Test
+	void aProviderNameIsCutAtOneHundredCharactersWithoutLeavingAJoinerAtTheEnd() {
+		var name = "a".repeat(99) + "\u200d" + "b".repeat(5);
+
+		var user = externalSignIn.signIn(google("g-jo", "jo@example.com", true, name, null));
+
+		// The cut falls right after the joiner, so it is dropped with what followed.
+		assertThat(user.displayName()).isEqualTo("a".repeat(99));
+	}
+
 	private static ExternalProfile google(String id, String email, boolean verified, String name, String avatar) {
 		return new ExternalProfile("google", id, email, verified, name, avatar);
 	}

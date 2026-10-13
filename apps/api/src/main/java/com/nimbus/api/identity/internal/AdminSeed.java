@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
 /**
  * Creates a deployment's first admin User from {@code NIMBUS_ADMIN_EMAIL} and {@code NIMBUS_ADMIN_PASSWORD},
  * so it doesn't go to whoever registers the admin email first. Does nothing unless both are set, and nothing
- * if a User already has that email, so restarts never create a duplicate. The User is announced with
+ * if a User already has that email, so restarts never create a duplicate. The email counts as verified: the
+ * operator who set it owns it, so continuing with a provider never removes the admin's password. The User is announced with
  * {@code UserRegistered} like any other; what that means for access is up to the modules that listen.
  */
 @Component
@@ -46,7 +47,7 @@ class AdminSeed implements ApplicationRunner {
 			throw new IllegalStateException("NIMBUS_ADMIN_PASSWORD must be 8 to 128 characters");
 		}
 		try {
-			registration.create(DISPLAY_NAME, email, password);
+			registration.createVerified(DISPLAY_NAME, email, password);
 			log.info("Created the admin User {}", email);
 		}
 		catch (Registration.EmailAlreadyRegisteredException e) {

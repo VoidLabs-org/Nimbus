@@ -4,6 +4,7 @@ import {
   Group,
   Menu,
   Modal,
+  PasswordInput,
   Stack,
   TextInput,
   UnstyledButton,
@@ -12,11 +13,12 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { ApiError } from "../api/client";
+import { tooManyAttemptsMessage } from "../api/messages";
 import { useSession } from "./useSession";
 
 /**
  * The signed-in User's menu: who they are (avatar or initials, and display name), a way to change the
- * display name, and sign out. Signing out ends this browser's session only. Once it succeeds, RequireUser
+ * display name, set or change their password, and sign out. Signing out ends this browser's session only. Once it succeeds, RequireUser
  * sends the User to the sign-in page; this menu doesn't navigate itself.
  */
 export function UserMenu() {
@@ -25,6 +27,8 @@ export function UserMenu() {
   const [editing, setEditing] = useState(false);
   // True while a rename is in flight; the dialog can't be dismissed then, or Cancel would be a lie.
   const [saving, setSaving] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   async function signOut() {
     setSigningOut(true);
@@ -62,6 +66,9 @@ export function UserMenu() {
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Item onClick={() => setEditing(true)}>Change display name</Menu.Item>
+          <Menu.Item onClick={() => setChangingPassword(true)}>
+            {user.hasPassword ? "Change password" : "Set password"}
+          </Menu.Item>
           <Menu.Item onClick={signOut} disabled={signingOut}>
             Sign out
           </Menu.Item>
@@ -82,7 +89,118 @@ export function UserMenu() {
           onDone={() => setEditing(false)}
         />
       </Modal>
+      <Modal
+        opened={changingPassword}
+        onClose={() => setChangingPassword(false)}
+        title={user.hasPassword ? "Change password" : "Set password"}
+        closeOnEscape={!savingPassword}
+        closeOnClickOutside={!savingPassword}
+        withCloseButton={!savingPassword}
+      >
+        <PasswordForm
+          hasPassword={user.hasPassword}
+          saving={savingPassword}
+          onSavingChange={setSavingPassword}
+          onDone={() => setChangingPassword(false)}
+        />
+      </Modal>
     </>
+  );
+}
+
+function PasswordForm({
+  hasPassword,
+  saving,
+  onSavingChange,
+  onDone,
+}: {
+  hasPassword: boolean;
+  saving: boolean;
+  onSavingChange: (saving: boolean) => void;
+  onDone: () => void;
+}) {
+  const { changePassword } = useSession();
+  const form = useForm({
+    initialValues: { currentPassword: "", newPassword: "" },
+    // Mirrors the server's rules; the server stays the authority.
+    validate: {
+      currentPassword: (value) => (hasPassword && !value ? "Enter your current password" : null),
+      newPassword: (value) =>
+        value.length < 8 || value.length > 128 ? "Use 8 to 128 characters" : null,
+    },
+  });
+
+  async function submit({
+    currentPassword,
+    newPassword,
+  }: {
+    currentPassword: string;
+    newPassword: string;
+  }) {
+    onSavingChange(true);
+    try {
+      await changePassword({
+        currentPassword: hasPassword ? currentPassword : undefined,
+        newPassword,
+      });
+      notifications.show({
+        color: "green",
+        message: hasPassword
+          ? "Password changed. You were signed out on your other devices."
+          : "Password set. You can now sign in with your email and password.",
+      });
+      onDone();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 429) {
+        form.setFieldError("currentPassword", tooManyAttemptsMessage(error.retryAfterSeconds));
+      } else if (
+        error instanceof ApiError &&
+        (error.fieldErrors.currentPassword || error.fieldErrors.newPassword)
+      ) {
+        if (error.fieldErrors.currentPassword) {
+          form.setFieldError("currentPassword", error.fieldErrors.currentPassword);
+        }
+        if (error.fieldErrors.newPassword) {
+          form.setFieldError("newPassword", error.fieldErrors.newPassword);
+        }
+      } else {
+        form.setFieldError("newPassword", "Couldn't save your password. Please try again.");
+      }
+    } finally {
+      onSavingChange(false);
+    }
+  }
+
+  return (
+    <form onSubmit={form.onSubmit(submit)}>
+      <Stack>
+        {hasPassword && (
+          <PasswordInput
+            label="Current password"
+            autoComplete="current-password"
+            data-autofocus
+            maxLength={128}
+            {...form.getInputProps("currentPassword")}
+          />
+        )}
+        <PasswordInput
+          label="New password"
+          description="8 to 128 characters"
+          autoComplete="new-password"
+          data-autofocus={hasPassword ? undefined : true}
+          maxLength={128}
+          {...form.getInputProps("newPassword")}
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onDone} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={saving}>
+            Save
+          </Button>
+        </Group>
+      </Stack>
+    </form>
   );
 }
 

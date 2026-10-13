@@ -1,14 +1,21 @@
 package com.nimbus.api.identity.internal;
 
+import java.util.UUID;
+
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,9 +28,12 @@ class UsersController {
 
 	private final CurrentUser currentUser;
 
-	UsersController(UserRepository users, CurrentUser currentUser) {
+	private final Passwords passwords;
+
+	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords) {
 		this.users = users;
 		this.currentUser = currentUser;
+		this.passwords = passwords;
 	}
 
 	/** The signed-in User's profile; an invalid-token 401 if their token outlived the User. */
@@ -42,6 +52,25 @@ class UsersController {
 			.orElseThrow(() -> new InvalidBearerTokenException("The User for this token no longer exists"));
 		user.rename(request.displayName());
 		return UserResponse.from(user);
+	}
+
+	/** Sets the first password of a User who has none, or changes the existing one (which must be given). */
+	@PutMapping("/me/password")
+	ResponseEntity<Void> changePassword(@AuthenticationPrincipal Jwt token,
+			@Valid @RequestBody ChangePasswordRequest request) {
+		var sessionId = token.getClaimAsString(AccessTokens.SESSION_CLAIM);
+		if (sessionId == null) {
+			throw new InvalidBearerTokenException("This token belongs to no session. Sign in again.");
+		}
+		passwords.change(currentUser.id(), UUID.fromString(sessionId), request.currentPassword(),
+				request.newPassword());
+		return ResponseEntity.noContent().build();
+	}
+
+	/** Same length rules as registration; passwords are kept exactly as typed. */
+	record ChangePasswordRequest(
+			@Size(max = 128) String currentPassword,
+			@NotNull @Size(min = 8, max = 128) String newPassword) {
 	}
 
 	/** Same rules and trimming as the display name at registration. */

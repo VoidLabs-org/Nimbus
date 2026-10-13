@@ -54,11 +54,23 @@ class Registration {
 	 * what guarantees one User per email.
 	 */
 	User create(String displayName, String email, String password) {
+		return create(displayName, email, password, false);
+	}
+
+	/** Like {@link #create} for a User whose email the operator vouches for, so it counts as verified. */
+	User createVerified(String displayName, String email, String password) {
+		return create(displayName, email, password, true);
+	}
+
+	private User create(String displayName, String email, String password, boolean verified) {
 		var normalizedEmail = email.toLowerCase(Locale.ROOT);
 		if (users.existsByEmail(normalizedEmail)) {
 			throw new EmailAlreadyRegisteredException();
 		}
-		var user = User.withPassword(normalizedEmail, displayName, passwordEncoder.encode(password), clock.instant());
+		var hash = passwordEncoder.encode(password);
+		var now = clock.instant();
+		var user = verified ? User.verifiedWithPassword(normalizedEmail, displayName, hash, now)
+				: User.withPassword(normalizedEmail, displayName, hash, now);
 		try {
 			return transaction.execute(status -> {
 				var saved = users.saveAndFlush(user);

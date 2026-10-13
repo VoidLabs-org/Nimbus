@@ -33,6 +33,14 @@ class IdentityErrors {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
 	}
 
+	/** Reported under {@code errors.currentPassword}, like a field that failed validation, so forms can show it. */
+	@ExceptionHandler
+	ProblemDetail wrongPassword(Passwords.WrongPasswordException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Some fields are invalid");
+		problem.setProperty("errors", Map.of("currentPassword", e.getMessage()));
+		return problem;
+	}
+
 	@ExceptionHandler
 	ProblemDetail notFromApp(AuthController.NotFromAppException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());

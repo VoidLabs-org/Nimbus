@@ -282,6 +282,29 @@ paths:
           $ref: "#/components/responses/InvalidFields"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/users/me/password:
+    put:
+      tags: [users]
+      summary: Set or change the signed-in User's password
+      description: >-
+        A User without a password (they only sign in with Google or GitHub) sets one; `currentPassword` is ignored.
+        A User with one must give it as `currentPassword`. The request must come from a session that is still
+        running, and every other session of the User ends; this browser stays signed in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: The password is set
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
 
 components:
   securitySchemes:
@@ -331,6 +354,20 @@ components:
           maxLength: 100
           description: Surrounding whitespace is removed; no control characters
 
+    ChangePasswordRequest:
+      type: object
+      required: [newPassword]
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 128
+          description: Required when the User has a password (`400` with `errors.currentPassword` if missing or wrong)
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Same rules as at registration; kept exactly as typed
+
     LoginRequest:
       type: object
       required: [email, password]
@@ -353,7 +390,7 @@ components:
 
     User:
       type: object
-      required: [id, email, displayName, avatarUrl]
+      required: [id, email, displayName, avatarUrl, hasPassword]
       properties:
         id:
           type: string
@@ -366,6 +403,9 @@ components:
         avatarUrl:
           type: [string, "null"]
           format: uri
+        hasPassword:
+          type: boolean
+          description: False for Users who only sign in with Google or GitHub; the app asks for a current password only when true
 
     Problem:
       type: object
@@ -398,7 +438,7 @@ components:
                     additionalProperties:
                       type: string
     TooManyAttempts:
-      description: Rate limited (failed sign-ins per email or IP address, or registrations or refreshes per IP address)
+      description: Rate limited (failed sign-ins per email or IP address, registrations or refreshes per IP address, or wrong current passwords per User)
       headers:
         Retry-After:
           description: Seconds until another attempt may succeed

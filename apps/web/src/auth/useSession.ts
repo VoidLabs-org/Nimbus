@@ -1,5 +1,5 @@
 import { createContext, use } from "react";
-import type { LoginInput, RegisterInput, User } from "../api/client";
+import type { ChangePasswordInput, LoginInput, RegisterInput, User } from "../api/client";
 
 export type Session = {
   /** The signed-in User, or null when nobody is signed in. */
@@ -16,6 +16,8 @@ export type Session = {
   login: (input: LoginInput) => Promise<void>;
   /** Changes the signed-in User's display name. Rejects with an ApiError (field errors for 400) if refused. */
   updateDisplayName: (displayName: string) => Promise<void>;
+  /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */
+  changePassword: (input: ChangePasswordInput) => Promise<void>;
   /** Ends this browser's session. Rejects, leaving the User signed in, if the server can't be reached. */
   logout: () => Promise<void>;
 };

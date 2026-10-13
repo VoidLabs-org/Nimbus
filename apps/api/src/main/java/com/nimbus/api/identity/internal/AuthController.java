@@ -101,7 +101,7 @@ class AuthController {
 	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken) {
 		return ResponseEntity.status(status)
 			.header(HttpHeaders.SET_COOKIE, refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString())
-			.body(new AuthResponse(accessTokens.issueFor(user), UserResponse.from(user)));
+			.body(new AuthResponse(accessTokens.issueFor(user, refreshToken.sessionId()), UserResponse.from(user)));
 	}
 
 	/** Tells the browser to drop a refresh token the server rejected, instead of resending it on every load. */

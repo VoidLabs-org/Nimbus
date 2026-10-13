@@ -1,6 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
+import java.util.UUID;
 
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -12,6 +13,8 @@ import org.springframework.stereotype.Component;
 /** Issues short-lived access tokens: HS256 JWTs whose subject is the User id. */
 @Component
 class AccessTokens {
+
+	static final String SESSION_CLAIM = "sid";
 
 	private final JwtEncoder encoder;
 
@@ -25,10 +28,12 @@ class AccessTokens {
 		this.clock = clock;
 	}
 
-	String issueFor(User user) {
+	/** The {@code sid} claim names the session the token was issued in, so a request can tell which one it is. */
+	String issueFor(User user, UUID sessionId) {
 		var now = clock.instant();
 		var claims = JwtClaimsSet.builder()
 			.subject(user.getId().toString())
+			.claim(SESSION_CLAIM, sessionId.toString())
 			.issuedAt(now)
 			.expiresAt(now.plus(properties.accessTokenTtl()))
 			.build();

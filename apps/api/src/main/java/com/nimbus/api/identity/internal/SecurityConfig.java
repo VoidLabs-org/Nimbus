@@ -27,8 +27,12 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 /**
  * Every request needs a valid access token (Bearer JWT) unless it is listed as public here.
@@ -52,17 +56,26 @@ class SecurityConfig {
 				.requestMatchers("/error").permitAll()
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()));
+		// A browser page load (a GET or HEAD that names text/html) of an API address without a token goes to the
+		// web app's sign-in page. "Accept: */*" (fetch, curl) is not a page load, and neither is a write: those get
+		// a 401. Registered before oauth2Login's own entry point, which would otherwise win for them.
+		RequestMatcher read = request -> HttpMethod.GET.matches(request.getMethod())
+				|| HttpMethod.HEAD.matches(request.getMethod());
+		var pageLoad = new MediaTypeRequestMatcher(MediaType.TEXT_HTML);
+		pageLoad.setIgnoredMediaTypes(Set.of(MediaType.ALL));
+		http.exceptionHandling(handling -> handling
+			.defaultAuthenticationEntryPointFor(new WebLoginEntryPoint(properties.publicUrl()),
+					new AndRequestMatcher(read, pageLoad))
+			.defaultAuthenticationEntryPointFor(new BearerTokenAuthenticationEntryPoint(),
+					new NegatedRequestMatcher(read)));
 		// Only the OAuth handshake keeps an HTTP session (the state and PKCE values of the login in progress, and the
 		// page to return to).
 		// OAuthLoginHandler drops it as soon as the handshake ends.
 		if (providers.getIfAvailable() != null) {
-			// Registered before oauth2Login's own entry point, so it wins for a browser page load.
-			// "Accept: */*" (fetch, curl) is not a page load: only a request that names text/html is.
-			var pageLoad = new MediaTypeRequestMatcher(MediaType.TEXT_HTML);
-			pageLoad.setIgnoredMediaTypes(Set.of(MediaType.ALL));
-			http.exceptionHandling(handling -> handling
-				.defaultAuthenticationEntryPointFor(new WebLoginEntryPoint(properties.publicUrl()), pageLoad));
 			http.oauth2Login(login -> login
+				// What is left for oauth2Login's entry point (a GET asking for plain text or an image) also goes
+				// to the web app, not to a generated page on the API host.
+				.loginPage(properties.publicUrl() + "/login")
 				.authorizationEndpoint(endpoint -> endpoint.baseUri(ReturnPathAuthorizationRequestResolver.BASE_URI)
 					.authorizationRequestResolver(new ReturnPathAuthorizationRequestResolver(providers.getObject())))
 				.redirectionEndpoint(endpoint -> endpoint.baseUri("/api/auth/oauth2/callback/*"))

@@ -30,6 +30,34 @@ class PageLoadSignInTests {
 			.expectHeader().valueEquals("Location", "http://localhost:3000/login");
 	}
 
+	@Test
+	void theRedirectIsNeverCached() {
+		client.get().uri("/api/users/me")
+			.header("Accept", "text/html")
+			.exchange()
+			.expectHeader().valueEquals("Cache-Control", "no-store");
+	}
+
+	@Test
+	void aRequestThatOnlyAcceptsPlainTextOrAnImageAlsoGoesToTheWebApp() {
+		for (var accept : new String[] { "text/plain", "image/png" }) {
+			client.get().uri("/api/users/me")
+				.header("Accept", accept)
+				.exchange()
+				.expectStatus().isFound()
+				.expectHeader().valueEquals("Location", "http://localhost:3000/login");
+		}
+	}
+
+	// Only reading a page is a page load; a form post or an update needs a status it can handle.
+	@Test
+	void aWriteThatAcceptsHtmlStillGetsA401() {
+		client.post().uri("/api/users/me")
+			.header("Accept", "text/html")
+			.exchange()
+			.expectStatus().isUnauthorized();
+	}
+
 	// fetch and curl accept anything; only a request that asks for a page by name is a page load.
 	@Test
 	void aRequestThatAcceptsAnythingStillGetsA401() {

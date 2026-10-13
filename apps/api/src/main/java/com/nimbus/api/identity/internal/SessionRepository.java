@@ -7,8 +7,24 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 interface SessionRepository extends JpaRepository<Session, UUID> {
+
+	/**
+	 * Deletes at most {@code limit} sessions that ended before {@code cutoff}: revoked, or past their absolute cap.
+	 * Their refresh tokens go with them (ON DELETE CASCADE). A session still running is never matched, whatever
+	 * its tokens' age. Runs in its own short transaction, so a large backlog is cleared in small steps.
+	 *
+	 * @return how many sessions were deleted
+	 */
+	@Transactional
+	@Modifying
+	@Query(value = """
+			delete from sessions where id in (
+				select id from sessions where expires_at < :cutoff or revoked_at < :cutoff limit :limit)
+			""", nativeQuery = true)
+	int deleteEndedBefore(@Param("cutoff") Instant cutoff, @Param("limit") int limit);
 
 	/** Ends the User's other sessions that are still running, so one browser stays signed in. */
 	@Modifying

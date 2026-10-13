@@ -6,7 +6,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.client.EntityExchangeResult;
 
 /** Reads the refresh cookie a response sets, so tests don't each parse Set-Cookie themselves. */
-final class RefreshCookies {
+public final class RefreshCookies {
 
 	private RefreshCookies() {
 	}
@@ -19,7 +19,7 @@ final class RefreshCookies {
 			.orElseThrow(() -> new AssertionError("no refresh_token cookie was set"));
 	}
 
-	static String valueOf(EntityExchangeResult<?> result) {
+	public static String valueOf(EntityExchangeResult<?> result) {
 		return of(result).getValue();
 	}
 

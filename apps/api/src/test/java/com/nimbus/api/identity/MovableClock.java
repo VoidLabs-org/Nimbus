@@ -11,15 +11,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
 /** Lets a test move time forward instead of waiting. */
-class MovableClock extends Clock {
+public class MovableClock extends Clock {
 
 	private volatile Instant now;
 
-	MovableClock(Instant start) {
+	public MovableClock(Instant start) {
 		this.now = start;
 	}
 
-	void advance(Duration duration) {
+	public void advance(Duration duration) {
 		now = now.plus(duration);
 	}
 
@@ -40,11 +40,11 @@ class MovableClock extends Clock {
 
 	/** Import it to replace the application's clock with a {@link MovableClock}. */
 	@TestConfiguration(proxyBeanMethods = false)
-	static class Configuration {
+	public static class Configuration {
 
 		@Bean
 		@Primary
-		MovableClock movableClock() {
+		public MovableClock movableClock() {
 			return new MovableClock(Instant.now());
 		}
 

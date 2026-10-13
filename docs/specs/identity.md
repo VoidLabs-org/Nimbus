@@ -41,7 +41,7 @@ At startup, when `NIMBUS_ADMIN_EMAIL` and `NIMBUS_ADMIN_PASSWORD` (in `apps/api/
 - A `401` from `/refresh` also clears the cookie (`Max-Age=0`), so the browser stops sending a dead token.
 - The cookie is the only credential for `/refresh`, so it also requires `X-Requested-With: nimbus` (`403` without it). Cross-site forms can't set that header.
 - Known trade-off: two refreshes sent at once with the same cookie (e.g. several tabs restored together) count as reuse and end the session. The web client sends one refresh at a time per tab, and only a `401` from `/refresh` sends the User to sign in (a `429` or an outage doesn't).
-- Expired and revoked rows are not cleaned up yet.
+- **Cleanup:** a scheduled job deletes sessions that ended more than 7 days ago (`nimbus.auth.session-retention`), meaning revoked (sign-out, token reuse, a provider link or a password change) or past their 90-day cap. Their refresh tokens go with them (`ON DELETE CASCADE`). It runs every hour (`nimbus.auth.session-cleanup-interval`, a fixed delay, first run one interval after startup) and logs how many sessions it removed. A session still running is never deleted, however old its tokens are: reuse detection needs the used ones while the session lives. After deletion its cookie gets the same `401` as any unknown token. Written for a single API instance; two instances running it at once only repeat the same deletes.
 - Access tokens outlive their session by up to 15 minutes, so an endpoint that must not be used from an ended session (setting a password) checks the token's `sid` against the session. Most endpoints don't.
 
 ## REST endpoints

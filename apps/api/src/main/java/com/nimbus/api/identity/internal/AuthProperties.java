@@ -15,6 +15,9 @@ import org.springframework.validation.annotation.Validated;
  * @param accessTokenTtl how long an access token stays valid
  * @param sessionIdleTimeout how long a session survives without a refresh (sliding)
  * @param sessionMaxAge how long a session lasts at most after sign-in, however active
+ * @param sessionRetention how long after a session ended (revoked, or past {@code sessionMaxAge}) its rows are
+ * kept before the cleanup job deletes them
+ * @param sessionCleanupInterval how long the cleanup job waits after a run before the next one
  * @param failedSignInsPerEmail failed sign-ins allowed for one email within {@code limitWindow}
  * @param signInsPerAddress failed sign-ins allowed from one IP address within {@code limitWindow}, across all
  * emails
@@ -31,6 +34,8 @@ record AuthProperties(
 		@DefaultValue("15m") Duration accessTokenTtl,
 		@DefaultValue("30d") Duration sessionIdleTimeout,
 		@DefaultValue("90d") Duration sessionMaxAge,
+		@DefaultValue("7d") Duration sessionRetention,
+		@DefaultValue("1h") Duration sessionCleanupInterval,
 		@DefaultValue("5") @Positive int failedSignInsPerEmail,
 		@DefaultValue("20") @Positive int signInsPerAddress,
 		@DefaultValue("10") @Positive int registrationsPerAddress,

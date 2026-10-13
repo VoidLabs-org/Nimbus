@@ -336,7 +336,7 @@ components:
           minLength: 1
           maxLength: 100
           description: >-
-            Surrounding whitespace is removed; at least one visible character; at most 100 characters (an emoji counts as one); no control, line-separator or invisible format characters (zero-width space, word joiner, byte order mark, soft hyphen) and no bidirectional marks, overrides or isolates. U+200D and U+200C are allowed only between two visible characters (emoji sequences, Persian and Indic scripts)
+            Surrounding whitespace (no-break and other Unicode spaces included) is removed; at least one visible character; at most 100 characters (an emoji counts as one); no control, line-separator, private-use or invisible format characters (zero-width space, word joiner, byte order mark, soft hyphen), no bidirectional marks, overrides or isolates, and no combining grapheme joiner. U+200D and U+200C are allowed only between two visible characters (emoji sequences, Persian and Indic scripts). Tag characters are allowed only in a flag sequence, variation selectors only after emoji, keycaps and Han characters, and at most 5 combining marks may stack on one character
         email:
           type: string
           format: email
@@ -356,7 +356,7 @@ components:
           minLength: 1
           maxLength: 100
           description: >-
-            Same rule as at registration. Surrounding whitespace is removed; at least one visible character; at most 100 characters (an emoji counts as one); no control, line-separator or invisible format characters (zero-width space, word joiner, byte order mark, soft hyphen) and no bidirectional marks, overrides or isolates. U+200D and U+200C are allowed only between two visible characters (emoji sequences, Persian and Indic scripts)
+            Same rule as at registration. Surrounding whitespace (no-break and other Unicode spaces included) is removed; at least one visible character; at most 100 characters (an emoji counts as one); no control, line-separator, private-use or invisible format characters (zero-width space, word joiner, byte order mark, soft hyphen), no bidirectional marks, overrides or isolates, and no combining grapheme joiner. U+200D and U+200C are allowed only between two visible characters (emoji sequences, Persian and Indic scripts). Tag characters are allowed only in a flag sequence, variation selectors only after emoji, keycaps and Han characters, and at most 5 combining marks may stack on one character
 
     ChangePasswordRequest:
       type: object

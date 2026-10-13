@@ -14,6 +14,7 @@ import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
+import { displayNameError } from "./displayName";
 import { useSession } from "./useSession";
 
 /**
@@ -224,8 +225,7 @@ function DisplayNameForm({
   const { updateDisplayName } = useSession();
   const form = useForm({
     initialValues: { displayName: current },
-    // Mirrors the server's rule; the server stays the authority.
-    validate: { displayName: (value) => (value.trim() ? null : "Enter your name") },
+    validate: { displayName: displayNameError },
   });
 
   async function submit({ displayName }: { displayName: string }) {
@@ -251,7 +251,6 @@ function DisplayNameForm({
           label="Name"
           autoComplete="name"
           data-autofocus
-          maxLength={100}
           {...form.getInputProps("displayName")}
         />
         <Group justify="flex-end">

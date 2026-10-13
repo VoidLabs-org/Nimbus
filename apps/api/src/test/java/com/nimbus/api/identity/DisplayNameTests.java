@@ -65,8 +65,86 @@ class DisplayNameTests {
 			"\ud83d\ude00".repeat(100), // 100 emoji is 200 UTF-16 units
 	};
 
+	private static final int BLACK_FLAG = 0x1F3F4;
+
+	private static final int TAG_CANCEL = 0xE007F;
+
+	/** The flag of England: a black flag, the tag letters "gbeng" and the cancel tag. */
+	private static final String ENGLAND = cp(BLACK_FLAG, 0xE0067, 0xE0062, 0xE0065, 0xE006E, 0xE0067, TAG_CANCEL);
+
+	/** Stricter cases, written as numbers so no invisible character sits in this file. */
+	private static final String[] ALSO_INVALID = {
+			"Dana" + cp(0xE0041), // a tag character outside a flag: invisible text
+			cp(BLACK_FLAG) + cp(0xE0068, 0xE0069, 0xE0064, 0xE0064, 0xE0065, 0xE006E, 0xE0020, 0xE006D, 0xE0065,
+					TAG_CANCEL), // a flag carrying a hidden message
+			"Da" + cp(0x034F) + "na", // combining grapheme joiner: invisible
+			"Da" + cp(0xFE0F) + "na", // emoji variation selector after a letter
+			"Da" + cp(0xFE00) + "na",
+			"D" + cp(0x0301).repeat(90), // a stack of combining marks drawing over the rows around it
+			cp(0x0301) + "Dana", // a mark with nothing to attach to
+			"Dana " + cp(0x0301) + "x",
+			String.valueOf((char) 0xD800), // a lone surrogate
+			"Dana" + cp(0xE000), // a private-use character
+	};
+
+	private static final String[] ALSO_VALID = {
+			"Dana " + ENGLAND,
+			"I " + cp(0x2764, 0xFE0F) + " you", // a heart with the emoji variation selector
+			cp('1', 0xFE0F, 0x20E3), // a keycap
+			cp(0x845B, 0xE0100), // a Han character with an ideographic variation selector
+			"Nguye" + cp(0x0302, 0x0303) + "n", // letters with two marks stacked
+			cp(0x1F44D, 0x1F3FD) + " Dana", // a thumbs up with a skin tone
+	};
+
 	@Autowired
 	RestTestClient client;
+
+	@Test
+	void stricterCasesAreRejectedAtRegistrationAndRename() {
+		var accessToken = registerAndGetAccessToken();
+
+		for (var name : ALSO_INVALID) {
+			register(name, "stricter-" + EMAILS.incrementAndGet() + "@example.com")
+				.expectStatus().isBadRequest()
+				.expectBody()
+				.jsonPath("$.errors.displayName").exists();
+			rename(accessToken, name)
+				.expectStatus().isBadRequest()
+				.expectBody()
+				.jsonPath("$.errors.displayName").exists();
+		}
+	}
+
+	@Test
+	void flagsMarksAndSelectorsThatAreVisibleAreAcceptedAtRegistrationAndRename() {
+		var accessToken = registerAndGetAccessToken();
+
+		for (var name : ALSO_VALID) {
+			register(name, "visible-" + EMAILS.incrementAndGet() + "@example.com")
+				.expectStatus().isCreated()
+				.expectBody()
+				.jsonPath("$.user.displayName").isEqualTo(name);
+			rename(accessToken, name)
+				.expectStatus().isOk()
+				.expectBody()
+				.jsonPath("$.displayName").isEqualTo(name);
+		}
+	}
+
+	// A no-break space is not "whitespace" to Java's strip(), but it is padding all the same.
+	@Test
+	void paddingWithNoBreakSpacesIsRemovedLikeOtherWhitespace() {
+		var accessToken = registerAndGetAccessToken();
+
+		rename(accessToken, cp(0xA0, 0xA0, 0x2007) + "Admin" + cp(0x202F, 0x3000))
+			.expectStatus().isOk()
+			.expectBody()
+			.jsonPath("$.displayName").isEqualTo("Admin");
+	}
+
+	private static String cp(int... codePoints) {
+		return new String(codePoints, 0, codePoints.length);
+	}
 
 	@Test
 	void registrationRejectsInvisibleAndSpoofedNames() {

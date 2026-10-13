@@ -170,6 +170,44 @@ class ExternalSignInTests {
 		assertThat(user.displayName()).isEqualTo("a".repeat(99));
 	}
 
+	@Test
+	void aProviderNameKeepsAFlagButLosesTagCharactersThatCarryHiddenText() {
+		var england = cp(0x1F3F4, 0xE0067, 0xE0062, 0xE0065, 0xE006E, 0xE0067, 0xE007F);
+		var hidden = cp(0xE0041, 0xE0042);
+
+		var user = externalSignIn.signIn(google("g-kit", "kit@example.com", true, "Kit " + england + hidden, null));
+
+		assertThat(user.displayName()).isEqualTo("Kit " + england);
+	}
+
+	// Cutting between code points could split a skin tone off its emoji or half a flag.
+	@Test
+	void aProviderNameIsCutBetweenWholeCharactersAsPeopleSeeThem() {
+		var thumbsUp = cp(0x1F44D, 0x1F3FD);
+		var flag = cp(0x1F1FA, 0x1F1F8);
+
+		var withSkinTone = externalSignIn.signIn(google("g-lee", "lee@example.com", true, "a".repeat(99) + thumbsUp, null));
+		var withFlag = externalSignIn.signIn(google("g-max", "max@example.com", true, "b".repeat(99) + flag, null));
+		var fits = externalSignIn.signIn(google("g-nat", "nat@example.com", true, "c".repeat(98) + thumbsUp, null));
+
+		assertThat(withSkinTone.displayName()).isEqualTo("a".repeat(99));
+		assertThat(withFlag.displayName()).isEqualTo("b".repeat(99));
+		assertThat(fits.displayName()).isEqualTo("c".repeat(98) + thumbsUp);
+	}
+
+	@Test
+	void aProviderNameLosesInvisibleMarksPaddingAndStackedMarks() {
+		var name = cp(0xA0, 0xA0) + "Da" + cp(0x034F) + "na" + cp(0x0301).repeat(40) + cp(0x202F);
+
+		var user = externalSignIn.signIn(google("g-oli", "oli@example.com", true, name, null));
+
+		assertThat(user.displayName()).isEqualTo("Dana" + cp(0x0301).repeat(5));
+	}
+
+	private static String cp(int... codePoints) {
+		return new String(codePoints, 0, codePoints.length);
+	}
+
 	private static ExternalProfile google(String id, String email, boolean verified, String name, String avatar) {
 		return new ExternalProfile("google", id, email, verified, name, avatar);
 	}

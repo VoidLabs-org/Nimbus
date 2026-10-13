@@ -12,7 +12,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * Sets or changes a User's password. A User who has one must give it first; a User without one (they only
  * sign in with a Linked identity) can set their first. Checking and hashing are slow, so they happen outside any
- * transaction; only the update shares one. Too many wrong current passwords block further tries for a while.
+ * transaction; only the update shares one. Too many wrong current passwords block further tries for a while;
+ * these are counted apart from failed sign-ins, so both can be tried up to their limits.
  */
 @Service
 class Passwords {
@@ -41,8 +42,8 @@ class Passwords {
 	/**
 	 * The request must come from a session that is still running. Access tokens outlive their session by up to
 	 * their lifetime, and a provider sign-in ends the sessions of whoever registered the email first: without
-	 * this check that person's token could still set the password of an account that is no longer theirs. Every
-	 * other session of the User ends once the password changes.
+	 * this check that person's token could still set the password of an account that is no longer theirs. When
+	 * an existing password is changed, every other session of the User ends; setting a first one ends none.
 	 *
 	 * @param sessionId the session of the access token making the request; it stays signed in
 	 * @param currentPassword what the User types as their current password; ignored when they have none
@@ -50,7 +51,8 @@ class Passwords {
 	 * @throws WrongPasswordException when the User has a password and {@code currentPassword} isn't it
 	 */
 	void change(UUID userId, UUID sessionId, String currentPassword, String newPassword) {
-		var user = users.findById(userId).orElseThrow(Passwords::tokenOutlivedUser);
+		var user = users.require(userId);
+		// Fails fast, before a guess is counted or a hash is computed; the check that protects is the one below.
 		requireActive(sessionId, userId);
 		if (user.passwordHash() != null) {
 			// Counted before the slow check, so parallel guesses can't race past the limit; a success takes it back.
@@ -63,10 +65,16 @@ class Passwords {
 		}
 		var hash = passwordEncoder.encode(newPassword);
 		transaction.executeWithoutResult(status -> {
-			// Checked again inside: the session may have ended while the password was being hashed.
+			// Lock first, then check: a provider sign-in that ends this session commits either before the lock
+			// (the check fails) or after the update (it removes this password again), never in between.
+			var locked = users.findLockedById(userId).orElseThrow(() -> new InvalidBearerTokenException(
+					"The User for this token no longer exists"));
 			requireActive(sessionId, userId);
-			users.findById(userId).orElseThrow(Passwords::tokenOutlivedUser).changePassword(hash);
-			sessions.endAllExcept(userId, sessionId);
+			var changing = locked.passwordHash() != null;
+			locked.changePassword(hash);
+			if (changing) {
+				sessions.endAllExcept(userId, sessionId);
+			}
 		});
 	}
 
@@ -74,10 +82,6 @@ class Passwords {
 		if (!sessions.isActive(sessionId, userId)) {
 			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
 		}
-	}
-
-	private static InvalidBearerTokenException tokenOutlivedUser() {
-		return new InvalidBearerTokenException("The User for this token no longer exists");
 	}
 
 	static class WrongPasswordException extends RuntimeException {

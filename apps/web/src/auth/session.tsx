@@ -58,8 +58,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   async function changePassword(input: ChangePasswordInput) {
+    const signedIn = user?.id;
     await api.changePassword(input);
-    setUser((current) => (current ? { ...current, hasPassword: true } : current));
+    // A sign-out, or another User signing in, meanwhile must not be marked by the slower request.
+    setUser((current) =>
+      current && current.id === signedIn ? { ...current, hasPassword: true } : current,
+    );
   }
 
   async function logout() {

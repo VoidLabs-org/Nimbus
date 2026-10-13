@@ -39,17 +39,14 @@ class UsersController {
 	/** The signed-in User's profile; an invalid-token 401 if their token outlived the User. */
 	@GetMapping("/me")
 	UserResponse me() {
-		return users.findById(currentUser.id())
-			.map(UserResponse::from)
-			.orElseThrow(() -> new InvalidBearerTokenException("The User for this token no longer exists"));
+		return UserResponse.from(users.require(currentUser.id()));
 	}
 
 	/** Changes the display name only; email, password and avatar are not editable here. */
 	@PatchMapping("/me")
 	@Transactional
 	UserResponse updateMe(@Valid @RequestBody UpdateProfileRequest request) {
-		var user = users.findById(currentUser.id())
-			.orElseThrow(() -> new InvalidBearerTokenException("The User for this token no longer exists"));
+		var user = users.require(currentUser.id());
 		user.rename(request.displayName());
 		return UserResponse.from(user);
 	}

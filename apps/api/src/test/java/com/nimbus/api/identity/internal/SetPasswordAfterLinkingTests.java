@@ -62,6 +62,19 @@ class SetPasswordAfterLinkingTests {
 		login("bea@example.com", "first password").expectStatus().isOk();
 	}
 
+	// Nothing was compromised by adding a way in, so the User's other devices stay signed in.
+	@Test
+	void settingAFirstPasswordLeavesTheOtherSessionsRunning() {
+		var user = externalSignIn.signIn(profile("google", "g-first", "first@example.com"));
+		var thisBrowser = sessions.start(user);
+		var otherBrowser = sessions.start(user);
+
+		setPassword(accessTokens.issueFor(user, thisBrowser.sessionId()), Map.of("newPassword", "first password"))
+			.expectStatus().isNoContent();
+
+		assertThat(sessions.refresh(otherBrowser.value(), "client-first").user().getId()).isEqualTo(user.getId());
+	}
+
 	@Test
 	void afterSettingOneTheUserMustGiveItToChangeIt() {
 		var user = externalSignIn.signIn(profile("google", "g-cy", "cy@example.com"));

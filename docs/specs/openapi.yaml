@@ -289,7 +289,8 @@ paths:
       description: >-
         A User without a password (they only sign in with Google or GitHub) sets one; `currentPassword` is ignored.
         A User with one must give it as `currentPassword`. The request must come from a session that is still
-        running, and every other session of the User ends; this browser stays signed in.
+        running. Changing an existing password ends every other session of the User; setting a first one ends none. This
+        browser stays signed in.
       requestBody:
         required: true
         content:

@@ -146,12 +146,18 @@ function PasswordForm({
       notifications.show({
         color: "green",
         message: hasPassword
-          ? "Password changed. You were signed out on your other devices."
+          ? "Password changed. Your other devices will be signed out shortly."
           : "Password set. You can now sign in with your email and password.",
       });
       onDone();
     } catch (error) {
-      if (error instanceof ApiError && error.status === 429) {
+      if (error instanceof ApiError && !hasPassword && error.fieldErrors.currentPassword) {
+        // Another tab set a password first, so this one doesn't know yet and has no field for the current one.
+        form.setFieldError(
+          "newPassword",
+          "This account already has a password. Reload the page, then use Change password.",
+        );
+      } else if (error instanceof ApiError && error.status === 429) {
         form.setFieldError("currentPassword", tooManyAttemptsMessage(error.retryAfterSeconds));
       } else if (
         error instanceof ApiError &&

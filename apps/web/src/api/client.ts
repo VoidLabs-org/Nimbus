@@ -211,6 +211,15 @@ export function createApiClient(
 
     me: () => request<User>("/api/users/me"),
 
+    /**
+     * The ids of the "Continue with ..." providers the server has switched on, in the order to show them
+     * (empty when none). Public, so no access token goes along; a failure says nothing about the session.
+     */
+    providers: () =>
+      request<{ providers: string[] }>("/api/auth/providers", {}, { authenticated: false }).then(
+        (response) => response.providers,
+      ),
+
     /** Changes the display name and returns the updated User. */
     updateProfile: (input: { displayName: string }) =>
       request<User>("/api/users/me", { method: "PATCH", body: JSON.stringify(input) }),

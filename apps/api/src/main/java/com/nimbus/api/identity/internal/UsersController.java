@@ -63,7 +63,7 @@ class UsersController {
 
 	/** Same length rules as registration; passwords are kept exactly as typed. */
 	record ChangePasswordRequest(
-			@Size(max = 128) String currentPassword,
+			@Size(max = ValidPassword.MAX_LENGTH) String currentPassword,
 			@ValidPassword String newPassword) {
 	}
 

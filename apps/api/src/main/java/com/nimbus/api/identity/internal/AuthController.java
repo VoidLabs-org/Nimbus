@@ -119,8 +119,8 @@ class AuthController {
 
 	/** Capped like registration, so oversized input never reaches the limiter or the password hash. */
 	record LoginRequest(
-			@NotBlank @Size(max = 254) String email,
-			@NotNull @Size(max = 128) String password) {
+			@NotBlank @Size(max = ValidEmail.MAX_LENGTH) String email,
+			@NotNull @Size(max = ValidPassword.MAX_LENGTH) String password) {
 
 		LoginRequest {
 			email = email == null ? null : email.strip();

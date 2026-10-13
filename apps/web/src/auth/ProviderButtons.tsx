@@ -1,6 +1,8 @@
 import { Button, Divider, Stack } from "@mantine/core";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { api } from "../api/client";
+import { safeReturnPath } from "./returnPath";
 
 // What each provider id from the server looks like here. An id not listed is not shown.
 const PROVIDERS = [
@@ -12,10 +14,14 @@ const PROVIDERS = [
  * "Continue with ..." for each provider the server has switched on, for the sign-in and register pages: signing
  * up and signing in are the same step with a provider. Full page loads, not fetches: the browser must follow
  * the redirects through the provider and back. Nothing shows, not even the divider, until the server has said
- * which are on, when none are, or when it can't be asked: the form above still works.
+ * which are on, when none are, or when it can't be asked: the form above still works. The page's `returnTo` goes
+ * along; the server keeps it through the handshake and hands it to `/auth/callback`.
  */
 export function ProviderButtons() {
   const [enabled, setEnabled] = useState<string[]>([]);
+  const [searchParams] = useSearchParams();
+  const returnTo = safeReturnPath(searchParams.get("returnTo"));
+  const query = returnTo === "/" ? "" : `?returnTo=${encodeURIComponent(returnTo)}`;
 
   useEffect(() => {
     let current = true;
@@ -41,7 +47,7 @@ export function ProviderButtons() {
           <Button
             key={provider.id}
             component="a"
-            href={`/api/auth/oauth2/${provider.id}`}
+            href={`/api/auth/oauth2/${provider.id}${query}`}
             variant="default"
             fullWidth
           >

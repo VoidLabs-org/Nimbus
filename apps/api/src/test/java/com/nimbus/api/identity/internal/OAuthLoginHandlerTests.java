@@ -95,6 +95,44 @@ class OAuthLoginHandlerTests {
 		assertThat(other.getRedirectedUrl()).isEqualTo("http://localhost:3000/login?error=failed");
 	}
 
+	@Test
+	void successGoesBackToThePageTheSignInStartedFrom() throws Exception {
+		var request = startedFrom("/projects/42?tab=board#top");
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationSuccess(request, response, google(recorded("verified-user")));
+
+		assertThat(response.getRedirectedUrl())
+			.isEqualTo("http://localhost:3000/auth/callback?returnTo=%2Fprojects%2F42%3Ftab%3Dboard%23top");
+		assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).startsWith("refresh_token=");
+	}
+
+	@Test
+	void aFailedSignInKeepsThePageForTheNextTry() throws Exception {
+		var unverified = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(startedFrom("/projects/42"), unverified, google(recorded("unverified-user")));
+		assertThat(unverified.getRedirectedUrl())
+			.isEqualTo("http://localhost:3000/login?error=email_unverified&provider=google&returnTo=%2Fprojects%2F42");
+
+		var request = startedFrom("/projects/42");
+		request.setRequestURI("/api/auth/oauth2/callback/github");
+		var declined = new MockHttpServletResponse();
+		handler.onAuthenticationFailure(request, declined,
+				new OAuth2AuthenticationException(new OAuth2Error("access_denied")));
+		assertThat(declined.getRedirectedUrl())
+			.isEqualTo("http://localhost:3000/login?error=cancelled&provider=github&returnTo=%2Fprojects%2F42");
+	}
+
+	// A handshake started from /login?returnTo=<page>, as ReturnPathAuthorizationRequestResolver leaves it.
+	private static MockHttpServletRequest startedFrom(String page) {
+		var request = new MockHttpServletRequest();
+		request.setSession(new MockHttpSession());
+		request.setParameter(ReturnPath.PARAMETER, page);
+		ReturnPath.remember(request);
+		request.removeParameter(ReturnPath.PARAMETER);
+		return request;
+	}
+
 	private static OAuth2AuthenticationToken google(Map<String, Object> claims) {
 		var user = new DefaultOAuth2User(AuthorityUtils.createAuthorityList("OIDC_USER"), claims, "sub");
 		return new OAuth2AuthenticationToken(user, List.of(), "google");

@@ -25,11 +25,20 @@ final class ReturnPath {
 	private ReturnPath() {
 	}
 
-	/** Keeps the request's {@code returnTo} for the end of the handshake, if it is a page inside the app. */
+	/**
+	 * Keeps the request's {@code returnTo} for the end of the handshake, if it is a page inside the app. Otherwise
+	 * forgets any earlier one: the session outlives a handshake that was abandoned at the provider, and a new start
+	 * must not inherit its page.
+	 */
 	static void remember(HttpServletRequest request) {
 		var path = request.getParameter(PARAMETER);
 		if (isInsideTheApp(path)) {
 			request.getSession().setAttribute(ATTRIBUTE, path);
+			return;
+		}
+		var session = request.getSession(false);
+		if (session != null) {
+			session.removeAttribute(ATTRIBUTE);
 		}
 	}
 

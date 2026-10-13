@@ -56,6 +56,23 @@ class ReturnPathAuthorizationRequestResolverTests {
 		assertThat(ReturnPath.recall(request)).isEmpty();
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "//evil.example.com", "" })
+	void startingAgainWithoutAUsablePathForgetsTheEarlierOne(String returnTo) {
+		var first = start("google", "/projects/42");
+		new ReturnPathAuthorizationRequestResolver(registrations).resolve(first);
+
+		var again = start("google", returnTo);
+		again.setSession(first.getSession());
+		new ReturnPathAuthorizationRequestResolver(registrations).resolve(again);
+		assertThat(ReturnPath.recall(again)).isEmpty();
+
+		var plain = start("github", null);
+		plain.setSession(first.getSession());
+		new ReturnPathAuthorizationRequestResolver(registrations).resolve(plain);
+		assertThat(ReturnPath.recall(plain)).isEmpty();
+	}
+
 	private static MockHttpServletRequest start(String provider, String returnTo) {
 		var request = new MockHttpServletRequest("GET", "/api/auth/oauth2/" + provider);
 		request.setServletPath("/api/auth/oauth2/" + provider);

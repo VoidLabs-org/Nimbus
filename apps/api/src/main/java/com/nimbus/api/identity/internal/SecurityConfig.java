@@ -48,11 +48,13 @@ class SecurityConfig {
 				.requestMatchers("/error").permitAll()
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()));
-		// Only the OAuth handshake keeps an HTTP session (the state and PKCE values of the login in progress).
+		// Only the OAuth handshake keeps an HTTP session (the state and PKCE values of the login in progress, and the
+		// page to return to).
 		// OAuthLoginHandler drops it as soon as the handshake ends.
 		if (providers.getIfAvailable() != null) {
 			http.oauth2Login(login -> login
-				.authorizationEndpoint(endpoint -> endpoint.baseUri("/api/auth/oauth2"))
+				.authorizationEndpoint(endpoint -> endpoint.baseUri(ReturnPathAuthorizationRequestResolver.BASE_URI)
+					.authorizationRequestResolver(new ReturnPathAuthorizationRequestResolver(providers.getObject())))
 				.redirectionEndpoint(endpoint -> endpoint.baseUri("/api/auth/oauth2/callback/*"))
 				.authorizedClientRepository(authorizedClients.getObject())
 				.userInfoEndpoint(endpoint -> endpoint.userService(new GithubUserService()))

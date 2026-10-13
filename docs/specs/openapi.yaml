@@ -90,6 +90,8 @@ paths:
         handshake keeps a short-lived HTTP session; nothing else in the API does. Only available when
         `GOOGLE_CLIENT_ID` is set.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/ReturnTo"
       responses:
         "302":
           description: Redirect to Google's sign-in page
@@ -101,7 +103,8 @@ paths:
       description: >-
         Signs the User in or creates them, linking the Google login (see the identity module spec for the rules).
         On success it sets the refresh cookie and redirects to `/auth/callback` on the public URL (`PUBLIC_URL`), where the web app calls
-        `POST /api/auth/refresh` for an access token; no token is ever in a URL. On failure it redirects to
+        `POST /api/auth/refresh` for an access token; no token is ever in a URL. A `returnTo` kept when the sign-in
+        started is added to either redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=google` on the public URL with `email_unverified` (Google did not verify the email),
         `cancelled` (the person declined at Google) or `failed` (anything else).
       security: []
@@ -136,6 +139,8 @@ paths:
         handshake keeps a short-lived HTTP session; nothing else in the API does. Only available when
         `GITHUB_CLIENT_ID` is set.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/ReturnTo"
       responses:
         "302":
           description: Redirect to GitHub's sign-in page
@@ -147,7 +152,8 @@ paths:
       description: >-
         Signs the User in or creates them, linking the GitHub login (see the identity module spec for the rules).
         On success it sets the refresh cookie and redirects to `/auth/callback` on the public URL (`PUBLIC_URL`), where the web app calls
-        `POST /api/auth/refresh` for an access token; no token is ever in a URL. On failure it redirects to
+        `POST /api/auth/refresh` for an access token; no token is ever in a URL. A `returnTo` kept when the sign-in
+        started is added to either redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=github` on the public URL with `email_unverified` (the GitHub account has no verified primary email),
         `cancelled` (the person declined at GitHub) or `failed` (anything else).
       security: []
@@ -343,6 +349,17 @@ components:
       type: apiKey
       in: cookie
       name: refresh_token
+
+  parameters:
+    ReturnTo:
+      name: returnTo
+      in: query
+      description: >-
+        The page to land on after signing in, e.g. `/projects/42`. Kept in the handshake's session (never sent to the
+        provider) and passed back as `returnTo` on the redirect that ends the handshake. Ignored unless it is a path
+        inside the app: one leading `/`, not `/` alone, no control characters, at most 2048 characters.
+      schema:
+        type: string
 
   headers:
     RefreshCookie:

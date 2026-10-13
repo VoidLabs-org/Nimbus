@@ -1,6 +1,9 @@
 package com.nimbus.api.identity.internal;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,8 +22,8 @@ import org.springframework.stereotype.Component;
  * Ends the OAuth handshake. On success it signs the User in like any other sign-in: a session, and its refresh
  * token in the cookie only. The browser is then sent to {@code /auth/callback}, where the web app trades the
  * cookie for an access token, so no token ever appears in a URL. On failure the browser goes back to the sign-in
- * page with a short code. Either way the handshake's short-lived HTTP session is dropped; nothing else in the
- * API uses one.
+ * page with a short code. Either way the page the sign-in started from ({@link ReturnPath}) is passed on as
+ * {@code returnTo}, and the handshake's short-lived HTTP session is dropped; nothing else in the API uses one.
  */
 @Component
 class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationFailureHandler {
@@ -43,6 +46,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	@Override
 	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
 			Authentication authentication) throws IOException {
+		var returnTo = ReturnPath.recall(request);
 		endHandshake(request);
 		var provider = "";
 		try {
@@ -52,20 +56,21 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			var refreshToken = sessions.start(user);
 			response.addHeader(HttpHeaders.SET_COOKIE,
 					AuthController.refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
-			redirect(response, "/auth/callback");
+			redirect(response, "/auth/callback", returnTo);
 		}
 		catch (ExternalSignIn.EmailUnverifiedException e) {
-			redirect(response, loginError("email_unverified", provider));
+			redirect(response, loginError("email_unverified", provider), returnTo);
 		}
 		catch (RuntimeException e) {
 			log.warn("Sign-in with a provider failed", e);
-			redirect(response, loginError("failed", provider));
+			redirect(response, loginError("failed", provider), returnTo);
 		}
 	}
 
 	@Override
 	public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
 			AuthenticationException exception) throws IOException {
+		var returnTo = ReturnPath.recall(request);
 		endHandshake(request);
 		// The provider reports "access_denied" when the person declines on its consent screen.
 		var declined = exception instanceof OAuth2AuthenticationException oauth
@@ -74,7 +79,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			log.warn("Sign-in with a provider failed", exception);
 		}
 		var provider = providerOf(request);
-		redirect(response, loginError(declined ? "cancelled" : "failed", provider));
+		redirect(response, loginError(declined ? "cancelled" : "failed", provider), returnTo);
 	}
 
 	// Tells the login page which provider the error is about, so it can say "Google" or "GitHub". The failure
@@ -91,8 +96,10 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 
 	// Always to the public URL: behind the dev proxy or a load balancer the request's own host is the API's,
 	// and the browser would land on a server that has no web app.
-	private void redirect(HttpServletResponse response, String path) throws IOException {
-		response.sendRedirect(publicUrl + path);
+	private void redirect(HttpServletResponse response, String path, Optional<String> returnTo) throws IOException {
+		var query = returnTo.map(page -> (path.contains("?") ? "&" : "?") + ReturnPath.PARAMETER + "="
+				+ URLEncoder.encode(page, StandardCharsets.UTF_8)).orElse("");
+		response.sendRedirect(publicUrl + path + query);
 	}
 
 	private static ExternalProfile profileOf(OAuth2AuthenticationToken login) {

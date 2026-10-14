@@ -20,6 +20,30 @@ _Avoid_: Deleted, closed or inactive project
 A unit of work a team tracks inside a Nimbus project. Only ever means the product concept.
 _Avoid_: Ticket, task, GitHub issue
 
+**Issue key**:
+The Project key and the Issue's number in that project, as in `NIM-12`, which names one Issue for good.
+_Avoid_: Issue ID, ticket number
+
+**Status**:
+The stage an Issue is at in its project, such as To do or In review; each project has its own ordered Statuses.
+_Avoid_: State, column, stage
+
+**Status category**:
+One of three fixed groups every Status belongs to (To do, In progress, Done), which the rest of Nimbus uses instead of Status names.
+_Avoid_: Status type, phase
+
+**Issue type**:
+What kind of work an Issue is: a Story (something new for users), a Bug (something broken) or a Chore (other necessary work).
+_Avoid_: Task (as a type), category
+
+**Reporter**:
+The User who created an Issue.
+_Avoid_: Creator, author, owner
+
+**Assignee**:
+The Member responsible for doing an Issue.
+_Avoid_: Owner, responsible
+
 **User**:
 A person who can sign in to Nimbus, identified by their email address. One person is one User, however many ways they sign in.
 _Avoid_: Account, login

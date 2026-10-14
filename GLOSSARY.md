@@ -4,6 +4,18 @@ A project management app where teams plan and track work in projects, boards and
 
 ## Product
 
+**Project**:
+A place where a team plans and tracks its work. It holds the team's Issues, boards and sprints.
+_Avoid_: Workspace, space, board
+
+**Project key**:
+A short code that identifies a project and prefixes its Issue numbers, as in `NIM-12`. It never changes and is never reused.
+_Avoid_: Prefix, slug, code
+
+**Archived project**:
+A project closed to all changes and hidden by default, which can be restored.
+_Avoid_: Deleted, closed or inactive project
+
 **Issue**:
 A unit of work a team tracks inside a Nimbus project. Only ever means the product concept.
 _Avoid_: Ticket, task, GitHub issue

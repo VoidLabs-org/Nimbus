@@ -28,6 +28,26 @@ _Avoid_: Account, login
 A User who has been added to a project. Only ever means project membership.
 _Avoid_: User (when you mean project membership)
 
+**Permission**:
+One action a User may be allowed to do, such as editing an Issue.
+_Avoid_: Right, privilege, capability
+
+**Role**:
+A named set of Grants that can be given to Users, such as Project admin or Viewer.
+_Avoid_: Group, permission group, permission set
+
+**Grant**:
+A Permission inside a Role, together with its Scope.
+_Avoid_: Rule, policy
+
+**Scope**:
+How far a Grant reaches: only the User's own records, everything in the project, or everything in Nimbus.
+_Avoid_: Range, level, visibility
+
+**Role assignment**:
+A User holding a Role, either across all of Nimbus or in one project.
+_Avoid_: Group membership, role member
+
 **Linked identity**:
 A Google or GitHub login attached to a User, letting them sign in without a password.
 _Avoid_: Social account, external account, provider user

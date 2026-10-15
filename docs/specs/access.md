@@ -60,10 +60,10 @@ The Platform admin edits Roles on the Roles page (all of it needs `access:role:m
 - **Create** a custom Role with a key (2 to 50 lowercase letters, digits and underscores, starting with a letter; unique, `409` if taken), a name (1 to 100 characters, trimmed), an optional description (at most 500) and a kind (`platform` or `project`). It starts with no Grants. Key and kind never change: a request that tries gets `400`.
 - **Rename and describe** any Role but Platform admin.
 - **Save Grants**: the whole set at once, replacing the old one. Each Grant must fit: a known Permission; in a project role, a project permission with one of its allowed Scopes; in a platform role, a platform permission without a Scope or a project permission with `ALL`; not a reserved Permission (unless Platform admin); not listed twice. Otherwise `400` with what is wrong per Permission under `errors`. Removing a locked Grant (Project admin's `projects:member:manage`) is `409`.
-- **Versions**: every Role has a version that changes on each edit. Renaming and saving Grants send the version they started from; a different one is refused with `409` ("This Role changed since you opened it"), so nobody overwrites someone else's change.
-- **Platform admin is locked**: it can't be renamed or have its Grants changed (`409`).
+- **Versions**: every Role has a version that changes on each edit. Renaming, saving Grants and resetting send the version they started from; a different one is refused with `409` ("This Role changed since you opened it"), so nobody overwrites someone else's change.
+- **Platform admin is locked**: it can't be renamed, reset or have its Grants changed (`409`).
 - **Customised**: renaming or saving Grants of a built-in Role marks it customised (with the time). **Reset to defaults** (built-in Roles only) restores its name, description and Grants and clears the mark.
-- **New Permissions**: a customised built-in Role reports `newPermissions`: its code defaults it doesn't hold that first appeared after it was customised. Defaults the admin removed on purpose aren't listed.
+- **New Permissions**: a customised built-in Role reports `newPermissions`: its code defaults it doesn't hold that first appeared after its Grants were last saved (or, if only renamed, after it was customised). Saving the Grants means the admin saw every Permission there was, so defaults they left out stop being reported.
 - **Delete** a custom Role only while nobody holds it (`409` with the number of assignments otherwise). Built-in Roles can't be deleted (`409`).
 
 ## Startup
@@ -71,7 +71,7 @@ The Platform admin edits Roles on the Roles page (all of it needs `access:role:m
 Before the API takes requests, every startup:
 
 1. Upserts `access_permissions` from the declarations, keeping when each Permission was first seen, and removes keys no longer declared.
-2. Creates any missing built-in Role, and resets every built-in Role that is not customised to the code defaults. Platform admin is always reset to every Permission. A customised built-in Role keeps what the admin set, except that its locked Grants are put back if missing.
+2. Creates any missing built-in Role, and resets every built-in Role that is not customised to the code defaults. If a custom Role already uses a built-in Role's key (a key a later release made built in), startup stops with a message to rename it with a migration, instead of overwriting it. Platform admin is always reset to every Permission. A customised built-in Role keeps what the admin set, except that its locked Grants are put back if missing.
 3. Logs a warning for each Grant whose key is no longer in the catalog. Such a Grant allows nothing and is never deleted automatically: rename or remove it with a Flyway migration in the same PR as the change.
 4. Gives Platform admin to the User with `NIMBUS_ADMIN_EMAIL` (`nimbus.admin.email`) if their email is verified: the seeded admin, or someone who proved the address with Google or GitHub. An unverified match (someone who registered that email with a password) gets nothing and is logged with the reason, so they can't take over Nimbus. Nothing happens when the setting is empty.
 
@@ -89,7 +89,7 @@ Running it again changes nothing. The sync takes a Postgres advisory lock for it
 | `POST /api/access/roles`             | `{key, name, description, kind}`: `201` with the new Role. `409` if the key is taken, `400` with `errors` for invalid fields.                                                                                                  |
 | `PATCH /api/access/roles/{key}`      | `{name?, description?, version}`: the updated Role. `409` if stale or Platform admin; `400` if `key` or `kind` is sent.                                                                                                        |
 | `PUT /api/access/roles/{key}/grants` | `{grants: [{permission, scope}], version}`: replaces every Grant, returns the Role. `400` with `errors` per Permission, `409` if stale, locked or Platform admin.                                                              |
-| `POST /api/access/roles/{key}/reset` | Built-in Roles only: back to the defaults, returns the Role. `409` for a custom Role.                                                                                                                                          |
+| `POST /api/access/roles/{key}/reset` | `{version}`, built-in Roles only: back to the defaults, returns the Role. `409` if stale, for Platform admin, or for a custom Role.                                                                                            |
 | `DELETE /api/access/roles/{key}`     | Custom Roles nobody holds: `204`. `409` for built-in Roles and Roles someone holds.                                                                                                                                            |
 | `GET /api/access/me/permissions`     | The signed-in User's platform permissions: `{platform: [...]}`, sorted. Any signed-in User. The web app uses it to hide what they can't use.                                                                                   |
 
@@ -100,7 +100,7 @@ Kinds and Scopes are lowercase in responses (`platform`, `project`, `own`, `proj
 | Table                     | Columns                                                                                                                                                                                                    |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `access_permissions`      | `key` (PK), `heading`, `description`, `kind` (`PLATFORM`/`PROJECT`), `scopes` (comma-separated), `own_hint`, `first_seen_at`. Upserted at every startup; Grants don't reference it.                        |
-| `access_roles`            | `id` (UUID), `key` (unique), `name`, `description`, `kind`, `built_in`, `customised`, `customised_at`, `version`, `created_at`.                                                                            |
+| `access_roles`            | `id` (UUID), `key` (unique), `name`, `description`, `kind`, `built_in`, `customised`, `customised_at` (when a customised built-in Role's Grants were last chosen), `version`, `created_at`.                |
 | `access_role_grants`      | `role_id` (→ `access_roles`, cascade delete), `permission_key`, `scope` (null for platform permissions). Primary key (`role_id`, `permission_key`).                                                        |
 | `access_role_assignments` | `id`, `role_id` (→ `access_roles`), `user_id`, `project_id` (null for platform roles), `created_at`. Unique (`user_id`, `role_id`) for platform roles; unique (`user_id`, `project_id`) for project roles. |
 

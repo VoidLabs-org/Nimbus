@@ -29,6 +29,11 @@ import { UserMenu } from "../auth/UserMenu";
  */
 export default function RolePage() {
   const { key = "" } = useParams();
+  // A fresh page per Role, so nothing (a loaded Role, a draft) carries over when the address changes.
+  return <RoleDetails key={key} roleKey={key} />;
+}
+
+function RoleDetails({ roleKey: key }: { roleKey: string }) {
   const [role, setRole] = useState<Role | null>(null);
   const [catalog, setCatalog] = useState<CatalogPermission[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -83,12 +88,24 @@ export default function RolePage() {
               its defaults.
             </Alert>
           )}
-          {/* Keyed by version: a saved, renamed or reset Role starts a fresh editor from what was stored. */}
-          <GrantsEditor key={role.version} role={role} catalog={catalog} onSaved={setRole} />
+          {/* Restarts only when the stored Grants change (saved or reset): renaming keeps unsaved ticks. */}
+          <GrantsEditor
+            key={grantsSignature(role)}
+            role={role}
+            catalog={catalog}
+            onSaved={setRole}
+          />
         </Stack>
       )}
     </Container>
   );
+}
+
+function grantsSignature(role: Role): string {
+  return role.grants
+    .map((grant) => `${grant.permission}=${grant.scope ?? ""}`)
+    .sort()
+    .join(",");
 }
 
 function RoleHeader({ role, onChanged }: { role: Role; onChanged: (role: Role) => void }) {
@@ -126,7 +143,7 @@ function RoleHeader({ role, onChanged }: { role: Role; onChanged: (role: Role) =
     setFailure(null);
     try {
       if (confirming === "reset") {
-        onChanged(await api.resetRole(role.key));
+        onChanged(await api.resetRole(role.key, role.version));
         notifications.show({ message: `${role.name} is back to its defaults.` });
       } else {
         await api.deleteRole(role.key);

@@ -116,7 +116,7 @@ class RoleEditor {
 			.param("description", description)
 			.param("id", role.id())
 			.update();
-		changed(role);
+		changed(role, false);
 	}
 
 	/** Replaces all of the Role's Grants with these. */
@@ -130,7 +130,7 @@ class RoleEditor {
 			}
 		}));
 		grants.replace(role.id(), wanted);
-		changed(role);
+		changed(role, true);
 	}
 
 	/** Permission key to Scope name, if every requested Grant fits the Permission and this kind of Role. */
@@ -138,6 +138,10 @@ class RoleEditor {
 		Map<String, String> errors = new TreeMap<>();
 		Map<String, String> wanted = new HashMap<>();
 		for (var grant : requested) {
+			if (grant == null) {
+				errors.putIfAbsent("grants", "A Grant is empty");
+				continue;
+			}
 			var key = grant.permission();
 			var problem = problem(role, grant);
 			if (problem == null && wanted.containsKey(key)) {
@@ -204,8 +208,8 @@ class RoleEditor {
 	}
 
 	/** Back to the code defaults: Grants, name and description. Built-in Roles only. */
-	void reset(String key) {
-		var role = lockedForUpdate(key);
+	void reset(String key, int version) {
+		var role = editable(key, version);
 		var builtIn = BuiltInDefaults.builtIn(key)
 			.orElseThrow(() -> new RoleConflictException("Only built-in Roles have defaults to reset to"));
 		grants.replace(role.id(), defaults.grantsOf(builtIn));
@@ -230,12 +234,18 @@ class RoleEditor {
 		return role;
 	}
 
-	/** Bumps the version, and marks a built-in Role customised so startup leaves it alone. */
-	private void changed(Stored role) {
+	/**
+	 * Bumps the version, and marks a built-in Role customised so startup leaves it alone. {@code customised_at} is
+	 * when its Grants were last chosen: saving them means the admin saw every Permission there was, so only
+	 * defaults added after that count as new.
+	 */
+	private void changed(Stored role, boolean grantsChosen) {
 		jdbc.sql("""
 				UPDATE access_roles SET version = version + 1, customised = customised OR built_in,
-				customised_at = CASE WHEN built_in THEN COALESCE(customised_at, now()) END
+				customised_at = CASE WHEN NOT built_in THEN NULL
+				    WHEN :grantsChosen THEN now() ELSE COALESCE(customised_at, now()) END
 				WHERE id = :id""")
+			.param("grantsChosen", grantsChosen)
 			.param("id", role.id())
 			.update();
 	}

@@ -319,7 +319,11 @@ export function createApiClient(
       request<Role>(`${rolePath(key)}/grants`, { method: "PUT", body: JSON.stringify(input) }),
 
     /** Back to the defaults; built-in Roles only. */
-    resetRole: (key: string) => request<Role>(`${rolePath(key)}/reset`, { method: "POST" }),
+    resetRole: (key: string, version: number) =>
+      request<Role>(`${rolePath(key)}/reset`, {
+        method: "POST",
+        body: JSON.stringify({ version }),
+      }),
 
     /** Deletes a custom Role nobody holds; a 409 says why not otherwise. */
     deleteRole: (key: string) => request<void>(rolePath(key), { method: "DELETE" }),

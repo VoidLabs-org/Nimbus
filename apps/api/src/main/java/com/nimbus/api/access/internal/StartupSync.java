@@ -85,9 +85,13 @@ class StartupSync implements SmartInitializingSingleton {
 				.param("now", now)
 				.update();
 		}
-		jdbc.sql("DELETE FROM access_permissions WHERE key NOT IN (:keys)")
-			.param("keys", catalog.all().stream().map(permission -> permission.key()).toList())
-			.update();
+		var keys = catalog.all().stream().map(permission -> permission.key()).toList();
+		if (keys.isEmpty()) {
+			jdbc.sql("DELETE FROM access_permissions").update();
+		}
+		else {
+			jdbc.sql("DELETE FROM access_permissions WHERE key NOT IN (:keys)").param("keys", keys).update();
+		}
 	}
 
 	private void syncBuiltIn(BuiltInRole role) {
@@ -102,10 +106,15 @@ class StartupSync implements SmartInitializingSingleton {
 			.param("kind", role.kind().name())
 			.param("now", java.sql.Timestamp.from(Instant.now()))
 			.update();
-		var row = jdbc.sql("SELECT id, customised FROM access_roles WHERE key = :key")
+		var row = jdbc.sql("SELECT id, customised, built_in FROM access_roles WHERE key = :key")
 			.param("key", role.key())
-			.query((rs, n) -> new Object[] { rs.getObject("id", UUID.class), rs.getBoolean("customised") })
+			.query((rs, n) -> new Object[] { rs.getObject("id", UUID.class), rs.getBoolean("customised"),
+					rs.getBoolean("built_in") })
 			.single();
+		if (!(boolean) row[2]) {
+			throw new IllegalStateException("A custom Role uses the key " + role.key() + ", which is now the key of a "
+					+ "built-in Role. Rename the custom Role with a migration before starting this version.");
+		}
 		var id = (UUID) row[0];
 		// Platform admin is locked: it is never customised and always holds everything. A customised Role keeps
 		// what the admin set, except Grants it must always hold.

@@ -1,6 +1,7 @@
 package com.nimbus.api.access.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -44,6 +45,9 @@ class StartupSyncTests {
 
 	@Autowired
 	JdbcClient jdbc;
+
+	@Autowired
+	RoleEditor editor;
 
 	@Test
 	void aVerifiedAdminWhoLostPlatformAdminGetsItBackAtStartup() {
@@ -124,6 +128,13 @@ class StartupSyncTests {
 		assertThat(roles.require("project_admin").newPermissions()).containsExactly("projects:project:update");
 		assertThat(roles.require("developer").newPermissions()).isEmpty();
 
+		// The admin saw the notice and saved the Permissions without it: that was their choice, so no more notice.
+		var current = roles.require("project_admin");
+		editor.saveGrants("project_admin", current.grants().stream()
+			.map(grant -> new RoleEditor.RequestedGrant(grant.permission(), grant.scope()))
+			.toList(), current.version());
+		assertThat(roles.require("project_admin").newPermissions()).isEmpty();
+
 		reset("project_admin");
 		assertThat(roles.require("project_admin").newPermissions()).isEmpty();
 	}
@@ -150,6 +161,20 @@ class StartupSyncTests {
 		assertThat(roles.require("project_admin").customised()).isTrue();
 
 		reset("project_admin");
+	}
+
+	@Test
+	void aCustomRoleWithABuiltInRolesKeyStopsStartupInsteadOfBeingOverwritten() {
+		// As if an admin had created "viewer" as a custom Role before a release made it built in.
+		jdbc.sql("UPDATE access_roles SET built_in = FALSE WHERE key = 'viewer'").update();
+		try {
+			assertThatThrownBy(startup::run).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("viewer")
+				.hasMessageContaining("custom Role");
+		}
+		finally {
+			jdbc.sql("UPDATE access_roles SET built_in = TRUE WHERE key = 'viewer'").update();
+		}
 	}
 
 	@Test

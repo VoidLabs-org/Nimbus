@@ -225,6 +225,32 @@ class RoleEditingTests {
 	}
 
 	@Test
+	void anEmptyGrantInTheListIsRefusedNotACrash() {
+		create("sloppy", "project").expectStatus().isCreated();
+
+		var body = new java.util.HashMap<String, Object>();
+		body.put("grants", java.util.Arrays.asList((Object) null));
+		body.put("version", version("sloppy"));
+		client.put().uri("/api/access/roles/sloppy/grants")
+			.header("Authorization", "Bearer " + admin)
+			.body(body)
+			.exchange()
+			.expectStatus().isBadRequest();
+	}
+
+	@Test
+	void resetIsFromTheVersionOpenedAndNeverForPlatformAdmin() {
+		var opened = version("viewer");
+		patch("viewer", Map.of("description", "Changed by someone else", "version", opened)).expectStatus().isOk();
+
+		resetFrom("viewer", opened).expectStatus().isEqualTo(409);
+		resetFrom("platform_admin", version("platform_admin")).expectStatus().isEqualTo(409);
+
+		reset("viewer");
+		assertThat((Boolean) JsonPath.read(role("viewer"), "$.customised")).isFalse();
+	}
+
+	@Test
 	void platformAdminIsLocked() {
 		patch("platform_admin", Map.of("name", "God mode", "version", version("platform_admin")))
 			.expectStatus().isEqualTo(409);
@@ -287,10 +313,14 @@ class RoleEditingTests {
 
 	/** Back to the code defaults, so tests sharing this database don't affect each other. */
 	private void reset(String key) {
-		client.post().uri("/api/access/roles/" + key + "/reset")
+		resetFrom(key, version(key)).expectStatus().isOk();
+	}
+
+	private RestTestClient.ResponseSpec resetFrom(String key, int version) {
+		return client.post().uri("/api/access/roles/" + key + "/reset")
 			.header("Authorization", "Bearer " + admin)
-			.exchange()
-			.expectStatus().isOk();
+			.body(Map.of("version", version))
+			.exchange();
 	}
 
 	private String list() {

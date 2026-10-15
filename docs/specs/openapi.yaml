@@ -546,13 +546,26 @@ paths:
     post:
       tags: [access]
       summary: Reset a built-in Role to its defaults
-      description: Restores its name, description and Grants and clears `customised`. Needs `access:role:manage`.
+      description: >-
+        Restores its name, description and Grants and clears `customised`. Refused for Platform admin and when the
+        Role changed since the given version. Needs `access:role:manage`.
       parameters:
         - name: key
           in: path
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                  description: The version the Role was opened at
       responses:
         "200":
           description: The Role, back to its defaults
@@ -567,7 +580,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: A custom Role, which has no defaults
+          description: A custom Role (no defaults), Platform admin (locked), or the Role changed since the version
           content:
             application/problem+json:
               schema:

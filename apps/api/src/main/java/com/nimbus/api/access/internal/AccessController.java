@@ -169,10 +169,13 @@ class AccessController {
 		editor.delete(key);
 	}
 
+	record ResetRoleRequest(@NotNull(message = "Send the version the Role was opened at") Integer version) {
+	}
+
 	@PostMapping("/roles/{key}/reset")
 	@Authorize(AccessPermissions.MANAGE_ROLES)
-	RoleResponse reset(@PathVariable String key) {
-		editor.reset(key);
+	RoleResponse reset(@PathVariable String key, @Valid @RequestBody ResetRoleRequest request) {
+		editor.reset(key, request.version());
 		return role(key);
 	}
 

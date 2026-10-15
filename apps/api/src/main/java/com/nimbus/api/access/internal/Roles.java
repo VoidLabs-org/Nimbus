@@ -97,9 +97,10 @@ class Roles {
 		var ids = rows.stream().map(Row::id).toList();
 		var grants = grantsOf(ids);
 		var holders = holdersOf(ids);
-		var firstSeen = firstSeen();
+		var firstSeen = rows.stream().anyMatch(row -> row.builtIn() && row.customised()) ? firstSeen()
+				: Map.<String, java.time.Instant>of();
 		return rows.stream().map(row -> {
-			var builtIn = BuiltInDefaults.builtIn(row.key());
+			var builtIn = row.builtIn() ? BuiltInDefaults.builtIn(row.key()) : java.util.Optional.<BuiltInRole>empty();
 			var locked = builtIn.map(defaults::lockedOf).orElse(Map.of());
 			var held = grants.getOrDefault(row.id(), List.of()).stream()
 				.map(grant -> new GrantView(grant.permission(), grant.scope(), locked.containsKey(grant.permission())))

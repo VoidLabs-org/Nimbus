@@ -13,9 +13,10 @@ Everything under `identity.internal` is private to the module.
 
 ## Events published
 
-| Event            | When                                                                                                                                    | Payload                          |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `UserRegistered` | A User is created: registration, or the admin seed below. Published in the same transaction as the insert. Never on sign-in or refresh. | `userId`, `email`, `displayName` |
+| Event            | When                                                                                                                                                                                                                                                                             | Payload                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `UserRegistered` | A User is created: registration, or the admin seed below. Published in the same transaction as the insert. Never on sign-in or refresh.                                                                                                                                          | `userId`, `email`, `displayName` |
+| `EmailVerified`  | An existing User's email becomes verified: someone signs in with Google or GitHub on the email of a User who had only registered it with a password (the password is removed, see Linked identities). Published in the same transaction. Not for Users created already verified. | `userId`, `email`                |
 
 Other modules react to it (e.g. `access` for a default group). `identity` does not know who listens. Listeners should use `@ApplicationModuleListener`, which runs after the commit: a plain synchronous `@EventListener` that throws rolls the sign-up back.
 

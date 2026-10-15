@@ -24,6 +24,7 @@ None yet.
 | Event                         | Reaction                                                                                                                                                                                                                                                                              |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `UserRegistered` (`identity`) | If it is the `NIMBUS_ADMIN_EMAIL` User and their email is verified, give them Platform admin. Runs synchronously right after the registration commits (`@TransactionalEventListener` in a new transaction), so the admin holds it by the time the registration or admin seed returns. |
+| `EmailVerified` (`identity`)  | The same check, when someone proves an email they had only registered with a password (by signing in with Google or GitHub). The real owner of the admin email becomes Platform admin at once, without a restart.                                                                     |
 
 ## Permissions
 
@@ -61,7 +62,9 @@ Before the API takes requests, every startup:
 3. Logs a warning for each Grant whose key is no longer in the catalog. Such a Grant allows nothing and is never deleted automatically: rename or remove it with a Flyway migration in the same PR as the change.
 4. Gives Platform admin to the User with `NIMBUS_ADMIN_EMAIL` (`nimbus.admin.email`) if their email is verified: the seeded admin, or someone who proved the address with Google or GitHub. An unverified match (someone who registered that email with a password) gets nothing and is logged with the reason, so they can't take over Nimbus. Nothing happens when the setting is empty.
 
-Running it again changes nothing.
+Running it again changes nothing. The sync takes a Postgres advisory lock for its transaction, so instances starting at the same time against one database wait for each other instead of colliding.
+
+**Shared dev database:** the catalog and the uncustomised built-in Roles always follow the code of the instance that started last. Two developers on branches with different Permissions keep resetting each other's catalog and defaults on the shared dev database (a running server keeps working, but its Roles may not match its code until it restarts). Work on new or changed Permissions against a local database (`docker compose up -d`).
 
 ## REST endpoints
 

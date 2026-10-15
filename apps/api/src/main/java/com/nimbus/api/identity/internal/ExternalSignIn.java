@@ -2,6 +2,7 @@ package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
 
+import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.identity.UserRegistered;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -73,6 +74,7 @@ class ExternalSignIn {
 			user.removePassword();
 			sessions.endAll(user);
 			user.verifyEmail();
+			events.publishEvent(new EmailVerified(user.getId(), user.email()));
 		}
 		return user;
 	}

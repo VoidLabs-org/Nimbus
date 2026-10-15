@@ -58,6 +58,12 @@ class CatalogTests {
 	}
 
 	@Test
+	void aProjectPermissionsDefaultNeedsAScope() {
+		assertRefused(Permission.project("access:thing:edit", "A", "x", Scope.PROJECT).grantedTo(BuiltInRole.DEVELOPER),
+				"needs a Scope");
+	}
+
+	@Test
 	void projectRolesNeverGetScopeAll() {
 		assertRefused(Permission.project("access:thing:edit", "A", "x", Scope.ALL), "can't allow ALL");
 	}

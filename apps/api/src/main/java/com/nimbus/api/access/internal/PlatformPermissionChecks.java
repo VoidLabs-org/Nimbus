@@ -26,8 +26,20 @@ class PlatformPermissionChecks implements PlatformPermissions {
 
 	@Override
 	public boolean holds(UUID userId, String permission) {
-		return catalog.find(permission).filter(found -> found.kind() == Kind.PLATFORM).isPresent()
-				&& heldBy(userId).contains(permission);
+		if (catalog.find(permission).filter(found -> found.kind() == Kind.PLATFORM).isEmpty()) {
+			return false;
+		}
+		return jdbc.sql("""
+				SELECT EXISTS (
+				    SELECT 1 FROM access_role_grants g JOIN access_roles r ON r.id = g.role_id
+				    WHERE g.permission_key = :permission AND r.kind = 'PLATFORM' AND (r.key = :everyone OR EXISTS (
+				        SELECT 1 FROM access_role_assignments a
+				        WHERE a.role_id = r.id AND a.user_id = :user AND a.project_id IS NULL)))""")
+			.param("permission", permission)
+			.param("everyone", BuiltInRole.EVERYONE.key())
+			.param("user", userId)
+			.query(Boolean.class)
+			.single();
 	}
 
 	/** The platform permissions the User holds, sorted; Grants for unknown keys are left out. */

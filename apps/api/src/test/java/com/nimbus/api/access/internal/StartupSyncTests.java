@@ -3,6 +3,8 @@ package com.nimbus.api.access.internal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
 
 import com.nimbus.api.TestcontainersConfiguration;
 import com.nimbus.api.access.PlatformPermissions;
@@ -112,6 +114,29 @@ class StartupSyncTests {
 
 		assertThat(roles.require("platform_admin").grants()).extracting(Roles.GrantView::permission)
 			.contains("access:role:manage");
+	}
+
+	@Test
+	void twoInstancesStartingAtOnceAgainstOneDatabaseBothSucceed() throws Exception {
+		for (var round = 0; round < 10; round++) {
+			var bothReady = new CyclicBarrier(2);
+			var first = CompletableFuture.runAsync(() -> startTogether(bothReady));
+			var second = CompletableFuture.runAsync(() -> startTogether(bothReady));
+
+			CompletableFuture.allOf(first, second).get();
+		}
+
+		assertThat(roles.all()).hasSize(5);
+	}
+
+	private void startTogether(CyclicBarrier bothReady) {
+		try {
+			bothReady.await();
+		}
+		catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+		startup.run();
 	}
 
 	/** Back to the code defaults, so tests sharing this database don't affect each other. */

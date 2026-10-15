@@ -118,9 +118,16 @@ function RoleDetails({ role, catalog }: { role: Role; catalog: CatalogPermission
                         <Text size="sm" c="dimmed">
                           {permission.description}
                         </Text>
-                        {permission.ownHint && (
+                        {/* Own only applies in project roles; a platform role holds project
+                            permissions in every project. */}
+                        {role.kind === "project" && permission.ownHint && (
                           <Text size="xs" c="dimmed">
                             Own: {permission.ownHint}
+                          </Text>
+                        )}
+                        {role.kind === "platform" && permission.kind === "project" && (
+                          <Text size="xs" c="dimmed">
+                            A platform role holds this in every project (Scope All).
                           </Text>
                         )}
                       </div>

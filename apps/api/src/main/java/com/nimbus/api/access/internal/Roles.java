@@ -51,19 +51,7 @@ class Roles {
 
 	/** Platform roles first, built-in Roles in their usual order, then the rest by name. */
 	List<RoleView> all() {
-		var grants = grantsByRole();
-		var holders = holdersByRole();
-		return jdbc.sql("SELECT id, key, name, description, kind, built_in, customised, version FROM access_roles")
-			.query((rs, n) -> {
-				var id = rs.getObject("id", UUID.class);
-				var key = rs.getString("key");
-				return new RoleView(id, key, rs.getString("name"), rs.getString("description"),
-						Kind.valueOf(rs.getString("kind")), rs.getBoolean("built_in"), rs.getBoolean("customised"),
-						rs.getInt("version"), grants.getOrDefault(id, List.of()),
-						BuiltInRole.EVERYONE.key().equals(key) ? null : holders.getOrDefault(id, 0));
-			})
-			.list()
-			.stream()
+		return load("", Map.of()).stream()
 			.sorted(Comparator.comparing(RoleView::kind)
 				.thenComparing(role -> builtInOrder(role.key()))
 				.thenComparing(role -> role.name().toLowerCase(Locale.ROOT)))
@@ -71,15 +59,42 @@ class Roles {
 	}
 
 	RoleView require(String key) {
-		return all().stream()
-			.filter(role -> role.key().equals(key))
+		return load("WHERE r.key = :key", Map.of("key", key)).stream()
 			.findFirst()
 			.orElseThrow(() -> new RoleNotFoundException(key));
 	}
 
-	private Map<UUID, List<GrantView>> grantsByRole() {
+	private record Row(UUID id, String key, String name, String description, Kind kind, boolean builtIn,
+			boolean customised, int version) {
+	}
+
+	/** The Roles matching {@code where} (on {@code access_roles r}), with only their own Grants and holders read. */
+	private List<RoleView> load(String where, Map<String, Object> params) {
+		var rows = jdbc.sql("SELECT r.id, r.key, r.name, r.description, r.kind, r.built_in, r.customised, r.version "
+				+ "FROM access_roles r " + where)
+			.params(params)
+			.query((rs, n) -> new Row(rs.getObject("id", UUID.class), rs.getString("key"), rs.getString("name"),
+					rs.getString("description"), Kind.valueOf(rs.getString("kind")), rs.getBoolean("built_in"),
+					rs.getBoolean("customised"), rs.getInt("version")))
+			.list();
+		if (rows.isEmpty()) {
+			return List.of();
+		}
+		var ids = rows.stream().map(Row::id).toList();
+		var grants = grantsOf(ids);
+		var holders = holdersOf(ids);
+		return rows.stream()
+			.map(row -> new RoleView(row.id(), row.key(), row.name(), row.description(), row.kind(), row.builtIn(),
+					row.customised(), row.version(), grants.getOrDefault(row.id(), List.of()),
+					BuiltInRole.EVERYONE.key().equals(row.key()) ? null : holders.getOrDefault(row.id(), 0)))
+			.toList();
+	}
+
+	private Map<UUID, List<GrantView>> grantsOf(List<UUID> roleIds) {
 		Map<UUID, List<GrantView>> grants = new HashMap<>();
-		jdbc.sql("SELECT role_id, permission_key, scope FROM access_role_grants ORDER BY permission_key")
+		jdbc.sql("SELECT role_id, permission_key, scope FROM access_role_grants WHERE role_id IN (:ids) "
+				+ "ORDER BY permission_key")
+			.param("ids", roleIds)
 			.query(rs -> {
 				var key = rs.getString("permission_key");
 				if (catalog.find(key).isPresent()) {
@@ -91,9 +106,11 @@ class Roles {
 		return grants;
 	}
 
-	private Map<UUID, Integer> holdersByRole() {
+	private Map<UUID, Integer> holdersOf(List<UUID> roleIds) {
 		Map<UUID, Integer> holders = new HashMap<>();
-		jdbc.sql("SELECT role_id, COUNT(*) AS holders FROM access_role_assignments GROUP BY role_id")
+		jdbc.sql("SELECT role_id, COUNT(*) AS holders FROM access_role_assignments WHERE role_id IN (:ids) "
+				+ "GROUP BY role_id")
+			.param("ids", roleIds)
 			.query(rs -> {
 				holders.put(rs.getObject("role_id", UUID.class), rs.getInt("holders"));
 			});

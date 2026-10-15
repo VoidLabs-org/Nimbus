@@ -90,6 +90,9 @@ class Catalog {
 			throw invalid(key, "is a " + permission.kind() + " permission but defaults to the "
 					+ grant.role().kind() + " role " + grant.role().key());
 		}
+		if (permission.kind() == Kind.PROJECT && grant.scope() == null) {
+			throw invalid(key, "needs a Scope for its default in " + grant.role().key());
+		}
 		if (permission.kind() == Kind.PLATFORM ? grant.scope() != null : !permission.scopes().contains(grant.scope())) {
 			throw invalid(key, "defaults to a Scope it doesn't allow in " + grant.role().key());
 		}

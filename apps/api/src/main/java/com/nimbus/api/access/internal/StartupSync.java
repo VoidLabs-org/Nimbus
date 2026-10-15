@@ -21,12 +21,16 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Brings the database in line with the code at every startup, before the API takes requests: stores the catalog,
  * creates missing built-in Roles, resets the ones nobody customised to the code defaults (Platform admin always),
  * warns about Grants for Permissions that no longer exist, and makes sure the admin email holds Platform admin.
- * Running it again changes nothing.
+ * Running it again changes nothing, and instances starting at the same time wait for each other.
  */
 @Component
 class StartupSync implements SmartInitializingSingleton {
 
 	private static final Logger log = LoggerFactory.getLogger(StartupSync.class);
+
+	// Any fixed number, the same in every instance: instances starting together against one database (the
+	// shared dev database, or several API instances) take turns instead of colliding on the same rows.
+	private static final long LOCK = 0x4e696d6275734143L;
 
 	private final Catalog catalog;
 
@@ -50,6 +54,7 @@ class StartupSync implements SmartInitializingSingleton {
 
 	void run() {
 		transaction.executeWithoutResult(status -> {
+			jdbc.sql("SELECT pg_advisory_xact_lock(:lock)").param("lock", LOCK).query((rs, n) -> 1).list();
 			storeCatalog();
 			for (var role : BuiltInRole.values()) {
 				syncBuiltIn(role);

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
 
+import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.identity.UserRegistered;
 import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
@@ -17,8 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Makes the User with {@code NIMBUS_ADMIN_EMAIL} Platform admin, when they register and at every startup, but only
- * once their email is verified (the seeded admin, or someone who proved the address through Google or GitHub).
+ * Makes the User with {@code NIMBUS_ADMIN_EMAIL} Platform admin when they register, when their email becomes
+ * verified, and at every startup, but only once their email is verified (the seeded admin, or someone who proved the address through Google or GitHub).
  * Otherwise someone who registered the admin's email first with a password would take over Nimbus.
  */
 @Component
@@ -43,6 +44,16 @@ class PlatformAdminBootstrap {
 	@TransactionalEventListener
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	void on(UserRegistered event) {
+		if (!adminEmail.isEmpty() && adminEmail.equals(event.email())) {
+			users.findByEmail(adminEmail).ifPresent(this::grantIfVerified);
+		}
+	}
+
+	// The real owner of the admin email claimed it with Google or GitHub, after someone registered it with a
+	// password: they become Platform admin straight away, not at the next restart.
+	@TransactionalEventListener
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	void on(EmailVerified event) {
 		if (!adminEmail.isEmpty() && adminEmail.equals(event.email())) {
 			users.findByEmail(adminEmail).ifPresent(this::grantIfVerified);
 		}

@@ -7,8 +7,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * Turns access errors into RFC 9457 problem details. A missing Permission is answered the same way wherever it is
- * raised, so every module's controllers are covered.
+ * Answers a missing Permission with {@code 403} problem details wherever it is raised, so every module's controllers
+ * are covered. The access module's own request errors are in {@link AccessRequestErrors}.
  */
 @RestControllerAdvice
 class AccessErrors {
@@ -16,11 +16,6 @@ class AccessErrors {
 	@ExceptionHandler
 	ProblemDetail permissionDenied(PermissionDeniedException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
-	}
-
-	@ExceptionHandler
-	ProblemDetail roleNotFound(Roles.RoleNotFoundException e) {
-		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
 	}
 
 }

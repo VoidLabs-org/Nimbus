@@ -28,8 +28,9 @@ public record Permission(String key, String heading, String description, Kind ki
 	 * A default Grant in a built-in Role.
 	 *
 	 * @param scope {@code null} for platform permissions
+	 * @param locked whether the Role must always keep it, whatever an admin edits
 	 */
-	public record Default(BuiltInRole role, Scope scope) {
+	public record Default(BuiltInRole role, Scope scope, boolean locked) {
 
 		public Default {
 			Objects.requireNonNull(role, "role");
@@ -63,12 +64,20 @@ public record Permission(String key, String heading, String description, Kind ki
 
 	/** The same Permission, granted by default in a built-in platform role (platform permissions only). */
 	public Permission grantedTo(BuiltInRole role) {
-		return withDefault(new Default(role, null));
+		return withDefault(new Default(role, null, false));
 	}
 
 	/** The same Permission, granted by default in a built-in project role with this Scope. */
 	public Permission grantedTo(BuiltInRole role, Scope scope) {
-		return withDefault(new Default(role, Objects.requireNonNull(scope, "scope")));
+		return withDefault(new Default(role, Objects.requireNonNull(scope, "scope"), false));
+	}
+
+	/**
+	 * The same Permission, granted by default in a built-in project role with this Scope, and impossible to remove
+	 * from it, e.g. so a project always has someone who can manage its Members.
+	 */
+	public Permission lockedIn(BuiltInRole role, Scope scope) {
+		return withDefault(new Default(role, Objects.requireNonNull(scope, "scope"), true));
 	}
 
 	private Permission withDefault(Default added) {

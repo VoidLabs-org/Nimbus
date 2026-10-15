@@ -36,11 +36,11 @@ class RolesTests {
 			.expectStatus().isOk()
 			.expectBody(String.class).returnResult().getResponseBody();
 
-		List<String> keys = JsonPath.read(body, "$.roles[*].key");
-		assertThat(keys).containsExactlyInAnyOrder("platform_admin", "everyone", "project_admin", "developer", "viewer");
-		assertThat((List<String>) JsonPath.read(body, "$.roles[?(@.kind == 'platform')].key"))
-			.containsExactlyInAnyOrder("platform_admin", "everyone");
-		assertThat((List<Boolean>) JsonPath.read(body, "$.roles[*].builtIn")).containsOnly(true);
+		// Other test classes share this database and may have added custom Roles.
+		List<String> builtIn = JsonPath.read(body, "$.roles[?(@.builtIn == true)].key");
+		assertThat(builtIn).containsExactly("platform_admin", "everyone", "project_admin", "developer", "viewer");
+		assertThat((List<String>) JsonPath.read(body, "$.roles[?(@.builtIn == true && @.kind == 'platform')].key"))
+			.containsExactly("platform_admin", "everyone");
 		assertThat((List<Integer>) JsonPath.read(body, "$.roles[?(@.key == 'platform_admin')].holders")).containsExactly(1);
 	}
 

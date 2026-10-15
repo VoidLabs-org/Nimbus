@@ -1,6 +1,7 @@
 package com.nimbus.api.access.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -44,6 +45,9 @@ class StartupSyncTests {
 
 	@Autowired
 	JdbcClient jdbc;
+
+	@Autowired
+	RoleEditor editor;
 
 	@Test
 	void aVerifiedAdminWhoLostPlatformAdminGetsItBackAtStartup() {
@@ -100,6 +104,77 @@ class StartupSyncTests {
 		assertThat(roles.require("viewer").grants()).isEmpty();
 
 		reset("developer");
+	}
+
+	@Test
+	void aCustomisedBuiltInRoleReportsDefaultsThatAppearedAfterItWasCustomised() {
+		var projectAdmin = roles.require("project_admin").id();
+		// Customised an hour ago, with update and archive removed. Then a release added update as a new Permission;
+		// archive existed before, so its removal was the admin's choice.
+		jdbc.sql("UPDATE access_roles SET customised = TRUE, customised_at = now() - INTERVAL '1 hour' WHERE id = :id")
+			.param("id", projectAdmin)
+			.update();
+		jdbc.sql("""
+				DELETE FROM access_role_grants WHERE role_id = :id
+				AND permission_key IN ('projects:project:update', 'projects:project:archive')""")
+			.param("id", projectAdmin)
+			.update();
+		jdbc.sql("UPDATE access_permissions SET first_seen_at = now() - INTERVAL '2 hours' WHERE key = 'projects:project:archive'")
+			.update();
+		jdbc.sql("UPDATE access_permissions SET first_seen_at = now() WHERE key = 'projects:project:update'").update();
+
+		startup.run();
+
+		assertThat(roles.require("project_admin").newPermissions()).containsExactly("projects:project:update");
+		assertThat(roles.require("developer").newPermissions()).isEmpty();
+
+		// The admin saw the notice and saved the Permissions without it: that was their choice, so no more notice.
+		var current = roles.require("project_admin");
+		editor.saveGrants("project_admin", current.grants().stream()
+			.map(grant -> new RoleEditor.RequestedGrant(grant.permission(), grant.scope()))
+			.toList(), current.version());
+		assertThat(roles.require("project_admin").newPermissions()).isEmpty();
+
+		reset("project_admin");
+		assertThat(roles.require("project_admin").newPermissions()).isEmpty();
+	}
+
+	@Test
+	void startupPutsBackALockedGrantEvenInACustomisedRole() {
+		var projectAdmin = roles.require("project_admin").id();
+		jdbc.sql("UPDATE access_roles SET customised = TRUE, customised_at = now() WHERE id = :id")
+			.param("id", projectAdmin)
+			.update();
+		jdbc.sql("DELETE FROM access_role_grants WHERE role_id = :id AND permission_key = 'projects:member:manage'")
+			.param("id", projectAdmin)
+			.update();
+
+		startup.run();
+
+		assertThat(roles.require("project_admin").grants())
+			.filteredOn(grant -> grant.permission().equals("projects:member:manage"))
+			.singleElement()
+			.satisfies(grant -> {
+				assertThat(grant.scope()).isEqualTo("project");
+				assertThat(grant.locked()).isTrue();
+			});
+		assertThat(roles.require("project_admin").customised()).isTrue();
+
+		reset("project_admin");
+	}
+
+	@Test
+	void aCustomRoleWithABuiltInRolesKeyStopsStartupInsteadOfBeingOverwritten() {
+		// As if an admin had created "viewer" as a custom Role before a release made it built in.
+		jdbc.sql("UPDATE access_roles SET built_in = FALSE WHERE key = 'viewer'").update();
+		try {
+			assertThatThrownBy(startup::run).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("viewer")
+				.hasMessageContaining("custom Role");
+		}
+		finally {
+			jdbc.sql("UPDATE access_roles SET built_in = TRUE WHERE key = 'viewer'").update();
+		}
 	}
 
 	@Test

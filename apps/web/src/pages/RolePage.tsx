@@ -2,37 +2,49 @@ import {
   Alert,
   Anchor,
   Badge,
+  Button,
   Center,
-  Checkbox,
   Container,
   Group,
   Loader,
-  Paper,
+  Modal,
   Stack,
   Text,
+  Textarea,
+  TextInput,
   Title,
 } from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
-import { kindLabels, scopeLabels } from "../access/labels";
+import { Link, useNavigate, useParams } from "react-router";
+import { GrantsEditor } from "../access/GrantsEditor";
+import { kindLabels } from "../access/labels";
 import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
 import { UserMenu } from "../auth/UserMenu";
 
 /**
- * One Role's Permissions, grouped by module heading, each with whether the Role grants it and with which Scope.
- * Read-only for now. A project role lists only Permissions that project roles can hold; a platform role lists
- * every Permission, project ones always with Scope All.
+ * One Role: its name and description, and its Permissions with their Scopes, all editable except for Platform admin.
+ * Built-in Roles can be reset to their defaults; custom Roles nobody holds can be deleted.
  */
 export default function RolePage() {
   const { key = "" } = useParams();
-  const [loaded, setLoaded] = useState<{ role: Role; catalog: CatalogPermission[] } | null>(null);
+  // A fresh page per Role, so nothing (a loaded Role, a draft) carries over when the address changes.
+  return <RoleDetails key={key} roleKey={key} />;
+}
+
+function RoleDetails({ roleKey: key }: { roleKey: string }) {
+  const [role, setRole] = useState<Role | null>(null);
+  const [catalog, setCatalog] = useState<CatalogPermission[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
     Promise.all([api.role(key), api.permissionCatalog()])
-      .then(([role, catalog]) => {
-        if (current) setLoaded({ role, catalog });
+      .then(([found, permissions]) => {
+        if (!current) return;
+        setRole(found);
+        setCatalog(permissions);
       })
       .catch((failure) => {
         if (!current) return;
@@ -56,91 +68,204 @@ export default function RolePage() {
         <UserMenu />
       </Group>
       {error && <Alert color="red">{error}</Alert>}
-      {!loaded && !error && (
+      {!role && !error && (
         <Center py="xl">
           <Loader />
         </Center>
       )}
-      {loaded && <RoleDetails role={loaded.role} catalog={loaded.catalog} />}
+      {role && (
+        <Stack>
+          <RoleHeader role={role} onChanged={setRole} />
+          {role.locked && (
+            <Alert color="gray">
+              Platform admin is locked: it always holds every Permission, including new ones.
+            </Alert>
+          )}
+          {role.newPermissions.length > 0 && (
+            <Alert color="blue" title="New Permissions">
+              Added to Nimbus since this Role was customised, and part of its defaults:{" "}
+              {role.newPermissions.join(", ")}. Tick them below to add them, or reset the Role to
+              its defaults.
+            </Alert>
+          )}
+          {/* Restarts only when the stored Grants change (saved or reset): renaming keeps unsaved ticks. */}
+          <GrantsEditor
+            key={grantsSignature(role)}
+            role={role}
+            catalog={catalog}
+            onSaved={setRole}
+          />
+        </Stack>
+      )}
     </Container>
   );
 }
 
-function RoleDetails({ role, catalog }: { role: Role; catalog: CatalogPermission[] }) {
-  const granted = new Map(role.grants.map((grant) => [grant.permission, grant.scope]));
-  const applicable = catalog.filter((permission) =>
-    role.kind === "platform" ? true : permission.kind === "project" && permission.scopes.length > 0,
-  );
-  const headings = [...new Set(applicable.map((permission) => permission.heading))];
+function grantsSignature(role: Role): string {
+  return role.grants
+    .map((grant) => `${grant.permission}=${grant.scope ?? ""}`)
+    .sort()
+    .join(",");
+}
+
+function RoleHeader({ role, onChanged }: { role: Role; onChanged: (role: Role) => void }) {
+  const navigate = useNavigate();
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const form = useForm({
+    initialValues: { name: role.name, description: role.description },
+    validate: { name: (value) => (value.trim() ? null : "Enter a name") },
+  });
+
+  async function rename(values: { name: string; description: string }) {
+    setFailure(null);
+    try {
+      onChanged(
+        await api.describeRole(role.key, {
+          name: values.name.trim(),
+          description: values.description.trim(),
+          version: role.version,
+        }),
+      );
+      setEditing(false);
+    } catch (error) {
+      if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0)
+        form.setErrors(error.fieldErrors);
+      else
+        setFailure(error instanceof ApiError ? error.message : "Couldn't save. Please try again.");
+    }
+  }
+
+  async function confirm() {
+    setBusy(true);
+    setFailure(null);
+    try {
+      if (confirming === "reset") {
+        onChanged(await api.resetRole(role.key, role.version));
+        notifications.show({ message: `${role.name} is back to its defaults.` });
+      } else {
+        await api.deleteRole(role.key);
+        notifications.show({ message: `Deleted ${role.name}.` });
+        navigate("/settings/roles", { replace: true });
+      }
+      setConfirming(null);
+    } catch (error) {
+      setConfirming(null);
+      setFailure(
+        error instanceof ApiError ? error.message : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <Stack>
-      <div>
-        <Group gap="xs">
-          <Title order={2}>{role.name}</Title>
-          {role.builtIn && <Badge variant="light">Built-in</Badge>}
-          <Badge variant="outline">{kindLabels[role.kind]}</Badge>
-        </Group>
-        <Text c="dimmed">{role.description}</Text>
-        <Text size="sm" c="dimmed" mt={4}>
-          {role.holders === null
-            ? "Every signed-in User holds this Role."
-            : `Held by ${role.holders} ${role.holders === 1 ? "User" : "Users"}.`}
-        </Text>
-      </div>
-      {headings.map((heading) => (
-        <Paper key={heading} withBorder p="md" radius="md">
-          <Title order={4} mb="sm">
-            {heading}
-          </Title>
-          <Stack gap="sm">
-            {applicable
-              .filter((permission) => permission.heading === heading)
-              .map((permission) => {
-                const scope = granted.get(permission.key);
-                return (
-                  <Group
-                    key={permission.key}
-                    justify="space-between"
-                    wrap="nowrap"
-                    align="flex-start"
-                  >
-                    <Group gap="sm" wrap="nowrap" align="flex-start">
-                      <Checkbox
-                        checked={granted.has(permission.key)}
-                        readOnly
-                        aria-label={permission.key}
-                      />
-                      <div>
-                        <Text ff="monospace" size="sm">
-                          {permission.key}
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {permission.description}
-                        </Text>
-                        {/* Own only applies in project roles; a platform role holds project
-                            permissions in every project. */}
-                        {role.kind === "project" && permission.ownHint && (
-                          <Text size="xs" c="dimmed">
-                            Own: {permission.ownHint}
-                          </Text>
-                        )}
-                        {role.kind === "platform" && permission.kind === "project" && (
-                          <Text size="xs" c="dimmed">
-                            A platform role holds this in every project (Scope All).
-                          </Text>
-                        )}
-                      </div>
-                    </Group>
-                    {granted.has(permission.key) && scope && (
-                      <Badge variant="light">{scopeLabels[scope]}</Badge>
-                    )}
-                  </Group>
-                );
-              })}
+    <div>
+      {failure && (
+        <Alert color="red" mb="sm">
+          {failure}
+        </Alert>
+      )}
+      {editing ? (
+        <form onSubmit={form.onSubmit(rename)}>
+          <Stack gap="xs" maw={560}>
+            <TextInput label="Name" {...form.getInputProps("name")} />
+            <Textarea
+              label="Description"
+              autosize
+              minRows={2}
+              {...form.getInputProps("description")}
+            />
+            <Group>
+              <Button type="submit" loading={form.submitting}>
+                Save
+              </Button>
+              <Button variant="default" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </Group>
           </Stack>
-        </Paper>
-      ))}
-    </Stack>
+        </form>
+      ) : (
+        <>
+          <Group justify="space-between" align="flex-start">
+            <Group gap="xs">
+              <Title order={2}>{role.name}</Title>
+              {role.builtIn && <Badge variant="light">Built-in</Badge>}
+              {role.customised && (
+                <Badge variant="light" color="yellow">
+                  Customised
+                </Badge>
+              )}
+              <Badge variant="outline">{kindLabels[role.kind]}</Badge>
+            </Group>
+            {!role.locked && (
+              <Group gap="xs">
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={() => {
+                    form.setValues({ name: role.name, description: role.description });
+                    setEditing(true);
+                  }}
+                >
+                  Rename
+                </Button>
+                {role.builtIn && role.customised && (
+                  <Button variant="default" size="xs" onClick={() => setConfirming("reset")}>
+                    Reset to defaults
+                  </Button>
+                )}
+                {!role.builtIn && (
+                  <Button
+                    color="red"
+                    variant="light"
+                    size="xs"
+                    onClick={() => setConfirming("delete")}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </Group>
+            )}
+          </Group>
+          <Text c="dimmed">{role.description}</Text>
+          <Text size="sm" c="dimmed" mt={4}>
+            <Text span ff="monospace" size="sm">
+              {role.key}
+            </Text>
+            {" · "}
+            {role.holders === null
+              ? "Every signed-in User holds this Role."
+              : `Held by ${role.holders} ${role.holders === 1 ? "assignment" : "assignments"}.`}
+          </Text>
+        </>
+      )}
+      <Modal
+        opened={confirming !== null}
+        onClose={() => setConfirming(null)}
+        title={confirming === "reset" ? "Reset to defaults?" : `Delete ${role.name}?`}
+      >
+        <Text size="sm" mb="md">
+          {confirming === "reset"
+            ? "Its name, description and Permissions go back to what Nimbus ships with. Your changes are lost."
+            : "This can't be undone. A Role someone still holds can't be deleted."}
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setConfirming(null)}>
+            Cancel
+          </Button>
+          <Button
+            color={confirming === "delete" ? "red" : undefined}
+            loading={busy}
+            onClick={confirm}
+          >
+            {confirming === "reset" ? "Reset" : "Delete"}
+          </Button>
+        </Group>
+      </Modal>
+    </div>
   );
 }

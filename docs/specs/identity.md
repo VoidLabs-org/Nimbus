@@ -4,9 +4,10 @@ Owns **Users** and sign-in: registration, passwords, access tokens, refresh-toke
 
 ## Public interface
 
-| Type          | Use                                                                                                                                                                                        |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `CurrentUser` | Inject it and call `id()` for the signed-in User's id (UUID) in a request. Outside an authenticated request it throws `AuthenticationCredentialsNotFoundException`, which becomes a `401`. |
+| Type          | Use                                                                                                                                                                                                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CurrentUser` | Inject it and call `id()` for the signed-in User's id (UUID) in a request. Outside an authenticated request it throws `AuthenticationCredentialsNotFoundException`, which becomes a `401`.                                                                                             |
+| `Users`       | `findByEmail(email)` (any case, surrounding whitespace ignored) and `findAllById(ids)`, returning `UserSummary`: `id`, `email`, `displayName`, `avatarUrl` and `emailVerified`. For other modules that need to look Users up, e.g. `access` checking that the admin email is verified. |
 
 Everything under `identity.internal` is private to the module.
 

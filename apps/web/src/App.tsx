@@ -4,6 +4,8 @@ import AuthCallbackPage from "./pages/AuthCallbackPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import RolePage from "./pages/RolePage";
+import RolesPage from "./pages/RolesPage";
 
 export default function App() {
   return (
@@ -15,6 +17,22 @@ export default function App() {
             element={
               <RequireUser>
                 <HomePage />
+              </RequireUser>
+            }
+          />
+          <Route
+            path="/settings/roles"
+            element={
+              <RequireUser>
+                <RolesPage />
+              </RequireUser>
+            }
+          />
+          <Route
+            path="/settings/roles/:key"
+            element={
+              <RequireUser>
+                <RolePage />
               </RequireUser>
             }
           />

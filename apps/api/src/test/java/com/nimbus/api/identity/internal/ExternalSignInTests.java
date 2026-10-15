@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.identity.UserRegistered;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -101,6 +102,7 @@ class ExternalSignInTests {
 		assertThat(externalSignIn.signIn(google("g-dee", "other@example.com", true, null, null)).getId())
 			.isEqualTo(existing.getId());
 		assertThat(recorder.registered).filteredOn(event -> event.userId().equals(existing.getId())).hasSize(1);
+		assertThat(recorder.verified).filteredOn(event -> event.userId().equals(existing.getId())).isEmpty();
 	}
 
 	@Test
@@ -124,6 +126,10 @@ class ExternalSignInTests {
 		assertThat(externalSignIn.signIn(google("g-eli", "eli@example.com", true, "Eli Real", null)).getId())
 			.isEqualTo(squatted.getId());
 		assertThat(recorder.registered).filteredOn(event -> event.userId().equals(squatted.getId())).hasSize(1);
+		// Announced once, when the provider proved the address; the second sign-in above changes nothing.
+		assertThat(recorder.verified).filteredOn(event -> event.userId().equals(squatted.getId()))
+			.singleElement()
+			.satisfies(event -> assertThat(event.email()).isEqualTo("eli@example.com"));
 	}
 
 	@Test
@@ -217,9 +223,16 @@ class ExternalSignInTests {
 
 		final List<UserRegistered> registered = new CopyOnWriteArrayList<>();
 
+		final List<EmailVerified> verified = new CopyOnWriteArrayList<>();
+
 		@EventListener
 		void on(UserRegistered event) {
 			registered.add(event);
+		}
+
+		@EventListener
+		void on(EmailVerified event) {
+			verified.add(event);
 		}
 
 	}

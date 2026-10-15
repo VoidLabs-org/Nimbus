@@ -19,6 +19,45 @@ export type ChangePasswordInput = {
 
 export type LoginInput = { email: string; password: string };
 
+/** Where a Role is held and where a Permission applies: across Nimbus, or inside one project. */
+export type Kind = "platform" | "project";
+
+export type Scope = "own" | "project" | "all";
+
+/** One Permission in the catalog, as the Roles pages show it. */
+export type CatalogPermission = {
+  key: string;
+  /** The module heading it is grouped under, e.g. "Projects". */
+  heading: string;
+  description: string;
+  kind: Kind;
+  /** The Scopes it may have in project roles; empty for platform permissions. */
+  scopes: Scope[];
+  /** What Scope Own means for it; null when Own isn't allowed. */
+  ownHint: string | null;
+};
+
+export type RoleSummary = {
+  key: string;
+  name: string;
+  description: string;
+  kind: Kind;
+  builtIn: boolean;
+  customised: boolean;
+  /** How many Permissions it grants. */
+  permissions: number;
+  /** How many Users hold it; null for Everyone, which every signed-in User holds. */
+  holders: number | null;
+};
+
+export type Grant = {
+  permission: string;
+  /** Null for platform permissions. */
+  scope: Scope | null;
+};
+
+export type Role = Omit<RoleSummary, "permissions"> & { version: number; grants: Grant[] };
+
 type AuthResponse = { accessToken: string; user: User };
 
 /** A failed API call, carrying the server's problem details (RFC 9457). */
@@ -230,6 +269,25 @@ export function createApiClient(
      */
     changePassword: (input: ChangePasswordInput) =>
       request<void>("/api/users/me/password", { method: "PUT", body: JSON.stringify(input) }),
+
+    /** The signed-in User's platform permissions, so the app can hide what they can't use. */
+    myPlatformPermissions: () =>
+      request<{ platform: string[] }>("/api/access/me/permissions").then(
+        (response) => response.platform,
+      ),
+
+    /** Every Permission in the catalog, sorted by heading and key. Needs access:role:manage. */
+    permissionCatalog: () =>
+      request<{ permissions: CatalogPermission[] }>("/api/access/permissions").then(
+        (response) => response.permissions,
+      ),
+
+    /** Every Role, platform roles first. Needs access:role:manage. */
+    roles: () =>
+      request<{ roles: RoleSummary[] }>("/api/access/roles").then((response) => response.roles),
+
+    /** One Role with its Grants. Needs access:role:manage. */
+    role: (key: string) => request<Role>(`/api/access/roles/${encodeURIComponent(key)}`),
   };
 }
 

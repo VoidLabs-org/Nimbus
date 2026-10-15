@@ -15,6 +15,8 @@ tags:
     description: Registration, sign-in and sessions (identity module)
   - name: users
     description: User profiles (identity module)
+  - name: access
+    description: Permissions, Roles and Role assignments (access module)
 
 paths:
   /api/auth/register:
@@ -339,6 +341,103 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyAttempts"
 
+  /api/access/permissions:
+    get:
+      tags: [access]
+      summary: The Permission catalog
+      description: >-
+        Every Permission the modules declare, sorted by heading and key. Rebuilt from the code at every startup.
+        Needs `access:role:manage`.
+      responses:
+        "200":
+          description: The catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [permissions]
+                properties:
+                  permissions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CatalogPermission"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/access/roles:
+    get:
+      tags: [access]
+      summary: Every Role
+      description: Platform roles first, built-in Roles in their usual order, then the rest by name. Needs `access:role:manage`.
+      responses:
+        "200":
+          description: The Roles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [roles]
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RoleSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/access/roles/{key}:
+    get:
+      tags: [access]
+      summary: One Role with its Grants
+      description: Grants for Permissions no longer in the catalog are left out. Needs `access:role:manage`.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The Role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/access/me/permissions:
+    get:
+      tags: [access]
+      summary: What the signed-in User may do across Nimbus
+      description: >-
+        The signed-in User's platform permissions (from Everyone and their platform roles), sorted, so the web app
+        can hide what they can't use. The server checks every action anyway.
+      responses:
+        "200":
+          description: Their platform permissions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [platform]
+                properties:
+                  platform:
+                    type: array
+                    items:
+                      type: string
+                    example: [projects:project:create]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -454,6 +553,100 @@ components:
           type: boolean
           description: False for Users who only sign in with Google or GitHub; the app asks for a current password only when true
 
+    CatalogPermission:
+      type: object
+      required: [key, heading, description, kind, scopes, ownHint]
+      properties:
+        key:
+          type: string
+          description: "`module:resource:action`"
+          example: projects:project:update
+        heading:
+          type: string
+          description: The module heading the Roles page groups it under
+          example: Projects
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [platform, project]
+          description: >-
+            A platform permission is granted in platform roles, without a Scope. A project permission is granted in
+            project roles with one of `scopes`, and in platform roles only with `all`.
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [own, project]
+          description: The Scopes it may have in project roles; empty for platform permissions and for project permissions only platform roles hold
+        ownHint:
+          type: [string, "null"]
+          description: What Scope Own means for it; null when Own isn't allowed
+
+    RoleSummary:
+      type: object
+      required: [key, name, description, kind, builtIn, customised, permissions, holders]
+      properties:
+        key:
+          type: string
+          example: project_admin
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [platform, project]
+        builtIn:
+          type: boolean
+        customised:
+          type: boolean
+          description: A built-in Role an admin changed; startup no longer resets it to the code defaults
+        permissions:
+          type: integer
+          description: How many Permissions it grants
+        holders:
+          type: [integer, "null"]
+          description: How many Role assignments it has; null for Everyone, which every signed-in User holds
+
+    Role:
+      type: object
+      required: [key, name, description, kind, builtIn, customised, version, grants, holders]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [platform, project]
+        builtIn:
+          type: boolean
+        customised:
+          type: boolean
+        version:
+          type: integer
+          description: Changes on every edit; edits must send the version they started from
+        grants:
+          type: array
+          items:
+            $ref: "#/components/schemas/Grant"
+        holders:
+          type: [integer, "null"]
+
+    Grant:
+      type: object
+      required: [permission, scope]
+      properties:
+        permission:
+          type: string
+        scope:
+          type: [string, "null"]
+          enum: [own, project, all, null]
+          description: Null for platform permissions
+
     Problem:
       type: object
       description: RFC 9457 problem details
@@ -497,3 +690,15 @@ components:
             $ref: "#/components/schemas/Problem"
     Unauthorized:
       description: Missing, expired or invalid access token
+    Forbidden:
+      description: The User lacks the Permission this needs
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Nothing with this key exists
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"

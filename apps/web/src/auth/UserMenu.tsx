@@ -12,6 +12,8 @@ import {
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
+import { Link } from "react-router";
+import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { displayNameError } from "./displayName";
@@ -19,11 +21,12 @@ import { useSession } from "./useSession";
 
 /**
  * The signed-in User's menu: who they are (avatar or initials, and display name), a way to change the
- * display name, set or change their password, and sign out. Signing out ends this browser's session only. Once it succeeds, RequireUser
+ * display name, set or change their password, Roles & access for those who manage Roles, and sign out. Signing out ends this browser's session only. Once it succeeds, RequireUser
  * sends the User to the sign-in page; this menu doesn't navigate itself.
  */
 export function UserMenu() {
   const { user, logout } = useSession();
+  const canManageRoles = usePlatformPermissions().includes("access:role:manage");
   const [signingOut, setSigningOut] = useState(false);
   const [editing, setEditing] = useState(false);
   // True while a rename is in flight; the dialog can't be dismissed then, or Cancel would be a lie.
@@ -70,6 +73,11 @@ export function UserMenu() {
           <Menu.Item onClick={() => setChangingPassword(true)}>
             {user.hasPassword ? "Change password" : "Set password"}
           </Menu.Item>
+          {canManageRoles && (
+            <Menu.Item component={Link} to="/settings/roles">
+              Roles & access
+            </Menu.Item>
+          )}
           <Menu.Item onClick={signOut} disabled={signingOut}>
             Sign out
           </Menu.Item>

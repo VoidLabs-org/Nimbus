@@ -29,7 +29,8 @@ class ProjectPermissions implements ModulePermissions {
 					.grantedTo(BuiltInRole.PROJECT_ADMIN, Scope.PROJECT),
 				Permission.project("projects:member:manage", "Projects",
 						"Add and remove Members and change their project role", Scope.PROJECT)
-					.grantedTo(BuiltInRole.PROJECT_ADMIN, Scope.PROJECT));
+					// Locked: a project always needs someone who can manage its Members.
+					.lockedIn(BuiltInRole.PROJECT_ADMIN, Scope.PROJECT));
 	}
 
 }

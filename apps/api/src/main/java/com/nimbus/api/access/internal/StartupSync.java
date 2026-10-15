@@ -1,14 +1,10 @@
 package com.nimbus.api.access.internal;
 
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.nimbus.api.access.BuiltInRole;
-import com.nimbus.api.access.Kind;
-import com.nimbus.api.access.Permission;
 import com.nimbus.api.access.Scope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,11 +36,18 @@ class StartupSync implements SmartInitializingSingleton {
 
 	private final PlatformAdminBootstrap platformAdmin;
 
-	StartupSync(Catalog catalog, JdbcClient jdbc, TransactionTemplate transaction, PlatformAdminBootstrap platformAdmin) {
+	private final BuiltInDefaults defaults;
+
+	private final GrantStore grants;
+
+	StartupSync(Catalog catalog, JdbcClient jdbc, TransactionTemplate transaction, PlatformAdminBootstrap platformAdmin,
+			BuiltInDefaults defaults, GrantStore grants) {
 		this.catalog = catalog;
 		this.jdbc = jdbc;
 		this.transaction = transaction;
 		this.platformAdmin = platformAdmin;
+		this.defaults = defaults;
+		this.grants = grants;
 	}
 
 	@Override
@@ -64,20 +67,27 @@ class StartupSync implements SmartInitializingSingleton {
 		platformAdmin.atStartup();
 	}
 
+	/** Upserts the catalog, keeping when each Permission was first seen, and drops keys no longer declared. */
 	private void storeCatalog() {
-		jdbc.sql("DELETE FROM access_permissions").update();
+		var now = java.sql.Timestamp.from(Instant.now());
 		for (var permission : catalog.all()) {
 			jdbc.sql("""
-					INSERT INTO access_permissions (key, heading, description, kind, scopes, own_hint)
-					VALUES (:key, :heading, :description, :kind, :scopes, :ownHint)""")
+					INSERT INTO access_permissions (key, heading, description, kind, scopes, own_hint, first_seen_at)
+					VALUES (:key, :heading, :description, :kind, :scopes, :ownHint, :now)
+					ON CONFLICT (key) DO UPDATE SET heading = EXCLUDED.heading, description = EXCLUDED.description,
+					kind = EXCLUDED.kind, scopes = EXCLUDED.scopes, own_hint = EXCLUDED.own_hint""")
 				.param("key", permission.key())
 				.param("heading", permission.heading())
 				.param("description", permission.description())
 				.param("kind", permission.kind().name())
 				.param("scopes", permission.scopes().stream().sorted().map(Scope::name).collect(Collectors.joining(",")))
 				.param("ownHint", permission.ownHint())
+				.param("now", now)
 				.update();
 		}
+		jdbc.sql("DELETE FROM access_permissions WHERE key NOT IN (:keys)")
+			.param("keys", catalog.all().stream().map(permission -> permission.key()).toList())
+			.update();
 	}
 
 	private void syncBuiltIn(BuiltInRole role) {
@@ -97,43 +107,24 @@ class StartupSync implements SmartInitializingSingleton {
 			.query((rs, n) -> new Object[] { rs.getObject("id", UUID.class), rs.getBoolean("customised") })
 			.single();
 		var id = (UUID) row[0];
-		// Platform admin is locked: it is never customised and always holds everything.
+		// Platform admin is locked: it is never customised and always holds everything. A customised Role keeps
+		// what the admin set, except Grants it must always hold.
 		if (role != BuiltInRole.PLATFORM_ADMIN && (boolean) row[1]) {
+			defaults.lockedOf(role).forEach((key, scope) -> jdbc.sql("""
+					INSERT INTO access_role_grants (role_id, permission_key, scope) VALUES (:id, :key, :scope)
+					ON CONFLICT (role_id, permission_key) DO UPDATE SET scope = EXCLUDED.scope""")
+				.param("id", id)
+				.param("key", key)
+				.param("scope", scope)
+				.update());
 			return;
 		}
-		var wanted = defaultGrants(role);
-		Map<String, String> current = new HashMap<>();
-		jdbc.sql("SELECT permission_key, scope FROM access_role_grants WHERE role_id = :id")
-			.param("id", id)
-			.query(rs -> {
-				current.put(rs.getString("permission_key"), rs.getString("scope"));
-			});
-		if (current.equals(wanted)) {
+		var wanted = defaults.grantsOf(role);
+		if (grants.of(id).equals(wanted)) {
 			return;
 		}
-		jdbc.sql("DELETE FROM access_role_grants WHERE role_id = :id").param("id", id).update();
-		wanted.forEach((key, scope) -> jdbc.sql("""
-				INSERT INTO access_role_grants (role_id, permission_key, scope) VALUES (:id, :key, :scope)""")
-			.param("id", id)
-			.param("key", key)
-			.param("scope", scope)
-			.update());
+		grants.replace(id, wanted);
 		jdbc.sql("UPDATE access_roles SET version = version + 1 WHERE id = :id").param("id", id).update();
-	}
-
-	/** Permission key to Scope name ({@code null} for platform permissions). */
-	private Map<String, String> defaultGrants(BuiltInRole role) {
-		Map<String, String> grants = new HashMap<>();
-		for (Permission permission : catalog.all()) {
-			if (role == BuiltInRole.PLATFORM_ADMIN) {
-				grants.put(permission.key(), permission.kind() == Kind.PLATFORM ? null : Scope.ALL.name());
-				continue;
-			}
-			permission.defaults().stream()
-				.filter(grant -> grant.role() == role)
-				.forEach(grant -> grants.put(permission.key(), grant.scope() == null ? null : grant.scope().name()));
-		}
-		return grants;
 	}
 
 	private void warnAboutUnknownGrants() {

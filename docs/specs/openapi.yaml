@@ -388,6 +388,35 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [access]
+      summary: Create a custom Role
+      description: It starts with no Grants. Its key and kind can never change. Needs `access:role:manage`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleRequest"
+      responses:
+        "201":
+          description: The new Role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A Role with this key already exists (also under `errors.key`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /api/access/roles/{key}:
     get:
@@ -413,6 +442,136 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [access]
+      summary: Rename or redescribe a Role
+      description: >-
+        A missing name or description is left as it is. Sending `key` or `kind` is refused: they never change.
+        Marks a built-in Role customised. Needs `access:role:manage`.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DescribeRoleRequest"
+      responses:
+        "200":
+          description: The updated Role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/RoleConflict"
+    delete:
+      tags: [access]
+      summary: Delete a custom Role nobody holds
+      description: Built-in Roles and Roles someone holds can't be deleted. Needs `access:role:manage`.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/RoleConflict"
+
+  /api/access/roles/{key}/grants:
+    put:
+      tags: [access]
+      summary: Replace all of a Role's Grants
+      description: >-
+        Each Grant must fit: a known Permission; in a project role a project permission with one of its allowed
+        Scopes; in a platform role a platform permission without a Scope or a project permission with `all`; never a
+        reserved Permission outside Platform admin; never twice. Marks a built-in Role customised. Needs
+        `access:role:manage`.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveGrantsRequest"
+      responses:
+        "200":
+          description: The Role with its new Grants
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "400":
+          description: Some Grants don't fit; what is wrong per Permission key is under `errors`
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/RoleConflict"
+
+  /api/access/roles/{key}/reset:
+    post:
+      tags: [access]
+      summary: Reset a built-in Role to its defaults
+      description: Restores its name, description and Grants and clears `customised`. Needs `access:role:manage`.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The Role, back to its defaults
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: A custom Role, which has no defaults
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /api/access/me/permissions:
     get:
@@ -582,6 +741,9 @@ components:
         ownHint:
           type: [string, "null"]
           description: What Scope Own means for it; null when Own isn't allowed
+        reserved:
+          type: boolean
+          description: Only Platform admin may hold it
 
     RoleSummary:
       type: object
@@ -611,7 +773,20 @@ components:
 
     Role:
       type: object
-      required: [key, name, description, kind, builtIn, customised, version, grants, holders]
+      required:
+        [
+          key,
+          name,
+          description,
+          kind,
+          builtIn,
+          customised,
+          locked,
+          version,
+          grants,
+          holders,
+          newPermissions,
+        ]
       properties:
         key:
           type: string
@@ -626,15 +801,30 @@ components:
           type: boolean
         customised:
           type: boolean
+        locked:
+          type: boolean
+          description: Nothing about it can be edited (Platform admin)
         version:
           type: integer
           description: Changes on every edit; edits must send the version they started from
         grants:
           type: array
           items:
-            $ref: "#/components/schemas/Grant"
+            allOf:
+              - $ref: "#/components/schemas/Grant"
+              - type: object
+                required: [locked]
+                properties:
+                  locked:
+                    type: boolean
+                    description: The Role must always hold it
         holders:
           type: [integer, "null"]
+        newPermissions:
+          type: array
+          items:
+            type: string
+          description: For a customised built-in Role, its defaults it lacks that appeared after it was customised
 
     Grant:
       type: object
@@ -646,6 +836,54 @@ components:
           type: [string, "null"]
           enum: [own, project, all, null]
           description: Null for platform permissions
+
+    CreateRoleRequest:
+      type: object
+      required: [key, name, kind]
+      properties:
+        key:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{1,49}$"
+          description: Fixed forever
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Surrounding whitespace is removed first
+        description:
+          type: string
+          maxLength: 500
+        kind:
+          type: string
+          enum: [platform, project]
+          description: Fixed forever
+
+    DescribeRoleRequest:
+      type: object
+      required: [version]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        version:
+          type: integer
+          description: The version the Role was opened at
+
+    SaveGrantsRequest:
+      type: object
+      required: [grants, version]
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: "#/components/schemas/Grant"
+        version:
+          type: integer
+          description: The version the Role was opened at
 
     Problem:
       type: object
@@ -698,6 +936,14 @@ components:
             $ref: "#/components/schemas/Problem"
     NotFound:
       description: Nothing with this key exists
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    RoleConflict:
+      description: >-
+        The Role changed since the given version, it is locked (Platform admin, or a Grant it must keep), it is
+        built in (delete), or someone holds it (delete)
       content:
         application/problem+json:
           schema:

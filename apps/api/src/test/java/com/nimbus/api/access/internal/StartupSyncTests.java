@@ -103,6 +103,56 @@ class StartupSyncTests {
 	}
 
 	@Test
+	void aCustomisedBuiltInRoleReportsDefaultsThatAppearedAfterItWasCustomised() {
+		var projectAdmin = roles.require("project_admin").id();
+		// Customised an hour ago, with update and archive removed. Then a release added update as a new Permission;
+		// archive existed before, so its removal was the admin's choice.
+		jdbc.sql("UPDATE access_roles SET customised = TRUE, customised_at = now() - INTERVAL '1 hour' WHERE id = :id")
+			.param("id", projectAdmin)
+			.update();
+		jdbc.sql("""
+				DELETE FROM access_role_grants WHERE role_id = :id
+				AND permission_key IN ('projects:project:update', 'projects:project:archive')""")
+			.param("id", projectAdmin)
+			.update();
+		jdbc.sql("UPDATE access_permissions SET first_seen_at = now() - INTERVAL '2 hours' WHERE key = 'projects:project:archive'")
+			.update();
+		jdbc.sql("UPDATE access_permissions SET first_seen_at = now() WHERE key = 'projects:project:update'").update();
+
+		startup.run();
+
+		assertThat(roles.require("project_admin").newPermissions()).containsExactly("projects:project:update");
+		assertThat(roles.require("developer").newPermissions()).isEmpty();
+
+		reset("project_admin");
+		assertThat(roles.require("project_admin").newPermissions()).isEmpty();
+	}
+
+	@Test
+	void startupPutsBackALockedGrantEvenInACustomisedRole() {
+		var projectAdmin = roles.require("project_admin").id();
+		jdbc.sql("UPDATE access_roles SET customised = TRUE, customised_at = now() WHERE id = :id")
+			.param("id", projectAdmin)
+			.update();
+		jdbc.sql("DELETE FROM access_role_grants WHERE role_id = :id AND permission_key = 'projects:member:manage'")
+			.param("id", projectAdmin)
+			.update();
+
+		startup.run();
+
+		assertThat(roles.require("project_admin").grants())
+			.filteredOn(grant -> grant.permission().equals("projects:member:manage"))
+			.singleElement()
+			.satisfies(grant -> {
+				assertThat(grant.scope()).isEqualTo("project");
+				assertThat(grant.locked()).isTrue();
+			});
+		assertThat(roles.require("project_admin").customised()).isTrue();
+
+		reset("project_admin");
+	}
+
+	@Test
 	void platformAdminIsResetEvenWhenMarkedCustomised() {
 		var platformAdmin = roles.require("platform_admin").id();
 		jdbc.sql("DELETE FROM access_role_grants WHERE role_id = :id AND permission_key = 'access:role:manage'")

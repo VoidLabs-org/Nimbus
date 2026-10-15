@@ -2,6 +2,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  Button,
   Center,
   Container,
   Group,
@@ -13,16 +14,18 @@ import {
 } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { NewRoleModal } from "../access/NewRoleModal";
 import { ApiError, api, type Kind, type RoleSummary } from "../api/client";
 import { UserMenu } from "../auth/UserMenu";
 
 /**
- * Settings → Roles: every Role, platform roles and project roles in two sections. Read-only for now; editing
- * Roles comes next. Only Users with access:role:manage get the list; anyone else sees why not.
+ * Settings → Roles: every Role, platform roles and project roles in two sections, and "New Role". Only Users with
+ * access:role:manage get the list; anyone else sees why not.
  */
 export default function RolesPage() {
   const [roles, setRoles] = useState<RoleSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -52,7 +55,10 @@ export default function RolesPage() {
         </Anchor>
         <UserMenu />
       </Group>
-      <Title order={2}>Roles & access</Title>
+      <Group justify="space-between" align="flex-start">
+        <Title order={2}>Roles & access</Title>
+        {roles && <Button onClick={() => setCreating(true)}>New Role</Button>}
+      </Group>
       <Text c="dimmed" mb="lg">
         A Role bundles Permissions. Platform roles apply across Nimbus; project roles apply to a
         Member in one project.
@@ -69,6 +75,7 @@ export default function RolesPage() {
           <RoleSection title="Project roles" kind="project" roles={roles} />
         </Stack>
       )}
+      <NewRoleModal opened={creating} onClose={() => setCreating(false)} />
     </Container>
   );
 }

@@ -35,6 +35,8 @@ export type CatalogPermission = {
   scopes: Scope[];
   /** What Scope Own means for it; null when Own isn't allowed. */
   ownHint: string | null;
+  /** Only Platform admin may hold it. */
+  reserved: boolean;
 };
 
 export type RoleSummary = {
@@ -56,7 +58,22 @@ export type Grant = {
   scope: Scope | null;
 };
 
-export type Role = Omit<RoleSummary, "permissions"> & { version: number; grants: Grant[] };
+export type RoleGrant = Grant & {
+  /** The Role must always hold it. */
+  locked: boolean;
+};
+
+export type Role = Omit<RoleSummary, "permissions"> & {
+  /** Changes on every edit; edits send the version they started from. */
+  version: number;
+  /** Nothing about it can be edited (Platform admin). */
+  locked: boolean;
+  grants: RoleGrant[];
+  /** For a customised built-in Role: defaults it lacks that appeared after it was customised. */
+  newPermissions: string[];
+};
+
+export type NewRoleInput = { key: string; name: string; description: string; kind: Kind };
 
 type AuthResponse = { accessToken: string; user: User };
 
@@ -287,8 +304,30 @@ export function createApiClient(
       request<{ roles: RoleSummary[] }>("/api/access/roles").then((response) => response.roles),
 
     /** One Role with its Grants. Needs access:role:manage. */
-    role: (key: string) => request<Role>(`/api/access/roles/${encodeURIComponent(key)}`),
+    role: (key: string) => request<Role>(rolePath(key)),
+
+    /** Creates a custom Role with no Grants. A taken key is a 409 with errors.key. */
+    createRole: (input: NewRoleInput) =>
+      request<Role>("/api/access/roles", { method: "POST", body: JSON.stringify(input) }),
+
+    /** Renames or redescribes a Role. A 409 means it changed since `version` (or it is locked). */
+    describeRole: (key: string, input: { name?: string; description?: string; version: number }) =>
+      request<Role>(rolePath(key), { method: "PATCH", body: JSON.stringify(input) }),
+
+    /** Replaces all of a Role's Grants. A 400 lists what is wrong per Permission; a 409 means it changed. */
+    saveGrants: (key: string, input: { grants: Grant[]; version: number }) =>
+      request<Role>(`${rolePath(key)}/grants`, { method: "PUT", body: JSON.stringify(input) }),
+
+    /** Back to the defaults; built-in Roles only. */
+    resetRole: (key: string) => request<Role>(`${rolePath(key)}/reset`, { method: "POST" }),
+
+    /** Deletes a custom Role nobody holds; a 409 says why not otherwise. */
+    deleteRole: (key: string) => request<void>(rolePath(key), { method: "DELETE" }),
   };
+}
+
+function rolePath(key: string): string {
+  return `/api/access/roles/${encodeURIComponent(key)}`;
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;

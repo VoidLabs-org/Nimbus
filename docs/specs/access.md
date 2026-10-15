@@ -4,14 +4,14 @@ Owns **Permissions**, **Roles**, **Grants**, **Scopes** and **Role assignments**
 
 ## Public interface
 
-| Type                           | Use                                                                                                                                                                                                                                                                |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ModulePermissions`            | Implement it as a bean in your module to declare its Permissions. Collected into the catalog at startup.                                                                                                                                                           |
-| `Permission`                   | One declaration: `Permission.platform(key, heading, description)` or `Permission.project(key, heading, description, scopes...)`, then `.ownHint(...)` and `.grantedTo(builtInRole[, scope])` for its defaults in the built-in Roles.                               |
-| `BuiltInRole`, `Kind`, `Scope` | The built-in Roles, platform or project, and `OWN` / `PROJECT` / `ALL`.                                                                                                                                                                                            |
-| `PlatformPermissions`          | `holds(userId, key)` and `require(userId, key)`: whether a User holds a platform permission, through Everyone or their platform roles. `false` for keys that aren't platform permissions in the catalog.                                                           |
-| `@Authorize("key")`            | On a controller method or class: requires the signed-in User to hold that platform permission, `403` otherwise. Only for platform permissions; project permissions need the project, so services ask `access` explicitly (coming with the project check API, #48). |
-| `PermissionDeniedException`    | Thrown by `require`; answered with `403` problem details from any module.                                                                                                                                                                                          |
+| Type                           | Use                                                                                                                                                                                                                                                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ModulePermissions`            | Implement it as a bean in your module to declare its Permissions. Collected into the catalog at startup.                                                                                                                                                                                                       |
+| `Permission`                   | One declaration: `Permission.platform(key, heading, description)` or `Permission.project(key, heading, description, scopes...)`, then `.ownHint(...)`, `.grantedTo(builtInRole[, scope])` for its defaults in the built-in Roles, and `.lockedIn(builtInRole, scope)` for a default the Role must always keep. |
+| `BuiltInRole`, `Kind`, `Scope` | The built-in Roles, platform or project, and `OWN` / `PROJECT` / `ALL`.                                                                                                                                                                                                                                        |
+| `PlatformPermissions`          | `holds(userId, key)` and `require(userId, key)`: whether a User holds a platform permission, through Everyone or their platform roles. `false` for keys that aren't platform permissions in the catalog.                                                                                                       |
+| `@Authorize("key")`            | On a controller method or class: requires the signed-in User to hold that platform permission, `403` otherwise. Only for platform permissions; project permissions need the project, so services ask `access` explicitly (coming with the project check API, #48).                                             |
+| `PermissionDeniedException`    | Thrown by `require`; answered with `403` problem details from any module.                                                                                                                                                                                                                                      |
 
 Everything under `access.internal` is private to the module.
 
@@ -39,9 +39,9 @@ A key is `module:resource:action`, lowercase, starting with the declaring module
 | `projects:project:view`    | project  | none           | Platform admin (`ALL`) | `projects`  |
 | `projects:project:update`  | project  | `PROJECT`      | Project admin          | `projects`  |
 | `projects:project:archive` | project  | `PROJECT`      | Project admin          | `projects`  |
-| `projects:member:manage`   | project  | `PROJECT`      | Project admin          | `projects`  |
+| `projects:member:manage`   | project  | `PROJECT`      | Project admin (locked) | `projects`  |
 
-`access:role:manage` and `access:role:assign` are reserved to Platform admin: no other Role may hold them (enforced once Roles can be edited, #45).
+`access:role:manage` and `access:role:assign` are reserved to Platform admin: no other Role may hold them, so nobody can give themselves or others the power to change access.
 
 ## Roles
 
@@ -53,12 +53,25 @@ A key is `module:resource:action`, lowercase, starting with the declaring module
 | Developer      | `developer`      | project  | No `projects` Permissions by default; later modules add theirs (e.g. editing Issues).        |
 | Viewer         | `viewer`         | project  | No `projects` Permissions by default. Members see their own projects without any Permission. |
 
+## Editing Roles
+
+The Platform admin edits Roles on the Roles page (all of it needs `access:role:manage`):
+
+- **Create** a custom Role with a key (2 to 50 lowercase letters, digits and underscores, starting with a letter; unique, `409` if taken), a name (1 to 100 characters, trimmed), an optional description (at most 500) and a kind (`platform` or `project`). It starts with no Grants. Key and kind never change: a request that tries gets `400`.
+- **Rename and describe** any Role but Platform admin.
+- **Save Grants**: the whole set at once, replacing the old one. Each Grant must fit: a known Permission; in a project role, a project permission with one of its allowed Scopes; in a platform role, a platform permission without a Scope or a project permission with `ALL`; not a reserved Permission (unless Platform admin); not listed twice. Otherwise `400` with what is wrong per Permission under `errors`. Removing a locked Grant (Project admin's `projects:member:manage`) is `409`.
+- **Versions**: every Role has a version that changes on each edit. Renaming and saving Grants send the version they started from; a different one is refused with `409` ("This Role changed since you opened it"), so nobody overwrites someone else's change.
+- **Platform admin is locked**: it can't be renamed or have its Grants changed (`409`).
+- **Customised**: renaming or saving Grants of a built-in Role marks it customised (with the time). **Reset to defaults** (built-in Roles only) restores its name, description and Grants and clears the mark.
+- **New Permissions**: a customised built-in Role reports `newPermissions`: its code defaults it doesn't hold that first appeared after it was customised. Defaults the admin removed on purpose aren't listed.
+- **Delete** a custom Role only while nobody holds it (`409` with the number of assignments otherwise). Built-in Roles can't be deleted (`409`).
+
 ## Startup
 
 Before the API takes requests, every startup:
 
-1. Rebuilds `access_permissions` from the declarations.
-2. Creates any missing built-in Role, and resets every built-in Role that is not customised to the code defaults. Platform admin is always reset to every Permission. A customised built-in Role is left exactly as it is.
+1. Upserts `access_permissions` from the declarations, keeping when each Permission was first seen, and removes keys no longer declared.
+2. Creates any missing built-in Role, and resets every built-in Role that is not customised to the code defaults. Platform admin is always reset to every Permission. A customised built-in Role keeps what the admin set, except that its locked Grants are put back if missing.
 3. Logs a warning for each Grant whose key is no longer in the catalog. Such a Grant allows nothing and is never deleted automatically: rename or remove it with a Flyway migration in the same PR as the change.
 4. Gives Platform admin to the User with `NIMBUS_ADMIN_EMAIL` (`nimbus.admin.email`) if their email is verified: the seeded admin, or someone who proved the address with Google or GitHub. An unverified match (someone who registered that email with a password) gets nothing and is logged with the reason, so they can't take over Nimbus. Nothing happens when the setting is empty.
 
@@ -68,12 +81,17 @@ Running it again changes nothing. The sync takes a Postgres advisory lock for it
 
 ## REST endpoints
 
-| Endpoint                         | Behaviour                                                                                                                                                                                                             |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/access/permissions`    | The catalog sorted by heading and key: `{permissions: [{key, heading, description, kind, scopes, ownHint}]}`. Needs `access:role:manage`.                                                                             |
-| `GET /api/access/roles`          | Every Role, platform roles first, then built-in order, then name: `{roles: [{key, name, description, kind, builtIn, customised, permissions, holders}]}`. `holders` is null for Everyone. Needs `access:role:manage`. |
-| `GET /api/access/roles/{key}`    | One Role with `version` and `grants: [{permission, scope}]` (scope null for platform permissions; Grants for unknown keys left out). `404` for an unknown key. Needs `access:role:manage`.                            |
-| `GET /api/access/me/permissions` | The signed-in User's platform permissions: `{platform: [...]}`, sorted. Any signed-in User. The web app uses it to hide what they can't use.                                                                          |
+| Endpoint                             | Behaviour                                                                                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/access/permissions`        | The catalog sorted by heading and key: `{permissions: [{key, heading, description, kind, scopes, ownHint, reserved}]}`. Needs `access:role:manage`.                                                                            |
+| `GET /api/access/roles`              | Every Role, platform roles first, then built-in order, then name: `{roles: [{key, name, description, kind, builtIn, customised, permissions, holders}]}`. `holders` is null for Everyone. Needs `access:role:manage`.          |
+| `GET /api/access/roles/{key}`        | One Role with `version`, `locked`, `newPermissions` and `grants: [{permission, scope, locked}]` (scope null for platform permissions; Grants for unknown keys left out). `404` for an unknown key. Needs `access:role:manage`. |
+| `POST /api/access/roles`             | `{key, name, description, kind}`: `201` with the new Role. `409` if the key is taken, `400` with `errors` for invalid fields.                                                                                                  |
+| `PATCH /api/access/roles/{key}`      | `{name?, description?, version}`: the updated Role. `409` if stale or Platform admin; `400` if `key` or `kind` is sent.                                                                                                        |
+| `PUT /api/access/roles/{key}/grants` | `{grants: [{permission, scope}], version}`: replaces every Grant, returns the Role. `400` with `errors` per Permission, `409` if stale, locked or Platform admin.                                                              |
+| `POST /api/access/roles/{key}/reset` | Built-in Roles only: back to the defaults, returns the Role. `409` for a custom Role.                                                                                                                                          |
+| `DELETE /api/access/roles/{key}`     | Custom Roles nobody holds: `204`. `409` for built-in Roles and Roles someone holds.                                                                                                                                            |
+| `GET /api/access/me/permissions`     | The signed-in User's platform permissions: `{platform: [...]}`, sorted. Any signed-in User. The web app uses it to hide what they can't use.                                                                                   |
 
 Kinds and Scopes are lowercase in responses (`platform`, `project`, `own`, `project`, `all`). Missing Permission: `403` problem details. No token: `401`.
 
@@ -81,11 +99,11 @@ Kinds and Scopes are lowercase in responses (`platform`, `project`, `own`, `proj
 
 | Table                     | Columns                                                                                                                                                                                                    |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `access_permissions`      | `key` (PK), `heading`, `description`, `kind` (`PLATFORM`/`PROJECT`), `scopes` (comma-separated), `own_hint`. Rebuilt at every startup; Grants don't reference it.                                          |
-| `access_roles`            | `id` (UUID), `key` (unique), `name`, `description`, `kind`, `built_in`, `customised`, `version`, `created_at`.                                                                                             |
+| `access_permissions`      | `key` (PK), `heading`, `description`, `kind` (`PLATFORM`/`PROJECT`), `scopes` (comma-separated), `own_hint`, `first_seen_at`. Upserted at every startup; Grants don't reference it.                        |
+| `access_roles`            | `id` (UUID), `key` (unique), `name`, `description`, `kind`, `built_in`, `customised`, `customised_at`, `version`, `created_at`.                                                                            |
 | `access_role_grants`      | `role_id` (→ `access_roles`, cascade delete), `permission_key`, `scope` (null for platform permissions). Primary key (`role_id`, `permission_key`).                                                        |
 | `access_role_assignments` | `id`, `role_id` (→ `access_roles`), `user_id`, `project_id` (null for platform roles), `created_at`. Unique (`user_id`, `role_id`) for platform roles; unique (`user_id`, `project_id`) for project roles. |
 
 ## Web app
 
-**Roles & access** in the user menu, shown only to holders of `access:role:manage`, opens `/settings/roles`: platform roles and project roles in two sections with name, built-in badge, description, key, holders and Permission count. `/settings/roles/:key` shows one Role read-only: its Permissions grouped by heading, each with a checkbox for whether it is granted, the own hint, and the Scope. A project role lists only Permissions project roles can hold.
+**Roles & access** in the user menu, shown only to holders of `access:role:manage`, opens `/settings/roles`: platform roles and project roles in two sections with name, built-in badge, description, key, holders and Permission count, and **New Role** (name, a key suggested from it, description, platform or project). `/settings/roles/:key` shows one Role: rename, **Reset to defaults** (customised built-in Roles), **Delete** (custom Roles), the new-Permissions notice, and its Permissions grouped by heading, each with a checkbox and, where there is a choice, a Scope dropdown limited to the allowed Scopes, with the own hint. Locked Grants and reserved Permissions are shown but disabled; Platform admin is read-only. **Save Permissions** saves all at once; a stale save shows "This Role changed since you opened it". A project role lists only Permissions project roles can hold.

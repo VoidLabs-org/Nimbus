@@ -75,6 +75,15 @@ class StartupSyncTests {
 		startup.run();
 
 		assertThat(output).contains("Role everyone has a Grant for projects:gone:away");
+		// Recorded once for the audit log by the system, not again at every startup.
+		startup.run();
+		var warnings = jdbc.sql("""
+				SELECT COUNT(*) FROM access_audit_entries
+				WHERE action = 'catalog.unknown_grant' AND target_key = 'everyone' AND actor_id IS NULL
+				AND after ->> 'permission' = 'projects:gone:away'""")
+			.query(Integer.class)
+			.single();
+		assertThat(warnings).isEqualTo(1);
 		assertThat(permissions.holds(UUID.randomUUID(), "projects:gone:away")).isFalse();
 		assertThat(roles.require("everyone").grants()).extracting(Roles.GrantView::permission)
 			.doesNotContain("projects:gone:away");
@@ -130,7 +139,7 @@ class StartupSyncTests {
 
 		// The admin saw the notice and saved the Permissions without it: that was their choice, so no more notice.
 		var current = roles.require("project_admin");
-		editor.saveGrants("project_admin", current.grants().stream()
+		editor.saveGrants(UUID.randomUUID(), "project_admin", current.grants().stream()
 			.map(grant -> new RoleEditor.RequestedGrant(grant.permission(), grant.scope()))
 			.toList(), current.version());
 		assertThat(roles.require("project_admin").newPermissions()).isEmpty();

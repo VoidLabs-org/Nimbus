@@ -40,14 +40,17 @@ class StartupSync implements SmartInitializingSingleton {
 
 	private final GrantStore grants;
 
+	private final AuditLog audit;
+
 	StartupSync(Catalog catalog, JdbcClient jdbc, TransactionTemplate transaction, PlatformAdminBootstrap platformAdmin,
-			BuiltInDefaults defaults, GrantStore grants) {
+			BuiltInDefaults defaults, GrantStore grants, AuditLog audit) {
 		this.catalog = catalog;
 		this.jdbc = jdbc;
 		this.transaction = transaction;
 		this.platformAdmin = platformAdmin;
 		this.defaults = defaults;
 		this.grants = grants;
+		this.audit = audit;
 	}
 
 	@Override
@@ -143,8 +146,15 @@ class StartupSync implements SmartInitializingSingleton {
 				WHERE g.permission_key NOT IN (SELECT key FROM access_permissions)
 				ORDER BY r.key, g.permission_key""")
 			.query(rs -> {
+				var role = rs.getString("role");
+				var permission = rs.getString("permission");
 				log.warn("Role {} has a Grant for {}, which is no longer a Permission; it is ignored. Rename or "
-						+ "remove it with a migration.", rs.getString("role"), rs.getString("permission"));
+						+ "remove it with a migration.", role, permission);
+				// Kept once in the audit log, not again at every startup.
+				var details = java.util.Map.of("permission", permission);
+				if (!audit.recordedBySystem("catalog.unknown_grant", role, details)) {
+					audit.record(null, "catalog.unknown_grant", AuditLog.TargetType.ROLE, role, null, details);
+				}
 			});
 	}
 

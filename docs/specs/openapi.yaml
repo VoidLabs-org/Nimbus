@@ -586,6 +586,51 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/access/audit:
+    get:
+      tags: [access]
+      summary: The audit log, newest first
+      description: >-
+        Every change to Roles and their Grants, and startup warnings about the catalog. Entries are never edited
+        or deleted. Needs `access:audit:view`.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: One page of entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries, page, size, total]
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEntry"
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+                  total:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /api/access/me/permissions:
     get:
       tags: [access]
@@ -849,6 +894,57 @@ components:
           type: [string, "null"]
           enum: [own, project, all, null]
           description: Null for platform permissions
+
+    AuditEntry:
+      type: object
+      required: [id, at, actor, action, target, before, after]
+      properties:
+        id:
+          type: string
+          format: uuid
+        at:
+          type: string
+          format: date-time
+        actor:
+          description: Who did it; null when the system did. Name and email are null for a User who no longer exists.
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [id, displayName, email]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                displayName:
+                  type: [string, "null"]
+                email:
+                  type: [string, "null"]
+        action:
+          type: string
+          enum:
+            [
+              role.created,
+              role.renamed,
+              role.grants_changed,
+              role.reset,
+              role.deleted,
+              catalog.unknown_grant,
+            ]
+        target:
+          type: object
+          required: [type, key]
+          properties:
+            type:
+              type: string
+              enum: [role]
+            key:
+              type: string
+        before:
+          type: [object, "null"]
+          description: The state before the change; null when there was none
+        after:
+          type: [object, "null"]
+          description: The state after the change; null when there is none
 
     CreateRoleRequest:
       type: object

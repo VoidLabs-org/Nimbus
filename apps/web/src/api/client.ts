@@ -75,6 +75,24 @@ export type Role = Omit<RoleSummary, "permissions"> & {
 
 export type NewRoleInput = { key: string; name: string; description: string; kind: Kind };
 
+/** One change in the audit log. */
+export type AuditEntry = {
+  id: string;
+  /** When it happened (ISO 8601). */
+  at: string;
+  /** Who did it; null when the system did (e.g. a warning at startup). Name and email are null for a User who no longer exists. */
+  actor: { id: string; displayName: string | null; email: string | null } | null;
+  /** e.g. role.created, role.renamed, role.grants_changed, role.reset, role.deleted, catalog.unknown_grant */
+  action: string;
+  target: { type: string; key: string };
+  /** The state before; null when there was none (created). */
+  before: Record<string, unknown> | null;
+  /** The state after; null when there is none (deleted). */
+  after: Record<string, unknown> | null;
+};
+
+export type AuditPage = { entries: AuditEntry[]; page: number; size: number; total: number };
+
 type AuthResponse = { accessToken: string; user: User };
 
 /** A failed API call, carrying the server's problem details (RFC 9457). */
@@ -324,6 +342,10 @@ export function createApiClient(
         method: "POST",
         body: JSON.stringify({ version }),
       }),
+
+    /** The audit log, newest first. Needs access:audit:view. */
+    auditLog: (page: number, size: number) =>
+      request<AuditPage>(`/api/access/audit?page=${page}&size=${size}`),
 
     /** Deletes a custom Role nobody holds; a 409 says why not otherwise. */
     deleteRole: (key: string) => request<void>(rolePath(key), { method: "DELETE" }),

@@ -9,6 +9,7 @@ import {
   Loader,
   Modal,
   Stack,
+  Tabs,
   Text,
   Textarea,
   TextInput,
@@ -20,6 +21,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { GrantsEditor } from "../access/GrantsEditor";
 import { kindLabels } from "../access/labels";
+import { RoleHolders } from "../access/RoleHolders";
+import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
 import { UserMenu } from "../auth/UserMenu";
 
@@ -37,6 +40,7 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   const [role, setRole] = useState<Role | null>(null);
   const [catalog, setCatalog] = useState<CatalogPermission[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const platformPermissions = usePlatformPermissions();
 
   useEffect(() => {
     let current = true;
@@ -58,6 +62,26 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
       current = false;
     };
   }, [key]);
+
+  // Everyone is held by every signed-in User, and project roles are given on a project's Members page.
+  const hasPeople =
+    role !== null &&
+    role.kind === "platform" &&
+    role.key !== "everyone" &&
+    platformPermissions.includes("access:role:assign");
+
+  // The holder count in the header changes when someone is given or loses the Role.
+  function refresh() {
+    api
+      .role(key)
+      .then(setRole)
+      .catch(() => {});
+  }
+
+  // Restarts only when the stored Grants change (saved or reset): renaming keeps unsaved ticks.
+  const grants = role && (
+    <GrantsEditor key={grantsSignature(role)} role={role} catalog={catalog} onSaved={setRole} />
+  );
 
   return (
     <Container size="lg" py="xl">
@@ -88,13 +112,20 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
               its defaults.
             </Alert>
           )}
-          {/* Restarts only when the stored Grants change (saved or reset): renaming keeps unsaved ticks. */}
-          <GrantsEditor
-            key={grantsSignature(role)}
-            role={role}
-            catalog={catalog}
-            onSaved={setRole}
-          />
+          {hasPeople ? (
+            <Tabs defaultValue="permissions" keepMounted>
+              <Tabs.List mb="md">
+                <Tabs.Tab value="permissions">Permissions</Tabs.Tab>
+                <Tabs.Tab value="people">People</Tabs.Tab>
+              </Tabs.List>
+              <Tabs.Panel value="permissions">{grants}</Tabs.Panel>
+              <Tabs.Panel value="people">
+                <RoleHolders role={role} onChanged={refresh} />
+              </Tabs.Panel>
+            </Tabs>
+          ) : (
+            grants
+          )}
         </Stack>
       )}
     </Container>

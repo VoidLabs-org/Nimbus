@@ -2,8 +2,10 @@ package com.nimbus.api.access.internal;
 
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
+import com.nimbus.api.access.BuiltInRole;
 import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.identity.UserRegistered;
 import com.nimbus.api.identity.UserSummary;
@@ -35,11 +37,14 @@ class PlatformAdminBootstrap {
 
 	private final RequestMemo memo;
 
+	private final AuditLog audit;
+
 	PlatformAdminBootstrap(Users users, JdbcClient jdbc, @Value("${nimbus.admin.email:}") String adminEmail,
-			RequestMemo memo) {
+			RequestMemo memo, AuditLog audit) {
 		this.users = users;
 		this.jdbc = jdbc;
 		this.memo = memo;
+		this.audit = audit;
 		this.adminEmail = adminEmail.strip().toLowerCase(Locale.ROOT);
 	}
 
@@ -63,6 +68,8 @@ class PlatformAdminBootstrap {
 		}
 	}
 
+	// The assignment and its audit entry are saved together.
+	@Transactional
 	void atStartup() {
 		if (!adminEmail.isEmpty()) {
 			users.findByEmail(adminEmail).ifPresent(this::grantIfVerified);
@@ -85,6 +92,8 @@ class PlatformAdminBootstrap {
 			.update();
 		if (added > 0) {
 			memo.clear();
+			audit.record(null, "role.assigned", AuditLog.TargetType.ROLE, BuiltInRole.PLATFORM_ADMIN.key(), null,
+					Map.of("user", PlatformRoleHolders.about(user)));
 			log.info("Made {} Platform admin", user.email());
 		}
 	}

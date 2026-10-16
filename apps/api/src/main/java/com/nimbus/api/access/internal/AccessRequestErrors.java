@@ -24,6 +24,16 @@ class AccessRequestErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail userNotFound(PlatformRoleHolders.UserNotFoundException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+	}
+
+	@ExceptionHandler
+	ProblemDetail ownAssignment(PlatformRoleHolders.OwnAssignmentException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
+	}
+
+	@ExceptionHandler
 	ProblemDetail conflict(RoleEditor.RoleConflictException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 	}

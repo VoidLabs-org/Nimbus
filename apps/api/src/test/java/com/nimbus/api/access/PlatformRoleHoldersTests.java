@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient;
@@ -32,6 +33,9 @@ class PlatformRoleHoldersTests {
 
 	@Autowired
 	RestTestClient client;
+
+	@Autowired
+	JdbcClient jdbc;
 
 	String admin;
 
@@ -87,6 +91,19 @@ class PlatformRoleHoldersTests {
 		take("support", register("di@example.com", "Di").id(), admin).expectStatus().isNotFound();
 		take("support", cy.id(), admin).expectStatus().isNoContent();
 		take("support", cy.id(), admin).expectStatus().isNotFound();
+	}
+
+	@Test
+	void aUserWhoHasNotProvedTheirEmailIsNotGivenAPlatformRole() {
+		// Anyone can register someone else's address with a password before its owner does.
+		var mallory = registerUnverified("carol@example.com", "Carol");
+
+		give("platform_admin", "carol@example.com", admin).expectStatus().isEqualTo(409);
+
+		assertThat((List<String>) JsonPath.read(myPermissions(mallory.token()), "$.platform"))
+			.doesNotContain("access:role:manage");
+		assertThat((List<String>) JsonPath.read(holders("platform_admin", admin), "$.users[*].email"))
+			.doesNotContain("carol@example.com");
 	}
 
 	@Test
@@ -252,7 +269,15 @@ class PlatformRoleHoldersTests {
 			.expectStatus().isOk();
 	}
 
+	/** A User who proved their email, as if they had then signed in once with Google on it. */
 	private Registered register(String email, String name) {
+		var registered = registerUnverified(email, name);
+		jdbc.sql("UPDATE users SET email_verified = TRUE WHERE email = :email").param("email", email).update();
+		return registered;
+	}
+
+	/** A password sign-up, which never proves the email. */
+	private Registered registerUnverified(String email, String name) {
 		var response = client.post().uri("/api/auth/register")
 			.body(Map.of("displayName", name, "email", email, "password", "correct horse"))
 			.exchange()

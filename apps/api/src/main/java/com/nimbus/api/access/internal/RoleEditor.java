@@ -89,7 +89,8 @@ class RoleEditor {
 
 	}
 
-	private record Stored(UUID id, String key, Kind kind, boolean builtIn, int version) {
+	/** A Role as edits read it, locked for the transaction. */
+	record Stored(UUID id, String key, Kind kind, boolean builtIn, int version) {
 	}
 
 	/** A custom Role with no Grants. */
@@ -210,7 +211,7 @@ class RoleEditor {
 
 	/** Deletes a custom Role, only while nobody holds it, so nobody loses access by accident. */
 	void delete(UUID actor, String key) {
-		var role = lockedForUpdate(key);
+		var role = lockedForUpdate(jdbc, key);
 		if (role.builtIn()) {
 			throw new RoleConflictException("Built-in Roles can't be deleted");
 		}
@@ -262,7 +263,7 @@ class RoleEditor {
 
 	/** The Role, locked for this transaction, if it may be edited and nobody changed it since {@code version}. */
 	private Stored editable(String key, int version) {
-		var role = lockedForUpdate(key);
+		var role = lockedForUpdate(jdbc, key);
 		if (BuiltInRole.PLATFORM_ADMIN.key().equals(key)) {
 			throw new RoleConflictException("Platform admin is locked: it always holds every Permission");
 		}
@@ -288,8 +289,15 @@ class RoleEditor {
 			.update();
 	}
 
-	private Stored lockedForUpdate(String key) {
-		return jdbc.sql("SELECT id, key, kind, built_in, version FROM access_roles WHERE key = :key FOR UPDATE")
+	/** The Role, locked until the transaction ends, so changes to it take turns; {@code 404} if there is none. */
+	static Stored lockedForUpdate(JdbcClient jdbc, String key) {
+		return stored(jdbc, key, true);
+	}
+
+	/** The Role, locked until the transaction ends when {@code lock}; {@code 404} if there is none. */
+	static Stored stored(JdbcClient jdbc, String key, boolean lock) {
+		return jdbc.sql("SELECT id, key, kind, built_in, version FROM access_roles WHERE key = :key"
+				+ (lock ? " FOR UPDATE" : ""))
 			.param("key", key)
 			.query((rs, n) -> new Stored(rs.getObject("id", UUID.class), rs.getString("key"),
 					Kind.valueOf(rs.getString("kind")), rs.getBoolean("built_in"), rs.getInt("version")))

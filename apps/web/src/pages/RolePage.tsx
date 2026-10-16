@@ -75,7 +75,12 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
     api
       .role(key)
       .then(setRole)
-      .catch(() => {});
+      .catch(() =>
+        notifications.show({
+          color: "yellow",
+          message: "Couldn't refresh this Role's holder count; reload the page to see it.",
+        }),
+      );
   }
 
   // Restarts only when the stored Grants change (saved or reset): renaming keeps unsaved ticks.
@@ -112,20 +117,22 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
               its defaults.
             </Alert>
           )}
-          {hasPeople ? (
-            <Tabs defaultValue="permissions" keepMounted>
+          {/* Always inside Tabs, so the Grants editor keeps its place (and unsaved ticks) when the People tab
+              appears once the signed-in User's Permissions arrive. */}
+          <Tabs defaultValue="permissions" keepMounted>
+            {hasPeople && (
               <Tabs.List mb="md">
                 <Tabs.Tab value="permissions">Permissions</Tabs.Tab>
                 <Tabs.Tab value="people">People</Tabs.Tab>
               </Tabs.List>
-              <Tabs.Panel value="permissions">{grants}</Tabs.Panel>
+            )}
+            <Tabs.Panel value="permissions">{grants}</Tabs.Panel>
+            {hasPeople && (
               <Tabs.Panel value="people">
                 <RoleHolders role={role} onChanged={refresh} />
               </Tabs.Panel>
-            </Tabs>
-          ) : (
-            grants
-          )}
+            )}
+          </Tabs>
         </Stack>
       )}
     </Container>

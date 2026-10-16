@@ -661,7 +661,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
         "409":
-          description: They already hold it, or it is Everyone or a project role
+          description: They already hold it, haven't verified their email (only Google or GitHub sign-in proves it), or it is Everyone or a project role
           content:
             application/problem+json:
               schema:

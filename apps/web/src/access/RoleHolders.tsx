@@ -25,12 +25,24 @@ import { useSession } from "../auth/useSession";
 export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => void }) {
   const { user } = useSession();
   const [holders, setHolders] = useState<RoleHolder[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Bumped after every change: the list is read again from the server, so it stays complete and sorted and shows
+  // what other admins changed meanwhile.
+  const [loads, setLoads] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<RoleHolder | null>(null);
   const [busy, setBusy] = useState(false);
   const form = useForm({
     initialValues: { email: "" },
-    validate: { email: (value) => (value.trim() ? null : "Enter an email") },
+    validate: {
+      email: (value) => {
+        if (!value.trim()) return "Enter an email";
+        // The server refuses it too; caught here so a 403 from the server can only mean a missing Permission.
+        if (value.trim().toLowerCase() === user?.email.toLowerCase())
+          return "You can't give yourself a Role";
+        return null;
+      },
+    },
   });
 
   useEffect(() => {
@@ -38,32 +50,40 @@ export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => 
     api
       .roleHolders(role.key)
       .then((found) => {
-        if (current) setHolders(found);
+        if (!current) return;
+        setHolders(found);
+        setLoadError(null);
       })
       .catch((failure) => {
         if (current)
-          setError(
+          setLoadError(
             failure instanceof ApiError ? failure.message : "Couldn't load who holds this Role.",
           );
       });
     return () => {
       current = false;
     };
-  }, [role.key]);
+  }, [role.key, loads]);
+
+  function changed() {
+    setLoads((count) => count + 1);
+    onChanged();
+  }
 
   async function give(values: { email: string }) {
     setError(null);
     try {
       const added = await api.giveRole(role.key, values.email.trim());
-      setHolders((current) => [...(current ?? []), added]);
       form.reset();
       notifications.show({ message: `Gave ${role.name} to ${added.email ?? "them"}.` });
-      onChanged();
+      changed();
     } catch (failure) {
       if (failure instanceof ApiError && failure.fieldErrors.email)
         form.setFieldError("email", failure.fieldErrors.email);
-      else if (failure instanceof ApiError && [403, 404, 409].includes(failure.status))
+      else if (failure instanceof ApiError && [404, 409].includes(failure.status))
         form.setFieldError("email", failure.message);
+      else if (failure instanceof ApiError && failure.status === 403)
+        setError("You no longer have permission to give Roles. Reload the page.");
       else setError("Couldn't give the Role. Please try again.");
     }
   }
@@ -74,13 +94,14 @@ export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => 
     setError(null);
     try {
       await api.takeRole(role.key, removing.id);
-      setHolders((current) => (current ?? []).filter((holder) => holder.id !== removing.id));
       notifications.show({ message: `Took ${role.name} from ${removing.email ?? "them"}.` });
-      onChanged();
+      changed();
     } catch (failure) {
       setError(
         failure instanceof ApiError ? failure.message : "Couldn't take the Role. Please try again.",
       );
+      // Someone else already took it away: show the list as it is now.
+      if (failure instanceof ApiError && failure.status === 404) changed();
     } finally {
       setRemoving(null);
       setBusy(false);
@@ -90,20 +111,30 @@ export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => 
   return (
     <Stack>
       {error && <Alert color="red">{error}</Alert>}
+      {loadError && (
+        <Alert color="red">
+          {loadError}{" "}
+          <Button size="compact-xs" variant="subtle" onClick={() => setLoads((count) => count + 1)}>
+            Try again
+          </Button>
+        </Alert>
+      )}
+      {/* Disabled until the list is there, so a change never shows a partial list as if it were complete. */}
       <form onSubmit={form.onSubmit(give)}>
         <Group align="flex-start" gap="xs">
           <TextInput
-            placeholder="Email of an existing User"
+            placeholder="Email of a User who signed in with Google or GitHub"
             aria-label="Email"
-            w={320}
+            w={360}
+            disabled={!holders}
             {...form.getInputProps("email")}
           />
-          <Button type="submit" loading={form.submitting}>
+          <Button type="submit" loading={form.submitting} disabled={!holders}>
             Add
           </Button>
         </Group>
       </form>
-      {!holders && !error && (
+      {!holders && !loadError && (
         <Center py="md">
           <Loader size="sm" />
         </Center>

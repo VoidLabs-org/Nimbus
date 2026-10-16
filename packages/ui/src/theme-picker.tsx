@@ -1,40 +1,41 @@
 import { Group, SegmentedControl } from "@mantine/core";
 import { themeNames, useNimbusTheme, type ThemeName } from "./nimbus-theme";
 
-const labels: Record<ThemeName, string> = {
+type Choice = ThemeName | "system";
+
+const labels: Record<Choice, string> = {
+  system: "System",
   paper: "Paper",
   ink: "Ink",
   fog: "Fog",
   slate: "Slate",
 };
 
-// Each theme's page colour, as its swatch.
-const swatches: Record<ThemeName, string> = {
-  paper: "#ffffff",
-  ink: "#121110",
-  fog: "#eef0f3",
-  slate: "#171b20",
-};
+const choices: readonly Choice[] = ["system", ...themeNames];
 
-/** All four themes side by side, each with its swatch. Picking one sets both mode and surface. */
+/**
+ * System and the four themes side by side, each with its swatch. A theme sets both mode and surface; System
+ * makes light or dark follow the system's setting again and keeps the surface (flat or glass) as it is.
+ */
 export function ThemePicker() {
-  const { theme, setTheme } = useNimbusTheme();
+  const { theme, followsSystem, setTheme, followSystem } = useNimbusTheme();
   return (
     <SegmentedControl
       radius="xl"
-      value={theme}
-      onChange={(value) => setTheme(value as ThemeName)}
+      value={followsSystem ? "system" : theme}
+      onChange={(value) => (value === "system" ? followSystem() : setTheme(value as ThemeName))}
       classNames={{
         root: "nimbus-segmented",
         indicator: "nimbus-segmented-indicator",
         label: "nimbus-segmented-label",
       }}
-      data={themeNames.map((name) => ({
-        value: name,
+      data={choices.map((choice) => ({
+        value: choice,
         label: (
           <Group gap={8} wrap="nowrap">
-            <span className="nimbus-swatch" style={{ background: swatches[name] }} />
-            {labels[name]}
+            {/* The theme's page colour (half light, half dark for System), from themes.css. */}
+            <span className="nimbus-swatch" data-swatch={choice} />
+            {labels[choice]}
           </Group>
         ),
       }))}

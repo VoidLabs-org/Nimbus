@@ -5,11 +5,22 @@
  * whichever theme is on.
  */
 
+/* Poppins ships with the app (no font CDN), so it works offline, in the desktop app too, without a reflow. */
+@import "@fontsource/poppins/400.css";
+@import "@fontsource/poppins/500.css";
+@import "@fontsource/poppins/600.css";
+@import "@fontsource/poppins/700.css";
+
 /* What every theme starts from; each one below overrides what it changes. */
 :root {
-  --font-heading: "Poppins", system-ui, sans-serif;
-  --font-body: "Poppins", system-ui, sans-serif;
-  --font-heading-weight: 600;
+  /* Each theme's page colour, defined once: the themes below use them, and so do the picker's swatches. */
+  --theme-paper-bg: #ffffff;
+  --theme-ink-bg: #121110;
+  --theme-fog-bg: #eef0f3;
+  --theme-slate-bg: #171b20;
+
+  /* Hovering a filled orange button goes lighter, so its dark text stays readable. */
+  --accent-hover: #ff9468;
 
   --color-accent: #ff6b3d;
   --color-accent-100: #ffefe7;
@@ -32,6 +43,7 @@
 
   --color-bg: #fff6ee;
   --color-surface: #f7e9dc;
+  --card: #ffffff;
   --color-text: #201d1a;
   --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
 
@@ -61,7 +73,7 @@
 }
 
 :root[data-theme="paper"] {
-  --color-bg: #ffffff;
+  --color-bg: var(--theme-paper-bg);
   --color-surface: #f4f2ef;
   --card: #ffffff;
   --color-text: #1a1816;
@@ -98,7 +110,8 @@
   --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
   --seg-on: rgba(255, 255, 255, 0.1);
-  --color-bg: #121110;
+  --accent-hover: #ff8a63;
+  --color-bg: var(--theme-ink-bg);
   --color-surface: #1c1a18;
   --card: #1c1a18;
   --color-text: #f3eee8;
@@ -128,7 +141,7 @@
 }
 
 :root[data-theme="fog"] {
-  --color-bg: #eef0f3;
+  --color-bg: var(--theme-fog-bg);
   --color-surface: #e2e6eb;
   --card: rgba(255, 255, 255, 0.85);
   --color-text: #161a20;
@@ -173,7 +186,8 @@
   --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
   --seg-on: rgba(255, 255, 255, 0.1);
-  --color-bg: #171b20;
+  --accent-hover: #ff8a63;
+  --color-bg: var(--theme-slate-bg);
   --color-surface: #20252c;
   --card: rgba(255, 255, 255, 0.06);
   --color-text: #e9edf2;
@@ -327,4 +341,24 @@
   height: 7px;
   border-radius: 50%;
   background: #ff6b3d;
+}
+
+.nimbus-swatch[data-swatch="paper"] {
+  background: var(--theme-paper-bg);
+}
+
+.nimbus-swatch[data-swatch="ink"] {
+  background: var(--theme-ink-bg);
+}
+
+.nimbus-swatch[data-swatch="fog"] {
+  background: var(--theme-fog-bg);
+}
+
+.nimbus-swatch[data-swatch="slate"] {
+  background: var(--theme-slate-bg);
+}
+
+.nimbus-swatch[data-swatch="system"] {
+  background: linear-gradient(135deg, var(--theme-paper-bg) 50%, var(--theme-ink-bg) 50%);
 }

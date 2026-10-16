@@ -19,11 +19,16 @@ function systemPrefers(scheme: "light" | "dark") {
 
 /** A page using the theme, as the navbar switches or the Appearance page will. */
 function Consumer({ label }: { label: string }) {
-  const { theme, mode, surface, setMode, setSurface, setTheme } = useNimbusTheme();
+  const { theme, mode, surface, followsSystem, setMode, setSurface, setTheme, followSystem } =
+    useNimbusTheme();
   return (
     <div>
       <span data-testid={`${label}-theme`}>{theme}</span>
       <span data-testid={`${label}-settings`}>{`${mode} ${surface}`}</span>
+      <span data-testid={`${label}-follows`}>{String(followsSystem)}</span>
+      <button type="button" onClick={followSystem}>
+        {label} follow system
+      </button>
       <button type="button" onClick={() => setMode(mode === "dark" ? "light" : "dark")}>
         {label} toggle dark
       </button>
@@ -118,6 +123,56 @@ describe("NimbusThemeProvider", () => {
 
     expect(screen.getByTestId("navbar-theme").textContent).toBe("slate");
     expect(root().getAttribute("data-theme")).toBe("slate");
+  });
+
+  it("follows a choice made in another tab, and keeps it when this tab changes the other setting", () => {
+    systemPrefers("light");
+    renderApp();
+
+    // Another tab picks Ink.
+    localStorage.setItem("nimbus-theme", JSON.stringify({ mode: "dark", surface: "flat" }));
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "nimbus-theme" }));
+    });
+    expect(root().getAttribute("data-theme")).toBe("ink");
+
+    act(() => screen.getByText("navbar toggle glass").click());
+
+    expect(root().getAttribute("data-theme")).toBe("slate");
+    expect(JSON.parse(localStorage.getItem("nimbus-theme") ?? "{}")).toEqual({
+      mode: "dark",
+      surface: "glass",
+    });
+  });
+
+  it("keeps another tab's choice when this tab hasn't heard about it yet", () => {
+    systemPrefers("light");
+    renderApp();
+
+    // Another tab picks dark, but this tab missed the event (say it was asleep).
+    localStorage.setItem("nimbus-theme", JSON.stringify({ mode: "dark" }));
+    act(() => screen.getByText("navbar toggle glass").click());
+
+    expect(JSON.parse(localStorage.getItem("nimbus-theme") ?? "{}")).toEqual({
+      mode: "dark",
+      surface: "glass",
+    });
+  });
+
+  it("goes back to following the system's light or dark, keeping the chosen surface", () => {
+    systemPrefers("dark");
+    renderApp();
+    expect(screen.getByTestId("navbar-follows").textContent).toBe("true");
+
+    act(() => screen.getByText("appearance pick fog").click());
+    expect(screen.getByTestId("navbar-follows").textContent).toBe("false");
+    expect(root().getAttribute("data-theme")).toBe("fog");
+
+    act(() => screen.getByText("appearance follow system").click());
+
+    expect(screen.getByTestId("navbar-follows").textContent).toBe("true");
+    expect(root().getAttribute("data-theme")).toBe("slate");
+    expect(JSON.parse(localStorage.getItem("nimbus-theme") ?? "{}")).toEqual({ surface: "glass" });
   });
 
   it("starts from the defaults when the saved choice is unreadable", () => {

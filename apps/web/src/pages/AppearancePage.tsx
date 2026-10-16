@@ -23,13 +23,12 @@ export default function AppearancePage() {
           </Text>
         </div>
         <Panel p="lg">
-          <Stack gap="md">
-            <div>
-              <ThemePicker />
-            </div>
+          {/* Left-aligned, so the picker keeps its own width instead of stretching across the panel. */}
+          <Stack gap="md" align="flex-start">
+            <ThemePicker />
             <Text size="sm" c="dimmed">
-              Paper is light and Ink is dark. Until you pick one, Nimbus follows your system&apos;s
-              light or dark setting.
+              Paper and Fog are light; Ink and Slate are dark. System follows your device&apos;s
+              light or dark setting, and keeps flat or glass as you last chose.
             </Text>
           </Stack>
         </Panel>

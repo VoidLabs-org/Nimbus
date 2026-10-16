@@ -75,10 +75,14 @@ type NimbusTheme = {
   mode: Mode;
   surface: Surface;
   theme: ThemeName;
+  /** True until the User picks light or dark: the mode then follows the system's setting, live. */
+  followsSystem: boolean;
   setMode: (mode: Mode) => void;
   setSurface: (surface: Surface) => void;
   /** Sets both settings at once. */
   setTheme: (theme: ThemeName) => void;
+  /** Forgets the chosen light or dark, so the mode follows the system again; the surface stays as chosen. */
+  followSystem: () => void;
 };
 
 const NimbusThemeContext = createContext<NimbusTheme | null>(null);
@@ -109,12 +113,20 @@ export function NimbusThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
+  // Another tab changed the theme: follow it, so the two never fight over the stored value.
+  useEffect(() => {
+    const follow = (event: StorageEvent) => {
+      if (event.key === THEME_STORAGE_KEY || event.key === null) setChosen(readChosen());
+    };
+    window.addEventListener("storage", follow);
+    return () => window.removeEventListener("storage", follow);
+  }, []);
+
+  // Merged into what is stored now, not this tab's copy, so a change made in another tab is never undone.
   function choose(next: Chosen) {
-    setChosen((current) => {
-      const merged = { ...current, ...next };
-      writeChosen(merged);
-      return merged;
-    });
+    const merged = { ...readChosen(), ...next };
+    writeChosen(merged);
+    setChosen(merged);
   }
 
   const value: NimbusTheme = {
@@ -124,6 +136,8 @@ export function NimbusThemeProvider({ children }: { children: ReactNode }) {
     setMode: (next) => choose({ mode: next }),
     setSurface: (next) => choose({ surface: next }),
     setTheme: (next) => choose(settingsOf(next)),
+    followsSystem: chosen.mode === undefined,
+    followSystem: () => choose({ mode: undefined }),
   };
 
   return (

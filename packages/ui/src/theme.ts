@@ -11,7 +11,8 @@ import {
   type VariantColorsResolver,
 } from "@mantine/core";
 
-// Brand orange: 10 shades, lightest to darkest, built around #ff6b3d (shade 5).
+// Brand orange: 10 shades, lightest to darkest, built around #ff6b3d (shade 5). Mantine needs real colours here
+// to work out its tints; on the page, shades 1 to 9 come from the theme's accent variables (orangeShades below).
 const nimbus: MantineColorsTuple = [
   "#fff7f3",
   "#ffefe7",
@@ -26,15 +27,26 @@ const nimbus: MantineColorsTuple = [
 ];
 
 // Filled orange buttons carry dark text: white on #ff6b3d is about 2.9:1, too faint to read comfortably. Hover
-// goes lighter, not darker, so the dark text stays readable.
+// goes lighter, not darker (--accent-hover, per theme), so the dark text stays readable. Any shade of the orange
+// counts, such as "nimbus.6".
 const variantColorResolver: VariantColorsResolver = (input) => {
   const colors = defaultVariantColorsResolver(input);
-  const primary = !input.color || input.color === input.theme.primaryColor;
-  if (input.variant === "filled" && primary) {
-    return { ...colors, color: "var(--on-accent)", hover: "var(--mantine-color-nimbus-4)" };
+  const primary = input.theme.primaryColor;
+  const orange = !input.color || input.color === primary || input.color.startsWith(`${primary}.`);
+  if (input.variant === "filled" && orange) {
+    return { ...colors, color: "var(--on-accent)", hover: "var(--accent-hover)" };
   }
   return colors;
 };
+
+// Mantine's orange shades follow the theme's accent variables, which Ink and Slate lighten for dark backgrounds,
+// so c="nimbus.7" and var(--color-accent-700) are always the same colour.
+const orangeShades = Object.fromEntries(
+  [1, 2, 3, 4, 5, 6, 7, 8, 9].map((shade) => [
+    `--mantine-color-nimbus-${shade}`,
+    `var(--color-accent-${shade}00)`,
+  ]),
+);
 
 /**
  * Points Mantine's own colours at the Nimbus theme variables (themes.css), so stock components (menus, modals,
@@ -51,6 +63,7 @@ export const cssVariablesResolver: CSSVariablesResolver = () => {
     "--mantine-color-default-color": "var(--color-text)",
     "--mantine-color-default-border": "var(--line-strong)",
     "--mantine-color-anchor": "var(--color-accent-700)",
+    ...orangeShades,
   };
   return { variables: {}, light: shared, dark: shared };
 };

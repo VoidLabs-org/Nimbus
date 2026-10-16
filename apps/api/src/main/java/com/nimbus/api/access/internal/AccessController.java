@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -17,6 +18,7 @@ import jakarta.validation.constraints.Null;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nimbus.api.access.Authorize;
 import com.nimbus.api.access.Kind;
 import com.nimbus.api.access.Scope;
@@ -56,8 +58,10 @@ class AccessController {
 
 	private final Users users;
 
+	private final ProjectScopeChecks projectScopes;
+
 	AccessController(Catalog catalog, Roles roles, PlatformPermissionChecks platformPermissions,
-			CurrentUser currentUser, RoleEditor editor, AuditLog audit, Users users) {
+			CurrentUser currentUser, RoleEditor editor, AuditLog audit, Users users, ProjectScopeChecks projectScopes) {
 		this.catalog = catalog;
 		this.roles = roles;
 		this.platformPermissions = platformPermissions;
@@ -65,6 +69,7 @@ class AccessController {
 		this.editor = editor;
 		this.audit = audit;
 		this.users = users;
+		this.projectScopes = projectScopes;
 	}
 
 	/** Who made a change; {@code null} in the entry when it was the system. */
@@ -125,7 +130,12 @@ class AccessController {
 			boolean locked, int version, List<Roles.GrantView> grants, Integer holders, List<String> newPermissions) {
 	}
 
-	record MyPermissionsResponse(List<String> platform) {
+	/**
+	 * @param project only when a project was asked about: each project permission the User has there, with its
+	 * widest Scope
+	 */
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	record MyPermissionsResponse(List<String> platform, Map<String, String> project) {
 	}
 
 	/** Surrounding whitespace is dropped from the name and description before validation. */
@@ -235,10 +245,21 @@ class AccessController {
 		return role(key);
 	}
 
-	/** The signed-in User's platform permissions; anyone signed in may ask. */
+	/**
+	 * The signed-in User's platform permissions and, given a project, their Scopes there; anyone signed in may ask.
+	 * {@code access} doesn't know which projects exist, so for any other id this is what platform roles allow.
+	 */
 	@GetMapping("/me/permissions")
-	MyPermissionsResponse myPermissions() {
-		return new MyPermissionsResponse(platformPermissions.heldBy(currentUser.id()));
+	MyPermissionsResponse myPermissions(@RequestParam(required = false) UUID project) {
+		var user = currentUser.id();
+		Map<String, String> scopes = null;
+		if (project != null) {
+			scopes = new TreeMap<>();
+			for (var held : projectScopes.heldIn(user, project).entrySet()) {
+				scopes.put(held.getKey(), lower(held.getValue()));
+			}
+		}
+		return new MyPermissionsResponse(platformPermissions.heldBy(user), scopes);
 	}
 
 	private static String lower(Kind kind) {

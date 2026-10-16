@@ -645,13 +645,24 @@ paths:
   /api/access/me/permissions:
     get:
       tags: [access]
-      summary: What the signed-in User may do across Nimbus
+      summary: What the signed-in User may do across Nimbus and in a project
       description: >-
         The signed-in User's platform permissions (from Everyone and their platform roles), sorted, so the web app
-        can hide what they can't use. The server checks every action anyway.
+        can hide what they can't use. With `project`, also their widest Scope for each project permission they have
+        in that project, from their project role there, their platform roles and Everyone. access doesn't know which
+        projects exist, so any other id gets what platform roles and Everyone allow. The server checks every action
+        anyway.
+      parameters:
+        - name: project
+          in: query
+          required: false
+          description: The project's id (from `GET /api/projects/{key}`)
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
-          description: Their platform permissions
+          description: Their platform permissions, and their Scopes in the project when one was given
           content:
             application/json:
               schema:
@@ -663,6 +674,19 @@ paths:
                     items:
                       type: string
                     example: [projects:project:create]
+                  project:
+                    type: object
+                    description: >-
+                      Only when `project` was given: project permission key to its widest Scope. Permissions the
+                      User lacks there are left out.
+                    additionalProperties:
+                      type: string
+                      enum: [own, project, all]
+                    example:
+                      projects:project:update: project
+                      projects:member:manage: project
+        "400":
+          description: "`project` is not a UUID"
         "401":
           $ref: "#/components/responses/Unauthorized"
 

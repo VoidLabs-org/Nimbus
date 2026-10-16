@@ -21,7 +21,7 @@ import { useSession } from "./useSession";
 
 /**
  * The signed-in User's menu: who they are (avatar or initials, and display name), a way to change the
- * display name, set or change their password, Roles & access for those who manage Roles, the Audit log for those who may read it, and sign out. Signing out ends this browser's session only. Once it succeeds, RequireUser
+ * display name, set or change their password, Appearance, Roles & access for those who manage Roles, the Audit log for those who may read it, and sign out. Signing out ends this browser's session only. Once it succeeds, RequireUser
  * sends the User to the sign-in page; this menu doesn't navigate itself.
  */
 export function UserMenu() {
@@ -74,6 +74,9 @@ export function UserMenu() {
           <Menu.Item onClick={() => setEditing(true)}>Change display name</Menu.Item>
           <Menu.Item onClick={() => setChangingPassword(true)}>
             {user.hasPassword ? "Change password" : "Set password"}
+          </Menu.Item>
+          <Menu.Item component={Link} to="/settings/appearance">
+            Appearance
           </Menu.Item>
           {canManageRoles && (
             <Menu.Item component={Link} to="/settings/roles">

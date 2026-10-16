@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from "react-router";
 import { RequireUser, SessionProvider } from "./auth/session";
+import AppearancePage from "./pages/AppearancePage";
 import AuditLogPage from "./pages/AuditLogPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import HomePage from "./pages/HomePage";
@@ -34,6 +35,14 @@ export default function App() {
             element={
               <RequireUser>
                 <RolePage />
+              </RequireUser>
+            }
+          />
+          <Route
+            path="/settings/appearance"
+            element={
+              <RequireUser>
+                <AppearancePage />
               </RequireUser>
             }
           />

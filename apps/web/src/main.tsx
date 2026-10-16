@@ -3,16 +3,17 @@ import { createRoot } from "react-dom/client";
 import "@mantine/core/styles.css";
 // Notifications styles must come after core styles
 import "@mantine/notifications/styles.css";
-import { MantineProvider } from "@mantine/core";
+// The four Nimbus themes, after Mantine's styles so they win
+import "@repo/ui/themes.css";
 import { Notifications } from "@mantine/notifications";
-import { theme } from "@repo/ui/theme";
+import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import App from "./App.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="auto">
+    <NimbusThemeProvider>
       <Notifications />
       <App />
-    </MantineProvider>
+    </NimbusThemeProvider>
   </StrictMode>,
 );

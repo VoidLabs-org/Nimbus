@@ -24,7 +24,6 @@ import com.nimbus.api.identity.CurrentUser;
 import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
 import org.springframework.http.HttpStatus;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -41,7 +40,6 @@ import tools.jackson.databind.JsonNode;
 /** The read-only Roles pages and what the signed-in User may do, for the web app to hide the rest. */
 @RestController
 @RequestMapping("/api/access")
-@Validated
 class AccessController {
 
 	private final Catalog catalog;
@@ -73,22 +71,25 @@ class AccessController {
 	record ActorResponse(UUID id, String displayName, String email) {
 	}
 
-	record TargetResponse(String type, String key) {
+	/** @param exists whether the Role still exists */
+	record TargetResponse(String type, String key, boolean exists) {
 	}
 
 	record AuditEntryResponse(UUID id, Instant at, ActorResponse actor, String action, TargetResponse target,
 			JsonNode before, JsonNode after) {
 	}
 
-	record AuditResponse(List<AuditEntryResponse> entries, int page, int size, long total) {
+	/** @param asOf pass it back with the next pages, so entries written meanwhile don't shift them */
+	record AuditResponse(List<AuditEntryResponse> entries, int page, int size, long total, long asOf) {
 	}
 
 	/** Newest first. A User who no longer exists is shown by id alone. */
 	@GetMapping("/audit")
 	@Authorize(AccessPermissions.VIEW_AUDIT)
 	AuditResponse audit(@RequestParam(defaultValue = "0") @Min(0) int page,
-			@RequestParam(defaultValue = "50") @Min(1) @Max(100) int size) {
-		var found = audit.page(page, size);
+			@RequestParam(defaultValue = "50") @Min(1) @Max(100) int size,
+			@RequestParam(required = false) @Min(0) Long asOf) {
+		var found = audit.page(page, size, asOf);
 		var actorIds = found.entries().stream().map(AuditLog.Entry::actorId).filter(id -> id != null).distinct().toList();
 		Map<UUID, UserSummary> actors = users.findAllById(actorIds).stream()
 			.collect(Collectors.toMap(UserSummary::id, Function.identity()));
@@ -100,8 +101,9 @@ class AccessController {
 						: new ActorResponse(user.id(), user.displayName(), user.email());
 			}
 			return new AuditEntryResponse(entry.id(), entry.at(), actor, entry.action(),
-					new TargetResponse(entry.targetType(), entry.targetKey()), entry.before(), entry.after());
-		}).toList(), page, size, found.total());
+					new TargetResponse(entry.targetType(), entry.targetKey(), entry.targetExists()), entry.before(),
+					entry.after());
+		}).toList(), page, size, found.total(), found.asOf());
 	}
 
 	/** @param reserved only Platform admin may hold it */

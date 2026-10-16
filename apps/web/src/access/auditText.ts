@@ -35,6 +35,8 @@ export function describeAuditEntry(entry: AuditEntry): string {
   switch (entry.action) {
     case "role.created":
       return `Created the ${String(after?.kind)} role "${String(after?.name)}"`;
+    case "role.described":
+      return "Changed the description";
     case "role.renamed": {
       const parts = [];
       if (before?.name !== after?.name)
@@ -48,10 +50,20 @@ export function describeAuditEntry(entry: AuditEntry): string {
       const changes = grantChanges(grantsOf(before), grantsOf(after));
       return `Reset to defaults${changes ? `: ${changes}` : ""}`;
     }
+    case "role.defaults_applied": {
+      const changes = grantChanges(grantsOf(before), grantsOf(after));
+      return `Brought back to its defaults at startup${changes ? `: ${changes}` : ""}`;
+    }
+    case "role.locked_grants_restored": {
+      const changes = grantChanges(grantsOf(before), grantsOf(after));
+      return `Gave back Permissions it must always hold${changes ? `: ${changes}` : ""}`;
+    }
     case "role.deleted":
       return `Deleted "${String(before?.name)}"`;
     case "catalog.unknown_grant":
       return `Has a Grant for ${String(after?.permission)}, which is no longer a Permission (ignored)`;
+    case "catalog.unknown_grant_resolved":
+      return `No longer has the Grant for ${String(after?.permission)}, which is no longer a Permission`;
     default:
       return entry.action;
   }

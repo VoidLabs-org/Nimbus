@@ -116,6 +116,11 @@ class RoleEditor {
 	void describe(UUID actor, String key, String name, String description, int version) {
 		var role = editable(key, version);
 		var before = snapshot(role.id());
+		var nameChanged = name != null && !name.equals(before.get("name"));
+		var descriptionChanged = description != null && !description.equals(before.get("description"));
+		if (!nameChanged && !descriptionChanged) {
+			return;
+		}
 		jdbc.sql("""
 				UPDATE access_roles SET name = COALESCE(:name, name), description = COALESCE(:description, description)
 				WHERE id = :id""")
@@ -125,8 +130,8 @@ class RoleEditor {
 			.update();
 		changed(role, false);
 		var after = snapshot(role.id());
-		audit.record(actor, "role.renamed", AuditLog.TargetType.ROLE, key, nameAndDescription(before),
-				nameAndDescription(after));
+		audit.record(actor, nameChanged ? "role.renamed" : "role.described", AuditLog.TargetType.ROLE, key,
+				nameAndDescription(before), nameAndDescription(after));
 	}
 
 	/** Replaces all of the Role's Grants with these. */
@@ -247,10 +252,7 @@ class RoleEditor {
 			.query((rs, n) -> Map.<String, Object>of("name", rs.getString("name"), "description",
 					rs.getString("description"), "kind", rs.getString("kind").toLowerCase(Locale.ROOT)))
 			.single());
-		Map<String, String> held = new TreeMap<>();
-		grants.of(roleId).forEach((permission, scope) -> held.put(permission,
-				scope == null ? null : scope.toLowerCase(Locale.ROOT)));
-		snapshot.put("grants", held);
+		snapshot.put("grants", GrantStore.forAudit(grants.of(roleId)));
 		return snapshot;
 	}
 

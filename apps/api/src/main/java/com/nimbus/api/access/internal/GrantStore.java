@@ -1,7 +1,9 @@
 package com.nimbus.api.access.internal;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -15,6 +17,13 @@ class GrantStore {
 
 	GrantStore(JdbcClient jdbc) {
 		this.jdbc = jdbc;
+	}
+
+	/** Grants as the audit log keeps them: sorted by key, Scopes in lowercase. */
+	static Map<String, String> forAudit(Map<String, String> grants) {
+		Map<String, String> sorted = new TreeMap<>();
+		grants.forEach((key, scope) -> sorted.put(key, scope == null ? null : scope.toLowerCase(Locale.ROOT)));
+		return sorted;
 	}
 
 	Map<String, String> of(UUID roleId) {

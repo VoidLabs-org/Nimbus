@@ -98,7 +98,7 @@ class StartupSync implements SmartInitializingSingleton {
 	}
 
 	private void syncBuiltIn(BuiltInRole role) {
-		jdbc.sql("""
+		var created = jdbc.sql("""
 				INSERT INTO access_roles (id, key, name, description, kind, built_in, customised, version, created_at)
 				VALUES (:id, :key, :name, :description, :kind, TRUE, FALSE, 0, :now)
 				ON CONFLICT (key) DO NOTHING""")
@@ -109,6 +109,11 @@ class StartupSync implements SmartInitializingSingleton {
 			.param("kind", role.kind().name())
 			.param("now", java.sql.Timestamp.from(Instant.now()))
 			.update();
+		if (created > 0) {
+			audit.record(null, "role.created", AuditLog.TargetType.ROLE, role.key(), null, java.util.Map.of("name",
+					role.defaultName(), "description", role.defaultDescription(), "kind",
+					role.kind().name().toLowerCase(java.util.Locale.ROOT)));
+		}
 		var row = jdbc.sql("SELECT id, customised, built_in FROM access_roles WHERE key = :key")
 			.param("key", role.key())
 			.query((rs, n) -> new Object[] { rs.getObject("id", UUID.class), rs.getBoolean("customised"),
@@ -122,6 +127,7 @@ class StartupSync implements SmartInitializingSingleton {
 		// Platform admin is locked: it is never customised and always holds everything. A customised Role keeps
 		// what the admin set, except Grants it must always hold.
 		if (role != BuiltInRole.PLATFORM_ADMIN && (boolean) row[1]) {
+			var before = grants.of(id);
 			defaults.lockedOf(role).forEach((key, scope) -> jdbc.sql("""
 					INSERT INTO access_role_grants (role_id, permission_key, scope) VALUES (:id, :key, :scope)
 					ON CONFLICT (role_id, permission_key) DO UPDATE SET scope = EXCLUDED.scope""")
@@ -129,13 +135,26 @@ class StartupSync implements SmartInitializingSingleton {
 				.param("key", key)
 				.param("scope", scope)
 				.update());
+			var after = grants.of(id);
+			if (!after.equals(before)) {
+				audit.record(null, "role.locked_grants_restored", AuditLog.TargetType.ROLE, role.key(),
+						java.util.Map.of("grants", GrantStore.forAudit(before)),
+						java.util.Map.of("grants", GrantStore.forAudit(after)));
+			}
 			return;
 		}
 		var wanted = defaults.grantsOf(role);
-		if (grants.of(id).equals(wanted)) {
+		var before = grants.of(id);
+		if (before.equals(wanted)) {
 			return;
 		}
 		grants.replace(id, wanted);
+		// A brand-new Role gets its first Grants here: that is part of creating it, not a change worth its own entry.
+		if (created == 0) {
+			audit.record(null, "role.defaults_applied", AuditLog.TargetType.ROLE, role.key(),
+					java.util.Map.of("grants", GrantStore.forAudit(before)),
+					java.util.Map.of("grants", GrantStore.forAudit(wanted)));
+		}
 		jdbc.sql("UPDATE access_roles SET version = version + 1 WHERE id = :id").param("id", id).update();
 	}
 
@@ -146,16 +165,11 @@ class StartupSync implements SmartInitializingSingleton {
 				WHERE g.permission_key NOT IN (SELECT key FROM access_permissions)
 				ORDER BY r.key, g.permission_key""")
 			.query(rs -> {
-				var role = rs.getString("role");
-				var permission = rs.getString("permission");
 				log.warn("Role {} has a Grant for {}, which is no longer a Permission; it is ignored. Rename or "
-						+ "remove it with a migration.", role, permission);
-				// Kept once in the audit log, not again at every startup.
-				var details = java.util.Map.of("permission", permission);
-				if (!audit.recordedBySystem("catalog.unknown_grant", role, details)) {
-					audit.record(null, "catalog.unknown_grant", AuditLog.TargetType.ROLE, role, null, details);
-				}
+						+ "remove it with a migration.", rs.getString("role"), rs.getString("permission"));
 			});
+		// In the audit log once when it appears and once when it is gone, not at every startup.
+		audit.recordUnknownGrantChanges();
 	}
 
 }

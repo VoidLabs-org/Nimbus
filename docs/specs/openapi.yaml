@@ -607,6 +607,12 @@ paths:
             minimum: 1
             maximum: 100
             default: 50
+        - name: asOf
+          in: query
+          description: The `asOf` of the first page; keeps later pages from shifting as new entries arrive
+          schema:
+            type: integer
+            minimum: 0
       responses:
         "200":
           description: One page of entries
@@ -614,7 +620,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [entries, page, size, total]
+                required: [entries, page, size, total, asOf]
                 properties:
                   entries:
                     type: array
@@ -626,6 +632,11 @@ paths:
                     type: integer
                   total:
                     type: integer
+                  asOf:
+                    type: integer
+                    description: The newest entry these pages cover; pass it back for the next pages
+        "400":
+          $ref: "#/components/responses/InvalidFields"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -925,20 +936,27 @@ components:
             [
               role.created,
               role.renamed,
+              role.described,
               role.grants_changed,
               role.reset,
               role.deleted,
+              role.defaults_applied,
+              role.locked_grants_restored,
               catalog.unknown_grant,
+              catalog.unknown_grant_resolved,
             ]
         target:
           type: object
-          required: [type, key]
+          required: [type, key, exists]
           properties:
             type:
               type: string
               enum: [role]
             key:
               type: string
+            exists:
+              type: boolean
+              description: Whether the Role still exists
         before:
           type: [object, "null"]
           description: The state before the change; null when there was none

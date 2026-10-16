@@ -1,6 +1,7 @@
 import {
   Alert,
   Anchor,
+  Button,
   Center,
   Container,
   Group,
@@ -13,6 +14,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { describeAuditEntry } from "../access/auditText";
+import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type AuditPage } from "../api/client";
 import { UserMenu } from "../auth/UserMenu";
 
@@ -23,30 +25,44 @@ const PAGE_SIZE = 50;
  * kept for good and never edited. Only Users with access:audit:view get the list.
  */
 export default function AuditLogPage() {
-  const [page, setPage] = useState(0);
-  const [loaded, setLoaded] = useState<AuditPage | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const canOpenRoles = usePlatformPermissions().includes("access:role:manage");
+  // `asOf` pins the set of entries the pages are cut from, so entries written meanwhile don't shift them; "Show newest"
+  // starts a fresh set. A result or an error belongs to the page it was asked for, so switching pages never shows
+  // the previous page's rows or an old error as if they were current.
+  const [view, setView] = useState<{ page: number; asOf?: number }>({ page: 0 });
+  const [result, setResult] = useState<{
+    page: number;
+    asOf?: number;
+    loaded?: AuditPage;
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     let current = true;
     api
-      .auditLog(page, PAGE_SIZE)
-      .then((found) => {
-        if (current) setLoaded(found);
+      .auditLog(view.page, PAGE_SIZE, view.asOf)
+      .then((loaded) => {
+        if (current) setResult({ page: view.page, asOf: view.asOf, loaded });
       })
       .catch((failure) => {
         if (!current) return;
-        setError(
-          failure instanceof ApiError && failure.status === 403
-            ? "You don't have permission to read the audit log."
-            : "Couldn't load the audit log. Please try again.",
-        );
+        setResult({
+          page: view.page,
+          asOf: view.asOf,
+          error:
+            failure instanceof ApiError && failure.status === 403
+              ? "You don't have permission to read the audit log."
+              : "Couldn't load the audit log. Please try again.",
+        });
       });
     return () => {
       current = false;
     };
-  }, [page]);
+  }, [view]);
 
+  const current = result && result.page === view.page && result.asOf === view.asOf ? result : null;
+  const loaded = current?.loaded ?? null;
+  const error = current?.error ?? null;
   const pages = loaded ? Math.max(1, Math.ceil(loaded.total / PAGE_SIZE)) : 1;
 
   return (
@@ -57,7 +73,12 @@ export default function AuditLogPage() {
         </Anchor>
         <UserMenu />
       </Group>
-      <Title order={2}>Audit log</Title>
+      <Group justify="space-between" align="flex-start">
+        <Title order={2}>Audit log</Title>
+        <Button variant="default" onClick={() => setView({ page: 0 })}>
+          Show newest
+        </Button>
+      </Group>
       <Text c="dimmed" mb="lg">
         Every change to Roles and their Permissions, newest first. Entries are never edited or
         deleted.
@@ -103,7 +124,7 @@ export default function AuditLogPage() {
                     )}
                   </Table.Td>
                   <Table.Td>
-                    {entry.action === "role.deleted" ? (
+                    {!entry.target.exists || !canOpenRoles ? (
                       <Text ff="monospace" size="sm">
                         {entry.target.key}
                       </Text>
@@ -127,7 +148,11 @@ export default function AuditLogPage() {
           </Table>
           {pages > 1 && (
             <Group justify="center" mt="md">
-              <Pagination total={pages} value={page + 1} onChange={(value) => setPage(value - 1)} />
+              <Pagination
+                total={pages}
+                value={view.page + 1}
+                onChange={(value) => setView({ page: value - 1, asOf: loaded?.asOf ?? view.asOf })}
+              />
             </Group>
           )}
         </>

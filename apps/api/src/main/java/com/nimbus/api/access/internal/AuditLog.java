@@ -28,14 +28,16 @@ class AuditLog {
 	 * One entry as read back.
 	 *
 	 * @param actorId {@code null} when the system did it
+	 * @param targetExists whether the Role it is about still exists, so the page links only to Roles it can open
 	 * @param before {@code null} when there was nothing before (created)
 	 * @param after {@code null} when there is nothing after (deleted)
 	 */
 	record Entry(UUID id, Instant at, UUID actorId, String action, String targetType, String targetKey,
-			JsonNode before, JsonNode after) {
+			boolean targetExists, JsonNode before, JsonNode after) {
 	}
 
-	record Page(List<Entry> entries, long total) {
+	/** @param asOf the newest entry this page set covers; pass it back for the next pages so they don't shift */
+	record Page(List<Entry> entries, long total, long asOf) {
 	}
 
 	private final JdbcClient jdbc;
@@ -63,31 +65,63 @@ class AuditLog {
 			.update();
 	}
 
-	/** Whether the system already recorded this exact entry, so a startup warning is kept once, not every restart. */
-	boolean recordedBySystem(String action, String targetKey, Object after) {
-		return jdbc.sql("""
-				SELECT EXISTS (SELECT 1 FROM access_audit_entries WHERE actor_id IS NULL AND action = :action
-				AND target_key = :key AND after = CAST(:after AS JSONB))""")
-			.param("action", action)
-			.param("key", targetKey)
-			.param("after", json.writeValueAsString(after))
-			.query(Boolean.class)
-			.single();
+	/**
+	 * Records Grants for keys no longer in the catalog: once when one appears, and once when it is gone again (fixed
+	 * by a migration, or its Role deleted), so the same Grant going stale later is recorded again. One statement
+	 * each, whatever the number of Grants.
+	 */
+	void recordUnknownGrantChanges() {
+		var states = """
+				WITH latest AS (
+				    SELECT DISTINCT ON (target_key, after ->> 'permission') target_key, after ->> 'permission' AS permission,
+				    action FROM access_audit_entries
+				    WHERE actor_id IS NULL AND action IN ('catalog.unknown_grant', 'catalog.unknown_grant_resolved')
+				    ORDER BY target_key, after ->> 'permission', seq DESC),
+				unknown AS (
+				    SELECT r.key AS role, g.permission_key AS permission FROM access_role_grants g
+				    JOIN access_roles r ON r.id = g.role_id
+				    WHERE g.permission_key NOT IN (SELECT key FROM access_permissions))
+				""";
+		jdbc.sql(states + """
+				INSERT INTO access_audit_entries (id, at, actor_id, action, target_type, target_key, before, after)
+				SELECT gen_random_uuid(), now(), NULL, 'catalog.unknown_grant_resolved', 'role', l.target_key, NULL,
+				jsonb_build_object('permission', l.permission) FROM latest l
+				WHERE l.action = 'catalog.unknown_grant'
+				AND NOT EXISTS (SELECT 1 FROM unknown u WHERE u.role = l.target_key AND u.permission = l.permission)""")
+			.update();
+		jdbc.sql(states + """
+				INSERT INTO access_audit_entries (id, at, actor_id, action, target_type, target_key, before, after)
+				SELECT gen_random_uuid(), now(), NULL, 'catalog.unknown_grant', 'role', u.role, NULL,
+				jsonb_build_object('permission', u.permission) FROM unknown u
+				LEFT JOIN latest l ON l.target_key = u.role AND l.permission = u.permission
+				WHERE l.action IS DISTINCT FROM 'catalog.unknown_grant'""")
+			.update();
 	}
 
-	/** Newest first. */
-	Page page(int page, int size) {
+	/**
+	 * Newest first, among entries up to {@code asOf} ({@code null}: the newest there is). Paging within that fixed set
+	 * means entries written meanwhile can't shift later pages, and a reader asks for them by starting again.
+	 */
+	Page page(int page, int size, Long asOf) {
+		var newest = asOf != null ? asOf
+				: jdbc.sql("SELECT COALESCE(MAX(seq), 0) FROM access_audit_entries").query(Long.class).single();
 		var entries = jdbc.sql("""
-				SELECT id, at, actor_id, action, target_type, target_key, before::text AS before, after::text AS after
-				FROM access_audit_entries ORDER BY seq DESC LIMIT :size OFFSET :offset""")
+				SELECT e.id, e.at, e.actor_id, e.action, e.target_type, e.target_key, e.before::text AS before,
+				e.after::text AS after, EXISTS (SELECT 1 FROM access_roles r WHERE r.key = e.target_key) AS target_exists
+				FROM access_audit_entries e WHERE e.seq <= :asOf ORDER BY e.seq DESC LIMIT :size OFFSET :offset""")
+			.param("asOf", newest)
 			.param("size", size)
 			.param("offset", (long) page * size)
 			.query((rs, n) -> new Entry(rs.getObject("id", UUID.class), rs.getTimestamp("at").toInstant(),
 					rs.getObject("actor_id", UUID.class), rs.getString("action"), rs.getString("target_type"),
-					rs.getString("target_key"), tree(rs.getString("before")), tree(rs.getString("after"))))
+					rs.getString("target_key"), rs.getBoolean("target_exists"), tree(rs.getString("before")),
+					tree(rs.getString("after"))))
 			.list();
-		var total = jdbc.sql("SELECT COUNT(*) FROM access_audit_entries").query(Long.class).single();
-		return new Page(entries, total);
+		var total = jdbc.sql("SELECT COUNT(*) FROM access_audit_entries WHERE seq <= :asOf")
+			.param("asOf", newest)
+			.query(Long.class)
+			.single();
+		return new Page(entries, total, newest);
 	}
 
 	private JsonNode tree(String text) {

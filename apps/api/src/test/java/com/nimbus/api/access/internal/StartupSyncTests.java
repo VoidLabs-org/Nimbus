@@ -84,6 +84,16 @@ class StartupSyncTests {
 			.query(Integer.class)
 			.single();
 		assertThat(warnings).isEqualTo(1);
+
+		// Fixed by a migration, then the same key goes stale again later: both are recorded.
+		jdbc.sql("DELETE FROM access_role_grants WHERE permission_key = 'projects:gone:away'").update();
+		startup.run();
+		jdbc.sql("INSERT INTO access_role_grants (role_id, permission_key, scope) VALUES (:id, 'projects:gone:away', NULL)")
+			.param("id", everyone)
+			.update();
+		startup.run();
+		assertThat(systemActions("everyone", "projects:gone:away"))
+			.containsExactly("catalog.unknown_grant", "catalog.unknown_grant_resolved", "catalog.unknown_grant");
 		assertThat(permissions.holds(UUID.randomUUID(), "projects:gone:away")).isFalse();
 		assertThat(roles.require("everyone").grants()).extracting(Roles.GrantView::permission)
 			.doesNotContain("projects:gone:away");
@@ -168,6 +178,12 @@ class StartupSyncTests {
 				assertThat(grant.locked()).isTrue();
 			});
 		assertThat(roles.require("project_admin").customised()).isTrue();
+		assertThat(jdbc.sql("""
+				SELECT COUNT(*) FROM access_audit_entries WHERE action = 'role.locked_grants_restored'
+				AND target_key = 'project_admin' AND actor_id IS NULL
+				AND after -> 'grants' ->> 'projects:member:manage' = 'project'""")
+			.query(Integer.class)
+			.single()).isPositive();
 
 		reset("project_admin");
 	}
@@ -184,6 +200,25 @@ class StartupSyncTests {
 		finally {
 			jdbc.sql("UPDATE access_roles SET built_in = TRUE WHERE key = 'viewer'").update();
 		}
+	}
+
+	@Test
+	void startupRecordsWhenItBringsABuiltInRoleBackToItsDefaults() {
+		var viewer = roles.require("viewer").id();
+		jdbc.sql("INSERT INTO access_role_grants (role_id, permission_key, scope) VALUES (:id, 'projects:project:update', 'PROJECT')")
+			.param("id", viewer)
+			.update();
+
+		startup.run();
+
+		var entry = jdbc.sql("""
+				SELECT before ->> 'grants' AS before, after ->> 'grants' AS after FROM access_audit_entries
+				WHERE action = 'role.defaults_applied' AND target_key = 'viewer' AND actor_id IS NULL
+				ORDER BY seq DESC LIMIT 1""")
+			.query((rs, n) -> new String[] { rs.getString("before"), rs.getString("after") })
+			.single();
+		assertThat(entry[0]).contains("projects:project:update");
+		assertThat(entry[1]).doesNotContain("projects:project:update");
 	}
 
 	@Test
@@ -221,6 +256,16 @@ class StartupSyncTests {
 			throw new IllegalStateException(e);
 		}
 		startup.run();
+	}
+
+	private java.util.List<String> systemActions(String role, String permission) {
+		return jdbc.sql("""
+				SELECT action FROM access_audit_entries WHERE actor_id IS NULL AND target_key = :role
+				AND action LIKE 'catalog.%' AND after ->> 'permission' = :permission ORDER BY seq""")
+			.param("role", role)
+			.param("permission", permission)
+			.query(String.class)
+			.list();
 	}
 
 	/** Back to the code defaults, so tests sharing this database don't affect each other. */

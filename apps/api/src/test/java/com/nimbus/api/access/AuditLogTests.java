@@ -70,7 +70,7 @@ class AuditLogTests {
 		send("POST", "/api/access/roles/viewer/reset", Map.of("version", version("viewer")));
 
 		assertThat(entriesAbout("viewer")).extracting(entry -> (String) entry.get("action"))
-			.startsWith("role.reset", "role.renamed");
+			.startsWith("role.reset", "role.described");
 	}
 
 	@Test
@@ -87,6 +87,60 @@ class AuditLogTests {
 
 		assertThat(entriesAbout("contested")).extracting(entry -> (String) entry.get("action"))
 			.containsExactly("role.renamed", "role.created");
+	}
+
+	@Test
+	void aSaveThatChangesNothingLeavesNoEntryAndADescriptionOnlyEditIsDescribed() {
+		post("/api/access/roles", Map.of("key", "steady", "name", "Steady", "description", "Same", "kind", "project"));
+		var opened = version("steady");
+
+		send("PATCH", "/api/access/roles/steady", Map.of("name", "Steady", "description", "Same", "version", opened));
+		assertThat(version("steady")).isEqualTo(opened);
+
+		send("PATCH", "/api/access/roles/steady", Map.of("description", "Different", "version", opened));
+
+		assertThat(entriesAbout("steady")).extracting(entry -> (String) entry.get("action"))
+			.containsExactly("role.described", "role.created");
+	}
+
+	@Test
+	void pagesStayTheSameWhileNewEntriesArrive() {
+		for (var i = 0; i < 3; i++) {
+			post("/api/access/roles", Map.of("key", "stable_" + i, "name", "Stable", "description", "", "kind", "project"));
+		}
+		var first = read("/api/access/audit?page=0&size=2");
+		long asOf = ((Number) JsonPath.read(first, "$.asOf")).longValue();
+		post("/api/access/roles", Map.of("key", "arrived_later", "name", "Later", "description", "", "kind", "project"));
+
+		var second = read("/api/access/audit?page=1&size=2&asOf=" + asOf);
+
+		List<String> firstIds = JsonPath.read(first, "$.entries[*].id");
+		List<String> secondIds = JsonPath.read(second, "$.entries[*].id");
+		assertThat(secondIds).doesNotContainAnyElementsOf(firstIds);
+		assertThat(JsonPath.<Integer>read(second, "$.total")).isEqualTo(JsonPath.<Integer>read(first, "$.total"));
+		assertThat(JsonPath.<List<String>>read(second, "$.entries[*].target.key")).doesNotContain("arrived_later");
+	}
+
+	@Test
+	void invalidPagingIsRefusedNotACrash() {
+		for (var query : List.of("page=-1", "size=0", "size=101", "asOf=-5")) {
+			client.get().uri("/api/access/audit?" + query)
+				.header("Authorization", "Bearer " + admin)
+				.exchange()
+				.expectStatus().isBadRequest();
+		}
+	}
+
+	@Test
+	void anEntrySaysWhetherItsRoleStillExists() {
+		post("/api/access/roles", Map.of("key", "short_lived", "name", "Short", "description", "", "kind", "project"));
+		post("/api/access/roles", Map.of("key", "long_lived", "name", "Long", "description", "", "kind", "project"));
+		send("DELETE", "/api/access/roles/short_lived", null);
+
+		assertThat(entriesAbout("short_lived")).extracting(entry -> JsonPath.<Boolean>read(entry, "$.target.exists"))
+			.containsOnly(false);
+		assertThat(entriesAbout("long_lived")).extracting(entry -> JsonPath.<Boolean>read(entry, "$.target.exists"))
+			.containsOnly(true);
 	}
 
 	@Test

@@ -73,6 +73,17 @@ export type Role = Omit<RoleSummary, "permissions"> & {
   newPermissions: string[];
 };
 
+/** A User holding a platform role. */
+export type RoleHolder = {
+  id: string;
+  /** Null, like the name, for a User who no longer exists. */
+  email: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  /** When they were given the Role (ISO 8601). */
+  since: string;
+};
+
 export type NewRoleInput = { key: string; name: string; description: string; kind: Kind };
 
 /** One change in the audit log. */
@@ -82,7 +93,7 @@ export type AuditEntry = {
   at: string;
   /** Who did it; null when the system did (e.g. a warning at startup). Name and email are null for a User who no longer exists. */
   actor: { id: string; displayName: string | null; email: string | null } | null;
-  /** e.g. role.created, role.renamed, role.grants_changed, role.reset, role.deleted, catalog.unknown_grant */
+  /** e.g. role.created, role.renamed, role.grants_changed, role.reset, role.deleted, role.assigned, role.unassigned, catalog.unknown_grant */
   action: string;
   /** `exists` is false once the Role has been deleted. */
   target: { type: string; key: string; exists: boolean };
@@ -359,6 +370,24 @@ export function createApiClient(
 
     /** Deletes a custom Role nobody holds; a 409 says why not otherwise. */
     deleteRole: (key: string) => request<void>(rolePath(key), { method: "DELETE" }),
+
+    /** The Users holding a platform role. Needs access:role:assign; 409 for Everyone and project roles. */
+    roleHolders: (key: string) =>
+      request<{ users: RoleHolder[] }>(`${rolePath(key)}/users`).then((response) => response.users),
+
+    /**
+     * Gives a platform role to the User with this email. 404 if nobody has it, 409 if they already hold the
+     * Role, 403 for the signed-in User's own email.
+     */
+    giveRole: (key: string, email: string) =>
+      request<RoleHolder>(`${rolePath(key)}/users`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+
+    /** Takes a platform role away. 409 for the last Platform admin, 403 for the signed-in User. */
+    takeRole: (key: string, userId: string) =>
+      request<void>(`${rolePath(key)}/users/${encodeURIComponent(userId)}`, { method: "DELETE" }),
   };
 }
 

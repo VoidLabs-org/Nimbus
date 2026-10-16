@@ -1,8 +1,6 @@
 package com.nimbus.api.access.internal;
 
-import java.time.Instant;
 import java.util.Locale;
-import java.util.UUID;
 
 import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.identity.UserRegistered;
@@ -11,7 +9,6 @@ import com.nimbus.api.identity.Users;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,17 +26,14 @@ class PlatformAdminBootstrap {
 
 	private final Users users;
 
-	private final JdbcClient jdbc;
-
 	private final String adminEmail;
 
-	private final RequestMemo memo;
+	private final PlatformRoleHolders holders;
 
-	PlatformAdminBootstrap(Users users, JdbcClient jdbc, @Value("${nimbus.admin.email:}") String adminEmail,
-			RequestMemo memo) {
+	PlatformAdminBootstrap(Users users, PlatformRoleHolders holders,
+			@Value("${nimbus.admin.email:}") String adminEmail) {
 		this.users = users;
-		this.jdbc = jdbc;
-		this.memo = memo;
+		this.holders = holders;
 		this.adminEmail = adminEmail.strip().toLowerCase(Locale.ROOT);
 	}
 
@@ -75,16 +69,7 @@ class PlatformAdminBootstrap {
 					+ "Platform admin. Signing in once with Google or GitHub on that email verifies it.", user.email());
 			return;
 		}
-		var added = jdbc.sql("""
-				INSERT INTO access_role_assignments (id, role_id, user_id, project_id, created_at)
-				SELECT :id, r.id, :user, NULL, :now FROM access_roles r WHERE r.key = 'platform_admin'
-				ON CONFLICT (user_id, role_id) WHERE project_id IS NULL DO NOTHING""")
-			.param("id", UUID.randomUUID())
-			.param("user", user.id())
-			.param("now", java.sql.Timestamp.from(Instant.now()))
-			.update();
-		if (added > 0) {
-			memo.clear();
+		if (holders.makePlatformAdmin(user)) {
 			log.info("Made {} Platform admin", user.email());
 		}
 	}

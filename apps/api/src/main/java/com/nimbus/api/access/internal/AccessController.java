@@ -60,8 +60,12 @@ class AccessController {
 
 	private final ProjectScopeChecks projectScopes;
 
+	private final PlatformRoleHolders holders;
+
 	AccessController(Catalog catalog, Roles roles, PlatformPermissionChecks platformPermissions,
-			CurrentUser currentUser, RoleEditor editor, AuditLog audit, Users users, ProjectScopeChecks projectScopes) {
+			CurrentUser currentUser, RoleEditor editor, AuditLog audit, Users users, ProjectScopeChecks projectScopes,
+			PlatformRoleHolders holders) {
+		this.holders = holders;
 		this.catalog = catalog;
 		this.roles = roles;
 		this.platformPermissions = platformPermissions;
@@ -243,6 +247,33 @@ class AccessController {
 	RoleResponse reset(@PathVariable String key, @Valid @RequestBody ResetRoleRequest request) {
 		editor.reset(currentUser.id(), key, request.version());
 		return role(key);
+	}
+
+	record HoldersResponse(List<PlatformRoleHolders.Holder> users) {
+	}
+
+	record GiveRoleRequest(@NotBlank(message = "Enter an email") @Size(max = 320) String email) {
+	}
+
+	/** Who holds a platform role. {@code 409} for Everyone and project roles. */
+	@GetMapping("/roles/{key}/users")
+	@Authorize(AccessPermissions.ASSIGN_ROLES)
+	HoldersResponse holders(@PathVariable String key) {
+		return new HoldersResponse(holders.of(key));
+	}
+
+	@PostMapping("/roles/{key}/users")
+	@ResponseStatus(HttpStatus.CREATED)
+	@Authorize(AccessPermissions.ASSIGN_ROLES)
+	PlatformRoleHolders.Holder give(@PathVariable String key, @Valid @RequestBody GiveRoleRequest request) {
+		return holders.give(currentUser.id(), key, request.email());
+	}
+
+	@DeleteMapping("/roles/{key}/users/{userId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	@Authorize(AccessPermissions.ASSIGN_ROLES)
+	void take(@PathVariable String key, @PathVariable UUID userId) {
+		holders.take(currentUser.id(), key, userId);
 	}
 
 	/**

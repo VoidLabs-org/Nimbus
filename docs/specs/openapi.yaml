@@ -586,6 +586,131 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/access/roles/{key}/users:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [access]
+      summary: Who holds a platform role
+      description: >-
+        Sorted by display name, then email. Everyone (held by every signed-in User) and project roles (given on a
+        project's Members page) have no holders here. Needs `access:role:assign`.
+      responses:
+        "200":
+          description: Its holders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users]
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RoleHolder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/NoHoldersHere"
+    post:
+      tags: [access]
+      summary: Give a platform role to a User by email
+      description: >-
+        Finds the User by exact email (any case, surrounding whitespace ignored). Nobody gives themselves a Role.
+        Recorded in the audit log. Needs `access:role:assign`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  maxLength: 320
+      responses:
+        "201":
+          description: The new holder
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleHolder"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The User lacks `access:role:assign`, or the email is their own
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No Role has this key, or no User has this email
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: They already hold it, haven't verified their email (only Google or GitHub sign-in proves it), or it is Everyone or a project role
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/access/roles/{key}/users/{userId}:
+    delete:
+      tags: [access]
+      summary: Take a platform role away from a User
+      description: >-
+        Nobody takes their own Role away, and Platform admin is never taken from its last holder: the check runs
+        under a lock, so two admins removing each other at once can't both succeed. Recorded in the audit log. Needs
+        `access:role:assign`.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Taken away
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The User lacks `access:role:assign`, or it is their own assignment
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No Role has this key, or the User doesn't hold it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The last Platform admin, or Everyone or a project role
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /api/access/audit:
     get:
       tags: [access]
@@ -930,6 +1055,26 @@ components:
           enum: [own, project, all, null]
           description: Null for platform permissions
 
+    RoleHolder:
+      type: object
+      description: A User holding a platform role
+      required: [id, email, displayName, avatarUrl, since]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: [string, "null"]
+          description: Null, like the name, for a User who no longer exists
+        displayName:
+          type: [string, "null"]
+        avatarUrl:
+          type: [string, "null"]
+        since:
+          type: string
+          format: date-time
+          description: When they were given the Role
+
     AuditEntry:
       type: object
       required: [id, at, actor, action, target, before, after]
@@ -1095,6 +1240,12 @@ components:
       description: >-
         The Role changed since the given version, it is locked (Platform admin, or a Grant it must keep), it is
         built in (delete), or someone holds it (delete)
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NoHoldersHere:
+      description: Everyone (held by every signed-in User) or a project role (given on a project's Members page)
       content:
         application/problem+json:
           schema:

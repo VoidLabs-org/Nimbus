@@ -29,6 +29,12 @@ function grantChanges(before: Grants, after: Grants): string {
     .join("; ");
 }
 
+/** The User an assignment entry is about: the email they had then, or their id. */
+function userOf(state: Record<string, unknown> | null): string {
+  const user = state?.user as { id?: string; email?: string } | undefined;
+  return user?.email ?? user?.id ?? "a User";
+}
+
 /** One line saying what an audit entry recorded, for the Audit log page. */
 export function describeAuditEntry(entry: AuditEntry): string {
   const { before, after } = entry;
@@ -60,6 +66,10 @@ export function describeAuditEntry(entry: AuditEntry): string {
     }
     case "role.deleted":
       return `Deleted "${String(before?.name)}"`;
+    case "role.assigned":
+      return `Gave it to ${userOf(after)}`;
+    case "role.unassigned":
+      return `Took it from ${userOf(before)}`;
     case "catalog.unknown_grant":
       return `Has a Grant for ${String(after?.permission)}, which is no longer a Permission (ignored)`;
     case "catalog.unknown_grant_resolved":

@@ -16,6 +16,28 @@
       media="(prefers-color-scheme: dark)"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Applies the saved theme before the first paint, so a reload doesn't flash another one. NimbusThemeProvider
+      (packages/ui) decides the theme from then on; this must read the same storage key and give the same answer.
+    -->
+    <script>
+      (function () {
+        var saved = {};
+        try {
+          saved = JSON.parse(localStorage.getItem("nimbus-theme") || "{}") || {};
+        } catch (e) {}
+        var mode =
+          saved.mode === "light" || saved.mode === "dark"
+            ? saved.mode
+            : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        var glass = saved.surface === "glass";
+        var theme = mode === "light" ? (glass ? "fog" : "paper") : glass ? "slate" : "ink";
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.setAttribute("data-mantine-color-scheme", mode);
+      })();
+    </script>
     <title>Nimbus</title>
   </head>
   <body>

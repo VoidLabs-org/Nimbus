@@ -22,6 +22,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -75,6 +76,9 @@ class ProjectChecksTests {
 
 	@Autowired
 	RestTestClient client;
+
+	@Autowired
+	TransactionTemplate transaction;
 
 	@Test
 	void aMemberHasTheScopeTheirProjectRoleGrantsInThatProjectOnly() {
@@ -246,6 +250,49 @@ class ProjectChecksTests {
 		finally {
 			RequestContextHolder.resetRequestAttributes();
 		}
+	}
+
+	@Test
+	void aRequestForgetsWhatItReadInsideATransactionThatRolledBack() {
+		var user = UUID.randomUUID();
+		var project = UUID.randomUUID();
+		RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+		try {
+			transaction.executeWithoutResult(status -> {
+				projectRoles.give(null, project, user, "project_admin");
+				assertThat(scopes.scope(user, project, EDIT)).contains(Scope.PROJECT);
+				status.setRollbackOnly();
+			});
+
+			assertThat(scopes.scope(user, project, EDIT)).isEmpty();
+		}
+		finally {
+			RequestContextHolder.resetRequestAttributes();
+		}
+	}
+
+	@Test
+	void aCallerMayCatchARefusedChangeAndStillCommitItsTransaction() {
+		var user = UUID.randomUUID();
+		var project = UUID.randomUUID();
+
+		transaction.executeWithoutResult(status -> {
+			projectRoles.give(null, project, user, "viewer");
+			assertThatThrownBy(() -> projectRoles.give(null, project, user, "developer"))
+				.isInstanceOf(IllegalStateException.class);
+			assertThatThrownBy(() -> projectRoles.change(null, project, user, "platform_admin"))
+				.isInstanceOf(NotAProjectRoleException.class);
+			projectRoles.change(null, project, user, "developer");
+		});
+
+		assertThat(projectRoles.roleOf(project, user)).contains("developer");
+	}
+
+	@Test
+	void aMissingIdFailsLoudlyInsteadOfIgnoringTheProjectRole() {
+		assertThatThrownBy(() -> scopes.scope(UUID.randomUUID(), null, EDIT)).isInstanceOf(NullPointerException.class);
+		assertThatThrownBy(() -> scopes.scope(null, UUID.randomUUID(), EDIT)).isInstanceOf(NullPointerException.class);
+		assertThatThrownBy(() -> scopes.filter(null, EDIT)).isInstanceOf(NullPointerException.class);
 	}
 
 	/** Adds a Grant with Scope All to Everyone, as the Platform admin would on the Roles page. */

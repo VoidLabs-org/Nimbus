@@ -252,13 +252,8 @@ class AccessController {
 	@GetMapping("/me/permissions")
 	MyPermissionsResponse myPermissions(@RequestParam(required = false) UUID project) {
 		var user = currentUser.id();
-		Map<String, String> scopes = null;
-		if (project != null) {
-			scopes = new TreeMap<>();
-			for (var held : projectScopes.heldIn(user, project).entrySet()) {
-				scopes.put(held.getKey(), lower(held.getValue()));
-			}
-		}
+		var scopes = project == null ? null : projectScopes.heldIn(user, project).entrySet().stream()
+			.collect(Collectors.toMap(Map.Entry::getKey, held -> lower(held.getValue()), (a, b) -> a, TreeMap::new));
 		return new MyPermissionsResponse(platformPermissions.heldBy(user), scopes);
 	}
 

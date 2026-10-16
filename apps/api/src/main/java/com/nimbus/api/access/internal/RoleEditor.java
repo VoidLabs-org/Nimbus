@@ -192,20 +192,20 @@ class RoleEditor {
 		catch (IllegalArgumentException e) {
 			return "No such Scope: " + grant.scope();
 		}
+		if (Catalog.fits(permission, role.kind(), scope)) {
+			return null;
+		}
 		if (permission.kind() == Kind.PLATFORM) {
-			if (role.kind() == Kind.PROJECT) {
-				return "A platform permission can't be in a project role";
-			}
-			return scope == null ? null : "A platform permission has no Scope";
+			return role.kind() == Kind.PROJECT ? "A platform permission can't be in a project role"
+					: "A platform permission has no Scope";
 		}
 		if (role.kind() == Kind.PLATFORM) {
-			return scope == Scope.ALL ? null : "In a platform role, a project permission needs Scope All";
+			return "In a platform role, a project permission needs Scope All";
 		}
-		return scope != null && permission.scopes().contains(scope) ? null
-				: "In a project role this needs one of: " + permission.scopes().stream()
-					.sorted()
-					.map(allowed -> allowed.name().toLowerCase(Locale.ROOT))
-					.toList();
+		return "In a project role this needs one of: " + permission.scopes().stream()
+			.sorted()
+			.map(allowed -> allowed.name().toLowerCase(Locale.ROOT))
+			.toList();
 	}
 
 	/** Deletes a custom Role, only while nobody holds it, so nobody loses access by accident. */

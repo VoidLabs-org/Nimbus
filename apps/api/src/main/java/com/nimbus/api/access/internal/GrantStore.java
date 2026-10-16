@@ -15,8 +15,11 @@ class GrantStore {
 
 	private final JdbcClient jdbc;
 
-	GrantStore(JdbcClient jdbc) {
+	private final RequestMemo memo;
+
+	GrantStore(JdbcClient jdbc, RequestMemo memo) {
 		this.jdbc = jdbc;
+		this.memo = memo;
 	}
 
 	/** Grants as the audit log keeps them: sorted by key, Scopes in lowercase. */
@@ -44,6 +47,7 @@ class GrantStore {
 			.param("key", key)
 			.param("scope", scope)
 			.update());
+		memo.clear();
 	}
 
 }

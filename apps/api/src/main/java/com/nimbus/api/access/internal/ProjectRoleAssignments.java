@@ -11,9 +11,13 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Project Role assignments, one per User per project (a unique index guards it). */
+/**
+ * Project Role assignments, one per User per project (a unique index guards it). Callers join it to their own
+ * transaction. A refused change has written nothing when it throws, so its exceptions don't mark that transaction
+ * rollback-only: a caller may catch them and carry on.
+ */
 @Component
-@Transactional
+@Transactional(noRollbackFor = { IllegalStateException.class, NotAProjectRoleException.class })
 class ProjectRoleAssignments implements ProjectRoles {
 
 	private final JdbcClient jdbc;

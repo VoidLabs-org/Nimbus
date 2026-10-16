@@ -26,7 +26,7 @@ class PlatformPermissionChecks implements PlatformPermissions {
 
 	@Override
 	public boolean holds(UUID userId, String permission) {
-		if (catalog.find(permission).filter(found -> found.kind() == Kind.PLATFORM).isEmpty()) {
+		if (catalog.find(permission, Kind.PLATFORM).isEmpty()) {
 			return false;
 		}
 		return jdbc.sql("""
@@ -56,7 +56,7 @@ class PlatformPermissionChecks implements PlatformPermissions {
 			.query(String.class)
 			.list()
 			.stream()
-			.filter(key -> catalog.find(key).filter(found -> found.kind() == Kind.PLATFORM).isPresent())
+			.filter(key -> catalog.find(key, Kind.PLATFORM).isPresent())
 			.toList();
 	}
 

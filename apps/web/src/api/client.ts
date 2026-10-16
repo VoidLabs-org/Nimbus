@@ -313,15 +313,6 @@ export function createApiClient(
     changePassword: (input: ChangePasswordInput) =>
       request<void>("/api/users/me/password", { method: "PUT", body: JSON.stringify(input) }),
 
-    /**
-     * The signed-in User's widest Scope for each project permission they have in a project (permissions
-     * they lack are left out), so the app can hide what they can't use there.
-     */
-    myProjectScopes: (projectId: string) =>
-      request<{ platform: string[]; project: Record<string, Scope> }>(
-        `/api/access/me/permissions?project=${encodeURIComponent(projectId)}`,
-      ).then((response) => response.project),
-
     /** The signed-in User's platform permissions, so the app can hide what they can't use. */
     myPlatformPermissions: () =>
       request<{ platform: string[] }>("/api/access/me/permissions").then(

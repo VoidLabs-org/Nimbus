@@ -5,13 +5,15 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 
 /**
  * Remembers answers until the end of the current request, so a request asking the same thing several times reads
  * the database once. Outside a request (startup, a listener on another thread) nothing is remembered. Changes to
- * Role assignments clear it, so a request sees its own changes.
+ * Grants and Role assignments clear it, so a request sees its own changes.
  */
 @Component
 class RequestMemo {
@@ -32,7 +34,25 @@ class RequestMemo {
 		return answer;
 	}
 
+	/**
+	 * Forgets everything; every write to Grants or Role assignments calls it. It forgets again when the transaction
+	 * ends, so answers read inside a transaction that rolls back don't outlive it.
+	 */
 	void clear() {
+		forget();
+		if (TransactionSynchronizationManager.isSynchronizationActive()) {
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+
+				@Override
+				public void afterCompletion(int status) {
+					forget();
+				}
+
+			});
+		}
+	}
+
+	private static void forget() {
 		var answers = answers();
 		if (answers != null) {
 			answers.clear();

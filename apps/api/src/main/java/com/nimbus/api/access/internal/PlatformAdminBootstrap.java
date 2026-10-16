@@ -33,9 +33,13 @@ class PlatformAdminBootstrap {
 
 	private final String adminEmail;
 
-	PlatformAdminBootstrap(Users users, JdbcClient jdbc, @Value("${nimbus.admin.email:}") String adminEmail) {
+	private final RequestMemo memo;
+
+	PlatformAdminBootstrap(Users users, JdbcClient jdbc, @Value("${nimbus.admin.email:}") String adminEmail,
+			RequestMemo memo) {
 		this.users = users;
 		this.jdbc = jdbc;
+		this.memo = memo;
 		this.adminEmail = adminEmail.strip().toLowerCase(Locale.ROOT);
 	}
 
@@ -80,6 +84,7 @@ class PlatformAdminBootstrap {
 			.param("now", java.sql.Timestamp.from(Instant.now()))
 			.update();
 		if (added > 0) {
+			memo.clear();
 			log.info("Made {} Platform admin", user.email());
 		}
 	}

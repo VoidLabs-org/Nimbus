@@ -49,6 +49,23 @@ class Catalog {
 		return Optional.ofNullable(byKey.get(key));
 	}
 
+	/** The Permission, only if it is of this kind. */
+	Optional<Permission> find(String key, Kind kind) {
+		return find(key).filter(permission -> permission.kind() == kind);
+	}
+
+	/**
+	 * Whether a Grant of the Permission with this Scope fits a Role of this kind: a platform permission without a
+	 * Scope in a platform role; a project permission with {@code ALL} in a platform role, or with one of its allowed
+	 * Scopes in a project role. The Roles page refuses Grants that don't fit, and checks ignore them.
+	 */
+	static boolean fits(Permission permission, Kind roleKind, Scope scope) {
+		if (permission.kind() == Kind.PLATFORM) {
+			return roleKind == Kind.PLATFORM && scope == null;
+		}
+		return roleKind == Kind.PLATFORM ? scope == Scope.ALL : scope != null && permission.scopes().contains(scope);
+	}
+
 	private static String moduleOf(ModulePermissions declaration) {
 		var name = ClassUtils.getUserClass(declaration).getPackageName();
 		if (!name.startsWith(BASE_PACKAGE)) {

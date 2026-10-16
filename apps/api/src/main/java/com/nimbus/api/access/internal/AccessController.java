@@ -1,11 +1,18 @@
 package com.nimbus.api.access.internal;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Null;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -14,6 +21,8 @@ import com.nimbus.api.access.Authorize;
 import com.nimbus.api.access.Kind;
 import com.nimbus.api.access.Scope;
 import com.nimbus.api.identity.CurrentUser;
+import com.nimbus.api.identity.UserSummary;
+import com.nimbus.api.identity.Users;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,8 +32,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
 
 /** The read-only Roles pages and what the signed-in User may do, for the web app to hide the rest. */
 @RestController
@@ -41,13 +52,58 @@ class AccessController {
 
 	private final RoleEditor editor;
 
+	private final AuditLog audit;
+
+	private final Users users;
+
 	AccessController(Catalog catalog, Roles roles, PlatformPermissionChecks platformPermissions,
-			CurrentUser currentUser, RoleEditor editor) {
+			CurrentUser currentUser, RoleEditor editor, AuditLog audit, Users users) {
 		this.catalog = catalog;
 		this.roles = roles;
 		this.platformPermissions = platformPermissions;
 		this.currentUser = currentUser;
 		this.editor = editor;
+		this.audit = audit;
+		this.users = users;
+	}
+
+	/** Who made a change; {@code null} in the entry when it was the system. */
+	record ActorResponse(UUID id, String displayName, String email) {
+	}
+
+	/** @param exists whether the Role still exists */
+	record TargetResponse(String type, String key, boolean exists) {
+	}
+
+	record AuditEntryResponse(UUID id, Instant at, ActorResponse actor, String action, TargetResponse target,
+			JsonNode before, JsonNode after) {
+	}
+
+	/** @param asOf pass it back with the next pages, so entries written meanwhile don't shift them */
+	record AuditResponse(List<AuditEntryResponse> entries, int page, int size, long total, long asOf) {
+	}
+
+	/** Newest first. A User who no longer exists is shown by id alone. */
+	@GetMapping("/audit")
+	@Authorize(AccessPermissions.VIEW_AUDIT)
+	AuditResponse audit(@RequestParam(defaultValue = "0") @Min(0) int page,
+			@RequestParam(defaultValue = "50") @Min(1) @Max(100) int size,
+			@RequestParam(required = false) @Min(0) Long asOf) {
+		var found = audit.page(page, size, asOf);
+		var actorIds = found.entries().stream().map(AuditLog.Entry::actorId).filter(id -> id != null).distinct().toList();
+		Map<UUID, UserSummary> actors = users.findAllById(actorIds).stream()
+			.collect(Collectors.toMap(UserSummary::id, Function.identity()));
+		return new AuditResponse(found.entries().stream().map(entry -> {
+			ActorResponse actor = null;
+			if (entry.actorId() != null) {
+				var user = actors.get(entry.actorId());
+				actor = user == null ? new ActorResponse(entry.actorId(), null, null)
+						: new ActorResponse(user.id(), user.displayName(), user.email());
+			}
+			return new AuditEntryResponse(entry.id(), entry.at(), actor, entry.action(),
+					new TargetResponse(entry.targetType(), entry.targetKey(), entry.targetExists()), entry.before(),
+					entry.after());
+		}).toList(), page, size, found.total(), found.asOf());
 	}
 
 	/** @param reserved only Platform admin may hold it */
@@ -142,7 +198,7 @@ class AccessController {
 	@ResponseStatus(HttpStatus.CREATED)
 	@Authorize(AccessPermissions.MANAGE_ROLES)
 	RoleResponse create(@Valid @RequestBody CreateRoleRequest request) {
-		editor.create(request.key(), request.name(), request.description(),
+		editor.create(currentUser.id(), request.key(), request.name(), request.description(),
 				Kind.valueOf(request.kind().toUpperCase(Locale.ROOT)));
 		return role(request.key());
 	}
@@ -150,7 +206,7 @@ class AccessController {
 	@PatchMapping("/roles/{key}")
 	@Authorize(AccessPermissions.MANAGE_ROLES)
 	RoleResponse describe(@PathVariable String key, @Valid @RequestBody DescribeRoleRequest request) {
-		editor.describe(key, request.name(), request.description(), request.version());
+		editor.describe(currentUser.id(), key, request.name(), request.description(), request.version());
 		return role(key);
 	}
 
@@ -158,7 +214,7 @@ class AccessController {
 	@PutMapping("/roles/{key}/grants")
 	@Authorize(AccessPermissions.MANAGE_ROLES)
 	RoleResponse saveGrants(@PathVariable String key, @Valid @RequestBody SaveGrantsRequest request) {
-		editor.saveGrants(key, request.grants(), request.version());
+		editor.saveGrants(currentUser.id(), key, request.grants(), request.version());
 		return role(key);
 	}
 
@@ -166,7 +222,7 @@ class AccessController {
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	@Authorize(AccessPermissions.MANAGE_ROLES)
 	void delete(@PathVariable String key) {
-		editor.delete(key);
+		editor.delete(currentUser.id(), key);
 	}
 
 	record ResetRoleRequest(@NotNull(message = "Send the version the Role was opened at") Integer version) {
@@ -175,7 +231,7 @@ class AccessController {
 	@PostMapping("/roles/{key}/reset")
 	@Authorize(AccessPermissions.MANAGE_ROLES)
 	RoleResponse reset(@PathVariable String key, @Valid @RequestBody ResetRoleRequest request) {
-		editor.reset(key, request.version());
+		editor.reset(currentUser.id(), key, request.version());
 		return role(key);
 	}
 

@@ -586,6 +586,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/access/audit:
+    get:
+      tags: [access]
+      summary: The audit log, newest first
+      description: >-
+        Every change to Roles and their Grants, and startup warnings about the catalog. Entries are never edited
+        or deleted. Needs `access:audit:view`.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: asOf
+          in: query
+          description: The `asOf` of the first page; keeps later pages from shifting as new entries arrive
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: One page of entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries, page, size, total, asOf]
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEntry"
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+                  total:
+                    type: integer
+                  asOf:
+                    type: integer
+                    description: The newest entry these pages cover; pass it back for the next pages
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /api/access/me/permissions:
     get:
       tags: [access]
@@ -849,6 +905,64 @@ components:
           type: [string, "null"]
           enum: [own, project, all, null]
           description: Null for platform permissions
+
+    AuditEntry:
+      type: object
+      required: [id, at, actor, action, target, before, after]
+      properties:
+        id:
+          type: string
+          format: uuid
+        at:
+          type: string
+          format: date-time
+        actor:
+          description: Who did it; null when the system did. Name and email are null for a User who no longer exists.
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [id, displayName, email]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                displayName:
+                  type: [string, "null"]
+                email:
+                  type: [string, "null"]
+        action:
+          type: string
+          enum:
+            [
+              role.created,
+              role.renamed,
+              role.described,
+              role.grants_changed,
+              role.reset,
+              role.deleted,
+              role.defaults_applied,
+              role.locked_grants_restored,
+              catalog.unknown_grant,
+              catalog.unknown_grant_resolved,
+            ]
+        target:
+          type: object
+          required: [type, key, exists]
+          properties:
+            type:
+              type: string
+              enum: [role]
+            key:
+              type: string
+            exists:
+              type: boolean
+              description: Whether the Role still exists
+        before:
+          type: [object, "null"]
+          description: The state before the change; null when there was none
+        after:
+          type: [object, "null"]
+          description: The state after the change; null when there is none
 
     CreateRoleRequest:
       type: object

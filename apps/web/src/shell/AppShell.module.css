@@ -103,14 +103,17 @@
 }
 
 /* The bar's contents fade out as it folds and back in as it unfolds; the logo stands in for them while it is a pill. */
-.bar > :not(.pillLogo) {
+.contents {
+  display: contents;
+}
+
+.contents > * {
   opacity: 1;
   transition: opacity 180ms ease 120ms;
 }
 
-.shell[data-folded] .bar > :not(.pillLogo) {
+.shell[data-folded] .contents > * {
   opacity: 0;
-  pointer-events: none;
   transition-delay: 0ms;
 }
 
@@ -228,7 +231,7 @@
 @media (prefers-reduced-motion: reduce) {
   .bar,
   .content,
-  .bar > :not(.pillLogo),
+  .contents > *,
   .pillLogo {
     transition: none;
   }

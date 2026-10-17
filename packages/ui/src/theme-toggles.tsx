@@ -21,6 +21,7 @@ export function ThemeToggles({
       <UnstyledButton
         className="nimbus-toggle"
         aria-label="Dark mode"
+        data-nav-focus="dark"
         aria-pressed={dark}
         title="Light / dark"
         onClick={() => setMode(dark ? "light" : "dark")}
@@ -31,6 +32,7 @@ export function ThemeToggles({
       <UnstyledButton
         className="nimbus-toggle nimbus-toggle-glass"
         aria-label="Glass"
+        data-nav-focus="glass"
         aria-pressed={glass}
         title="Glass"
         onClick={() => setSurface(glass ? "flat" : "glass")}

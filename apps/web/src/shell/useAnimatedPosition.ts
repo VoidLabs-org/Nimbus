@@ -16,9 +16,14 @@ export function useAnimatedPosition(
   const reduceMotion = useReducedMotion();
   const instant = narrow || reduceMotion;
   const [state, setState] = useState(() => idleAt(target));
+  const [wasNarrow, setWasNarrow] = useState(narrow);
 
-  // Adjusting state to the props while rendering: either catch up at once, or begin a move.
-  if (instant && (state.shown !== target || state.phase !== "idle")) {
+  // Adjusting state to the props while rendering: catch up at once, or begin a move. Crossing the narrow breakpoint
+  // is a resize, not a choice, so the bar goes to its edge without the fold.
+  if (narrow !== wasNarrow) {
+    setWasNarrow(narrow);
+    setState(idleAt(target, state.corner));
+  } else if (instant && (state.shown !== target || state.phase !== "idle")) {
     setState(idleAt(target, state.corner));
   } else if (!instant && state.phase === "idle" && state.shown !== target) {
     setState(startMove(state.shown, target));

@@ -1,3 +1,4 @@
+import type { FloatingPosition } from "@mantine/core";
 import { useSyncExternalStore } from "react";
 
 /** Which edge of the window the navbar sits on. */
@@ -22,11 +23,9 @@ export function isVertical(position: NavPosition): boolean {
   return position === "left" || position === "right";
 }
 
-export type MenuPlacement = "bottom-end" | "top-end" | "right-end" | "left-end";
-
 /** Where the account menu opens from the avatar: towards the free side of the window. */
-export function menuPlacement(position: NavPosition): MenuPlacement {
-  const placements: Record<NavPosition, MenuPlacement> = {
+export function menuPlacement(position: NavPosition): FloatingPosition {
+  const placements: Record<NavPosition, FloatingPosition> = {
     top: "bottom-end",
     bottom: "top-end",
     left: "right-end",
@@ -110,4 +109,63 @@ export function shortcutPosition(event: {
 }): NavPosition | null {
   if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return null;
   return SHORTCUT_KEYS[event.key] ?? null;
+}
+
+/** The media query below which the navbar folds into a menu and is always at the top. */
+export const NARROW_QUERY = "(max-width: 61.99em)";
+
+/** Mantine's corners for toasts. */
+type ToastCorner = "top-right" | "bottom-right" | "bottom-left";
+
+/** Where toasts appear: a corner the bar isn't on, so one never covers the bar (the account chip is at its end). */
+export function notificationPosition(position: NavPosition): ToastCorner {
+  const corners: Record<NavPosition, ToastCorner> = {
+    top: "bottom-right",
+    bottom: "top-right",
+    left: "bottom-right",
+    right: "bottom-left",
+  };
+  return corners[position];
+}
+
+const NON_TYPING_INPUTS = [
+  "radio",
+  "checkbox",
+  "button",
+  "submit",
+  "reset",
+  "range",
+  "color",
+  "file",
+  "image",
+];
+
+/**
+ * Whether an element takes typed text, so keyboard shortcuts stand aside: text-like inputs, textareas, selects (arrow
+ * keys change their choice) and editable areas. Radio buttons, checkboxes and buttons don't.
+ */
+export function takesTyping(element: {
+  tagName: string;
+  type?: string;
+  isContentEditable?: boolean;
+}): boolean {
+  if (element.isContentEditable) return true;
+  if (element.tagName === "TEXTAREA" || element.tagName === "SELECT") return true;
+  return element.tagName === "INPUT" && !NON_TYPING_INPUTS.includes(element.type ?? "text");
+}
+
+// Which navbar control had keyboard focus when the shortcut moved the bar: its layout is rebuilt, so the same control
+// in the new layout gets the focus back (see AppShell).
+let focusedControl: string | null = null;
+
+/** Notes the control (its data-nav-focus) that has focus, before the bar changes layout. */
+export function rememberNavFocus(control: string | null) {
+  focusedControl = control;
+}
+
+/** The control to give focus back to, once; null if focus wasn't in the bar. */
+export function takeNavFocus(): string | null {
+  const control = focusedControl;
+  focusedControl = null;
+  return control;
 }

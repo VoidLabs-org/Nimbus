@@ -4,9 +4,13 @@ import {
   isVertical,
   menuPlacement,
   NAV_POSITION_KEY,
+  notificationPosition,
   parseNavPosition,
   readNavPosition,
+  rememberNavFocus,
   shortcutPosition,
+  takeNavFocus,
+  takesTyping,
   writeNavPosition,
 } from "./navPosition";
 
@@ -116,5 +120,41 @@ describe("shortcutPosition", () => {
     expect(shortcutPosition(keys("ArrowUp", { altKey: false }))).toBeNull();
     expect(shortcutPosition(keys("ArrowUp", { ctrlKey: true }))).toBeNull();
     expect(shortcutPosition(keys("ArrowUp", { metaKey: true }))).toBeNull();
+  });
+});
+
+describe("notificationPosition", () => {
+  it("puts toasts in a corner the bar isn't on", () => {
+    expect(notificationPosition("top")).toBe("bottom-right");
+    expect(notificationPosition("bottom")).toBe("top-right");
+    expect(notificationPosition("left")).toBe("bottom-right");
+    expect(notificationPosition("right")).toBe("bottom-left");
+  });
+});
+
+describe("takesTyping", () => {
+  it("is true for text fields, textareas, selects and editable areas", () => {
+    expect(takesTyping({ tagName: "INPUT", type: "text" })).toBe(true);
+    expect(takesTyping({ tagName: "INPUT", type: "email" })).toBe(true);
+    expect(takesTyping({ tagName: "INPUT" })).toBe(true);
+    expect(takesTyping({ tagName: "TEXTAREA" })).toBe(true);
+    expect(takesTyping({ tagName: "SELECT" })).toBe(true);
+    expect(takesTyping({ tagName: "DIV", isContentEditable: true })).toBe(true);
+  });
+
+  it("is false for radio buttons, checkboxes and buttons, which take no typing", () => {
+    expect(takesTyping({ tagName: "INPUT", type: "radio" })).toBe(false);
+    expect(takesTyping({ tagName: "INPUT", type: "checkbox" })).toBe(false);
+    expect(takesTyping({ tagName: "INPUT", type: "button" })).toBe(false);
+    expect(takesTyping({ tagName: "BUTTON" })).toBe(false);
+    expect(takesTyping({ tagName: "DIV" })).toBe(false);
+  });
+});
+
+describe("remembered focus", () => {
+  it("hands back the control that had focus once, then nothing", () => {
+    rememberNavFocus("dark");
+    expect(takeNavFocus()).toBe("dark");
+    expect(takeNavFocus()).toBeNull();
   });
 });

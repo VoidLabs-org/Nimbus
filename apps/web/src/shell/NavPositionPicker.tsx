@@ -1,6 +1,6 @@
 import { Kbd, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { NAV_POSITIONS, useNavPosition, type NavPosition } from "./navPosition";
+import { NARROW_QUERY, NAV_POSITIONS, useNavPosition, type NavPosition } from "./navPosition";
 import classes from "./NavPositionPicker.module.css";
 
 const LABELS: Record<NavPosition, string> = {
@@ -9,9 +9,6 @@ const LABELS: Record<NavPosition, string> = {
   left: "Left",
   right: "Right",
 };
-
-/** The same width the navbar folds into a menu at, where it can only be at the top. */
-const NARROW = "(max-width: 61.99em)";
 
 /** The shortcut's modifier keys, as this computer names them. */
 const MODIFIERS = /Mac|iPhone|iPad/.test(navigator.userAgent) ? ["⌥", "⇧"] : ["Alt", "Shift"];
@@ -23,7 +20,7 @@ const MODIFIERS = /Mac|iPhone|iPad/.test(navigator.userAgent) ? ["⌥", "⇧"] :
  */
 export function NavPositionPicker() {
   const [position, setPosition] = useNavPosition();
-  const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
+  const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
   return (
     <fieldset className={classes.fieldset}>
       <legend className={classes.legend}>Navbar position</legend>

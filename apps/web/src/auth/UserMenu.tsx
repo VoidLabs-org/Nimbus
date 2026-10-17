@@ -1,11 +1,10 @@
 import { IconChevronDown } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import { Avatar, Button, Group, Menu, Modal, Text } from "@mantine/core";
+import { Avatar, Button, Group, Menu, Modal, Text, type FloatingPosition } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { Link } from "react-router";
 import classes from "./UserMenu.module.css";
-import type { MenuPlacement } from "../shell/navPosition";
 import { useSession } from "./useSession";
 
 /**
@@ -21,7 +20,7 @@ export function UserMenu({
   /** Just the avatar, for the vertical rail. */
   compact?: boolean;
   /** Which side of the chip the menu opens on; towards the free side of the window. */
-  placement?: MenuPlacement;
+  placement?: FloatingPosition;
 }) {
   const { user, logout } = useSession();
   const [confirming, setConfirming] = useState(false);
@@ -56,6 +55,7 @@ export function UserMenu({
           <button
             type="button"
             className={compact ? `${classes.chip} ${classes.compact}` : classes.chip}
+            data-nav-focus="account"
             aria-label={`Account menu for ${user.displayName}`}
           >
             {/* Falls back to initials of the name when there is no image, or it fails to load. No referrer:

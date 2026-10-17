@@ -5,14 +5,14 @@ import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 // The four Nimbus themes, after Mantine's styles so they win
 import "@repo/ui/themes.css";
-import { Notifications } from "@mantine/notifications";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import App from "./App.tsx";
+import { AppNotifications } from "./shell/AppNotifications";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <NimbusThemeProvider>
-      <Notifications />
+      <AppNotifications />
       <App />
     </NimbusThemeProvider>
   </StrictMode>,

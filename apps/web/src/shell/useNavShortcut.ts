@@ -1,14 +1,15 @@
 import { useEffect } from "react";
-import { shortcutPosition, useNavPosition } from "./navPosition";
+import { rememberNavFocus, shortcutPosition, takesTyping, useNavPosition } from "./navPosition";
 
-/** Typing in a field: arrow keys belong to it, so the shortcut stands aside. */
-function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+/** A dialog (a Mantine modal) is open: the page behind it isn't the User's focus, so the bar doesn't move under it. */
+function dialogOpen(): boolean {
+  return document.querySelector('[aria-modal="true"]') !== null;
 }
 
 /**
- * Alt + Shift + an arrow key moves the navbar to that edge (see shortcutPosition). Off while `enabled` is false: on a
+ * Alt + Shift + an arrow key moves the navbar to that edge (see shortcutPosition). It stands aside while someone is
+ * typing in a field, while a dialog is open, and for a key something else already handled. If the keyboard focus was on
+ * a navbar control, the same control in the new layout gets it back (see AppShell). Off while `enabled` is false: on a
  * narrow screen the bar is always at the top, so the keys would change a setting nobody can see.
  */
 export function useNavShortcut(enabled: boolean) {
@@ -17,8 +18,14 @@ export function useNavShortcut(enabled: boolean) {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const next = shortcutPosition(event);
-      if (!next || isEditable(event.target)) return;
+      if (!next || event.defaultPrevented || dialogOpen()) return;
+      if (event.target instanceof HTMLElement && takesTyping(event.target)) return;
       event.preventDefault();
+      const control =
+        event.target instanceof Element
+          ? (event.target.closest("[data-nav-focus]")?.getAttribute("data-nav-focus") ?? null)
+          : null;
+      rememberNavFocus(control);
       setPosition(next);
     };
     window.addEventListener("keydown", onKeyDown);

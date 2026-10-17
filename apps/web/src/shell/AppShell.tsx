@@ -33,7 +33,7 @@ function DestinationLink({
       to={destination.to}
       end={destination.end}
       onClick={onOpen}
-      data-nav-focus="home"
+      data-nav-focus={destination.id}
       className={({ isActive }) => (isActive ? `${classes.link} ${classes.active}` : classes.link)}
     >
       {destination.label}
@@ -54,7 +54,7 @@ function RailLink({ destination, side }: { destination: Destination; side: "left
           to={destination.to}
           end={destination.end}
           aria-label={destination.label}
-          data-nav-focus="home"
+          data-nav-focus={destination.id}
           className={({ isActive }) =>
             isActive ? `${classes.railLink} ${classes.railActive}` : classes.railLink
           }

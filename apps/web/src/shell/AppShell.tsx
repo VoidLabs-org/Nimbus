@@ -1,23 +1,34 @@
-import { Burger, Container, Group, Menu, UnstyledButton } from "@mantine/core";
+import { Burger, Container, Group, Popover, Stack, UnstyledButton } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { useNimbusTheme } from "@repo/ui/nimbus-theme";
 import { ThemeToggles } from "@repo/ui/theme-toggles";
 import { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
-import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
 import classes from "./AppShell.module.css";
+import { useDestinations, type Destination } from "./navigation";
 
-type Destination = { to: string; label: string; end?: boolean };
+/** Below Mantine's `md` breakpoint the links and the theme capsule fold into a menu. */
+const NARROW = "(max-width: 61.99em)";
 
-/** The pages a signed-in User may open from the navbar: Roles & access and the Audit log only with their Permission. */
-function useDestinations(): Destination[] {
-  const platformPermissions = usePlatformPermissions();
-  const destinations: Destination[] = [{ to: "/", label: "Home", end: true }];
-  if (platformPermissions.includes("access:role:manage"))
-    destinations.push({ to: "/settings/roles", label: "Roles & access" });
-  if (platformPermissions.includes("access:audit:view"))
-    destinations.push({ to: "/settings/audit", label: "Audit log" });
-  return destinations;
+/** A navbar link: highlighted, and announced as the current page, while it is open. */
+function DestinationLink({
+  destination,
+  onOpen,
+}: {
+  destination: Destination;
+  onOpen?: () => void;
+}) {
+  return (
+    <NavLink
+      to={destination.to}
+      end={destination.end}
+      onClick={onOpen}
+      className={({ isActive }) => (isActive ? `${classes.link} ${classes.active}` : classes.link)}
+    >
+      {destination.label}
+    </NavLink>
+  );
 }
 
 /**
@@ -27,6 +38,7 @@ function useDestinations(): Destination[] {
 export function AppShell() {
   const { mode } = useNimbusTheme();
   const destinations = useDestinations();
+  const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -42,44 +54,51 @@ export function AppShell() {
           />
           nimbus
         </UnstyledButton>
-        <Group gap={4} visibleFrom="md" wrap="nowrap">
-          {destinations.map((destination) => (
-            <NavLink
-              key={destination.to}
-              to={destination.to}
-              end={destination.end}
-              className={({ isActive }) =>
-                isActive ? `${classes.link} ${classes.active}` : classes.link
-              }
-            >
-              {destination.label}
-            </NavLink>
-          ))}
-        </Group>
-        <Group visibleFrom="md" ml={8}>
-          <ThemeToggles />
-        </Group>
-        <Menu opened={menuOpen} onChange={setMenuOpen} position="bottom-end" width={240}>
-          <Menu.Target>
-            <Burger
-              hiddenFrom="md"
-              size="sm"
-              opened={menuOpen}
-              aria-label={menuOpen ? "Close the menu" : "Open the menu"}
-            />
-          </Menu.Target>
-          <Menu.Dropdown>
-            {destinations.map((destination) => (
-              <Menu.Item key={destination.to} component={Link} to={destination.to}>
-                {destination.label}
-              </Menu.Item>
-            ))}
-            <Menu.Divider />
-            <Group p="xs">
+        {narrow ? (
+          // Only rendered while narrow, so widening the window closes it instead of leaving it open, unanchored.
+          // A popover, not a Menu, so Tab reaches the theme buttons as well as the links.
+          <Popover
+            opened={menuOpen}
+            onChange={setMenuOpen}
+            position="bottom-end"
+            trapFocus
+            shadow="md"
+          >
+            <Popover.Target>
+              <Burger
+                size="sm"
+                opened={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-label={menuOpen ? "Close the menu" : "Open the menu"}
+              />
+            </Popover.Target>
+            <Popover.Dropdown>
+              <Stack gap={4}>
+                {destinations.map((destination) => (
+                  <DestinationLink
+                    key={destination.to}
+                    destination={destination}
+                    onOpen={() => setMenuOpen(false)}
+                  />
+                ))}
+                <Group mt="xs">
+                  <ThemeToggles />
+                </Group>
+              </Stack>
+            </Popover.Dropdown>
+          </Popover>
+        ) : (
+          <>
+            <Group gap={4} wrap="nowrap">
+              {destinations.map((destination) => (
+                <DestinationLink key={destination.to} destination={destination} />
+              ))}
+            </Group>
+            <Group ml={8}>
               <ThemeToggles />
             </Group>
-          </Menu.Dropdown>
-        </Menu>
+          </>
+        )}
         <UserMenu />
       </nav>
       <Outlet />

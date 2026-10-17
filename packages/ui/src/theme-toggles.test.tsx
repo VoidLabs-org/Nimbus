@@ -19,7 +19,15 @@ beforeEach(() => {
     }) as MediaQueryList;
 });
 
-afterEach(cleanup);
+const realMatchMedia = window.matchMedia;
+
+// Leave nothing behind for the next test: the real matchMedia, and no theme on the document.
+afterEach(() => {
+  cleanup();
+  window.matchMedia = realMatchMedia;
+  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-mantine-color-scheme");
+});
 
 describe("ThemeToggles", () => {
   it("turns dark and glass on and off, and says which are on", () => {

@@ -59,7 +59,13 @@ beforeEach(() => {
   root().removeAttribute("data-mantine-color-scheme");
 });
 
-afterEach(cleanup);
+const realMatchMedia = window.matchMedia;
+
+// Leave nothing behind for the next test: the real matchMedia (beforeEach clears the rest).
+afterEach(() => {
+  cleanup();
+  window.matchMedia = realMatchMedia;
+});
 
 describe("NimbusThemeProvider", () => {
   it("follows the system's light setting on a first visit, with flat surfaces", () => {

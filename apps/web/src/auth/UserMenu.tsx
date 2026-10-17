@@ -13,22 +13,19 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { Link } from "react-router";
-import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { displayNameError } from "./displayName";
 import { useSession } from "./useSession";
 
 /**
- * The signed-in User's menu: who they are (avatar or initials, and display name), a way to change the
- * display name, set or change their password, Appearance, Roles & access for those who manage Roles, the Audit log for those who may read it, and sign out. Signing out ends this browser's session only. Once it succeeds, RequireUser
- * sends the User to the sign-in page; this menu doesn't navigate itself.
+ * The signed-in User's own menu: who they are (avatar or initials, with the display name heading the menu), a way
+ * to change the display name, set or change their password, Appearance, and sign out. Pages such as Roles & access
+ * and the Audit log are in the navbar. Signing out ends this browser's session only. Once it succeeds,
+ * RequireUser sends the User to the sign-in page; this menu doesn't navigate itself.
  */
 export function UserMenu() {
   const { user, logout } = useSession();
-  const platformPermissions = usePlatformPermissions();
-  const canManageRoles = platformPermissions.includes("access:role:manage");
-  const canReadAudit = platformPermissions.includes("access:audit:view");
   const [signingOut, setSigningOut] = useState(false);
   const [editing, setEditing] = useState(false);
   // True while a rename is in flight; the dialog can't be dismissed then, or Cancel would be a lie.
@@ -77,16 +74,6 @@ export function UserMenu() {
           <Menu.Item component={Link} to="/settings/appearance">
             Appearance
           </Menu.Item>
-          {canManageRoles && (
-            <Menu.Item component={Link} to="/settings/roles">
-              Roles & access
-            </Menu.Item>
-          )}
-          {canReadAudit && (
-            <Menu.Item component={Link} to="/settings/audit">
-              Audit log
-            </Menu.Item>
-          )}
           <Menu.Item onClick={signOut} disabled={signingOut}>
             Sign out
           </Menu.Item>

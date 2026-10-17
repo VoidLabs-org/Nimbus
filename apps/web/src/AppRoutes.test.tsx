@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { User } from "./api/client";
 import { AppRoutes } from "./App";
+import { createQueryClient } from "./api/queryClient";
 import { SessionContext, type Session } from "./auth/useSession";
 
 const alice: User = {
@@ -39,9 +41,11 @@ function pageAt(path: string, user: User | null): string {
   return renderToStaticMarkup(
     <NimbusThemeProvider>
       <MemoryRouter initialEntries={[path]}>
-        <SessionContext value={session(user)}>
-          <AppRoutes />
-        </SessionContext>
+        <QueryClientProvider client={createQueryClient()}>
+          <SessionContext value={session(user)}>
+            <AppRoutes />
+          </SessionContext>
+        </QueryClientProvider>
       </MemoryRouter>
     </NimbusThemeProvider>,
   );

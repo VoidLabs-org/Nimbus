@@ -12,8 +12,9 @@ import { actorName, formatTime, grantChips, groupByDay } from "../access/auditVi
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
-import { api, type AuditEntry, type AuditPage } from "../api/client";
-import { failedLoad, type FailedLoad } from "../api/failure";
+import type { AuditEntry } from "../api/client";
+import { loadFailure, useAuditLog } from "../api/queries";
+import type { FailedLoad } from "../api/failure";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./AuditLogPage.module.css";
 import { AuditLogSkeleton } from "./AuditLogSkeleton";
@@ -44,46 +45,14 @@ export default function AuditLogPage() {
   const [opened, setOpened] = useState<AuditEntry | null>(null);
   const canOpenRoles = usePlatformPermissions().includes("access:role:manage");
   // `asOf` pins the set of entries the pages are cut from, so entries written meanwhile don't shift them; "Show newest"
-  // starts a fresh set. A result or an error belongs to the page it was asked for, so switching pages never shows
-  // the previous page's rows or an old error as if they were current.
+  // starts a fresh set.
   const [view, setView] = useState<{ page: number; asOf?: number }>({ page: 0 });
-  const [result, setResult] = useState<{
-    page: number;
-    asOf?: number;
-    loaded?: AuditPage;
-    error?: FailedLoad;
-  } | null>(null);
-
-  // The last page that arrived: it stays on screen, dimmed, while the next one loads, so the list doesn't collapse and
-  // the Pagination doesn't vanish under the User's pointer. The skeleton is only for the very first load.
-  const [shown, setShown] = useState<AuditPage | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    api
-      .auditLog(view.page, PAGE_SIZE, view.asOf)
-      .then((loaded) => {
-        if (!current) return;
-        setShown(loaded);
-        setResult({ page: view.page, asOf: view.asOf, loaded });
-      })
-      .catch((failure) => {
-        if (!current) return;
-        setResult({
-          page: view.page,
-          asOf: view.asOf,
-          error: failedLoad(failure),
-        });
-      });
-    return () => {
-      current = false;
-    };
-  }, [view]);
-
-  const current = result && result.page === view.page && result.asOf === view.asOf ? result : null;
-  const loaded = current?.loaded ?? shown;
-  const loading = !current?.loaded && !current?.error;
-  const error = current?.error ?? null;
+  // While the next page loads, the previous one stays on screen, dimmed, so the list doesn't collapse and the
+  // Pagination doesn't vanish under the User's pointer. The skeleton is only for the very first load.
+  const query = useAuditLog(view.page, PAGE_SIZE, view.asOf);
+  const loaded = query.data ?? null;
+  const error = loadFailure(query);
+  const loading = query.isPlaceholderData || (loaded === null && error === null);
   const pages = loaded ? Math.max(1, Math.ceil(loaded.total / PAGE_SIZE)) : 1;
 
   // Grouped per page, so a day that continues on the next page shows its heading there too.
@@ -91,8 +60,7 @@ export default function AuditLogPage() {
 
   // Asks for the same page once more.
   function retry() {
-    setResult(null);
-    setView({ ...view });
+    void query.refetch();
   }
 
   // The log couldn't be opened at all: the status page takes its place. A later page that fails is shown inline

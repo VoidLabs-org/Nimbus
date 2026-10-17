@@ -5,14 +5,14 @@ import { Panel } from "@repo/ui/panel";
 import { PillTabs } from "@repo/ui/pill-tabs";
 import { Loading } from "@repo/ui/skeleton";
 import { Tag } from "@repo/ui/tag";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { NewRoleModal } from "../access/NewRoleModal";
 import { heldBy, permissionCount, roleTag } from "../access/roleRow";
-import { api, type Kind, type RoleSummary } from "../api/client";
-import { failedLoad, type FailedLoad } from "../api/failure";
+import type { Kind, RoleSummary } from "../api/client";
+import { loadFailure, useRoles } from "../api/queries";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./RolesPage.module.css";
 import { RoleColumns } from "./RoleColumns";
@@ -39,39 +39,15 @@ function useKindTab(): [Kind, (kind: Kind) => void] {
  * access:role:manage get the list; anyone else sees why not.
  */
 export default function RolesPage() {
-  const [roles, setRoles] = useState<RoleSummary[] | null>(null);
-  const [error, setError] = useState<FailedLoad | null>(null);
-  // Bumped by Try again on the status page, to load the Roles again.
-  const [attempt, setAttempt] = useState(0);
+  const rolesQuery = useRoles();
+  const roles = rolesQuery.data ?? null;
+  const error = loadFailure(rolesQuery);
   const [creating, setCreating] = useState(false);
   const [kind, setKind] = useKindTab();
 
-  useEffect(() => {
-    let current = true;
-    api
-      .roles()
-      .then((found) => {
-        if (current) setRoles(found);
-      })
-      .catch((failure) => {
-        if (current) setError(failedLoad(failure));
-      });
-    return () => {
-      current = false;
-    };
-  }, [attempt]);
-
   // No access, offline or a server error: the status page takes the place of the list.
   if (error) {
-    return (
-      <FailedLoadPage
-        failure={error}
-        onRetry={() => {
-          setError(null);
-          setAttempt((tries) => tries + 1);
-        }}
-      />
-    );
+    return <FailedLoadPage failure={error} onRetry={() => void rolesQuery.refetch()} />;
   }
 
   return (

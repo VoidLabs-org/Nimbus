@@ -1,3 +1,5 @@
+import { IconChevronDown } from "@tabler/icons-react";
+import { Glyph } from "@repo/ui/glyph";
 import { Avatar, Button, Group, Menu, Modal, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
@@ -55,8 +57,8 @@ export function UserMenu() {
               size={36}
             />
             <span className={classes.name}>{user.displayName.split(" ")[0]}</span>
-            <span className={classes.chevron} aria-hidden>
-              ▾
+            <span className={classes.chevron}>
+              <Glyph icon={IconChevronDown} size={14} />
             </span>
           </button>
         </Menu.Target>

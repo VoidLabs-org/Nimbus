@@ -1,3 +1,5 @@
+import { IconChevronRight } from "@tabler/icons-react";
+import { Glyph } from "@repo/ui/glyph";
 import { Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { Link } from "react-router";
@@ -33,7 +35,7 @@ export default function SettingsOverview() {
                           : item.description}
                       </span>
                     </span>
-                    <span aria-hidden>›</span>
+                    <Glyph icon={IconChevronRight} size={16} stroke={1.5} />
                   </Link>
                 </li>
               ))}

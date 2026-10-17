@@ -1,3 +1,5 @@
+import { IconArrowRight } from "@tabler/icons-react";
+import { Glyph } from "@repo/ui/glyph";
 import {
   Alert,
   Button,
@@ -144,8 +146,8 @@ function RoleList({ label, roles }: { label: string; roles: RoleSummary[] }) {
                     {heldBy(role)}
                   </span>
                   <span className={classes.permissions}>{permissionCount(role)}</span>
-                  <span className={classes.arrow} aria-hidden>
-                    →
+                  <span className={classes.arrow}>
+                    <Glyph icon={IconArrowRight} size={16} stroke={1.5} />
                   </span>
                 </Link>
               </li>

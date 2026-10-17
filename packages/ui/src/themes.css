@@ -386,36 +386,6 @@
   color: var(--on-accent);
 }
 
-.nimbus-icon-sun {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent);
-}
-
-.nimbus-icon-moon {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  box-shadow: inset -4px -3px 0 0 currentColor;
-  transform: rotate(-20deg);
-}
-
-.nimbus-icon-glass {
-  box-sizing: border-box;
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  border: 1.5px solid currentColor;
-  background: linear-gradient(
-    135deg,
-    transparent 35%,
-    color-mix(in srgb, currentColor 45%, transparent) 35% 55%,
-    transparent 55%
-  );
-}
-
 /* A theme's colour swatch, with the orange dot every theme shares. */
 .nimbus-swatch {
   position: relative;

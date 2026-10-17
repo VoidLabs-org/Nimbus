@@ -18,6 +18,8 @@
 }
 
 .chevron {
+  display: flex;
+  align-items: center;
   font-size: 11px;
   opacity: 0.7;
 }

@@ -1,11 +1,17 @@
-import { Alert, Anchor, Stack, Text } from "@mantine/core";
+import { Alert, Anchor, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type RegisterInput } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { displayNameError } from "../auth/displayName";
-import { AuthLayout, AuthPasswordInput, AuthSubmit, AuthTextInput } from "../auth/AuthLayout";
+import {
+  AuthForm,
+  AuthLayout,
+  AuthPasswordInput,
+  AuthSubmit,
+  AuthTextInput,
+} from "../auth/AuthLayout";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -60,24 +66,22 @@ export default function RegisterPage() {
     >
       {formError && <Alert color="red">{formError}</Alert>}
       <ProviderButtons />
-      <form onSubmit={form.onSubmit(submit)}>
-        <Stack gap={18}>
-          <AuthTextInput label="Name" autoComplete="name" {...form.getInputProps("displayName")} />
-          <AuthTextInput
-            label="Email"
-            type="email"
-            autoComplete="email"
-            {...form.getInputProps("email")}
-          />
-          <AuthPasswordInput
-            label="Password"
-            description="8 to 128 characters"
-            autoComplete="new-password"
-            {...form.getInputProps("password")}
-          />
-          <AuthSubmit loading={form.submitting}>Create account</AuthSubmit>
-        </Stack>
-      </form>
+      <AuthForm onSubmit={form.onSubmit(submit)}>
+        <AuthTextInput label="Name" autoComplete="name" {...form.getInputProps("displayName")} />
+        <AuthTextInput
+          label="Email"
+          type="email"
+          autoComplete="email"
+          {...form.getInputProps("email")}
+        />
+        <AuthPasswordInput
+          label="Password"
+          description="8 to 128 characters"
+          autoComplete="new-password"
+          {...form.getInputProps("password")}
+        />
+        <AuthSubmit loading={form.submitting}>Create account</AuthSubmit>
+      </AuthForm>
       <Text size="sm">
         Already have an account?{" "}
         <Anchor component={Link} to={{ pathname: "/login", search: searchParams.toString() }}>

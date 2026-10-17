@@ -1,11 +1,11 @@
 import { Burger, Container, Group, Popover, Stack, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { useNimbusTheme } from "@repo/ui/nimbus-theme";
 import { ThemeToggles } from "@repo/ui/theme-toggles";
 import { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
 import { UserMenu } from "../auth/UserMenu";
 import classes from "./AppShell.module.css";
+import { NimbusLogo } from "./NimbusLogo";
 import { useDestinations, type Destination } from "./navigation";
 
 /** Below Mantine's `md` breakpoint the links and the theme capsule fold into a menu. */
@@ -36,7 +36,6 @@ function DestinationLink({
  * (light/dark and glass) in the bar; narrow ones fold them into a menu next to the avatar.
  */
 export function AppShell() {
-  const { mode } = useNimbusTheme();
   const destinations = useDestinations();
   const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -45,13 +44,7 @@ export function AppShell() {
     <Container size="lg" pt="md">
       <nav className={classes.bar} aria-label="Main">
         <UnstyledButton component={Link} to="/" className={classes.brand}>
-          {/* The light logo has dark bars for light themes; the dark one cream bars for dark themes. */}
-          <img
-            src={mode === "dark" ? "/nimbus-icon-dark.png" : "/nimbus-icon-light.png"}
-            alt=""
-            width={24}
-            height={24}
-          />
+          <NimbusLogo size={24} />
           nimbus
         </UnstyledButton>
         {narrow ? (

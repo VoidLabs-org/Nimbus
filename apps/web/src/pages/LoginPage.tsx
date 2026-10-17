@@ -1,10 +1,16 @@
-import { Alert, Anchor, Stack, Text } from "@mantine/core";
+import { Alert, Anchor, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
 import { providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
-import { AuthLayout, AuthPasswordInput, AuthSubmit, AuthTextInput } from "../auth/AuthLayout";
+import {
+  AuthForm,
+  AuthLayout,
+  AuthPasswordInput,
+  AuthSubmit,
+  AuthTextInput,
+} from "../auth/AuthLayout";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -62,22 +68,20 @@ export default function LoginPage() {
       {providerError && <Alert color="red">{providerError}</Alert>}
       {formError && <Alert color="red">{formError}</Alert>}
       <ProviderButtons />
-      <form onSubmit={form.onSubmit(submit)}>
-        <Stack gap={22}>
-          <AuthTextInput
-            label="Email"
-            type="email"
-            autoComplete="email"
-            {...form.getInputProps("email")}
-          />
-          <AuthPasswordInput
-            label="Password"
-            autoComplete="current-password"
-            {...form.getInputProps("password")}
-          />
-          <AuthSubmit loading={form.submitting}>Sign in</AuthSubmit>
-        </Stack>
-      </form>
+      <AuthForm onSubmit={form.onSubmit(submit)}>
+        <AuthTextInput
+          label="Email"
+          type="email"
+          autoComplete="email"
+          {...form.getInputProps("email")}
+        />
+        <AuthPasswordInput
+          label="Password"
+          autoComplete="current-password"
+          {...form.getInputProps("password")}
+        />
+        <AuthSubmit loading={form.submitting}>Sign in</AuthSubmit>
+      </AuthForm>
       <Text size="sm">
         New to Nimbus?{" "}
         <Anchor component={Link} to={{ pathname: "/register", search: searchParams.toString() }}>

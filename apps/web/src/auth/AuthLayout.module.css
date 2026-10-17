@@ -94,6 +94,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: var(--auth-gap);
   justify-self: center;
   width: 100%;
   max-width: 576px;
@@ -101,32 +102,23 @@
   padding: 40px clamp(16px, 4.4vw, 56px);
 }
 
+/* Shown only below 900px, where the panel (and its brand) is hidden. */
+.compactBrand {
+  display: none;
+  font-size: 17px;
+}
+
+/* The form's fields and button, spaced like the column around them. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--auth-gap);
+}
+
 .subtitle {
   margin-top: 6px;
   font-size: 15px;
   color: var(--color-accent-2-700);
-}
-
-.provider {
-  height: 46px;
-}
-
-/* "or" between the providers and the form, on two soft rules. */
-.or {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-  color: var(--color-accent-2-500);
-}
-
-.or::before,
-.or::after {
-  content: "";
-  flex: 1;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--color-surface);
 }
 
 /* Pill fields on the card colour, with the hint and errors under the field. */
@@ -178,6 +170,10 @@
 
   .panel {
     display: none;
+  }
+
+  .compactBrand {
+    display: flex;
   }
 
   .form {

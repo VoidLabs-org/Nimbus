@@ -2,7 +2,8 @@ import { Alert, Stack, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { ApiError, api, type Role } from "../api/client";
-import { RoleFormFooter, RoleFormModal } from "./RoleFormModal";
+import { RoleFormFooter } from "./RoleFormParts";
+import { WindowFrame } from "./WindowFrame";
 import { descriptionClassNames, fieldClassNames } from "./roleFormClassNames";
 
 /**
@@ -46,7 +47,7 @@ export function RenameRoleModal({
   }
 
   return (
-    <RoleFormModal
+    <WindowFrame
       opened
       onClose={onClose}
       title="Rename Role"
@@ -70,6 +71,6 @@ export function RenameRoleModal({
           <RoleFormFooter submitLabel="Save" loading={form.submitting} onCancel={onClose} />
         </Stack>
       </form>
-    </RoleFormModal>
+    </WindowFrame>
   );
 }

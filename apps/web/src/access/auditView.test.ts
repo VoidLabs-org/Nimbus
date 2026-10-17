@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AuditEntry } from "../api/client";
-import {
-  auditChanges,
-  auditTitle,
-  dayLabel,
-  diffLines,
-  grantChips,
-  groupByDay,
-  initialsOf,
-} from "./auditView";
+import { auditChanges, auditTitle, dayLabel, diffLines, grantChips, groupByDay } from "./auditView";
 
 function entry(overrides: Partial<AuditEntry>): AuditEntry {
   return {
@@ -70,14 +62,21 @@ const changed = entry({
 });
 
 describe("grantChips", () => {
-  it("lists added then removed Grants", () => {
+  it("lists added, removed, then re-scoped Grants", () => {
     expect(grantChips(changed)).toEqual({
       chips: [
         { kind: "added", permission: "j:k:l", scope: "project" },
         { kind: "removed", permission: "d:e:f", scope: null },
+        { kind: "changed", permission: "a:b:c", scope: "own → all" },
       ],
       more: 0,
     });
+  });
+
+  it("includes a Grant that only changed Scope", () => {
+    expect(
+      grantChips(entry({ before: { grants: { a: "own" } }, after: { grants: { a: "all" } } })),
+    ).toEqual({ chips: [{ kind: "changed", permission: "a", scope: "own → all" }], more: 0 });
   });
 
   it("shows three and counts the rest", () => {
@@ -99,7 +98,7 @@ describe("auditChanges", () => {
   it("lists each Grant added, removed or given another Scope", () => {
     expect(auditChanges(changed)).toEqual([
       { label: "j:k:l", before: null, after: "project" },
-      { label: "d:e:f", before: "granted", after: null },
+      { label: "d:e:f", before: "", after: null, bare: true },
       { label: "a:b:c", before: "own", after: "all" },
     ]);
   });
@@ -164,7 +163,7 @@ describe("diffLines", () => {
     expect(
       diffLines([
         { label: "j:k:l", before: null, after: "project" },
-        { label: "d:e:f", before: "granted", after: null },
+        { label: "d:e:f", before: "", after: null, bare: true },
         { label: "a:b:c", before: "own", after: "all" },
         { label: "Name", before: "Dev", after: "Developer" },
       ]),
@@ -179,14 +178,11 @@ describe("diffLines", () => {
   });
 });
 
-describe("initialsOf", () => {
-  it("takes the first letters of the first and last name", () => {
-    expect(initialsOf("Maya Reyes")).toBe("MR");
-    expect(initialsOf("maya")).toBe("M");
-    expect(initialsOf("Ana Maria Lopez")).toBe("AL");
-  });
-
-  it("copes with an empty name", () => {
-    expect(initialsOf("  ")).toBe("?");
+describe("diffLines with a value that looks like a marker", () => {
+  it("keeps = value for a name that is the word granted", () => {
+    expect(diffLines([{ label: "Name", before: "granted", after: "Granted access" }])).toEqual([
+      { kind: "removed", text: "Name = granted" },
+      { kind: "added", text: "Name = Granted access" },
+    ]);
   });
 });

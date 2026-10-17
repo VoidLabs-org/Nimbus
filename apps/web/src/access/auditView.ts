@@ -36,20 +36,34 @@ export function groupByDay(
 
 const MAX_CHIPS = 3;
 
-/** Up to three Grants an entry added or removed, and how many more there were. */
+/** Up to three Grants an entry added, removed or gave another Scope, and how many more there were. */
 export function grantChips(entry: AuditEntry): {
-  chips: { kind: "added" | "removed"; permission: string; scope: string | null }[];
+  chips: { kind: "added" | "removed" | "changed"; permission: string; scope: string | null }[];
   more: number;
 } {
-  const { added, removed } = diffGrants(entry);
+  const { added, removed, rescoped } = diffGrants(entry);
   const all = [
     ...added.map(({ permission, scope }) => ({ kind: "added" as const, permission, scope })),
     ...removed.map(({ permission, scope }) => ({ kind: "removed" as const, permission, scope })),
+    ...rescoped.map(({ permission, from, to }) => ({
+      kind: "changed" as const,
+      permission,
+      scope: `${from ?? "none"} → ${to ?? "none"}`,
+    })),
   ];
   return { chips: all.slice(0, MAX_CHIPS), more: Math.max(0, all.length - MAX_CHIPS) };
 }
 
-export type AuditChange = { label: string; before: string | null; after: string | null };
+/**
+ * One row of an entry's before → after list. `bare` marks a Grant with no Scope (a platform Permission): the side that
+ * is there is "" and shows as the label alone.
+ */
+export type AuditChange = {
+  label: string;
+  before: string | null;
+  after: string | null;
+  bare?: true;
+};
 
 const FIELDS = [
   ["name", "Name"],
@@ -68,12 +82,14 @@ export function auditChanges(entry: AuditEntry): AuditChange[] {
     ...added.map(({ permission, scope }) => ({
       label: permission,
       before: null,
-      after: scope ?? "granted",
+      after: scope ?? "",
+      ...(scope === null && { bare: true as const }),
     })),
     ...removed.map(({ permission, scope }) => ({
       label: permission,
-      before: scope ?? "granted",
+      before: scope ?? "",
       after: null,
+      ...(scope === null && { bare: true as const }),
     })),
     ...rescoped.map(({ permission, from, to }) => ({
       label: permission,
@@ -115,24 +131,29 @@ export function auditTitle(entry: AuditEntry): string {
 
 /** The changes as the lines of a diff: what was there (removed) and what is there now (added). */
 export function diffLines(changes: AuditChange[]): { kind: "added" | "removed"; text: string }[] {
-  const line = (label: string, value: string) =>
-    value === "granted" ? label : `${label} = ${value}`;
-  return changes.flatMap(({ label, before, after }) => [
-    ...(before !== null ? [{ kind: "removed" as const, text: line(label, before) }] : []),
-    ...(after !== null ? [{ kind: "added" as const, text: line(label, after) }] : []),
+  const line = (label: string, value: string, bare?: true) =>
+    bare ? label : `${label} = ${value}`;
+  return changes.flatMap(({ label, before, after, bare }) => [
+    ...(before !== null ? [{ kind: "removed" as const, text: line(label, before, bare) }] : []),
+    ...(after !== null ? [{ kind: "added" as const, text: line(label, after, bare) }] : []),
   ]);
-}
-
-/** A name's initials for an avatar: the first and last word's first letters. */
-export function initialsOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "?";
-  const first = words[0]!;
-  const last = words.length > 1 ? words[words.length - 1]! : "";
-  return (first[0]! + (last[0] ?? "")).toUpperCase();
 }
 
 /** The name an entry shows for who did it. */
 export function actorName(entry: Pick<AuditEntry, "actor">): string {
   return entry.actor ? (entry.actor.displayName ?? "A deleted User") : "System";
+}
+
+/** The time of day on a 12-hour clock (9:30 AM), in the viewer's locale, for a row. */
+export function formatTime(date: Date): string {
+  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+/** Date and time on a 12-hour clock, in the viewer's locale, for the dialog. */
+export function formatWhen(date: Date): string {
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+    hour12: true,
+  });
 }

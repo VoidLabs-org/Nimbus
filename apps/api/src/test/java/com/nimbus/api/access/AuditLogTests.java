@@ -132,6 +132,27 @@ class AuditLogTests {
 	}
 
 	@Test
+	void anEntryShowsItsActorsPictureAndNoneForAUserWhoNoLongerExists() {
+		jdbc.sql("UPDATE users SET avatar_url = 'https://img/root.png' WHERE email = 'root@example.com'").update();
+		post("/api/access/roles", Map.of("key", "pictured", "name", "Pictured", "description", "", "kind", "project"));
+		var gone = java.util.UUID.randomUUID();
+		jdbc.sql("""
+				INSERT INTO access_audit_entries (id, at, actor_id, action, target_type, target_key)
+				VALUES (gen_random_uuid(), now(), :actor, 'role.created', 'role', 'by_a_ghost')
+				""").param("actor", gone).update();
+
+		var actor = JsonPath.<Map<String, Object>>read(entriesAbout("pictured").get(0), "$.actor");
+		assertThat(actor.get("email")).isEqualTo("root@example.com");
+		assertThat(actor.get("avatarUrl")).isEqualTo("https://img/root.png");
+		assertThat(actor.get("displayName")).isNotIn("root@example.com", "https://img/root.png");
+
+		var ghost = JsonPath.<Map<String, Object>>read(entriesAbout("by_a_ghost").get(0), "$.actor");
+		assertThat(ghost.get("id")).isEqualTo(gone.toString());
+		assertThat(ghost.get("avatarUrl")).isNull();
+		assertThat(ghost.get("email")).isNull();
+	}
+
+	@Test
 	void anEntrySaysWhetherItsRoleStillExists() {
 		post("/api/access/roles", Map.of("key", "short_lived", "name", "Short", "description", "", "kind", "project"));
 		post("/api/access/roles", Map.of("key", "long_lived", "name", "Long", "description", "", "kind", "project"));

@@ -15,18 +15,27 @@ import { Link } from "react-router";
 import { AuditAvatar } from "../access/AuditAvatar";
 import { AuditEntryModal } from "../access/AuditEntryModal";
 import { describeAuditEntry } from "../access/auditText";
-import { actorName, grantChips, groupByDay } from "../access/auditView";
+import { actorName, formatTime, grantChips, groupByDay } from "../access/auditView";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type AuditEntry, type AuditPage } from "../api/client";
 import classes from "./AuditLogPage.module.css";
 
 const PAGE_SIZE = 50;
 
+const CHIP_MARK = { added: "+", removed: "−", changed: "~" } as const;
+
 /**
  * Settings → Audit log: every change to Roles and their Permissions, newest first, with who made it. Entries are
  * kept for good and never edited. Only Users with access:audit:view get the list.
  */
 export default function AuditLogPage() {
+  // Today and Yesterday follow the clock: this moves on at midnight, even if the page stays open.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const timer = setTimeout(() => setNow(new Date()), tomorrow - Date.now() + 1000);
+    return () => clearTimeout(timer);
+  }, [now]);
   const [opened, setOpened] = useState<AuditEntry | null>(null);
   const canOpenRoles = usePlatformPermissions().includes("access:role:manage");
   // `asOf` pins the set of entries the pages are cut from, so entries written meanwhile don't shift them; "Show newest"
@@ -37,8 +46,6 @@ export default function AuditLogPage() {
     page: number;
     asOf?: number;
     loaded?: AuditPage;
-    /** When it arrived, for Today and Yesterday. */
-    now?: Date;
     error?: string;
   } | null>(null);
 
@@ -47,7 +54,7 @@ export default function AuditLogPage() {
     api
       .auditLog(view.page, PAGE_SIZE, view.asOf)
       .then((loaded) => {
-        if (current) setResult({ page: view.page, asOf: view.asOf, loaded, now: new Date() });
+        if (current) setResult({ page: view.page, asOf: view.asOf, loaded });
       })
       .catch((failure) => {
         if (!current) return;
@@ -71,7 +78,7 @@ export default function AuditLogPage() {
   const pages = loaded ? Math.max(1, Math.ceil(loaded.total / PAGE_SIZE)) : 1;
 
   // Grouped per page, so a day that continues on the next page shows its heading there too.
-  const days = loaded && current?.now ? groupByDay(loaded.entries, current.now) : [];
+  const days = loaded ? groupByDay(loaded.entries, now) : [];
 
   return (
     <Container size="lg" px={0} py="xl">
@@ -154,23 +161,31 @@ function AuditRow({
 }) {
   const { chips, more } = grantChips(entry);
   return (
-    <li className={classes.row}>
+    // The whole row opens the entry, except where the click was on a link or ended a text selection, so keys, names
+    // and summaries can still be selected and copied. The summary button is the keyboard (and screen reader) way in.
+    <li
+      className={classes.row}
+      onClick={(event) => {
+        if ((event.target as Element).closest("a") || window.getSelection()?.toString()) return;
+        onOpen();
+      }}
+    >
       <time className={classes.time} dateTime={entry.at}>
-        {new Date(entry.at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+        {formatTime(new Date(entry.at))}
       </time>
       <span className={entry.actor ? classes.who : `${classes.who} ${classes.system}`}>
         <AuditAvatar actor={entry.actor} />
         {actorName(entry)}
       </span>
       <div className={classes.what}>
-        <button type="button" className={classes.open} onClick={onOpen}>
+        <button type="button" className={classes.open}>
           {describeAuditEntry(entry)}
         </button>
         {chips.length > 0 && (
           <div className={classes.chips}>
             {chips.map((chip) => (
               <span key={chip.permission} className={`${classes.chip} ${classes[chip.kind]}`}>
-                {chip.kind === "added" ? "+" : "−"} {chip.permission}
+                {CHIP_MARK[chip.kind]} {chip.permission}
                 {chip.scope && ` · ${chip.scope}`}
               </span>
             ))}

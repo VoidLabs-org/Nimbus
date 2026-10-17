@@ -2,8 +2,8 @@ import type { AuditEntry } from "../api/client";
 import { AuditAvatar } from "./AuditAvatar";
 import classes from "./AuditEntryModal.module.css";
 import { describeAuditEntry } from "./auditText";
-import { actorName, auditChanges, auditTitle, diffLines } from "./auditView";
-import { RoleFormModal } from "./RoleFormModal";
+import { actorName, auditChanges, auditTitle, diffLines, formatWhen } from "./auditView";
+import { WindowFrame } from "./WindowFrame";
 
 /**
  * One Audit log entry in full, as in the design: who and what at the top, then When, Who, Role, Action and the summary
@@ -12,7 +12,7 @@ import { RoleFormModal } from "./RoleFormModal";
 export function AuditEntryModal({ entry, onClose }: { entry: AuditEntry; onClose: () => void }) {
   const lines = diffLines(auditChanges(entry));
   return (
-    <RoleFormModal
+    <WindowFrame
       opened
       onClose={onClose}
       title={
@@ -27,17 +27,7 @@ export function AuditEntryModal({ entry, onClose }: { entry: AuditEntry; onClose
     >
       <dl className={classes.facts}>
         <dt>When</dt>
-        <dd>
-          {new Date(entry.at).toLocaleString("en-GB", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hourCycle: "h23",
-          })}
-        </dd>
+        <dd>{formatWhen(new Date(entry.at))}</dd>
         <dt>Who</dt>
         <dd>
           <b>{actorName(entry)}</b>
@@ -63,6 +53,6 @@ export function AuditEntryModal({ entry, onClose }: { entry: AuditEntry; onClose
         </div>
       )}
       <p className={classes.note}>Entries are never edited or deleted.</p>
-    </RoleFormModal>
+    </WindowFrame>
   );
 }

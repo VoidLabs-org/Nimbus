@@ -30,12 +30,11 @@
   list-style: none;
 }
 
-/* Time, Who, the summary with its chips, the Role pill and an arrow. The summary button stretches over the whole
-   row; the Role pill sits above it so it stays a link of its own. */
+/* Time, Who, the summary with its chips, the Role pill and an arrow. The whole row opens the entry. */
 .row {
   position: relative;
   display: grid;
-  grid-template-columns: 56px 200px minmax(0, 1fr) 150px 20px;
+  grid-template-columns: 80px 200px minmax(0, 1fr) 150px 20px;
   grid-template-areas: "time who what role arrow";
   gap: 16px;
   align-items: center;
@@ -50,6 +49,7 @@
 
 .time {
   grid-area: time;
+  white-space: nowrap;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--color-accent-2-500);
@@ -88,14 +88,11 @@
   cursor: pointer;
 }
 
-.open::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 20px;
+.row {
+  cursor: pointer;
 }
 
-.open:focus-visible::after {
+.row:has(.open:focus-visible) {
   outline: 2px solid var(--color-accent);
 }
 
@@ -124,6 +121,11 @@
   text-decoration: line-through;
 }
 
+.changed {
+  background: var(--seg);
+  color: var(--color-accent-2-700);
+}
+
 .more {
   align-self: center;
   font-size: 11px;
@@ -133,8 +135,6 @@
 .role {
   grid-area: role;
   justify-self: start;
-  position: relative;
-  z-index: 1;
   padding: 3px 11px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;

@@ -1,0 +1,78 @@
+/* The shared window frame, from the "Nimbus Themes" design (14a). Colours come only from the theme variables. */
+.overlay {
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Fog and Slate's window colour is see-through, so what is behind it is blurred, as in the design. */
+.content {
+  border-radius: 32px;
+  border: 1px solid var(--glass-border);
+  background: var(--modal-bg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+}
+
+/* A slim rounded scrollbar in the theme's colours, with no arrow buttons, inset from the rounded corners. Chrome
+   and Safari use the ::-webkit-scrollbar styles and ignore them if scrollbar-width is set, so the standard
+   properties are only for browsers without them (Firefox). */
+.content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.content::-webkit-scrollbar-track {
+  margin-block: 28px;
+  background: transparent;
+}
+
+.content::-webkit-scrollbar-button {
+  display: none;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .content {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+.header {
+  align-items: flex-start;
+  padding: 28px 28px 0;
+  background: transparent;
+}
+
+.body {
+  padding: 0 28px 28px;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+/* Under the title, in the body: Mantine's title is a heading and names the dialog, so it holds only "New Role". */
+.subtitle {
+  margin: -10px 0 20px;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--color-accent-2-700);
+}
+
+.close {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--seg);
+  color: var(--color-text);
+}

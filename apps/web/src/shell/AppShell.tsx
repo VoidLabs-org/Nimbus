@@ -6,7 +6,7 @@ import { Link, NavLink, Outlet } from "react-router";
 import { UserMenu } from "../auth/UserMenu";
 import classes from "./AppShell.module.css";
 import { NimbusLogo } from "./NimbusLogo";
-import { useDestinations, type Destination } from "./navigation";
+import { DESTINATIONS, type Destination } from "./navigation";
 
 /** Below Mantine's `md` breakpoint the links and the theme capsule fold into a menu. */
 const NARROW = "(max-width: 61.99em)";
@@ -36,7 +36,6 @@ function DestinationLink({
  * (light/dark and glass) in the bar; narrow ones fold them into a menu next to the avatar.
  */
 export function AppShell() {
-  const destinations = useDestinations();
   const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -67,7 +66,7 @@ export function AppShell() {
             </Popover.Target>
             <Popover.Dropdown>
               <Stack gap={4}>
-                {destinations.map((destination) => (
+                {DESTINATIONS.map((destination) => (
                   <DestinationLink
                     key={destination.to}
                     destination={destination}
@@ -83,7 +82,7 @@ export function AppShell() {
         ) : (
           <>
             <Group gap={4} wrap="nowrap">
-              {destinations.map((destination) => (
+              {DESTINATIONS.map((destination) => (
                 <DestinationLink key={destination.to} destination={destination} />
               ))}
             </Group>

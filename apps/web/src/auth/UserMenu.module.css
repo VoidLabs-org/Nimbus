@@ -1,0 +1,56 @@
+/* The account chip and its menu, from the "Nimbus Themes" design (19b). Colours come only from the theme variables. */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 14px 4px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chevron {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* On a phone the chip is just the avatar, so it fits beside the logo and the menu button. */
+@media (max-width: 36em) {
+  .name,
+  .chevron {
+    display: none;
+  }
+
+  .chip {
+    padding: 4px;
+  }
+}
+
+.dropdown {
+  padding: 8px;
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+}
+
+.label {
+  padding: 10px 16px 12px;
+  font-size: 13px;
+  color: var(--color-accent-2-700);
+  text-transform: none;
+}
+
+.item {
+  padding: 12px 16px;
+  border-radius: 999px;
+  font-size: 15px;
+}

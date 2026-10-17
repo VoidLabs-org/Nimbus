@@ -1,37 +1,19 @@
-import {
-  Avatar,
-  Button,
-  Group,
-  Menu,
-  Modal,
-  PasswordInput,
-  Stack,
-  TextInput,
-  UnstyledButton,
-} from "@mantine/core";
-import { useForm } from "@mantine/form";
+import { Avatar, Button, Group, Menu, Modal, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { Link } from "react-router";
-import { ApiError } from "../api/client";
-import { tooManyAttemptsMessage } from "../api/messages";
-import { displayNameError } from "./displayName";
+import classes from "./UserMenu.module.css";
 import { useSession } from "./useSession";
 
 /**
- * The signed-in User's own menu: who they are (avatar or initials, with the display name heading the menu), a way
- * to change the display name, set or change their password, Appearance, and sign out. Pages such as Roles & access
- * and the Audit log are in the navbar. Signing out ends this browser's session only. Once it succeeds,
- * RequireUser sends the User to the sign-in page; this menu doesn't navigate itself.
+ * The signed-in User's chip in the navbar (avatar, first name, ▾) and the compact menu it opens: their email,
+ * Settings and Sign out. Sign out asks first. Signing out ends this browser's session only. Once it succeeds,
+ * RequireUser sends the User to the sign-in page; this doesn't navigate itself.
  */
 export function UserMenu() {
   const { user, logout } = useSession();
+  const [confirming, setConfirming] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const [editing, setEditing] = useState(false);
-  // True while a rename is in flight; the dialog can't be dismissed then, or Cancel would be a lie.
-  const [saving, setSaving] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
 
   async function signOut() {
     setSigningOut(true);
@@ -42,6 +24,7 @@ export function UserMenu() {
         color: "red",
         message: "Couldn't sign out. Check your connection and try again.",
       });
+      setConfirming(false);
       setSigningOut(false);
     }
   }
@@ -50,10 +33,18 @@ export function UserMenu() {
 
   return (
     <>
-      <Menu position="bottom-end">
+      <Menu
+        position="bottom-end"
+        width={240}
+        offset={10}
+        classNames={{ dropdown: classes.dropdown, item: classes.item, label: classes.label }}
+      >
         <Menu.Target>
-          {/* The avatar alone in the navbar; the name heads the menu. */}
-          <UnstyledButton aria-label={`Account menu for ${user.displayName}`}>
+          <button
+            type="button"
+            className={classes.chip}
+            aria-label={`Account menu for ${user.displayName}`}
+          >
             {/* Falls back to initials of the name when there is no image, or it fails to load. No referrer:
                 Google's image host refuses some requests that carry one. */}
             <Avatar
@@ -63,211 +54,41 @@ export function UserMenu() {
               color="initials"
               size={36}
             />
-          </UnstyledButton>
+            <span className={classes.name}>{user.displayName.split(" ")[0]}</span>
+            <span className={classes.chevron} aria-hidden>
+              ▾
+            </span>
+          </button>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Label>{user.displayName}</Menu.Label>
-          <Menu.Item onClick={() => setEditing(true)}>Change display name</Menu.Item>
-          <Menu.Item onClick={() => setChangingPassword(true)}>
-            {user.hasPassword ? "Change password" : "Set password"}
+          <Menu.Label>{user.email}</Menu.Label>
+          <Menu.Item component={Link} to="/settings">
+            Settings
           </Menu.Item>
-          <Menu.Item component={Link} to="/settings/appearance">
-            Appearance
-          </Menu.Item>
-          <Menu.Item onClick={signOut} disabled={signingOut}>
-            Sign out
-          </Menu.Item>
+          <Menu.Item onClick={() => setConfirming(true)}>Sign out</Menu.Item>
         </Menu.Dropdown>
       </Menu>
       <Modal
-        opened={editing}
-        onClose={() => setEditing(false)}
-        title="Change display name"
-        closeOnEscape={!saving}
-        closeOnClickOutside={!saving}
-        withCloseButton={!saving}
+        opened={confirming}
+        onClose={() => setConfirming(false)}
+        title="Sign out?"
+        size={420}
+        closeOnEscape={!signingOut}
+        closeOnClickOutside={!signingOut}
+        withCloseButton={!signingOut}
       >
-        <DisplayNameForm
-          current={user.displayName}
-          saving={saving}
-          onSavingChange={setSaving}
-          onDone={() => setEditing(false)}
-        />
-      </Modal>
-      <Modal
-        opened={changingPassword}
-        onClose={() => setChangingPassword(false)}
-        title={user.hasPassword ? "Change password" : "Set password"}
-        closeOnEscape={!savingPassword}
-        closeOnClickOutside={!savingPassword}
-        withCloseButton={!savingPassword}
-      >
-        <PasswordForm
-          hasPassword={user.hasPassword}
-          saving={savingPassword}
-          onSavingChange={setSavingPassword}
-          onDone={() => setChangingPassword(false)}
-        />
+        <Text size="sm" c="dimmed" mb="lg">
+          You&apos;ll need your email and password to sign back in.
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setConfirming(false)} disabled={signingOut}>
+            Cancel
+          </Button>
+          <Button onClick={signOut} loading={signingOut}>
+            Sign out
+          </Button>
+        </Group>
       </Modal>
     </>
-  );
-}
-
-function PasswordForm({
-  hasPassword,
-  saving,
-  onSavingChange,
-  onDone,
-}: {
-  hasPassword: boolean;
-  saving: boolean;
-  onSavingChange: (saving: boolean) => void;
-  onDone: () => void;
-}) {
-  const { changePassword } = useSession();
-  const form = useForm({
-    initialValues: { currentPassword: "", newPassword: "" },
-    // Mirrors the server's rules; the server stays the authority.
-    validate: {
-      currentPassword: (value) => (hasPassword && !value ? "Enter your current password" : null),
-      newPassword: (value) =>
-        value.length < 8 || value.length > 128 ? "Use 8 to 128 characters" : null,
-    },
-  });
-
-  async function submit({
-    currentPassword,
-    newPassword,
-  }: {
-    currentPassword: string;
-    newPassword: string;
-  }) {
-    onSavingChange(true);
-    try {
-      await changePassword({
-        currentPassword: hasPassword ? currentPassword : undefined,
-        newPassword,
-      });
-      notifications.show({
-        color: "green",
-        message: hasPassword
-          ? "Password changed. Your other devices will be signed out shortly."
-          : "Password set. You can now sign in with your email and password.",
-      });
-      onDone();
-    } catch (error) {
-      if (error instanceof ApiError && !hasPassword && error.fieldErrors.currentPassword) {
-        // Another tab set a password first, so this one doesn't know yet and has no field for the current one.
-        form.setFieldError(
-          "newPassword",
-          "This account already has a password. Reload the page, then use Change password.",
-        );
-      } else if (error instanceof ApiError && error.status === 429) {
-        form.setFieldError("currentPassword", tooManyAttemptsMessage(error.retryAfterSeconds));
-      } else if (
-        error instanceof ApiError &&
-        (error.fieldErrors.currentPassword || error.fieldErrors.newPassword)
-      ) {
-        if (error.fieldErrors.currentPassword) {
-          form.setFieldError("currentPassword", error.fieldErrors.currentPassword);
-        }
-        if (error.fieldErrors.newPassword) {
-          form.setFieldError("newPassword", error.fieldErrors.newPassword);
-        }
-      } else {
-        form.setFieldError("newPassword", "Couldn't save your password. Please try again.");
-      }
-    } finally {
-      onSavingChange(false);
-    }
-  }
-
-  return (
-    <form onSubmit={form.onSubmit(submit)}>
-      <Stack>
-        {hasPassword && (
-          <PasswordInput
-            label="Current password"
-            autoComplete="current-password"
-            data-autofocus
-            maxLength={128}
-            {...form.getInputProps("currentPassword")}
-          />
-        )}
-        <PasswordInput
-          label="New password"
-          description="8 to 128 characters"
-          autoComplete="new-password"
-          data-autofocus={hasPassword ? undefined : true}
-          maxLength={128}
-          {...form.getInputProps("newPassword")}
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onDone} disabled={saving}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={saving}>
-            Save
-          </Button>
-        </Group>
-      </Stack>
-    </form>
-  );
-}
-
-function DisplayNameForm({
-  current,
-  saving,
-  onSavingChange,
-  onDone,
-}: {
-  current: string;
-  saving: boolean;
-  onSavingChange: (saving: boolean) => void;
-  onDone: () => void;
-}) {
-  const { updateDisplayName } = useSession();
-  const form = useForm({
-    initialValues: { displayName: current },
-    validate: { displayName: displayNameError },
-  });
-
-  async function submit({ displayName }: { displayName: string }) {
-    onSavingChange(true);
-    try {
-      await updateDisplayName(displayName.trim());
-      onDone();
-    } catch (error) {
-      if (error instanceof ApiError && error.fieldErrors.displayName) {
-        form.setFieldError("displayName", error.fieldErrors.displayName);
-      } else if (error instanceof ApiError && error.status === 429) {
-        form.setFieldError("displayName", tooManyAttemptsMessage(error.retryAfterSeconds));
-      } else {
-        form.setFieldError("displayName", "Couldn't save your name. Please try again.");
-      }
-    } finally {
-      onSavingChange(false);
-    }
-  }
-
-  return (
-    <form onSubmit={form.onSubmit(submit)}>
-      <Stack>
-        <TextInput
-          label="Name"
-          autoComplete="name"
-          data-autofocus
-          {...form.getInputProps("displayName")}
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onDone} disabled={saving}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={saving}>
-            Save
-          </Button>
-        </Group>
-      </Stack>
-    </form>
   );
 }

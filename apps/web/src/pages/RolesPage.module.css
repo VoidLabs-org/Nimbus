@@ -32,6 +32,20 @@
   color: var(--color-accent-2-500);
 }
 
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 20px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}
+
 .row {
   border-top: 1px solid var(--line);
   border-radius: 20px;
@@ -69,13 +83,17 @@
   color: var(--color-accent-800);
 }
 
+/* The description, then the key; they wrap apart with a gap, and the key sits alone when there is no description. */
 .summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
   font-size: 13px;
   color: var(--color-accent-2-700);
 }
 
 .key {
-  margin-left: 6px;
   font-family: ui-monospace, monospace;
   font-size: 11px;
   color: var(--color-accent-2-500);

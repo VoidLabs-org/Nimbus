@@ -22,6 +22,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { GrantsEditor } from "../access/GrantsEditor";
 import { kindLabels } from "../access/labels";
 import { RoleHolders } from "../access/RoleHolders";
+import { heldBy } from "../access/roleRow";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
 
@@ -273,7 +274,9 @@ function RoleHeader({ role, onChanged }: { role: Role; onChanged: (role: Role) =
             {" · "}
             {role.holders === null
               ? "Every signed-in User holds this Role."
-              : `Held by ${role.holders} ${role.holders === 1 ? "assignment" : "assignments"}.`}
+              : role.holders === 0
+                ? "No one holds this Role yet."
+                : `Held by ${heldBy(role)}.`}
           </Text>
         </>
       )}

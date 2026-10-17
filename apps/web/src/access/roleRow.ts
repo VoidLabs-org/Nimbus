@@ -4,7 +4,7 @@ import type { RoleSummary } from "../api/client";
  * Who holds a Role, as the Roles list says it: people for a platform role, assignments for a project role (one
  * User can hold it in several projects), "Everyone" for the Role every signed-in User holds.
  */
-export function heldBy(role: RoleSummary): string {
+export function heldBy(role: Pick<RoleSummary, "kind" | "holders">): string {
   if (role.holders === null) return "Everyone";
   if (role.holders === 0) return "No one yet";
   const [one, many] =

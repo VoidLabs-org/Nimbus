@@ -1,8 +1,17 @@
-import { Alert, Button, Center, Container, Loader, Stack, Title } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Center,
+  Container,
+  Loader,
+  Stack,
+  Title,
+  VisuallyHidden,
+} from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { PillTabs } from "@repo/ui/pill-tabs";
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { NewRoleModal } from "../access/NewRoleModal";
 import { heldBy, permissionCount, roleTag } from "../access/roleRow";
 import { ApiError, api, type Kind, type RoleSummary } from "../api/client";
@@ -13,6 +22,16 @@ const TABS: { value: Kind; label: string }[] = [
   { value: "platform", label: "Platform roles" },
 ];
 
+/** The open tab, kept in the address (?kind=platform) so coming back from a Role returns to it. */
+function useKindTab(): [Kind, (kind: Kind) => void] {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kind: Kind = searchParams.get("kind") === "platform" ? "platform" : "project";
+  function setKind(next: Kind) {
+    setSearchParams(next === "project" ? {} : { kind: next }, { replace: true });
+  }
+  return [kind, setKind];
+}
+
 /**
  * Settings → Roles: every Role, project roles and platform roles on two tabs, and "New Role". Only Users with
  * access:role:manage get the list; anyone else sees why not.
@@ -21,7 +40,7 @@ export default function RolesPage() {
   const [roles, setRoles] = useState<RoleSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [kind, setKind] = useState<Kind>("project");
+  const [kind, setKind] = useKindTab();
 
   useEffect(() => {
     let current = true;
@@ -72,23 +91,23 @@ export default function RolesPage() {
               onChange={(value) => setKind(value as Kind)}
               style={{ alignSelf: "flex-start" }}
             />
-            <RoleList roles={roles.filter((role) => role.kind === kind)} />
+            <RoleList
+              label={TABS.find((tab) => tab.value === kind)!.label}
+              roles={roles.filter((role) => role.kind === kind)}
+            />
           </>
         )}
       </Stack>
-      {/* Keyed by the tab, so it opens on the kind being looked at. */}
-      <NewRoleModal
-        key={kind}
-        opened={creating}
-        initialKind={kind}
-        onClose={() => setCreating(false)}
-      />
+      <NewRoleModal opened={creating} initialKind={kind} onClose={() => setCreating(false)} />
     </Container>
   );
 }
 
-/** The Roles of one kind in a panel; each row opens the Role. */
-function RoleList({ roles }: { roles: RoleSummary[] }) {
+/**
+ * The Roles of one kind in a panel; each row opens the Role. A list of links, with "Held by" said to screen readers,
+ * since the column titles above are only visual.
+ */
+function RoleList({ label, roles }: { label: string; roles: RoleSummary[] }) {
   return (
     <Panel p={8}>
       <div className={classes.columns} aria-hidden>
@@ -97,28 +116,39 @@ function RoleList({ roles }: { roles: RoleSummary[] }) {
         <span>Permissions</span>
         <span />
       </div>
-      {roles.map((role) => {
-        const tag = roleTag(role);
-        return (
-          <Link key={role.key} to={`/settings/roles/${role.key}`} className={classes.row}>
-            <div className={classes.role}>
-              <div className={classes.name}>
-                {role.name}
-                {tag && <span className={classes.tag}>{tag}</span>}
-              </div>
-              <div className={classes.summary}>
-                {role.description}
-                <span className={classes.key}>{role.key}</span>
-              </div>
-            </div>
-            <span className={classes.held}>{heldBy(role)}</span>
-            <span className={classes.permissions}>{permissionCount(role)}</span>
-            <span className={classes.arrow} aria-hidden>
-              →
-            </span>
-          </Link>
-        );
-      })}
+      {roles.length === 0 ? (
+        <p className={classes.empty}>No {label.toLowerCase()} yet.</p>
+      ) : (
+        <ul className={classes.list} aria-label={label}>
+          {roles.map((role) => {
+            const tag = roleTag(role);
+            return (
+              <li key={role.key}>
+                <Link to={`/settings/roles/${role.key}`} className={classes.row}>
+                  <div className={classes.role}>
+                    <div className={classes.name}>
+                      {role.name}
+                      {tag && <span className={classes.tag}>{tag}</span>}
+                    </div>
+                    <div className={classes.summary}>
+                      {role.description && <span>{role.description}</span>}
+                      <span className={classes.key}>{role.key}</span>
+                    </div>
+                  </div>
+                  <span className={classes.held}>
+                    <VisuallyHidden>Held by </VisuallyHidden>
+                    {heldBy(role)}
+                  </span>
+                  <span className={classes.permissions}>{permissionCount(role)}</span>
+                  <span className={classes.arrow} aria-hidden>
+                    →
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Panel>
   );
 }

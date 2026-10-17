@@ -60,7 +60,7 @@
 }
 
 .body {
-  padding: 20px 28px 28px;
+  padding: 0 28px 28px;
 }
 
 .title {
@@ -70,8 +70,9 @@
   letter-spacing: -0.02em;
 }
 
+/* Under the title, in the body: Mantine's title is a heading and names the dialog, so it holds only "New Role". */
 .subtitle {
-  margin-top: 4px;
+  margin: -10px 0 20px;
   font-size: 14px;
   font-weight: 400;
   letter-spacing: normal;

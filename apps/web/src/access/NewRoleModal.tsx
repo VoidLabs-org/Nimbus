@@ -1,6 +1,6 @@
 import { Alert, Button, Group, Modal, Radio, Stack, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApiError, api, type Kind, type NewRoleInput } from "../api/client";
 import classes from "./NewRoleModal.module.css";
@@ -25,8 +25,9 @@ function FieldLabel({ name, note }: { name: string; note?: string }) {
 
 /**
  * Creates a custom Role with no Permissions, then opens it so they can be ticked. Where it applies starts as
- * `initialKind` (the Roles tab it was opened from). The key follows the name until the User types their own (see
- * `keyForName`), and can't change once the Role exists. Closing it clears the form.
+ * `initialKind` (the Roles tab it was opened from) until the User picks one. The key follows the name until the
+ * User types their own (see `keyForName`), and can't change once the Role exists. Closing it clears the form, and
+ * an answer that arrives after closing is ignored.
  */
 export function NewRoleModal({
   opened,
@@ -39,8 +40,14 @@ export function NewRoleModal({
 }) {
   const navigate = useNavigate();
   const [formError, setFormError] = useState<string | null>(null);
-  const form = useForm<NewRoleInput>({
-    initialValues: { name: "", key: "", description: "", kind: initialKind },
+  // null until the User picks one, so the window follows the tab it is opened from.
+  const [chosenKind, setChosenKind] = useState<Kind | null>(null);
+  const [kindError, setKindError] = useState<string | null>(null);
+  // Counts closes, so a create that finishes after the window closed (Cancel during the request) is ignored.
+  const closes = useRef(0);
+  const kind = chosenKind ?? initialKind;
+  const form = useForm<Omit<NewRoleInput, "kind">>({
+    initialValues: { name: "", key: "", description: "" },
     validate: {
       name: (value) => (value.trim() ? null : "Enter a name"),
       key: (value) =>
@@ -51,20 +58,33 @@ export function NewRoleModal({
   });
 
   function close() {
+    closes.current += 1;
     form.reset();
+    setChosenKind(null);
+    setKindError(null);
     setFormError(null);
     onClose();
   }
 
-  async function submit(values: NewRoleInput) {
+  async function submit(values: Omit<NewRoleInput, "kind">) {
     setFormError(null);
+    setKindError(null);
+    const opening = closes.current;
     try {
-      const role = await api.createRole({ ...values, name: values.name.trim() });
+      const role = await api.createRole({ ...values, kind, name: values.name.trim() });
+      if (closes.current !== opening) return;
       close();
       navigate(`/settings/roles/${role.key}`);
     } catch (error) {
+      if (closes.current !== opening) return;
       if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {
-        form.setErrors(error.fieldErrors);
+        const { kind: kindMessage, ...fields } = error.fieldErrors;
+        form.setErrors(fields);
+        setKindError(kindMessage ?? null);
+        // An error on a field this window doesn't show still needs saying.
+        if (Object.keys(fields).some((field) => !(field in form.values))) {
+          setFormError(error.message || "Couldn't create the Role. Please try again.");
+        }
       } else {
         setFormError("Couldn't create the Role. Please try again.");
       }
@@ -77,12 +97,7 @@ export function NewRoleModal({
       onClose={close}
       size={560}
       yOffset={24}
-      title={
-        <>
-          New Role
-          <div className={classes.subtitle}>Pick where it applies, then name it.</div>
-        </>
-      }
+      title="New Role"
       classNames={{
         overlay: classes.overlay,
         content: classes.content,
@@ -92,14 +107,16 @@ export function NewRoleModal({
         close: classes.close,
       }}
     >
-      <form onSubmit={form.onSubmit(submit)}>
+      <p className={classes.subtitle}>Pick where it applies, then name it.</p>
+      <form onSubmit={(event) => form.onSubmit(submit)(event)}>
         <Stack gap={18}>
           {formError && <Alert color="red">{formError}</Alert>}
           <Radio.Group
             label="Where it applies"
             classNames={{ label: classes.label }}
-            value={form.values.kind}
-            onChange={(kind) => form.setFieldValue("kind", kind as Kind)}
+            value={kind}
+            onChange={(value) => setChosenKind(value as Kind)}
+            error={kindError}
           >
             <div className={classes.kinds}>
               {KINDS.map((kind) => (

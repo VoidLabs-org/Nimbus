@@ -1,7 +1,7 @@
 import { Group, Stack } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { Bone } from "@repo/ui/skeleton";
-import type { OpenedRole } from "./openedRole";
+import type { OpenedRole } from "../access/openedRole";
 import classes from "./RolePage.module.css";
 
 /**

@@ -2,6 +2,7 @@ import { Stack } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { Bone } from "@repo/ui/skeleton";
 import classes from "./RolesPage.module.css";
+import { RoleColumns } from "./RoleColumns";
 
 /** The tabs and a few rows, in the shape of RoleList, so the list lands without moving anything. */
 export function RoleListSkeleton() {
@@ -9,12 +10,7 @@ export function RoleListSkeleton() {
     <Stack gap="lg">
       <Bone h={44} w={300} radius="xl" />
       <Panel p={8}>
-        <div className={classes.columns}>
-          <span>Role</span>
-          <span>Held by</span>
-          <span>Permissions</span>
-          <span />
-        </div>
+        <RoleColumns />
         {[0, 1, 2].map((row) => (
           <div key={row} className={classes.row}>
             <div className={classes.role}>

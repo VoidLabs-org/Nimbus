@@ -15,8 +15,9 @@ import { api, type Kind, type RoleSummary } from "../api/client";
 import { failedLoad, type FailedLoad } from "../api/failure";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./RolesPage.module.css";
+import { RoleColumns } from "./RoleColumns";
 import { RoleListSkeleton } from "./RoleListSkeleton";
-import { openedRole } from "./openedRole";
+import { openedRole } from "../access/openedRole";
 
 const TABS: { value: Kind; label: string }[] = [
   { value: "project", label: "Project roles" },
@@ -121,12 +122,7 @@ export default function RolesPage() {
 function RoleList({ label, roles }: { label: string; roles: RoleSummary[] }) {
   return (
     <Panel p={8}>
-      <div className={classes.columns} aria-hidden>
-        <span>Role</span>
-        <span>Held by</span>
-        <span>Permissions</span>
-        <span />
-      </div>
+      <RoleColumns />
       {roles.length === 0 ? (
         <p className={classes.empty}>No {label.toLowerCase()} yet.</p>
       ) : (

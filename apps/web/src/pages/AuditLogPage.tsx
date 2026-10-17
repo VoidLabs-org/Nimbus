@@ -54,12 +54,18 @@ export default function AuditLogPage() {
     error?: FailedLoad;
   } | null>(null);
 
+  // The last page that arrived: it stays on screen, dimmed, while the next one loads, so the list doesn't collapse and
+  // the Pagination doesn't vanish under the User's pointer. The skeleton is only for the very first load.
+  const [shown, setShown] = useState<AuditPage | null>(null);
+
   useEffect(() => {
     let current = true;
     api
       .auditLog(view.page, PAGE_SIZE, view.asOf)
       .then((loaded) => {
-        if (current) setResult({ page: view.page, asOf: view.asOf, loaded });
+        if (!current) return;
+        setShown(loaded);
+        setResult({ page: view.page, asOf: view.asOf, loaded });
       })
       .catch((failure) => {
         if (!current) return;
@@ -75,7 +81,8 @@ export default function AuditLogPage() {
   }, [view]);
 
   const current = result && result.page === view.page && result.asOf === view.asOf ? result : null;
-  const loaded = current?.loaded ?? null;
+  const loaded = current?.loaded ?? shown;
+  const loading = !current?.loaded && !current?.error;
   const error = current?.error ?? null;
   const pages = loaded ? Math.max(1, Math.ceil(loaded.total / PAGE_SIZE)) : 1;
 
@@ -122,7 +129,7 @@ export default function AuditLogPage() {
             </Group>
           </Alert>
         )}
-        {!loaded && !error && (
+        {!loaded && loading && (
           <Loading>
             <AuditLogSkeleton />
           </Loading>
@@ -133,7 +140,7 @@ export default function AuditLogPage() {
           </Panel>
         )}
         {loaded && loaded.entries.length > 0 && (
-          <>
+          <Stack gap="lg" aria-busy={loading} className={loading ? classes.paging : undefined}>
             <Panel p={8}>
               {days.map((day) => (
                 <section key={day.key} aria-label={day.label}>
@@ -156,13 +163,11 @@ export default function AuditLogPage() {
                 <Pagination
                   total={pages}
                   value={view.page + 1}
-                  onChange={(value) =>
-                    setView({ page: value - 1, asOf: loaded?.asOf ?? view.asOf })
-                  }
+                  onChange={(value) => setView({ page: value - 1, asOf: loaded.asOf ?? view.asOf })}
                 />
               </Group>
             )}
-          </>
+          </Stack>
         )}
       </Stack>
       {opened && <AuditEntryModal entry={opened} onClose={() => setOpened(null)} />}

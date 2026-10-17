@@ -1,8 +1,8 @@
-import { openedRole } from "../pages/openedRole";
 import { Alert, Radio, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { openedRole } from "./openedRole";
 import { ApiError, api, type Kind, type NewRoleInput } from "../api/client";
 import classes from "./NewRoleModal.module.css";
 import { FieldLabel, RoleFormFooter } from "./RoleFormParts";

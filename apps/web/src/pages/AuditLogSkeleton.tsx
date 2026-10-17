@@ -11,7 +11,7 @@ export function AuditLogSkeleton() {
       </div>
       <div className={classes.list}>
         {[0, 1, 2, 3].map((row) => (
-          <div key={row} className={classes.row} data-skeleton>
+          <div key={row} className={classes.row}>
             <span className={classes.time}>
               <Bone h={13} w={44} />
             </span>

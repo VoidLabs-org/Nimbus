@@ -4,6 +4,7 @@ import { PillTabs } from "@repo/ui/pill-tabs";
 import { Loading } from "@repo/ui/skeleton";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
+import { readOpenedRole, showsPeopleTab } from "../access/openedRole";
 import { GrantsEditor } from "../access/GrantsEditor";
 import { grantable } from "../access/grants";
 import { RenameRoleModal } from "../access/RenameRoleModal";
@@ -17,7 +18,6 @@ import { roleCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./RolePage.module.css";
-import type { OpenedRole } from "./openedRole";
 import { RoleSkeleton } from "./RoleSkeleton";
 
 /**
@@ -41,7 +41,9 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   const [failure, setFailure] = useState<string | null>(null);
   const platformPermissions = usePlatformPermissions();
   // The Roles list says which kind of Role it opened, so the skeleton can match it.
-  const opened = (useLocation().state as OpenedRole | null) ?? undefined;
+  const location = useLocation();
+  const opened = readOpenedRole(location.state);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let current = true;
@@ -59,12 +61,13 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
     };
   }, [key, attempt]);
 
-  // Everyone is held by every signed-in User, and project roles are given on a project's Members page.
-  const hasPeople =
-    role !== null &&
-    role.kind === "platform" &&
-    role.key !== "everyone" &&
-    platformPermissions.includes("access:role:assign");
+  const hasPeople = role !== null && showsPeopleTab(role.kind, role.key, platformPermissions);
+
+  // The hint was only for the skeleton; once the Role is here it would go stale (after a rename, on a reload).
+  const hinted = location.state !== null;
+  useEffect(() => {
+    if (role && hinted) navigate(location, { replace: true, state: null });
+  }, [role, hinted, navigate, location]);
 
   // Whatever changed the Role (rename, save, reset), a refusal shown from an earlier try no longer applies.
   function changed(next: Role) {
@@ -104,11 +107,7 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
         <Loading>
           <RoleSkeleton
             opened={opened}
-            tabs={
-              opened?.kind === "platform" &&
-              key !== "everyone" &&
-              platformPermissions.includes("access:role:assign")
-            }
+            tabs={opened !== undefined && showsPeopleTab(opened.kind, key, platformPermissions)}
           />
         </Loading>
       )}

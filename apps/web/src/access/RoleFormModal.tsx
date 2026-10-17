@@ -22,8 +22,8 @@ export function RoleFormModal({
 }: {
   opened: boolean;
   onClose: () => void;
-  title: string;
-  subtitle: string;
+  title: ReactNode;
+  subtitle?: string;
   children: ReactNode;
 }) {
   return (
@@ -42,7 +42,7 @@ export function RoleFormModal({
         close: classes.close,
       }}
     >
-      <p className={classes.subtitle}>{subtitle}</p>
+      {subtitle && <p className={classes.subtitle}>{subtitle}</p>}
       {children}
     </Modal>
   );

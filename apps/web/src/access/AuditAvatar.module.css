@@ -1,0 +1,40 @@
+/* Initials chip from the "Nimbus Themes" design (Audit log). Colours come only from the theme variables. */
+.avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.avatar[data-size="44"] {
+  width: 44px;
+  height: 44px;
+  font-size: 14px;
+}
+
+.avatar[data-tone="accent"] {
+  background: var(--color-accent);
+  color: var(--on-accent);
+}
+
+.avatar[data-tone="ink"] {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.avatar[data-tone="system"] {
+  background: var(--color-accent-2-200);
+  color: var(--color-text);
+}
+
+.picture {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}

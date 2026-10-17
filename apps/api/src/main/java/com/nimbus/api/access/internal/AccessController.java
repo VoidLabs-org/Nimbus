@@ -76,8 +76,12 @@ class AccessController {
 		this.projectScopes = projectScopes;
 	}
 
-	/** Who made a change; {@code null} in the entry when it was the system. */
-	record ActorResponse(UUID id, String displayName, String email) {
+	/**
+	 * Who made a change; {@code null} in the entry when it was the system.
+	 *
+	 * @param avatarUrl {@code null} when they have no picture, and for a User who no longer exists
+	 */
+	record ActorResponse(UUID id, String displayName, String email, String avatarUrl) {
 	}
 
 	/** @param exists whether the Role still exists */
@@ -106,8 +110,8 @@ class AccessController {
 			ActorResponse actor = null;
 			if (entry.actorId() != null) {
 				var user = actors.get(entry.actorId());
-				actor = user == null ? new ActorResponse(entry.actorId(), null, null)
-						: new ActorResponse(user.id(), user.displayName(), user.email());
+				actor = user == null ? new ActorResponse(entry.actorId(), null, null, null)
+						: new ActorResponse(user.id(), user.displayName(), user.email(), user.avatarUrl());
 			}
 			return new AuditEntryResponse(entry.id(), entry.at(), actor, entry.action(),
 					new TargetResponse(entry.targetType(), entry.targetKey(), entry.targetExists()), entry.before(),

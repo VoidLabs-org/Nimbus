@@ -55,22 +55,21 @@ export function UserMenu() {
     <>
       <Menu position="bottom-end">
         <Menu.Target>
-          <UnstyledButton>
-            <Group gap="xs">
-              {/* Falls back to initials of the name when there is no image, or it fails to load. No referrer:
-                  Google's image host refuses some requests that carry one. */}
-              <Avatar
-                src={user.avatarUrl}
-                imageProps={{ referrerPolicy: "no-referrer" }}
-                name={user.displayName}
-                color="initials"
-                size="sm"
-              />
-              {user.displayName}
-            </Group>
+          {/* The avatar alone in the navbar; the name heads the menu. */}
+          <UnstyledButton aria-label={`Account menu for ${user.displayName}`}>
+            {/* Falls back to initials of the name when there is no image, or it fails to load. No referrer:
+                Google's image host refuses some requests that carry one. */}
+            <Avatar
+              src={user.avatarUrl}
+              imageProps={{ referrerPolicy: "no-referrer" }}
+              name={user.displayName}
+              color="initials"
+              size={36}
+            />
           </UnstyledButton>
         </Menu.Target>
         <Menu.Dropdown>
+          <Menu.Label>{user.displayName}</Menu.Label>
           <Menu.Item onClick={() => setEditing(true)}>Change display name</Menu.Item>
           <Menu.Item onClick={() => setChangingPassword(true)}>
             {user.hasPassword ? "Change password" : "Set password"}

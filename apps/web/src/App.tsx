@@ -8,52 +8,27 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import RolePage from "./pages/RolePage";
 import RolesPage from "./pages/RolesPage";
+import { AppShell } from "./shell/AppShell";
 
 export default function App() {
   return (
     <BrowserRouter>
       <SessionProvider>
         <Routes>
+          {/* Every signed-in page, inside the navbar shell. */}
           <Route
-            path="/"
             element={
               <RequireUser>
-                <HomePage />
+                <AppShell />
               </RequireUser>
             }
-          />
-          <Route
-            path="/settings/roles"
-            element={
-              <RequireUser>
-                <RolesPage />
-              </RequireUser>
-            }
-          />
-          <Route
-            path="/settings/roles/:key"
-            element={
-              <RequireUser>
-                <RolePage />
-              </RequireUser>
-            }
-          />
-          <Route
-            path="/settings/appearance"
-            element={
-              <RequireUser>
-                <AppearancePage />
-              </RequireUser>
-            }
-          />
-          <Route
-            path="/settings/audit"
-            element={
-              <RequireUser>
-                <AuditLogPage />
-              </RequireUser>
-            }
-          />
+          >
+            <Route path="/" element={<HomePage />} />
+            <Route path="/settings/roles" element={<RolesPage />} />
+            <Route path="/settings/roles/:key" element={<RolePage />} />
+            <Route path="/settings/appearance" element={<AppearancePage />} />
+            <Route path="/settings/audit" element={<AuditLogPage />} />
+          </Route>
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />

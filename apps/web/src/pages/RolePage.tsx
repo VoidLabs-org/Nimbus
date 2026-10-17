@@ -24,7 +24,6 @@ import { kindLabels } from "../access/labels";
 import { RoleHolders } from "../access/RoleHolders";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
-import { UserMenu } from "../auth/UserMenu";
 
 /**
  * One Role: its name and description, and its Permissions with their Scopes, all editable except for Platform admin.
@@ -89,13 +88,10 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   );
 
   return (
-    <Container size="lg" py="xl">
-      <Group justify="space-between" mb="md">
-        <Anchor component={Link} to="/settings/roles">
-          ← Roles & access
-        </Anchor>
-        <UserMenu />
-      </Group>
+    <Container size="lg" px={0} py="xl">
+      <Anchor component={Link} to="/settings/roles" display="inline-block" mb="md">
+        ← Roles & access
+      </Anchor>
       {error && <Alert color="red">{error}</Alert>}
       {!role && !error && (
         <Center py="xl">

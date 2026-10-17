@@ -47,14 +47,15 @@ flowchart LR
 
 Pages already sit inside `NimbusThemeProvider` (in the app's entry point), so plain Mantine components are themed. Reach for these when the design calls for them:
 
-| Import                                        | What it is                                                                                                                                                   |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Panel` from `@repo/ui/panel`                 | A rounded surface for grouping content; glass on Fog and Slate, solid with a hairline on Paper and Ink.                                                      |
-| `PillTabs` from `@repo/ui/pill-tabs`          | Pill-shaped tabs (a Mantine `SegmentedControl`), as on the Roles pages.                                                                                      |
-| `ScopePill` from `@repo/ui/scope-pill`        | A small segmented choice on a soft track, such as Own / Project / All.                                                                                       |
-| `RoundCheck` from `@repo/ui/round-check`      | A round orange check (a Mantine `Checkbox`).                                                                                                                 |
-| `ThemePicker` from `@repo/ui/theme-picker`    | System and the four themes, as on Settings → Appearance.                                                                                                     |
-| `useNimbusTheme` from `@repo/ui/nimbus-theme` | `{ theme, mode, surface, followsSystem, setMode, setSurface, setTheme, followSystem }`, for the rare page that needs the theme itself (the navbar switches). |
+| Import                                        | What it is                                                                                                                                                  |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Panel` from `@repo/ui/panel`                 | A rounded surface for grouping content; glass on Fog and Slate, solid with a hairline on Paper and Ink.                                                     |
+| `PillTabs` from `@repo/ui/pill-tabs`          | Pill-shaped tabs (a Mantine `SegmentedControl`), as on the Roles pages.                                                                                     |
+| `ScopePill` from `@repo/ui/scope-pill`        | A small segmented choice on a soft track, such as Own / Project / All.                                                                                      |
+| `RoundCheck` from `@repo/ui/round-check`      | A round orange check (a Mantine `Checkbox`).                                                                                                                |
+| `ThemePicker` from `@repo/ui/theme-picker`    | System and the four themes, as on Settings → Appearance.                                                                                                    |
+| `ThemeToggles` from `@repo/ui/theme-toggles`  | The navbar's theme capsule: a sun/moon button for light and dark, and a glass button that is orange while on.                                               |
+| `useNimbusTheme` from `@repo/ui/nimbus-theme` | `{ theme, mode, surface, followsSystem, setMode, setSurface, setTheme, followSystem }`, for the rare page that needs the theme itself (the navbar capsule). |
 
 ```tsx
 import { Button, Stack, Text, Title } from "@mantine/core";

@@ -1,0 +1,42 @@
+/* The pill navbar, from the "Nimbus Themes" design. Colours come only from the theme variables. */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 20px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--color-text);
+}
+
+.link {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.link:hover {
+  background: var(--row-hover);
+}
+
+.active,
+.active:hover {
+  background: var(--color-text);
+  color: var(--color-bg);
+}

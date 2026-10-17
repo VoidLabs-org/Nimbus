@@ -16,7 +16,6 @@ import { Link } from "react-router";
 import { describeAuditEntry } from "../access/auditText";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type AuditPage } from "../api/client";
-import { UserMenu } from "../auth/UserMenu";
 
 const PAGE_SIZE = 50;
 
@@ -66,13 +65,7 @@ export default function AuditLogPage() {
   const pages = loaded ? Math.max(1, Math.ceil(loaded.total / PAGE_SIZE)) : 1;
 
   return (
-    <Container size="lg" py="xl">
-      <Group justify="space-between" mb="md">
-        <Anchor component={Link} to="/">
-          Home
-        </Anchor>
-        <UserMenu />
-      </Group>
+    <Container size="lg" px={0} py="xl">
       <Group justify="space-between" align="flex-start">
         <Title order={2}>Audit log</Title>
         <Button variant="default" onClick={() => setView({ page: 0 })}>

@@ -1,19 +1,11 @@
-import { Anchor, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { Container, Stack, Text, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { ThemePicker } from "@repo/ui/theme-picker";
-import { Link } from "react-router";
-import { UserMenu } from "../auth/UserMenu";
 
 /** Settings → Appearance: pick Paper, Ink, Fog or Slate. The choice is kept in this browser. */
 export default function AppearancePage() {
   return (
-    <Container size="md" py="xl">
-      <Group justify="space-between" mb="md">
-        <Anchor component={Link} to="/">
-          ← Home
-        </Anchor>
-        <UserMenu />
-      </Group>
+    <Container size="md" px={0} py="xl">
       <Stack gap="lg">
         <div>
           <Title order={1}>Appearance</Title>

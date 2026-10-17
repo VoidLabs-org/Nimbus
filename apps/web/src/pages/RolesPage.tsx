@@ -16,7 +16,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { NewRoleModal } from "../access/NewRoleModal";
 import { ApiError, api, type Kind, type RoleSummary } from "../api/client";
-import { UserMenu } from "../auth/UserMenu";
 
 /**
  * Settings → Roles: every Role, platform roles and project roles in two sections, and "New Role". Only Users with
@@ -48,13 +47,7 @@ export default function RolesPage() {
   }, []);
 
   return (
-    <Container size="lg" py="xl">
-      <Group justify="space-between" mb="md">
-        <Anchor component={Link} to="/">
-          Home
-        </Anchor>
-        <UserMenu />
-      </Group>
+    <Container size="lg" px={0} py="xl">
       <Group justify="space-between" align="flex-start">
         <Title order={2}>Roles & access</Title>
         {roles && <Button onClick={() => setCreating(true)}>New Role</Button>}

@@ -8,12 +8,18 @@ import { IconHome, IconSettings } from "@tabler/icons-react";
  * handed to the same one when the bar changes layout.
  */
 export type Destination = {
-  id: "home" | "settings";
+  id: string;
   to: string;
   label: string;
   icon: Icon;
   end?: boolean;
 };
+
+/**
+ * The names of the navbar's other controls that can hold keyboard focus (data-nav-focus in AppShell, UserMenu and the
+ * theme switches). A destination's `id` must not be one of these, or the wrong control would get the focus back.
+ */
+export const OTHER_FOCUS_KEYS = ["brand", "account", "dark", "glass"] as const;
 
 /**
  * The pages in the navbar's links: Home and Settings (display name, password, Appearance, Roles & access and the Audit

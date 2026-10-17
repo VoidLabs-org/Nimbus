@@ -21,7 +21,7 @@ import { useAnimatedPosition } from "./useAnimatedPosition";
 import { useNavShortcut } from "./useNavShortcut";
 
 /** A navbar link: highlighted, and announced as the current page, while it is open. */
-function DestinationLink({
+export function DestinationLink({
   destination,
   onOpen,
 }: {
@@ -46,7 +46,13 @@ function DestinationLink({
  * link sits in a span the tooltip attaches to: Mantine's Tooltip merges its own class into its child, which would
  * replace the NavLink's function className (what marks the open page) and leave the link unstyled.
  */
-function RailLink({ destination, side }: { destination: Destination; side: "left" | "right" }) {
+export function RailLink({
+  destination,
+  side,
+}: {
+  destination: Destination;
+  side: "left" | "right";
+}) {
   return (
     <Tooltip label={destination.label} position={side === "left" ? "right" : "left"} withArrow>
       <span className={classes.railItem}>
@@ -126,7 +132,7 @@ export function AppShell() {
                 </UnstyledButton>
                 {DESTINATIONS.map((destination) => (
                   <RailLink
-                    key={destination.to}
+                    key={destination.id}
                     destination={destination}
                     side={position === "left" ? "left" : "right"}
                   />
@@ -170,7 +176,7 @@ export function AppShell() {
                     <Stack gap={4}>
                       {DESTINATIONS.map((destination) => (
                         <DestinationLink
-                          key={destination.to}
+                          key={destination.id}
                           destination={destination}
                           onOpen={() => setMenuOpen(false)}
                         />
@@ -185,7 +191,7 @@ export function AppShell() {
                 <>
                   <Group gap={4} wrap="nowrap">
                     {DESTINATIONS.map((destination) => (
-                      <DestinationLink key={destination.to} destination={destination} />
+                      <DestinationLink key={destination.id} destination={destination} />
                     ))}
                   </Group>
                   <Group ml={8}>

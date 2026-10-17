@@ -99,6 +99,8 @@ describe("changing a Role", () => {
     fireEvent.click(screen.getByRole("button", { name: /Create Role/ }));
 
     expect(await screen.findByText("Beta")).toBeTruthy();
+    // The window closes with a transition; finishing before it ends leaves its timer running after the test.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });
 

@@ -3,6 +3,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { ThemeToggles } from "@repo/ui/theme-toggles";
 import { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
+import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
 import classes from "./AppShell.module.css";
 import { NimbusLogo } from "./NimbusLogo";
@@ -36,6 +37,8 @@ function DestinationLink({
  * (light/dark and glass) in the bar; narrow ones fold them into a menu next to the avatar.
  */
 export function AppShell() {
+  // Starts the request (and caches it) on every signed-in page, so Settings lists its groups at once.
+  usePlatformPermissions();
   const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
   const [menuOpen, setMenuOpen] = useState(false);
 

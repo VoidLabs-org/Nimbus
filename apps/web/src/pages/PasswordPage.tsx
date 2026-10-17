@@ -3,7 +3,9 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
+import { passwordError } from "../auth/password";
 import { useSession } from "../auth/useSession";
+import { BackToSettings } from "../settings/BackToSettings";
 
 /**
  * Settings → Password: set a password (a User who signed in with Google or GitHub has none) or change it. Changing
@@ -16,8 +18,7 @@ export default function PasswordPage() {
     initialValues: { currentPassword: "", newPassword: "" },
     validate: {
       currentPassword: (value) => (hasPassword && !value ? "Enter your current password" : null),
-      newPassword: (value) =>
-        value.length < 8 || value.length > 128 ? "Use 8 to 128 characters" : null,
+      newPassword: passwordError,
     },
   });
 
@@ -70,6 +71,7 @@ export default function PasswordPage() {
   return (
     <Container size="sm" px={0} py="xl">
       <Stack gap="lg" maw={520}>
+        <BackToSettings />
         <div>
           <Title order={1} fz={32} lh={1.1}>
             Password

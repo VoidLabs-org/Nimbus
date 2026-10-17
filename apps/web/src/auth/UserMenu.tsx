@@ -78,7 +78,9 @@ export function UserMenu() {
         withCloseButton={!signingOut}
       >
         <Text size="sm" c="dimmed" mb="lg">
-          You&apos;ll need your email and password to sign back in.
+          {user.hasPassword
+            ? "You'll need your email and password to sign back in."
+            : "You'll sign back in with Google or GitHub."}
         </Text>
         <Group justify="flex-end">
           <Button variant="default" onClick={() => setConfirming(false)} disabled={signingOut}>

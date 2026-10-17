@@ -1,6 +1,6 @@
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 
-/** A page in Settings, with the line the narrow-screen overview shows under its name. */
+/** A page in Settings, with the line the overview shows under its name. */
 export type SettingsItem = { to: string; label: string; description: string };
 
 export type SettingsGroup = { label: "Account" | "Workspace"; items: SettingsItem[] };
@@ -16,7 +16,7 @@ const ACCOUNT: SettingsItem[] = [
 ];
 
 /**
- * The Settings pages a User may open, grouped as the sidebar shows them: Account for everyone, Workspace (Roles &
+ * The Settings pages a User may open, grouped as the overview shows them: Account for everyone, Workspace (Roles &
  * access with `access:role:manage`, the Audit log with `access:audit:view`) only when there is something in it. The
  * one place that decides what Settings offers.
  */

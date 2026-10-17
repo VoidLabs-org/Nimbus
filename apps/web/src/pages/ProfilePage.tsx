@@ -5,6 +5,7 @@ import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { displayNameError } from "../auth/displayName";
 import { useSession } from "../auth/useSession";
+import { BackToSettings } from "../settings/BackToSettings";
 
 /** Settings → Profile: the User's avatar, name and email, and a Display name they can change. */
 export default function ProfilePage() {
@@ -14,6 +15,7 @@ export default function ProfilePage() {
   return (
     <Container size="sm" px={0} py="xl">
       <Stack gap="lg" maw={520}>
+        <BackToSettings />
         <div>
           <Title order={1} fz={32} lh={1.1}>
             Profile
@@ -39,8 +41,7 @@ export default function ProfilePage() {
             </Text>
           </div>
         </Group>
-        {/* Keyed by the saved name, so the field starts again from it after a save (or if it changed elsewhere). */}
-        <DisplayNameForm key={user.displayName} current={user.displayName} />
+        <DisplayNameForm current={user.displayName} />
       </Stack>
     </Container>
   );
@@ -54,8 +55,12 @@ function DisplayNameForm({ current }: { current: string }) {
   });
 
   async function submit({ displayName }: { displayName: string }) {
+    const name = displayName.trim();
     try {
-      await updateDisplayName(displayName.trim());
+      await updateDisplayName(name);
+      // Start again from what was saved (trimmed), so the form is clean and Save waits for the next change.
+      form.setInitialValues({ displayName: name });
+      form.setValues({ displayName: name });
       notifications.show({ message: "Display name saved." });
     } catch (error) {
       if (error instanceof ApiError && error.fieldErrors.displayName) {

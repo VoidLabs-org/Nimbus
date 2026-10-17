@@ -47,6 +47,8 @@
   font-size: 13px;
   color: var(--color-accent-2-700);
   text-transform: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .item {

@@ -10,7 +10,7 @@ import RolePage from "./pages/RolePage";
 import PasswordPage from "./pages/PasswordPage";
 import ProfilePage from "./pages/ProfilePage";
 import RolesPage from "./pages/RolesPage";
-import SettingsLayout from "./settings/SettingsLayout";
+import SettingsOverview from "./settings/SettingsOverview";
 import { AppShell } from "./shell/AppShell";
 
 export default function App() {
@@ -27,16 +27,14 @@ export default function App() {
             }
           >
             <Route path="/" element={<HomePage />} />
-            {/* Settings: the sidebar (or, on narrow screens, the overview) around each page. */}
-            <Route path="/settings" element={<SettingsLayout />}>
-              <Route index element={null} />
-              <Route path="profile" element={<ProfilePage />} />
-              <Route path="password" element={<PasswordPage />} />
-              <Route path="appearance" element={<AppearancePage />} />
-              <Route path="roles" element={<RolesPage />} />
-              <Route path="roles/:key" element={<RolePage />} />
-              <Route path="audit" element={<AuditLogPage />} />
-            </Route>
+            {/* Settings: the overview list, and the pages it opens. */}
+            <Route path="/settings" element={<SettingsOverview />} />
+            <Route path="/settings/profile" element={<ProfilePage />} />
+            <Route path="/settings/password" element={<PasswordPage />} />
+            <Route path="/settings/appearance" element={<AppearancePage />} />
+            <Route path="/settings/roles" element={<RolesPage />} />
+            <Route path="/settings/roles/:key" element={<RolePage />} />
+            <Route path="/settings/audit" element={<AuditLogPage />} />
           </Route>
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/login" element={<LoginPage />} />

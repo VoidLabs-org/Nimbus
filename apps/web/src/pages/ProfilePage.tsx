@@ -1,6 +1,6 @@
 import { Avatar, Button, Container, Group, Stack, Text, TextInput, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { notifications } from "@mantine/notifications";
+import { toast } from "@repo/ui/toast";
 import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { displayNameError } from "../auth/displayName";
@@ -62,7 +62,7 @@ function DisplayNameForm({ current }: { current: string }) {
       // Start again from what was saved (trimmed), so the form is clean and Save waits for the next change.
       form.setInitialValues({ displayName: name });
       form.setValues({ displayName: name });
-      notifications.show({ message: "Display name saved." });
+      toast.success("Display name saved.");
     } catch (error) {
       if (error instanceof ApiError && error.fieldErrors.displayName) {
         form.setFieldError("displayName", error.fieldErrors.displayName);

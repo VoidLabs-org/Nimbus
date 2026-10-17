@@ -13,7 +13,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { notifications } from "@mantine/notifications";
+import { toast } from "@repo/ui/toast";
 import { useEffect, useState } from "react";
 import { ApiError, api, type Role, type RoleHolder } from "../api/client";
 import { useSession } from "../auth/useSession";
@@ -75,7 +75,7 @@ export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => 
     try {
       const added = await api.giveRole(role.key, values.email.trim());
       form.reset();
-      notifications.show({ message: `Gave ${role.name} to ${added.email ?? "them"}.` });
+      toast.success(`Gave ${role.name} to ${added.email ?? "them"}.`);
       changed();
     } catch (failure) {
       if (failure instanceof ApiError && failure.fieldErrors.email)
@@ -94,7 +94,7 @@ export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => 
     setError(null);
     try {
       await api.takeRole(role.key, removing.id);
-      notifications.show({ message: `Took ${role.name} from ${removing.email ?? "them"}.` });
+      toast.success(`Took ${role.name} from ${removing.email ?? "them"}.`);
       changed();
     } catch (failure) {
       setError(

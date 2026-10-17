@@ -55,6 +55,7 @@ Pages already sit inside `NimbusThemeProvider` (in the app's entry point), so pl
 | `RoundCheck` from `@repo/ui/round-check`      | A round orange check (a Mantine `Checkbox`).                                                                                                                |
 | `ThemePicker` from `@repo/ui/theme-picker`    | System and the four themes, as on Settings → Appearance.                                                                                                    |
 | `ThemeToggles` from `@repo/ui/theme-toggles`  | The navbar's theme capsule: a sun/moon button for light and dark, and a glass button that is orange while on.                                               |
+| `toast` from `@repo/ui/toast`                 | Toasts after an action: `toast.success`, `toast.info`, `toast.warning`, `toast.error` (errors stay until closed). The app renders `NimbusToasts` once.      |
 | `useNimbusTheme` from `@repo/ui/nimbus-theme` | `{ theme, mode, surface, followsSystem, setMode, setSurface, setTheme, followSystem }`, for the rare page that needs the theme itself (the navbar capsule). |
 
 ```tsx
@@ -78,10 +79,11 @@ export function ProjectSummary() {
 
 - **Colours only through the theme.** Use Mantine's colour props (`c="dimmed"`, `color="red"`, the default variants) or the theme variables (`var(--color-text)`, `var(--line)`, `var(--glass)`, …). Never a hex value in a page: it will be wrong in at least one of the four themes.
 - **`Panel`, not Mantine's `Paper`**, for surfaces.
+- **`toast`, not Mantine's `notifications.show`.** Name what happened (success, info, warning, error), not a colour; the kind picks the icon, colour, how long it stays and how a screen reader announces it.
 - **The orange is for actions.** Filled orange buttons get dark text automatically; don't override it to white (too low contrast).
 - **Changing a theme:** edit its block in `themes.css`. A new variable needs a value in `:root` so pages render even without `data-theme`.
 - **Changing the storage key or how the theme is picked:** change the provider and the pre-paint script together.
 
 ## Tests
 
-`pnpm --filter @repo/ui test` runs Vitest (jsdom) against the provider and hook as a page would use them: first visit follows the system, every mode × surface pair, Mantine following the mode, two consumers agreeing, choices surviving a reload and other tabs' changes, System, and unreadable storage. Pages are checked by hand in all four themes.
+`pnpm --filter @repo/ui test` runs Vitest (jsdom) against the provider and hook as a page would use them: first visit follows the system, every mode × surface pair, Mantine following the mode, two consumers agreeing, choices surviving a reload and other tabs' changes, System, and unreadable storage. The toast tests render `NimbusToasts` and show toasts as a page would: errors as alerts that stay, the other kinds as polite messages that close on their own, the kind and icon of each, and no more than three at once. Pages are checked by hand in all four themes.

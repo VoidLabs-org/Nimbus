@@ -11,7 +11,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
+import { toast } from "@repo/ui/toast";
 import { PillTabs } from "@repo/ui/pill-tabs";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
@@ -86,10 +86,7 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
       .role(key)
       .then(setRole)
       .catch(() =>
-        notifications.show({
-          color: "yellow",
-          message: "Couldn't refresh this Role's holder count; reload the page to see it.",
-        }),
+        toast.warning("Couldn't refresh this Role's holder count; reload the page to see it."),
       );
   }
 
@@ -254,10 +251,10 @@ function ConfirmModal({
     try {
       if (confirming === "reset") {
         onChanged(await api.resetRole(role.key, role.version));
-        notifications.show({ message: `${role.name} is back to its defaults.` });
+        toast.success(`${role.name} is back to its defaults.`);
       } else {
         await api.deleteRole(role.key);
-        notifications.show({ message: `Deleted ${role.name}.` });
+        toast.success(`Deleted ${role.name}.`);
         navigate("/settings/roles", { replace: true });
       }
       onClose();

@@ -47,6 +47,56 @@ A key is `module:resource:action`, lowercase, starting with the declaring module
 
 `access:role:manage` and `access:role:assign` are reserved to Platform admin: no other Role may hold them, so nobody can give themselves or others the power to change access.
 
+### Adding a Permission
+
+First decide which kind it is:
+
+- **Platform permission:** an action that isn't about one project. Examples: creating a project, reading the audit log.
+- **Project permission:** an action inside one project. Example: renaming it. A Member's project role grants it, with a Scope:
+  - `OWN`: only their own records.
+  - `PROJECT`: any record in the project.
+
+Then:
+
+1. **Declare it** in your module's `ModulePermissions` bean (a real one: `ProjectPermissions` in `projects`).
+   - **Key:** `module:resource:action`, starting with your module's name.
+   - **`.grantedTo(...)`:** who holds it by default. Platform admin gets every new Permission on its own.
+   - **`.lockedIn(...)`:** only for a Grant a Role must always keep.
+   - **A broken declaration** stops startup with a message naming the key.
+
+   ```java
+   Permission.platform("projects:project:create", "Projects", "Create projects")
+       .grantedTo(BuiltInRole.EVERYONE),
+   Permission.project("projects:project:update", "Projects", "Rename and describe a project", Scope.PROJECT)
+       .grantedTo(BuiltInRole.PROJECT_ADMIN, Scope.PROJECT)
+   ```
+
+2. **Check it on the server.** It is the only place that enforces anything. Check the Permission, never a Role name.
+
+   ```java
+   // Platform permission: on the controller method, 403 without it.
+   @PostMapping("/projects")
+   @Authorize("projects:project:create")
+   ProjectResponse create(...) { ... }
+
+   // Project permission: in the service, with the project at hand.
+   Scope scope = projectScopes.require(userId, projectId, "projects:project:update"); // throws PermissionDeniedException
+   // For a list: which projects' records the User may reach.
+   ProjectFilter reachable = projectScopes.filter(userId, "projects:project:update");
+   ```
+
+3. **Hide what the User can't use** in the web app.
+   - Use `usePlatformPermissions()` for platform permissions; `settingsGroups()` is the pattern.
+   - It is only a convenience. The server still refuses.
+4. **Tell the docs.**
+   - Add a row to the table above.
+   - If it is reserved to Platform admin (no other Role may hold it, like `access:role:manage`), say so under the table.
+5. **Test it.**
+   - A User without it is refused (`403`).
+   - A User with it succeeds.
+
+Nothing else is needed to show it on the Roles pages: the catalog is read at startup, so the new Permission appears there by itself, grouped under its heading.
+
 ## Roles
 
 | Role           | Key              | Kind     | Holds                                                                                        |

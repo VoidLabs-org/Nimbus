@@ -48,6 +48,14 @@ _Avoid_: Owner, responsible
 A person who can sign in to Nimbus, identified by their email address. One person is one User, however many ways they sign in.
 _Avoid_: Account, login
 
+**Unverified User**:
+A User who hasn't yet proved they own their email address. They can sign in but can't use Nimbus until they do.
+_Avoid_: Pending, inactive or unconfirmed user
+
+**Verification code**:
+A short-lived code emailed to a User to prove they own the address.
+_Avoid_: OTP, token, PIN
+
 **Member**:
 A User who has been added to a project. Only ever means project membership.
 _Avoid_: User (when you mean project membership)

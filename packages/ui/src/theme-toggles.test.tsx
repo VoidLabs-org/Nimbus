@@ -1,30 +1,21 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NimbusThemeProvider } from "./nimbus-theme";
+import { stubMatchMedia } from "./test-support";
 import { ThemeToggles } from "./theme-toggles";
+
+let restoreMatchMedia: () => void;
 
 beforeEach(() => {
   localStorage.clear();
   // A light system; jsdom has no matchMedia of its own.
-  window.matchMedia = (query: string) =>
-    ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      dispatchEvent: () => false,
-    }) as MediaQueryList;
+  restoreMatchMedia = stubMatchMedia("light");
 });
-
-const realMatchMedia = window.matchMedia;
 
 // Leave nothing behind for the next test: the real matchMedia, and no theme on the document.
 afterEach(() => {
   cleanup();
-  window.matchMedia = realMatchMedia;
+  restoreMatchMedia();
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("data-mantine-color-scheme");
 });

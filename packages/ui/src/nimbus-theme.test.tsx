@@ -1,20 +1,11 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NimbusThemeProvider, useNimbusTheme } from "./nimbus-theme";
+import { stubMatchMedia } from "./test-support";
 
-// jsdom has no matchMedia: answer the dark-mode query as the "system" would.
+// jsdom has no matchMedia: answer the dark-mode query as the "system" would. afterEach puts the real one back.
 function systemPrefers(scheme: "light" | "dark") {
-  window.matchMedia = (query: string) =>
-    ({
-      matches: query.includes("prefers-color-scheme: dark") && scheme === "dark",
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      dispatchEvent: () => false,
-    }) as MediaQueryList;
+  stubMatchMedia(scheme);
 }
 
 /** A page using the theme, as the navbar switches or the Appearance page will. */

@@ -465,10 +465,12 @@
   margin-top: 0;
 }
 
+/* No padding on the toast itself: its parts carry the spacing, so closing (Mantine shrinks max-height to 0) folds it
+   away completely instead of leaving a padded strip that snaps shut. */
 .nimbus-toast {
   --notification-radius: 24px;
   gap: 12px;
-  padding: 8px;
+  padding: 0;
   background: var(--modal-bg);
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-lg);
@@ -486,7 +488,7 @@
   align-self: flex-start;
   width: 32px;
   height: 32px;
-  margin: 0;
+  margin: 8px 0 8px 8px;
   border-radius: 50%;
 }
 
@@ -513,7 +515,7 @@
 
 .nimbus-toast .mantine-Notification-body {
   margin: 0;
-  padding: 6px 0;
+  padding: 14px 0;
 }
 
 .nimbus-toast .mantine-Notification-description {
@@ -527,6 +529,7 @@
   align-self: flex-start;
   width: 32px;
   height: 32px;
+  margin: 8px 8px 8px 0;
   border-radius: 50%;
   color: var(--color-accent-2-500);
 }

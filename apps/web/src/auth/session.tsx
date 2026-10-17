@@ -113,7 +113,7 @@ export function RequireUser({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (restoring) {
-    return <SignInCheck />;
+    return <SignInCheck message="Checking your session" />;
   }
   // The sign-in couldn't be checked: offline, or the server failed. Either way the User may try again.
   if (unavailable) {

@@ -1,10 +1,13 @@
-import { Button, Group, Loader } from "@mantine/core";
+import { Button, Group, Loader, VisuallyHidden } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../api/client";
 import classes from "./ProviderButtons.module.css";
 import { GitHubIcon, GoogleIcon } from "./ProviderIcons";
 import { safeReturnPath } from "./returnPath";
+
+// How long the buttons stay busy if the browser hasn't left by then.
+const GIVE_UP_AFTER_MS = 10_000;
 
 // What each provider id from the server looks like here. An id not listed is not shown.
 const PROVIDERS = [
@@ -20,13 +23,16 @@ const PROVIDERS = [
  * shows, not even the "or", when none are on or the server can't be asked: the form still works. The page's `returnTo` goes along; the server keeps it through the handshake and hands it to
  * `/auth/callback`.
  * Between the click and the browser leaving, the page stays as it was: the clicked button works, the other is held
- * back and the "or" under them says where the User is being taken. Coming back with the Back button starts again.
+ * back (its click is cancelled, so it can't take over) and the "or" under them says where the User is being taken,
+ * for screen readers too, through a region that is always there. A click that opens the provider in a new tab changes
+ * nothing. If the browser never leaves (the User pressed Stop, or it stalled), or comes back with the Back button, the
+ * buttons start again.
  */
 export function ProviderButtons() {
   // null until the server answers.
   const [enabled, setEnabled] = useState<string[] | null>(null);
   // The provider the User chose, from the click until the browser leaves.
-  const [going, setGoing] = useState<string | null>(null);
+  const [going, setGoing] = useState<{ id: string; name: string } | null>(null);
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnPath(searchParams.get("returnTo"));
   const query = returnTo === "/" ? "" : `?returnTo=${encodeURIComponent(returnTo)}`;
@@ -37,6 +43,13 @@ export function ProviderButtons() {
     window.addEventListener("pageshow", restored);
     return () => window.removeEventListener("pageshow", restored);
   }, []);
+
+  // Pressing Stop, or a redirect that stalls, leaves the page here without the browser going anywhere.
+  useEffect(() => {
+    if (going === null) return;
+    const timer = setTimeout(() => setGoing(null), GIVE_UP_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [going]);
 
   useEffect(() => {
     let current = true;
@@ -79,9 +92,22 @@ export function ProviderButtons() {
             className={classes.provider}
             leftSection={provider.icon}
             aria-label={`Continue with ${provider.name}`}
-            loading={going === provider.id}
-            disabled={going !== null && going !== provider.id}
-            onClick={() => setGoing(provider.id)}
+            loading={going?.id === provider.id}
+            disabled={going !== null && going.id !== provider.id}
+            onClick={(event) => {
+              // Disabled doesn't stop a link: while one provider is under way, the others (and a second click) do nothing.
+              if (going !== null) return event.preventDefault();
+              // A click that opens the provider in a new tab leaves this page where it is.
+              if (
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+              )
+                return;
+              setGoing({ id: provider.id, name: provider.name });
+            }}
           >
             {provider.name}
           </Button>
@@ -90,11 +116,13 @@ export function ProviderButtons() {
       {going === null ? (
         <div className={classes.or}>or</div>
       ) : (
-        <div className={`${classes.or} ${classes.going}`} role="status">
+        <div className={`${classes.or} ${classes.going}`} aria-hidden>
           <Loader size={14} />
-          Taking you to {PROVIDERS.find((provider) => provider.id === going)?.name}…
+          Taking you to {going.name}…
         </div>
       )}
+      {/* Always there, so a change to its text is announced (a region that appears with its text often isn't). */}
+      <VisuallyHidden role="status">{going && `Taking you to ${going.name}`}</VisuallyHidden>
     </>
   );
 }

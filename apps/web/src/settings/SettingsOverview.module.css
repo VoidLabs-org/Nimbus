@@ -1,0 +1,58 @@
+/* The Settings overview, from the "Nimbus Themes" design (16c). Colours come only from the theme variables. */
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 720px;
+  margin-inline: auto;
+  padding-block: var(--mantine-spacing-xl);
+}
+
+.groupLabel {
+  margin: 0 0 10px;
+  padding-left: 24px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-2-700);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-top: 1px solid var(--line);
+  border-radius: 20px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.row:hover {
+  background: var(--row-hover);
+}
+
+li:first-child > .row {
+  border-top: 0;
+}
+
+.rowTitle {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.rowDescription {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}

@@ -7,7 +7,10 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import RolePage from "./pages/RolePage";
+import PasswordPage from "./pages/PasswordPage";
+import ProfilePage from "./pages/ProfilePage";
 import RolesPage from "./pages/RolesPage";
+import SettingsOverview from "./settings/SettingsOverview";
 import { AppShell } from "./shell/AppShell";
 
 export default function App() {
@@ -24,9 +27,13 @@ export default function App() {
             }
           >
             <Route path="/" element={<HomePage />} />
+            {/* Settings: the overview list, and the pages it opens. */}
+            <Route path="/settings" element={<SettingsOverview />} />
+            <Route path="/settings/profile" element={<ProfilePage />} />
+            <Route path="/settings/password" element={<PasswordPage />} />
+            <Route path="/settings/appearance" element={<AppearancePage />} />
             <Route path="/settings/roles" element={<RolesPage />} />
             <Route path="/settings/roles/:key" element={<RolePage />} />
-            <Route path="/settings/appearance" element={<AppearancePage />} />
             <Route path="/settings/audit" element={<AuditLogPage />} />
           </Route>
           <Route path="/auth/callback" element={<AuthCallbackPage />} />

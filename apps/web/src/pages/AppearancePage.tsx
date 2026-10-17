@@ -1,12 +1,14 @@
 import { Container, Stack, Text, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { ThemePicker } from "@repo/ui/theme-picker";
+import { BackToSettings } from "../settings/BackToSettings";
 
 /** Settings → Appearance: pick Paper, Ink, Fog or Slate. The choice is kept in this browser. */
 export default function AppearancePage() {
   return (
     <Container size="md" px={0} py="xl">
       <Stack gap="lg">
+        <BackToSettings />
         <div>
           <Title order={1}>Appearance</Title>
           <Text c="dimmed" mt={6}>

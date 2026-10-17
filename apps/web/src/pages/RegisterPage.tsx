@@ -12,6 +12,7 @@ import {
   AuthSubmit,
   AuthTextInput,
 } from "../auth/AuthLayout";
+import { passwordError } from "../auth/password";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -29,8 +30,7 @@ export default function RegisterPage() {
       displayName: displayNameError,
       email: (value) =>
         /^\S+@\S+\.\S+$/.test(value.trim()) ? null : "Enter a valid email address",
-      password: (value) =>
-        value.length < 8 || value.length > 128 ? "Use between 8 and 128 characters" : null,
+      password: passwordError,
     },
   });
 

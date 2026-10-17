@@ -551,3 +551,18 @@
   background: var(--color-text);
   color: var(--color-bg);
 }
+
+/* Skeleton shapes: a soft grey from the theme lines, so they read on every theme and on glass panels. */
+.nimbus-bone[data-visible]::before {
+  background: transparent;
+}
+
+.nimbus-bone[data-visible]::after {
+  background: var(--line-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nimbus-bone[data-animate]::after {
+    animation: none;
+  }
+}

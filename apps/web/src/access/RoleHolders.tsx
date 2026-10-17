@@ -3,9 +3,7 @@ import {
   Avatar,
   Badge,
   Button,
-  Center,
   Group,
-  Loader,
   Modal,
   Stack,
   Table,
@@ -13,10 +11,12 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { useEffect, useState } from "react";
 import { ApiError, api, type Role, type RoleHolder } from "../api/client";
 import { useSession } from "../auth/useSession";
+import { HoldersSkeleton } from "./HoldersSkeleton";
 
 /**
  * A platform role's People tab: who holds it, giving it to a User by email, and taking it away. The signed-in User's
@@ -135,9 +135,9 @@ export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => 
         </Group>
       </form>
       {!holders && !loadError && (
-        <Center py="md">
-          <Loader size="sm" />
-        </Center>
+        <Loading>
+          <HoldersSkeleton />
+        </Loading>
       )}
       {holders && holders.length === 0 && <Text c="dimmed">Nobody holds this Role yet.</Text>}
       {holders && holders.length > 0 && (

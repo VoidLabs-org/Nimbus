@@ -1,17 +1,8 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import {
-  Alert,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Pagination,
-  Stack,
-  Title,
-} from "@mantine/core";
+import { Alert, Button, Container, Group, Pagination, Stack, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
+import { Loading } from "@repo/ui/skeleton";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { AuditAvatar } from "../access/AuditAvatar";
@@ -25,6 +16,7 @@ import { api, type AuditEntry, type AuditPage } from "../api/client";
 import { failedLoad, type FailedLoad } from "../api/failure";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./AuditLogPage.module.css";
+import { AuditLogSkeleton } from "./AuditLogSkeleton";
 
 const PAGE_SIZE = 50;
 
@@ -62,12 +54,18 @@ export default function AuditLogPage() {
     error?: FailedLoad;
   } | null>(null);
 
+  // The last page that arrived: it stays on screen, dimmed, while the next one loads, so the list doesn't collapse and
+  // the Pagination doesn't vanish under the User's pointer. The skeleton is only for the very first load.
+  const [shown, setShown] = useState<AuditPage | null>(null);
+
   useEffect(() => {
     let current = true;
     api
       .auditLog(view.page, PAGE_SIZE, view.asOf)
       .then((loaded) => {
-        if (current) setResult({ page: view.page, asOf: view.asOf, loaded });
+        if (!current) return;
+        setShown(loaded);
+        setResult({ page: view.page, asOf: view.asOf, loaded });
       })
       .catch((failure) => {
         if (!current) return;
@@ -83,7 +81,8 @@ export default function AuditLogPage() {
   }, [view]);
 
   const current = result && result.page === view.page && result.asOf === view.asOf ? result : null;
-  const loaded = current?.loaded ?? null;
+  const loaded = current?.loaded ?? shown;
+  const loading = !current?.loaded && !current?.error;
   const error = current?.error ?? null;
   const pages = loaded ? Math.max(1, Math.ceil(loaded.total / PAGE_SIZE)) : 1;
 
@@ -130,10 +129,10 @@ export default function AuditLogPage() {
             </Group>
           </Alert>
         )}
-        {!loaded && !error && (
-          <Center py="xl">
-            <Loader />
-          </Center>
+        {!loaded && loading && (
+          <Loading>
+            <AuditLogSkeleton />
+          </Loading>
         )}
         {loaded && loaded.entries.length === 0 && (
           <Panel p={8}>
@@ -141,7 +140,7 @@ export default function AuditLogPage() {
           </Panel>
         )}
         {loaded && loaded.entries.length > 0 && (
-          <>
+          <Stack gap="lg" aria-busy={loading} className={loading ? classes.paging : undefined}>
             <Panel p={8}>
               {days.map((day) => (
                 <section key={day.key} aria-label={day.label}>
@@ -164,13 +163,11 @@ export default function AuditLogPage() {
                 <Pagination
                   total={pages}
                   value={view.page + 1}
-                  onChange={(value) =>
-                    setView({ page: value - 1, asOf: loaded?.asOf ?? view.asOf })
-                  }
+                  onChange={(value) => setView({ page: value - 1, asOf: loaded.asOf ?? view.asOf })}
                 />
               </Group>
             )}
-          </>
+          </Stack>
         )}
       </Stack>
       {opened && <AuditEntryModal entry={opened} onClose={() => setOpened(null)} />}

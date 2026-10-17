@@ -43,7 +43,7 @@
   border-radius: 20px;
 }
 
-.row:hover {
+li.row:hover {
   background: var(--row-hover);
 }
 
@@ -88,7 +88,7 @@
   cursor: pointer;
 }
 
-.row {
+li.row {
   cursor: pointer;
 }
 
@@ -171,5 +171,22 @@ a.role:hover {
       "what what arrow";
     gap: 8px 12px;
     padding: 14px 16px;
+  }
+}
+
+.roleBone {
+  grid-area: role;
+  justify-self: start;
+}
+
+/* The previous page, kept while the next one loads: dimmed and out of reach, so it can't be opened by mistake. */
+.paging {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .paging {
+    transition: opacity 150ms;
   }
 }

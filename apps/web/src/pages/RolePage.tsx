@@ -1,20 +1,10 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Modal,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Alert, Box, Button, Container, Group, Modal, Stack, Text, Title } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
 import { PillTabs } from "@repo/ui/pill-tabs";
+import { Loading } from "@repo/ui/skeleton";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
+import { readOpenedRole, showsPeopleTab } from "../access/openedRole";
 import { GrantsEditor } from "../access/GrantsEditor";
 import { grantable } from "../access/grants";
 import { RenameRoleModal } from "../access/RenameRoleModal";
@@ -28,6 +18,7 @@ import { roleCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./RolePage.module.css";
+import { RoleSkeleton } from "./RoleSkeleton";
 
 /**
  * One Role: its name and description, and its Permissions with their Scopes, all editable except for Platform admin.
@@ -49,6 +40,10 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const platformPermissions = usePlatformPermissions();
+  // The Roles list says which kind of Role it opened, so the skeleton can match it.
+  const location = useLocation();
+  const opened = readOpenedRole(location.state);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let current = true;
@@ -66,12 +61,13 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
     };
   }, [key, attempt]);
 
-  // Everyone is held by every signed-in User, and project roles are given on a project's Members page.
-  const hasPeople =
-    role !== null &&
-    role.kind === "platform" &&
-    role.key !== "everyone" &&
-    platformPermissions.includes("access:role:assign");
+  const hasPeople = role !== null && showsPeopleTab(role.kind, role.key, platformPermissions);
+
+  // The hint was only for the skeleton; once the Role is here it would go stale (after a rename, on a reload).
+  const hinted = location.state !== null;
+  useEffect(() => {
+    if (role && hinted) navigate(location, { replace: true, state: null });
+  }, [role, hinted, navigate, location]);
 
   // Whatever changed the Role (rename, save, reset), a refusal shown from an earlier try no longer applies.
   function changed(next: Role) {
@@ -108,9 +104,12 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
         <BreadcrumbTrail crumbs={roleCrumbs(role)} />
       </Box>
       {!role && (
-        <Center py="xl">
-          <Loader />
-        </Center>
+        <Loading>
+          <RoleSkeleton
+            opened={opened}
+            tabs={opened !== undefined && showsPeopleTab(opened.kind, key, platformPermissions)}
+          />
+        </Loading>
       )}
       {role && (
         <Stack gap="lg">
@@ -154,8 +153,8 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
 }
 
 /**
- * The Permissions and People tabs beside the summary panel. The unsaved Grants live here, above the tabs, so ticks
- * survive a visit to People; below about 900px the summary moves under the tabs.
+ * The tabs, then the Permissions beside the summary panel. The unsaved Grants live here, above the tabs, so ticks
+ * survive a visit to People; below about 900px the summary moves under the Permissions.
  */
 function RoleWorkspace({
   role,
@@ -180,43 +179,45 @@ function RoleWorkspace({
   const current = hasPeople ? tab : "permissions";
 
   return (
-    <div className={classes.layout}>
-      <div className={classes.main}>
-        {hasPeople && (
-          <PillTabs
-            data={[
-              { value: "permissions", label: "Permissions" },
-              { value: "people", label: "People" },
-            ]}
-            value={current}
-            onChange={(value) => setTab(value as typeof tab)}
-            style={{ alignSelf: "flex-start" }}
-          />
-        )}
-        {/* Only mounted while shown, so the Scope pills measure themselves in a visible page; the draft lives above. */}
-        {current === "permissions" && (
-          <GrantsEditor role={role} catalog={catalog} grants={grants} />
-        )}
-        {hasPeople && (
-          <div hidden={current !== "people"}>
-            <RoleHolders role={role} onChanged={onRefresh} />
-          </div>
-        )}
+    <>
+      {hasPeople && (
+        <PillTabs
+          data={[
+            { value: "permissions", label: "Permissions" },
+            { value: "people", label: "People" },
+          ]}
+          value={current}
+          onChange={(value) => setTab(value as typeof tab)}
+          style={{ alignSelf: "flex-start" }}
+        />
+      )}
+      <div className={classes.layout}>
+        <div className={classes.main}>
+          {/* Only mounted while shown, so the Scope pills measure themselves in a visible page; the draft lives above. */}
+          {current === "permissions" && (
+            <GrantsEditor role={role} catalog={catalog} grants={grants} />
+          )}
+          {hasPeople && (
+            <div hidden={current !== "people"}>
+              <RoleHolders role={role} onChanged={onRefresh} />
+            </div>
+          )}
+        </div>
+        <RoleSummary
+          role={role}
+          granted={grants.draft.size}
+          grantable={grantable(role.kind, catalog).length}
+          showSave={current === "permissions"}
+          changes={grants.changes}
+          saving={grants.saving}
+          onSave={grants.save}
+          onDiscard={grants.discard}
+          onRename={onRename}
+          onReset={() => onConfirm("reset")}
+          onDelete={() => onConfirm("delete")}
+        />
       </div>
-      <RoleSummary
-        role={role}
-        granted={grants.draft.size}
-        grantable={grantable(role.kind, catalog).length}
-        showSave={current === "permissions"}
-        changes={grants.changes}
-        saving={grants.saving}
-        onSave={grants.save}
-        onDiscard={grants.discard}
-        onRename={onRename}
-        onReset={() => onConfirm("reset")}
-        onDelete={() => onConfirm("delete")}
-      />
-    </div>
+    </>
   );
 }
 

@@ -7,7 +7,7 @@ import { useSettingsGroups } from "./sections";
 
 /**
  * Settings, as the overview list of the design (variant 16c): every page the User may open, a row each, and a row
- * opens that page at full width. Each of those pages has a link back here (see BackToSettings).
+ * opens that page at full width. Each of those pages has breadcrumbs back here.
  */
 export default function SettingsOverview() {
   const groups = useSettingsGroups();

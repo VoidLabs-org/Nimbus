@@ -1,21 +1,24 @@
-import { Button, Divider, Stack } from "@mantine/core";
+import { Button, Group } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../api/client";
+import classes from "./AuthLayout.module.css";
+import { GitHubIcon, GoogleIcon } from "./ProviderIcons";
 import { safeReturnPath } from "./returnPath";
 
 // What each provider id from the server looks like here. An id not listed is not shown.
 const PROVIDERS = [
-  { id: "google", label: "Continue with Google" },
-  { id: "github", label: "Continue with GitHub" },
+  { id: "google", name: "Google", icon: <GoogleIcon /> },
+  { id: "github", name: "GitHub", icon: <GitHubIcon /> },
 ];
 
 /**
  * "Continue with ..." for each provider the server has switched on, for the sign-in and register pages: signing
- * up and signing in are the same step with a provider. Full page loads, not fetches: the browser must follow
- * the redirects through the provider and back. Nothing shows, not even the divider, until the server has said
- * which are on, when none are, or when it can't be asked: the form above still works. The page's `returnTo` goes
- * along; the server keeps it through the handshake and hands it to `/auth/callback`.
+ * up and signing in are the same step with a provider. They sit side by side above the form, then "or". Full page
+ * loads, not fetches: the browser must follow the redirects through the provider and back. Nothing shows, not even
+ * the "or", until the server has said which are on, when none are, or when it can't be asked: the form below still
+ * works. The page's `returnTo` goes along; the server keeps it through the handshake and hands it to
+ * `/auth/callback`.
  */
 export function ProviderButtons() {
   const [enabled, setEnabled] = useState<string[]>([]);
@@ -41,20 +44,22 @@ export function ProviderButtons() {
 
   return (
     <>
-      <Divider label="or" labelPosition="center" my="md" />
-      <Stack gap="xs">
+      <Group grow gap={10}>
         {shown.map((provider) => (
           <Button
             key={provider.id}
             component="a"
             href={`/api/auth/oauth2/${provider.id}${query}`}
             variant="default"
-            fullWidth
+            className={classes.provider}
+            leftSection={provider.icon}
+            aria-label={`Continue with ${provider.name}`}
           >
-            {provider.label}
+            {provider.name}
           </Button>
         ))}
-      </Stack>
+      </Group>
+      <div className={classes.or}>or</div>
     </>
   );
 }

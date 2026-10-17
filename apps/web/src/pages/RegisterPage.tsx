@@ -1,21 +1,11 @@
-import {
-  Alert,
-  Anchor,
-  Button,
-  Container,
-  Paper,
-  PasswordInput,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Alert, Anchor, Stack, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type RegisterInput } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { displayNameError } from "../auth/displayName";
+import { AuthLayout, AuthPasswordInput, AuthSubmit, AuthTextInput } from "../auth/AuthLayout";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -63,40 +53,37 @@ export default function RegisterPage() {
   }
 
   return (
-    <Container size={420} py="xl">
-      <Title order={2} ta="center">
-        Create your Nimbus account
-      </Title>
-      <Paper withBorder p="lg" mt="lg" radius="md">
-        <form onSubmit={form.onSubmit(submit)}>
-          <Stack>
-            {formError && <Alert color="red">{formError}</Alert>}
-            <TextInput label="Name" autoComplete="name" {...form.getInputProps("displayName")} />
-            <TextInput
-              label="Email"
-              type="email"
-              autoComplete="email"
-              {...form.getInputProps("email")}
-            />
-            <PasswordInput
-              label="Password"
-              description="8 to 128 characters"
-              autoComplete="new-password"
-              {...form.getInputProps("password")}
-            />
-            <Button type="submit" loading={form.submitting}>
-              Create account
-            </Button>
-          </Stack>
-        </form>
-        <ProviderButtons />
-      </Paper>
-      <Text ta="center" mt="md" size="sm">
+    <AuthLayout
+      title="Create your account"
+      subtitle="Start moving work from backlog to done."
+      gap={18}
+    >
+      {formError && <Alert color="red">{formError}</Alert>}
+      <ProviderButtons />
+      <form onSubmit={form.onSubmit(submit)}>
+        <Stack gap={18}>
+          <AuthTextInput label="Name" autoComplete="name" {...form.getInputProps("displayName")} />
+          <AuthTextInput
+            label="Email"
+            type="email"
+            autoComplete="email"
+            {...form.getInputProps("email")}
+          />
+          <AuthPasswordInput
+            label="Password"
+            description="8 to 128 characters"
+            autoComplete="new-password"
+            {...form.getInputProps("password")}
+          />
+          <AuthSubmit loading={form.submitting}>Create account</AuthSubmit>
+        </Stack>
+      </form>
+      <Text size="sm">
         Already have an account?{" "}
         <Anchor component={Link} to={{ pathname: "/login", search: searchParams.toString() }}>
           Sign in
         </Anchor>
       </Text>
-    </Container>
+    </AuthLayout>
   );
 }

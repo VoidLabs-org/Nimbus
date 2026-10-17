@@ -92,7 +92,12 @@ export type AuditEntry = {
   /** When it happened (ISO 8601). */
   at: string;
   /** Who did it; null when the system did (e.g. a warning at startup). Name and email are null for a User who no longer exists. */
-  actor: { id: string; displayName: string | null; email: string | null } | null;
+  actor: {
+    id: string;
+    displayName: string | null;
+    email: string | null;
+    avatarUrl: string | null;
+  } | null;
   /** e.g. role.created, role.renamed, role.grants_changed, role.reset, role.deleted, role.assigned, role.unassigned, catalog.unknown_grant */
   action: string;
   /** `exists` is false once the Role has been deleted. */

@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApiError, api, type Kind, type NewRoleInput } from "../api/client";
 import classes from "./NewRoleModal.module.css";
-import { FieldLabel, RoleFormFooter, RoleFormModal } from "./RoleFormModal";
+import { FieldLabel, RoleFormFooter } from "./RoleFormParts";
+import { WindowFrame } from "./WindowFrame";
 import { descriptionClassNames, fieldClassNames } from "./roleFormClassNames";
 import { followsName, keyForName, ROLE_KEY } from "./roleKey";
 
@@ -82,7 +83,7 @@ export function NewRoleModal({
   }
 
   return (
-    <RoleFormModal
+    <WindowFrame
       opened={opened}
       onClose={close}
       title="New Role"
@@ -146,6 +147,6 @@ export function NewRoleModal({
           />
         </Stack>
       </form>
-    </RoleFormModal>
+    </WindowFrame>
   );
 }

@@ -61,6 +61,11 @@
   --scrim: rgba(32, 29, 26, 0.3);
   --modal-bg: rgba(255, 248, 241, 0.82);
   --on-accent: #201d1a;
+  /* Diff colours: added is green, removed is red, as people expect in a before → after list. */
+  --diff-added-bg: rgba(22, 163, 74, 0.13);
+  --diff-added-fg: #14532d;
+  --diff-removed-bg: rgba(220, 38, 38, 0.1);
+  --diff-removed-fg: #7f1d1d;
   --seg-on: #fff;
   --seg-on-fg: #201d1a;
 
@@ -137,6 +142,10 @@
   --scrim: rgba(0, 0, 0, 0.6);
   --modal-bg: #1c1a18;
   --on-accent: #121110;
+  --diff-added-bg: rgba(74, 222, 128, 0.14);
+  --diff-added-fg: #bbf7d0;
+  --diff-removed-bg: rgba(248, 113, 113, 0.14);
+  --diff-removed-fg: #fecaca;
   --seg-on-fg: #f3eee8;
 }
 
@@ -213,6 +222,10 @@
   --scrim: rgba(8, 10, 12, 0.6);
   --modal-bg: rgba(30, 35, 42, 0.86);
   --on-accent: #171b20;
+  --diff-added-bg: rgba(74, 222, 128, 0.14);
+  --diff-added-fg: #bbf7d0;
+  --diff-removed-bg: rgba(248, 113, 113, 0.14);
+  --diff-removed-fg: #fecaca;
   --seg-on-fg: #e9edf2;
   --panel-blur: blur(28px) saturate(1.5);
 }

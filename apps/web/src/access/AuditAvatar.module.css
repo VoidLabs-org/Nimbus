@@ -1,0 +1,23 @@
+/* Initials chip colours from the "Nimbus Themes" design (Audit log). Colours come only from the theme variables. */
+.avatar {
+  flex: none;
+}
+
+.avatar .placeholder {
+  font-weight: 700;
+}
+
+.avatar[data-tone="accent"] .placeholder {
+  background: var(--color-accent);
+  color: var(--on-accent);
+}
+
+.avatar[data-tone="ink"] .placeholder {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.avatar[data-tone="system"] .placeholder {
+  background: var(--color-accent-2-200);
+  color: var(--color-text);
+}

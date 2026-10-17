@@ -1,5 +1,4 @@
-import { Button, Group, Modal } from "@mantine/core";
-import type { ReactNode } from "react";
+import { Button, Group } from "@mantine/core";
 import classes from "./NewRoleModal.module.css";
 
 /** A field's label with a note, such as "Optional", on its right. */
@@ -9,42 +8,6 @@ export function FieldLabel({ name, note }: { name: string; note?: string }) {
       {name}
       {note && <span className={classes.note}>{note}</span>}
     </>
-  );
-}
-
-/** The frame both Role windows (New Role, Rename Role) share: the window, its title and the line under it. */
-export function RoleFormModal({
-  opened,
-  onClose,
-  title,
-  subtitle,
-  children,
-}: {
-  opened: boolean;
-  onClose: () => void;
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-}) {
-  return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      size={560}
-      yOffset={24}
-      title={title}
-      classNames={{
-        overlay: classes.overlay,
-        content: classes.content,
-        header: classes.header,
-        body: classes.body,
-        title: classes.title,
-        close: classes.close,
-      }}
-    >
-      <p className={classes.subtitle}>{subtitle}</p>
-      {children}
-    </Modal>
   );
 }
 

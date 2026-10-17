@@ -1,0 +1,173 @@
+/* The Audit log, from the "Nimbus Themes" design (Audit log). Colours come only from the theme variables. */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px 24px;
+}
+
+.description {
+  max-width: 620px;
+  margin-top: 8px;
+  font-size: 15px;
+  color: var(--color-accent-2-700);
+}
+
+.day {
+  margin: 0;
+  padding: 14px 20px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-2-500);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Time, Who, the summary with its chips, the Role pill and an arrow. The whole row opens the entry. */
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 80px 200px minmax(0, 1fr) 150px 20px;
+  grid-template-areas: "time who what role arrow";
+  gap: 16px;
+  align-items: center;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.row:hover {
+  background: var(--row-hover);
+}
+
+.time {
+  grid-area: time;
+  white-space: nowrap;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent-2-500);
+}
+
+.who {
+  grid-area: who;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.system {
+  color: var(--color-accent-2-700);
+}
+
+.what {
+  grid-area: what;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row {
+  cursor: pointer;
+}
+
+.row:has(.open:focus-visible) {
+  outline: 2px solid var(--color-accent);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.added {
+  background: var(--diff-added-bg);
+  color: var(--diff-added-fg);
+}
+
+.removed {
+  background: var(--diff-removed-bg);
+  color: var(--diff-removed-fg);
+  text-decoration: line-through;
+}
+
+.changed {
+  background: var(--seg);
+  color: var(--color-accent-2-700);
+}
+
+.more {
+  align-self: center;
+  font-size: 11px;
+  color: var(--color-accent-2-500);
+}
+
+.role {
+  grid-area: role;
+  justify-self: start;
+  padding: 3px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+a.role:hover {
+  background: var(--seg);
+}
+
+.arrow {
+  grid-area: arrow;
+  color: var(--color-accent-2-500);
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 20px;
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}
+
+/* Narrow screens: the time, who and Role pill go on one line above the summary. */
+@media (max-width: 48em) {
+  .row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "time who role"
+      "what what arrow";
+    gap: 8px 12px;
+    padding: 14px 16px;
+  }
+}

@@ -1,29 +1,42 @@
 import {
   Alert,
-  Anchor,
   Button,
   Center,
   Container,
   Group,
   Loader,
   Pagination,
-  Table,
-  Text,
+  Stack,
   Title,
 } from "@mantine/core";
+import { Panel } from "@repo/ui/panel";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { AuditAvatar } from "../access/AuditAvatar";
+import { AuditEntryModal } from "../access/AuditEntryModal";
 import { describeAuditEntry } from "../access/auditText";
+import { actorName, formatTime, grantChips, groupByDay } from "../access/auditView";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
-import { ApiError, api, type AuditPage } from "../api/client";
+import { ApiError, api, type AuditEntry, type AuditPage } from "../api/client";
+import classes from "./AuditLogPage.module.css";
 
 const PAGE_SIZE = 50;
+
+const CHIP_MARK = { added: "+", removed: "−", changed: "~" } as const;
 
 /**
  * Settings → Audit log: every change to Roles and their Permissions, newest first, with who made it. Entries are
  * kept for good and never edited. Only Users with access:audit:view get the list.
  */
 export default function AuditLogPage() {
+  // Today and Yesterday follow the clock: this moves on at midnight, even if the page stays open.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const timer = setTimeout(() => setNow(new Date()), tomorrow - Date.now() + 1000);
+    return () => clearTimeout(timer);
+  }, [now]);
+  const [opened, setOpened] = useState<AuditEntry | null>(null);
   const canOpenRoles = usePlatformPermissions().includes("access:role:manage");
   // `asOf` pins the set of entries the pages are cut from, so entries written meanwhile don't shift them; "Show newest"
   // starts a fresh set. A result or an error belongs to the page it was asked for, so switching pages never shows
@@ -64,92 +77,132 @@ export default function AuditLogPage() {
   const error = current?.error ?? null;
   const pages = loaded ? Math.max(1, Math.ceil(loaded.total / PAGE_SIZE)) : 1;
 
+  // Grouped per page, so a day that continues on the next page shows its heading there too.
+  const days = loaded ? groupByDay(loaded.entries, now) : [];
+
   return (
     <Container size="lg" px={0} py="xl">
-      <Group justify="space-between" align="flex-start">
-        <Title order={2}>Audit log</Title>
-        <Button variant="default" onClick={() => setView({ page: 0 })}>
-          Show newest
-        </Button>
-      </Group>
-      <Text c="dimmed" mb="lg">
-        Every change to Roles and their Permissions, newest first. Entries are never edited or
-        deleted.
-      </Text>
-      {error && <Alert color="red">{error}</Alert>}
-      {!loaded && !error && (
-        <Center py="xl">
-          <Loader />
-        </Center>
-      )}
-      {loaded && loaded.entries.length === 0 && <Text c="dimmed">Nothing has changed yet.</Text>}
-      {loaded && loaded.entries.length > 0 && (
-        <>
-          <Table layout="fixed" highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th w={190}>When</Table.Th>
-                <Table.Th w={200}>Who</Table.Th>
-                <Table.Th w={180}>Role</Table.Th>
-                <Table.Th>What</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {loaded.entries.map((entry) => (
-                <Table.Tr key={entry.id}>
-                  <Table.Td>
-                    <Text size="sm">{new Date(entry.at).toLocaleString()}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    {entry.actor ? (
-                      <>
-                        <Text size="sm">{entry.actor.displayName ?? "A deleted User"}</Text>
-                        {entry.actor.email && (
-                          <Text size="xs" c="dimmed">
-                            {entry.actor.email}
-                          </Text>
-                        )}
-                      </>
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        System
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {!entry.target.exists || !canOpenRoles ? (
-                      <Text ff="monospace" size="sm">
-                        {entry.target.key}
-                      </Text>
-                    ) : (
-                      <Anchor
-                        component={Link}
-                        to={`/settings/roles/${entry.target.key}`}
-                        ff="monospace"
-                        size="sm"
-                      >
-                        {entry.target.key}
-                      </Anchor>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{describeAuditEntry(entry)}</Text>
-                  </Table.Td>
-                </Table.Tr>
+      <Stack gap="lg">
+        <div className={classes.header}>
+          <div>
+            <Title order={1} fz={40} lh={1.05}>
+              Audit log
+            </Title>
+            <div className={classes.description}>
+              Every change to Roles and their Permissions, newest first. Entries are never edited or
+              deleted.
+            </div>
+          </div>
+          <Button variant="default" onClick={() => setView({ page: 0 })}>
+            Show newest
+          </Button>
+        </div>
+        {error && <Alert color="red">{error}</Alert>}
+        {!loaded && !error && (
+          <Center py="xl">
+            <Loader />
+          </Center>
+        )}
+        {loaded && loaded.entries.length === 0 && (
+          <Panel p={8}>
+            <p className={classes.empty}>Nothing has changed yet.</p>
+          </Panel>
+        )}
+        {loaded && loaded.entries.length > 0 && (
+          <>
+            <Panel p={8}>
+              {days.map((day) => (
+                <section key={day.key} aria-label={day.label}>
+                  <h2 className={classes.day}>{day.label}</h2>
+                  <ul className={classes.list}>
+                    {day.entries.map((entry) => (
+                      <AuditRow
+                        key={entry.id}
+                        entry={entry}
+                        canOpenRoles={canOpenRoles}
+                        onOpen={() => setOpened(entry)}
+                      />
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </Table.Tbody>
-          </Table>
-          {pages > 1 && (
-            <Group justify="center" mt="md">
-              <Pagination
-                total={pages}
-                value={view.page + 1}
-                onChange={(value) => setView({ page: value - 1, asOf: loaded?.asOf ?? view.asOf })}
-              />
-            </Group>
-          )}
-        </>
-      )}
+            </Panel>
+            {pages > 1 && (
+              <Group justify="center">
+                <Pagination
+                  total={pages}
+                  value={view.page + 1}
+                  onChange={(value) =>
+                    setView({ page: value - 1, asOf: loaded?.asOf ?? view.asOf })
+                  }
+                />
+              </Group>
+            )}
+          </>
+        )}
+      </Stack>
+      {opened && <AuditEntryModal entry={opened} onClose={() => setOpened(null)} />}
     </Container>
+  );
+}
+
+/**
+ * One entry: time, who, the summary (a button that opens the entry in full, stretched over the row), up to three
+ * Grant chips, the Role as a pill (a link only while the Role exists and the User may open Roles) and an arrow.
+ */
+function AuditRow({
+  entry,
+  canOpenRoles,
+  onOpen,
+}: {
+  entry: AuditEntry;
+  canOpenRoles: boolean;
+  onOpen: () => void;
+}) {
+  const { chips, more } = grantChips(entry);
+  return (
+    // The whole row opens the entry, except where the click was on a link or ended a text selection, so keys, names
+    // and summaries can still be selected and copied. The summary button is the keyboard (and screen reader) way in.
+    <li
+      className={classes.row}
+      onClick={(event) => {
+        if ((event.target as Element).closest("a") || window.getSelection()?.toString()) return;
+        onOpen();
+      }}
+    >
+      <time className={classes.time} dateTime={entry.at}>
+        {formatTime(new Date(entry.at))}
+      </time>
+      <span className={entry.actor ? classes.who : `${classes.who} ${classes.system}`}>
+        <AuditAvatar actor={entry.actor} />
+        {actorName(entry)}
+      </span>
+      <div className={classes.what}>
+        <button type="button" className={classes.open}>
+          {describeAuditEntry(entry)}
+        </button>
+        {chips.length > 0 && (
+          <div className={classes.chips}>
+            {chips.map((chip) => (
+              <span key={chip.permission} className={`${classes.chip} ${classes[chip.kind]}`}>
+                {CHIP_MARK[chip.kind]} {chip.permission}
+                {chip.scope && ` · ${chip.scope}`}
+              </span>
+            ))}
+            {more > 0 && <span className={classes.more}>+{more} more</span>}
+          </div>
+        )}
+      </div>
+      {entry.target.exists && canOpenRoles ? (
+        <Link to={`/settings/roles/${entry.target.key}`} className={classes.role}>
+          {entry.target.key}
+        </Link>
+      ) : (
+        <span className={classes.role}>{entry.target.key}</span>
+      )}
+      <span className={classes.arrow} aria-hidden>
+        →
+      </span>
+    </li>
   );
 }

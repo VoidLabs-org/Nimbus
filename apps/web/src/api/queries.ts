@@ -18,8 +18,14 @@ export const queryKeys = {
   catalog: ["catalog"] as const,
   audit: ["audit"] as const,
   auditPage: (page: number, asOf?: number) => ["audit", page, asOf] as const,
+  permissions: ["permissions"] as const,
   myPermissions: (userId: string) => ["permissions", userId] as const,
 };
+
+/** A refresh failed while older data is still on screen: say so, since the data may be out of date. */
+export function refreshFailed(query: UseQueryResult): boolean {
+  return query.isRefetchError && !query.isFetching;
+}
 
 /**
  * Why a load failed, for the status page that replaces the content, or null. Only while there is nothing to show
@@ -37,8 +43,8 @@ export function useRoles() {
 }
 
 /** One Role with its Grants. */
-export function useRole(key: string) {
-  return useQuery({ queryKey: queryKeys.role(key), queryFn: () => api.role(key) });
+export function useRole(key: string, enabled = true) {
+  return useQuery({ queryKey: queryKeys.role(key), queryFn: () => api.role(key), enabled });
 }
 
 /** Every Permission a Role can hold, grouped for the Role page. */
@@ -71,16 +77,21 @@ export function useAuditLog(page: number, pageSize: number, asOf?: number) {
  */
 export function useRolesChanged() {
   const client = useQueryClient();
-  return (updated?: Role) => {
-    if (updated) client.setQueryData(queryKeys.role(updated.key), updated);
-    return Promise.all([
+  return async (updated?: Role) => {
+    if (updated) {
+      // A refetch of this Role already under way would come back with the version before this change and undo it.
+      await client.cancelQueries({ queryKey: queryKeys.role(updated.key), exact: true });
+      client.setQueryData(queryKeys.role(updated.key), updated);
+    }
+    await Promise.all([
       client.invalidateQueries({
         queryKey: queryKeys.roles,
-        predicate: ({ queryKey }) =>
-          !updated || queryKey.length !== 2 || queryKey[1] !== updated.key,
+        // This Role was just replaced, and renaming, saving or resetting doesn't change who holds it: leave its own
+        // entries (the Role and its holders) alone and refresh the rest.
+        predicate: ({ queryKey }) => !updated || queryKey[1] !== updated.key,
       }),
       client.invalidateQueries({ queryKey: queryKeys.audit }),
-      client.invalidateQueries({ queryKey: ["permissions"] }),
+      client.invalidateQueries({ queryKey: queryKeys.permissions }),
     ]);
   };
 }

@@ -37,7 +37,9 @@ export default function RolePage() {
 }
 
 function RoleDetails({ roleKey: key }: { roleKey: string }) {
-  const roleQuery = useRole(key);
+  // Switched off once the Role is deleted, so nothing fetches it again while the page is leaving.
+  const [deleted, setDeleted] = useState(false);
+  const roleQuery = useRole(key, !deleted);
   const catalogQuery = usePermissionCatalog();
   // Both the Role and the catalog are needed before anything shows.
   const role = catalogQuery.data ? (roleQuery.data ?? null) : null;
@@ -47,6 +49,8 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  // Counts resets: the Permissions start again from the defaults, whatever was ticked and unsaved.
+  const [resets, setResets] = useState(0);
   const platformPermissions = usePlatformPermissions();
   // The Roles list says which kind of Role it opened, so the skeleton can match it.
   const location = useLocation();
@@ -60,6 +64,14 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   useEffect(() => {
     if (role && hinted) navigate(location, { replace: true, state: null });
   }, [role, hinted, navigate, location]);
+
+  // Showing the cached Role while it refreshes: if the refresh fails, what is on screen may be out of date.
+  useEffect(() => {
+    if (roleQuery.isRefetchError)
+      toast.warning(
+        "Couldn't refresh this Role; what you see may be out of date. Reload the page to see the latest.",
+      );
+  }, [roleQuery.isRefetchError, roleQuery.errorUpdatedAt]);
 
   // Whatever changed the Role (rename, save, reset), a refusal shown from an earlier try no longer applies.
   function changed(next: Role) {
@@ -110,6 +122,7 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
             </Alert>
           )}
           <RoleWorkspace
+            key={resets}
             role={role}
             catalog={catalog}
             hasPeople={hasPeople}
@@ -124,7 +137,11 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
             role={role}
             confirming={confirming}
             onClose={() => setConfirming(null)}
-            onChanged={changed}
+            onChanged={(next) => {
+              changed(next);
+              if (confirming === "reset") setResets((count) => count + 1);
+            }}
+            onDeleted={() => setDeleted(true)}
             onFailure={setFailure}
           />
         </Stack>
@@ -222,12 +239,14 @@ function ConfirmModal({
   confirming,
   onClose,
   onChanged,
+  onDeleted,
   onFailure,
 }: {
   role: Role;
   confirming: "reset" | "delete" | null;
   onClose: () => void;
   onChanged: (role: Role) => void;
+  onDeleted: () => void;
   onFailure: (message: string | null) => void;
 }) {
   const navigate = useNavigate();
@@ -246,6 +265,7 @@ function ConfirmModal({
         toast.success(`${role.name} is back to its defaults.`);
       } else {
         await api.deleteRole(role.key);
+        onDeleted();
         void roleDeleted(role.key);
         toast.success(`Deleted ${role.name}.`);
         navigate("/settings/roles", { replace: true });

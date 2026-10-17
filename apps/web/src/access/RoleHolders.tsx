@@ -15,7 +15,7 @@ import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { useState } from "react";
 import { ApiError, api, type Role, type RoleHolder } from "../api/client";
-import { loadFailure, useRoleHolders, useRolesChanged } from "../api/queries";
+import { loadFailure, refreshFailed, useRoleHolders, useRolesChanged } from "../api/queries";
 import { useSession } from "../auth/useSession";
 import { HoldersSkeleton } from "./HoldersSkeleton";
 
@@ -27,11 +27,13 @@ export function RoleHolders({ role }: { role: Role }) {
   const { user } = useSession();
   const holdersQuery = useRoleHolders(role.key);
   const holders = holdersQuery.data ?? null;
-  const loadError = loadFailure(holdersQuery)
-    ? holdersQuery.error instanceof ApiError
-      ? holdersQuery.error.message
-      : "Couldn't load who holds this Role."
-    : null;
+  // A first load that failed, or a refresh that did (after giving or taking the Role) and left the list out of date.
+  const loadError =
+    loadFailure(holdersQuery) || refreshFailed(holdersQuery)
+      ? holdersQuery.error instanceof ApiError
+        ? holdersQuery.error.message
+        : "Couldn't load who holds this Role."
+      : null;
   // Every change refreshes the holders, the Role's holder count and whatever else shows them, so the list stays
   // complete and sorted and shows what other admins changed meanwhile.
   const rolesChanged = useRolesChanged();

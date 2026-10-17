@@ -12,7 +12,7 @@ import { actorName, formatTime, grantChips, groupByDay } from "../access/auditVi
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
-import type { AuditEntry } from "../api/client";
+import type { AuditEntry, AuditPage } from "../api/client";
 import { loadFailure, useAuditLog } from "../api/queries";
 import type { FailedLoad } from "../api/failure";
 import { FailedLoadPage } from "../shell/StatusPages";
@@ -48,9 +48,12 @@ export default function AuditLogPage() {
   // starts a fresh set.
   const [view, setView] = useState<{ page: number; asOf?: number }>({ page: 0 });
   // While the next page loads, the previous one stays on screen, dimmed, so the list doesn't collapse and the
-  // Pagination doesn't vanish under the User's pointer. The skeleton is only for the very first load.
+  // Pagination doesn't vanish under the User's pointer. It also stays if that page fails to load (the query then has no
+  // data), with the inline alert above it. The skeleton is only for the very first load.
   const query = useAuditLog(view.page, PAGE_SIZE, view.asOf);
-  const loaded = query.data ?? null;
+  const [last, setLast] = useState<AuditPage | null>(null);
+  if (query.data && !query.isPlaceholderData && query.data !== last) setLast(query.data);
+  const loaded = query.data ?? last;
   const error = loadFailure(query);
   const loading = query.isPlaceholderData || (loaded === null && error === null);
   const pages = loaded ? Math.max(1, Math.ceil(loaded.total / PAGE_SIZE)) : 1;
@@ -83,7 +86,14 @@ export default function AuditLogPage() {
               deleted.
             </div>
           </div>
-          <Button variant="default" onClick={() => setView({ page: 0 })}>
+          <Button
+            variant="default"
+            onClick={() => {
+              // The newest page is already open: ask again. Otherwise open it; it refreshes as it opens.
+              if (view.page === 0 && view.asOf === undefined) void query.refetch();
+              else setView({ page: 0 });
+            }}
+          >
             Show newest
           </Button>
         </div>

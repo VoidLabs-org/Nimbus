@@ -1,0 +1,183 @@
+/* Sign in and Register, from the "Nimbus Themes" design (Login and Register). Colours come only from the theme
+   variables. */
+/* At most 1600px wide and centred, so a big screen shows the design's frame with background around it instead of
+   stretching it. */
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 24px;
+  max-width: 1600px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+/* The Nimbus panel: the logo, three bars and the tagline. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 48px;
+  border-radius: 28px;
+  background: var(--color-surface);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+/* A bar grows past its share of the width rather than cut its words off on a narrower window. */
+.bar {
+  display: flex;
+  align-items: center;
+  min-width: max-content;
+  height: 96px;
+  padding: 0 40px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-size: clamp(24px, 2.7vw, 34px);
+  white-space: nowrap;
+}
+
+.backlog {
+  width: 92%;
+  gap: 20px;
+  padding: 0 32px;
+  background: var(--color-accent);
+  color: var(--on-accent);
+}
+
+.backlog::before {
+  content: "";
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-bg);
+}
+
+.toDone {
+  width: 72%;
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.littleAi {
+  width: 54%;
+  background: var(--color-accent-2);
+  color: var(--color-bg);
+  font-size: clamp(20px, 2.2vw, 28px);
+}
+
+.tagline {
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}
+
+/* The form stays the design's width (about 460px between its paddings), centred in its column. */
+.form {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--auth-gap);
+  justify-self: center;
+  width: 100%;
+  max-width: 576px;
+  box-sizing: border-box;
+  padding: 40px clamp(16px, 4.4vw, 56px);
+}
+
+/* Shown only below 900px, where the panel (and its brand) is hidden. */
+.compactBrand {
+  display: none;
+  font-size: 17px;
+}
+
+/* The form's fields and button, spaced like the column around them. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--auth-gap);
+}
+
+.subtitle {
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--color-accent-2-700);
+}
+
+/* Pill fields on the card colour, with the hint and errors under the field. */
+.field {
+  --input-padding: 20px;
+}
+
+:root .field[data-variant="default"] {
+  --input-bg: var(--card);
+}
+
+/* The design's fields are 46px tall. Mantine sets the height inline on the wrapper, so it is set again here, on
+   the field itself (and, for a password, the input inside it). */
+.fieldInput {
+  --input-height: 46px;
+  --input-size: 46px;
+  --input-line-height: 44px;
+}
+
+.fieldNote {
+  margin-top: 6px;
+  padding-left: 20px;
+}
+
+/* The primary button: the label on the left, a round arrow on the right. */
+.submit {
+  height: 52px;
+  padding: 0 8px 0 24px;
+  font-size: 16px;
+}
+
+.arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+/* Below about 900px only the form shows, full width. */
+@media (max-width: 900px) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .panel {
+    display: none;
+  }
+
+  .compactBrand {
+    display: flex;
+  }
+
+  .form {
+    max-width: none;
+    padding: 24px 0;
+  }
+}

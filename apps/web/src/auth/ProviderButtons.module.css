@@ -1,0 +1,27 @@
+/* The provider buttons and the "or" under them, from the "Nimbus Themes" design. */
+.provider {
+  height: 46px;
+}
+
+/* "or" between the providers and the form, on two soft rules. */
+.or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--color-accent-2-500);
+}
+
+.or::before,
+.or::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-surface);
+}
+
+/* Holds the row's place while the server is asked which providers are on, so the form below doesn't jump. */
+.pending {
+  visibility: hidden;
+}

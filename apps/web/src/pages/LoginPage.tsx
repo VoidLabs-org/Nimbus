@@ -1,20 +1,16 @@
-import {
-  Alert,
-  Anchor,
-  Button,
-  Container,
-  Paper,
-  PasswordInput,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Alert, Anchor, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
 import { providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
+import {
+  AuthForm,
+  AuthLayout,
+  AuthPasswordInput,
+  AuthSubmit,
+  AuthTextInput,
+} from "../auth/AuthLayout";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -68,39 +64,30 @@ export default function LoginPage() {
   }
 
   return (
-    <Container size={420} py="xl">
-      <Title order={2} ta="center">
-        Sign in to Nimbus
-      </Title>
-      <Paper withBorder p="lg" mt="lg" radius="md">
-        <form onSubmit={form.onSubmit(submit)}>
-          <Stack>
-            {providerError && <Alert color="red">{providerError}</Alert>}
-            {formError && <Alert color="red">{formError}</Alert>}
-            <TextInput
-              label="Email"
-              type="email"
-              autoComplete="email"
-              {...form.getInputProps("email")}
-            />
-            <PasswordInput
-              label="Password"
-              autoComplete="current-password"
-              {...form.getInputProps("password")}
-            />
-            <Button type="submit" loading={form.submitting}>
-              Sign in
-            </Button>
-          </Stack>
-        </form>
-        <ProviderButtons />
-      </Paper>
-      <Text ta="center" mt="md" size="sm">
+    <AuthLayout title="Welcome back" subtitle="Sign in to Nimbus" gap={22}>
+      {providerError && <Alert color="red">{providerError}</Alert>}
+      {formError && <Alert color="red">{formError}</Alert>}
+      <ProviderButtons />
+      <AuthForm onSubmit={form.onSubmit(submit)}>
+        <AuthTextInput
+          label="Email"
+          type="email"
+          autoComplete="email"
+          {...form.getInputProps("email")}
+        />
+        <AuthPasswordInput
+          label="Password"
+          autoComplete="current-password"
+          {...form.getInputProps("password")}
+        />
+        <AuthSubmit loading={form.submitting}>Sign in</AuthSubmit>
+      </AuthForm>
+      <Text size="sm">
         New to Nimbus?{" "}
         <Anchor component={Link} to={{ pathname: "/register", search: searchParams.toString() }}>
           Create an account
         </Anchor>
       </Text>
-    </Container>
+    </AuthLayout>
   );
 }

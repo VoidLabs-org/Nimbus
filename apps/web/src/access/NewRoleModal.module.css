@@ -1,0 +1,224 @@
+/* The New Role window, from the "Nimbus Themes" design (14a). Colours come only from the theme variables. */
+.overlay {
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Fog and Slate's window colour is see-through, so what is behind it is blurred, as in the design. */
+.content {
+  border-radius: 32px;
+  border: 1px solid var(--glass-border);
+  background: var(--modal-bg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+}
+
+/* Scrollbars (the window on a very short screen, and a long description): a slim rounded bar in the theme's
+   colours, with no arrow buttons. Chrome and Safari use the ::-webkit-scrollbar styles below, and ignore them if
+   scrollbar-width is set, so the standard properties are only for browsers without them (Firefox). */
+.content::-webkit-scrollbar,
+.description::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content::-webkit-scrollbar-thumb,
+.description::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+/* Inset from the ends, so the bar stays clear of the rounded corners. */
+.content::-webkit-scrollbar-track {
+  margin-block: 28px;
+  background: transparent;
+}
+
+.description::-webkit-scrollbar-track {
+  margin-block: 14px;
+  background: transparent;
+}
+
+.content::-webkit-scrollbar-button,
+.description::-webkit-scrollbar-button {
+  display: none;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .content,
+  .description {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+.header {
+  align-items: flex-start;
+  padding: 28px 28px 0;
+  background: transparent;
+}
+
+.body {
+  padding: 20px 28px 28px;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--color-accent-2-700);
+}
+
+.close {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--seg);
+  color: var(--color-text);
+}
+
+/* A field's label, with a note such as "Optional" on the right. */
+.label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.note {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--color-accent-2-500);
+}
+
+/* "Where it applies": two cards, the chosen one outlined in orange. */
+.kinds {
+  display: flex;
+  gap: 10px;
+}
+
+.kind {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--seg);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.kind[data-checked] {
+  background: var(--color-accent-100);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.kindIndicator {
+  margin-top: 2px;
+}
+
+.kindName {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.kindHint {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-accent-2-700);
+}
+
+/* Pill fields on the card colour, 46px tall like the sign-in page's. Mantine sets the height inline on the wrapper,
+   so it is set again on the field itself. */
+.field {
+  --input-padding: 20px;
+}
+
+:root .field[data-variant="default"] {
+  --input-bg: var(--card);
+}
+
+.fieldInput {
+  --input-height: 46px;
+  --input-size: 46px;
+  --input-line-height: 44px;
+}
+
+.key {
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+}
+
+/* Shown in the key field while the key is still the one suggested from the name. */
+.fromName {
+  height: 32px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--seg);
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--color-accent-2-700);
+}
+
+.description {
+  border-radius: 20px;
+  padding: 12px 20px;
+  background: var(--card);
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.footerNote {
+  font-size: 13px;
+  color: var(--color-accent-2-700);
+}
+
+.cancel {
+  height: 46px;
+  padding: 0 24px;
+}
+
+.create {
+  height: 46px;
+  padding: 0 8px 0 24px;
+}
+
+.arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+@media (max-width: 36em) {
+  .kinds {
+    flex-direction: column;
+  }
+}

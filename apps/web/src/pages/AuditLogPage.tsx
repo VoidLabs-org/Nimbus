@@ -1,6 +1,16 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import { Button, Center, Container, Group, Loader, Pagination, Stack, Title } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Center,
+  Container,
+  Group,
+  Loader,
+  Pagination,
+  Stack,
+  Title,
+} from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
@@ -19,6 +29,13 @@ import classes from "./AuditLogPage.module.css";
 const PAGE_SIZE = 50;
 
 const CHIP_MARK = { added: "+", removed: "−", changed: "~" } as const;
+
+/** What went wrong loading a later page of the log, said inline above the list. */
+function pageFailureMessage(failure: FailedLoad): string {
+  if (failure === "no-access") return "You don't have permission to read the audit log.";
+  if (failure === "offline") return "You're offline. Check your connection, then try again.";
+  return "Couldn't load this page of the log.";
+}
 
 /**
  * Settings → Audit log: every change to Roles and their Permissions, newest first, with who made it. Entries are
@@ -73,18 +90,16 @@ export default function AuditLogPage() {
   // Grouped per page, so a day that continues on the next page shows its heading there too.
   const days = loaded ? groupByDay(loaded.entries, now) : [];
 
-  // No access, offline or a server error: the status page takes the place of the log. Try again asks for the same
-  // page once more.
-  if (error) {
-    return (
-      <FailedLoadPage
-        failure={error}
-        onRetry={() => {
-          setResult(null);
-          setView({ ...view });
-        }}
-      />
-    );
+  // Asks for the same page once more.
+  function retry() {
+    setResult(null);
+    setView({ ...view });
+  }
+
+  // The log couldn't be opened at all: the status page takes its place. A later page that fails is shown inline
+  // instead (below), so Show newest stays at hand to start again.
+  if (error && view.page === 0 && view.asOf === undefined) {
+    return <FailedLoadPage failure={error} onRetry={retry} />;
   }
 
   return (
@@ -105,7 +120,17 @@ export default function AuditLogPage() {
             Show newest
           </Button>
         </div>
-        {!loaded && (
+        {error && (
+          <Alert color="red">
+            <Group justify="space-between" gap="sm">
+              {pageFailureMessage(error)}
+              <Button variant="default" size="xs" onClick={retry}>
+                Try again
+              </Button>
+            </Group>
+          </Alert>
+        )}
+        {!loaded && !error && (
           <Center py="xl">
             <Loader />
           </Center>

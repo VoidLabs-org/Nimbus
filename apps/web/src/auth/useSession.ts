@@ -6,8 +6,11 @@ export type Session = {
   user: User | null;
   /** True while the session is being renewed on app load, before anyone knows who is signed in. */
   restoring: boolean;
-  /** True when the session could not be checked (rate limit, outage); not the same as signed out. */
-  unavailable: boolean;
+  /**
+   * Why the session could not be checked, or null when it could: "offline" when the request never reached the server,
+   * "server" for anything else (rate limit, outage). Not the same as signed out.
+   */
+  unavailable: "offline" | "server" | null;
   /** True after the User chose to sign out, so they go to a plain sign-in page, not one that returns here. */
   signedOutOnPurpose: boolean;
   /** Checks the session again after it was unavailable. */

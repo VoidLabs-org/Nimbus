@@ -1,12 +1,11 @@
 import { Button, Title } from "@mantine/core";
-import { Glyph } from "@repo/ui/glyph";
-import { IconArrowRight } from "@tabler/icons-react";
+import { ArrowButton } from "@repo/ui/arrow-button";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import classes from "./StatusPage.module.css";
 
 /**
- * An error or status page (design 27): the eyebrow, headline, text, an optional note and the buttons on the left;
+ * An error or status page (design 27): the eyebrow, headline, text, an optional note and any buttons on the left;
  * the three bars from sign-in on the right, naming what happened (`code`, then `name`). `standalone` fills the
  * window, for the pages shown without the navbar.
  */
@@ -24,7 +23,7 @@ export function StatusPage({
   title: string;
   body: string;
   note?: ReactNode;
-  actions: ReactNode;
+  actions?: ReactNode;
   code: string;
   name: string;
   standalone?: boolean;
@@ -38,7 +37,7 @@ export function StatusPage({
         </Title>
         <div className={classes.body}>{body}</div>
         {note}
-        <div className={classes.actions}>{actions}</div>
+        {actions && <div className={classes.actions}>{actions}</div>}
       </div>
       <div className={classes.bars} aria-hidden>
         <span className={`${classes.bar} ${classes.code}`}>{code}</span>
@@ -61,41 +60,39 @@ export function StatusNote({
   );
 }
 
-const arrow = (
-  <span className={classes.arrow}>
-    <Glyph icon={IconArrowRight} />
-  </span>
-);
+/** Where an action goes: a link with `to`, a button with `onClick`. */
+type ActionTarget = { to: string; onClick?: never } | { onClick: () => void; to?: never };
 
-/** The page's main action, an orange pill with a round arrow: a link with `to`, a button with `onClick`. */
+/** The button's props for its target: its click, or a router link drawn in place of the button element. */
+function target({ to, onClick }: ActionTarget) {
+  return {
+    onClick,
+    renderRoot:
+      to === undefined
+        ? undefined
+        : (props: Record<string, unknown>) => <Link to={to} {...props} />,
+  };
+}
+
+/** The page's main action, an orange pill with a round arrow. */
 export function PrimaryAction({
-  to,
-  onClick,
   children,
-}: Readonly<{ to?: string; onClick?: () => void; children: ReactNode }>) {
-  return to ? (
-    <Button component={Link} to={to} className={classes.primary} rightSection={arrow}>
+  ...action
+}: Readonly<ActionTarget & { children: ReactNode }>) {
+  return (
+    <ArrowButton className={classes.primary} {...target(action)}>
       {children}
-    </Button>
-  ) : (
-    <Button onClick={onClick} className={classes.primary} rightSection={arrow}>
-      {children}
-    </Button>
+    </ArrowButton>
   );
 }
 
-/** A quieter action beside it: a link with `to`, a button with `onClick`. */
+/** A quieter action beside it. */
 export function SecondaryAction({
-  to,
-  onClick,
   children,
-}: Readonly<{ to?: string; onClick?: () => void; children: ReactNode }>) {
-  return to ? (
-    <Button component={Link} to={to} className={classes.secondary}>
-      {children}
-    </Button>
-  ) : (
-    <Button onClick={onClick} className={classes.secondary}>
+  ...action
+}: Readonly<ActionTarget & { children: ReactNode }>) {
+  return (
+    <Button className={classes.secondary} {...target(action)}>
       {children}
     </Button>
   );

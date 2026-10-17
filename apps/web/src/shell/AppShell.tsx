@@ -76,29 +76,32 @@ export function RailLink({
 }
 
 /**
+ * The open page, with the offline page over it while the browser has no connection, and the crashed page in its place
+ * if it crashes while drawing. Either way the navbar stays. Offline, the page is hidden rather than removed, so
+ * unsaved work on it (ticked Permissions, a half-filled window) is still there when the connection comes back.
+ */
+function PageContent() {
+  const online = useOnline();
+  const location = useLocation();
+  return (
+    <>
+      {!online && <OfflinePage />}
+      <div hidden={!online}>
+        <PageErrorBoundary resetKey={location.key}>
+          <Outlet />
+        </PageErrorBoundary>
+      </div>
+    </>
+  );
+}
+
+/**
  * Every signed-in page: the navbar, fixed to the edge the User chose (top, bottom, left or right), and the page in the
  * room it leaves. Top and bottom give the horizontal bar (links, the theme capsule and the account chip); left and
  * right turn it into a narrow rail of icons. Narrow screens always get the top bar, with the links and the theme
  * capsule folded into a menu next to the account chip. Changing the edge folds the bar into a corner and unfolds it
  * along the new one, like a snake going round the corner.
  */
-/**
- * The open page, or a status page in its place: the offline page while the browser has no connection (the page
- * comes back by itself when it returns), the server-error page if the page crashes. Either way the navbar stays.
- */
-function PageContent() {
-  const online = useOnline();
-  const { pathname } = useLocation();
-  // Nothing to load again while offline: the page returns as soon as the browser is back online.
-  const [, recheck] = useState(0);
-  if (!online) return <OfflinePage onRetry={() => recheck((tries) => tries + 1)} />;
-  return (
-    <PageErrorBoundary key={pathname}>
-      <Outlet />
-    </PageErrorBoundary>
-  );
-}
-
 export function AppShell() {
   // Starts the request (and caches it) on every signed-in page, so Settings lists its groups at once.
   usePlatformPermissions();

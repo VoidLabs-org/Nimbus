@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "./client";
+import { ApiError, NetworkError } from "./client";
 import { failedLoad } from "./failure";
 
 describe("failedLoad", () => {
@@ -12,14 +12,13 @@ describe("failedLoad", () => {
   });
 
   it("shows the offline page when the request never reached the server", () => {
-    // fetch rejects with a TypeError when there is no network.
-    expect(failedLoad(new TypeError("Failed to fetch"))).toBe("offline");
+    expect(failedLoad(new NetworkError(new TypeError("Failed to fetch")))).toBe("offline");
   });
 
-  it("shows the server-error page for anything else", () => {
+  it("shows the server-error page for anything else, a bug in the app included", () => {
     expect(failedLoad(new ApiError(500, undefined))).toBe("server");
     expect(failedLoad(new ApiError(502, undefined))).toBe("server");
     expect(failedLoad(new ApiError(429, undefined, {}, 30))).toBe("server");
-    expect(failedLoad(new Error("Unexpected token in JSON"))).toBe("server");
+    expect(failedLoad(new TypeError("Cannot read properties of undefined"))).toBe("server");
   });
 });

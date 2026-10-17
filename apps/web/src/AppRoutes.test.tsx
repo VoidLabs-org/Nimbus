@@ -23,7 +23,7 @@ function session(user: User | null): Session {
   return {
     user,
     restoring: false,
-    unavailable: false,
+    unavailable: null,
     signedOutOnPurpose: false,
     retry: () => {},
     register: unused,

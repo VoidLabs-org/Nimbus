@@ -533,3 +533,21 @@
   border-radius: 50%;
   color: var(--color-accent-2-500);
 }
+
+/* The main action (ArrowButton): the label on the left, a round arrow on the right. Callers size it with
+   --arrow-button-height and --arrow-size. */
+.nimbus-arrow-button {
+  height: var(--arrow-button-height, 50px);
+  padding: 0 8px 0 24px;
+}
+
+.nimbus-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--arrow-size, 34px);
+  height: var(--arrow-size, 34px);
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
+}

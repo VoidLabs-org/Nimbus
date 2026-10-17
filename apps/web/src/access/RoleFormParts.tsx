@@ -1,5 +1,4 @@
-import { IconArrowRight } from "@tabler/icons-react";
-import { Glyph } from "@repo/ui/glyph";
+import { ArrowButton } from "@repo/ui/arrow-button";
 import { Button, Group } from "@mantine/core";
 import classes from "./NewRoleModal.module.css";
 
@@ -32,18 +31,9 @@ export function RoleFormFooter({
         <Button variant="default" className={classes.cancel} onClick={onCancel}>
           Cancel
         </Button>
-        <Button
-          type="submit"
-          loading={loading}
-          className={classes.create}
-          rightSection={
-            <span className={classes.arrow}>
-              <Glyph icon={IconArrowRight} />
-            </span>
-          }
-        >
+        <ArrowButton type="submit" loading={loading} className={classes.create}>
           {submitLabel}
-        </Button>
+        </ArrowButton>
       </Group>
     </div>
   );

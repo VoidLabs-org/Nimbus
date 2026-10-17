@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, createApiClient } from "./client";
+import { ApiError, createApiClient, NetworkError } from "./client";
 
 const alice = { id: "5b0c", email: "alice@example.com", displayName: "Alice", avatarUrl: null };
 
@@ -44,6 +44,15 @@ describe("api client", () => {
 
     await expect(api.me()).rejects.toBeInstanceOf(ApiError);
     expect(authorization(server.calls[0])).toBeNull();
+  });
+
+  it("fails with a NetworkError when the request can't reach the server", async () => {
+    const api = createApiClient(() => Promise.reject(new TypeError("Failed to fetch")), {
+      onSessionLost: () => {},
+      currentPath: () => "/",
+    });
+
+    await expect(api.providers()).rejects.toBeInstanceOf(NetworkError);
   });
 
   it("signs the User in on register and sends their access token afterwards", async () => {

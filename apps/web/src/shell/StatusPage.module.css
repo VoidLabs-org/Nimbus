@@ -67,22 +67,9 @@
   margin-top: 6px;
 }
 
-/* The main action: an orange pill with the label on the left and a round arrow on the right, as on sign-in. */
+/* The main action is an ArrowButton at its usual size. */
 .primary {
-  height: 50px;
-  padding: 0 8px 0 24px;
   font-size: 15px;
-}
-
-.arrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--color-text);
-  color: var(--color-bg);
 }
 
 :root .secondary {

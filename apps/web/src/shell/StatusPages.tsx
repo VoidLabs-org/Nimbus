@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import type { FailedLoad } from "../api/failure";
 import { loginPath, safeReturnPath } from "../auth/returnPath";
 import { PrimaryAction, SecondaryAction, StatusNote, StatusPage } from "./StatusPage";
 
-/** Go back where the User came from. */
+/**
+ * Go back where the User came from, shown only when that was a page in Nimbus: a link opened in a new tab lands on
+ * the first entry of its history (React Router's "default" key), and going back from there would do nothing or
+ * leave Nimbus.
+ */
 function GoBack() {
   const navigate = useNavigate();
+  const { key } = useLocation();
+  if (key === "default") return null;
   return <SecondaryAction onClick={() => navigate(-1)}>Go back</SecondaryAction>;
 }
 
@@ -49,8 +55,8 @@ export function NoAccessPage() {
 }
 
 /**
- * 27c: the server failed, or the page crashed. Try again calls `onRetry`, which loads the page again. Without the
- * navbar (`standalone`) there is no home to go to, so only Try again shows.
+ * 27c: the server failed. Try again calls `onRetry`, which loads the page again. Without the navbar (`standalone`)
+ * there is no home to go to, so only Try again shows.
  */
 export function ServerErrorPage({
   onRetry,
@@ -74,17 +80,56 @@ export function ServerErrorPage({
   );
 }
 
+/**
+ * A page that crashed while drawing: a bug in the app, so it doesn't blame the server (27c's layout, "Something
+ * broke"). Try again draws the page afresh.
+ */
+export function CrashedPage({ onRetry }: Readonly<{ onRetry: () => void }>) {
+  return (
+    <StatusPage
+      eyebrow="Something broke"
+      title="This page ran into a problem."
+      body="It wasn’t something you did. Try again, or go home and come back to it."
+      code="Error"
+      name="Something broke"
+      actions={
+        <>
+          <PrimaryAction onClick={onRetry}>Try again</PrimaryAction>
+          <SecondaryAction to="/">Go home</SecondaryAction>
+        </>
+      }
+    />
+  );
+}
+
 /** Seconds between automatic tries while offline. */
 const RETRY_SECONDS = 8;
 
+const OFFLINE = {
+  eyebrow: "No connection",
+  title: "You’re offline.",
+  body: "Check your internet connection. Nimbus will reconnect automatically.",
+  code: "Offline",
+  name: "reconnecting",
+};
+
 /**
- * 27e: no connection. Tries again every few seconds by itself (`onRetry`), counting down, and at once on Retry now.
- * `standalone` is for the sign-in check on load, before there is a navbar.
+ * 27e: no connection. With `onRetry` (a request to send again) it tries every few seconds by itself, counting down,
+ * and at once on Retry now. Without it there is nothing to try: the page comes back when the browser is online again,
+ * so it shows no countdown and no button. `standalone` is for the sign-in check on load, before there is a navbar.
  */
 export function OfflinePage({
   onRetry,
   standalone = false,
-}: Readonly<{ onRetry: () => void; standalone?: boolean }>) {
+}: Readonly<{ onRetry?: () => void; standalone?: boolean }>) {
+  if (!onRetry) return <StatusPage {...OFFLINE} standalone={standalone} />;
+  return <RetryingOfflinePage onRetry={onRetry} standalone={standalone} />;
+}
+
+function RetryingOfflinePage({
+  onRetry,
+  standalone,
+}: Readonly<{ onRetry: () => void; standalone: boolean }>) {
   const [seconds, setSeconds] = useState(RETRY_SECONDS);
   // The latest onRetry, for the timer, which is set up once.
   const retry = useRef(onRetry);
@@ -113,12 +158,8 @@ export function OfflinePage({
 
   return (
     <StatusPage
-      eyebrow="No connection"
-      title="You’re offline."
-      body="Check your internet connection. Nimbus will reconnect automatically."
+      {...OFFLINE}
       note={<StatusNote dot>Trying again in {seconds}s</StatusNote>}
-      code="Offline"
-      name="reconnecting"
       standalone={standalone}
       actions={<PrimaryAction onClick={retryNow}>Retry now</PrimaryAction>}
     />

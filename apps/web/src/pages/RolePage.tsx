@@ -23,8 +23,10 @@ import { RoleSummary } from "../access/RoleSummary";
 import { useGrantsDraft } from "../access/useGrantsDraft";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
+import { failedLoad, type FailedLoad } from "../api/failure";
 import { roleCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
+import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./RolePage.module.css";
 
 /**
@@ -40,7 +42,9 @@ export default function RolePage() {
 function RoleDetails({ roleKey: key }: { roleKey: string }) {
   const [role, setRole] = useState<Role | null>(null);
   const [catalog, setCatalog] = useState<CatalogPermission[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FailedLoad | null>(null);
+  // Bumped by Try again on the status page, to load the Role again.
+  const [attempt, setAttempt] = useState(0);
   const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -55,17 +59,12 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
         setCatalog(permissions);
       })
       .catch((failure) => {
-        if (!current) return;
-        if (failure instanceof ApiError && failure.status === 404)
-          setError("No Role has this key.");
-        else if (failure instanceof ApiError && failure.status === 403)
-          setError("You don't have permission to manage Roles.");
-        else setError("Couldn't load this Role. Please try again.");
+        if (current) setError(failedLoad(failure));
       });
     return () => {
       current = false;
     };
-  }, [key]);
+  }, [key, attempt]);
 
   // Everyone is held by every signed-in User, and project roles are given on a project's Members page.
   const hasPeople =
@@ -90,13 +89,25 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
       );
   }
 
+  // Not found, no access, offline or a server error: the status page takes the place of the Role.
+  if (error) {
+    return (
+      <FailedLoadPage
+        failure={error}
+        onRetry={() => {
+          setError(null);
+          setAttempt((tries) => tries + 1);
+        }}
+      />
+    );
+  }
+
   return (
     <Container size="lg" px={0} py="xl">
       <Box mb="md">
-        <BreadcrumbTrail crumbs={roleCrumbs(role, !role && !error, key)} />
+        <BreadcrumbTrail crumbs={roleCrumbs(role)} />
       </Box>
-      {error && <Alert color="red">{error}</Alert>}
-      {!role && !error && (
+      {!role && (
         <Center py="xl">
           <Loader />
         </Center>

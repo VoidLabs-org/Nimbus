@@ -1,4 +1,4 @@
-import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
+import { Center, Loader } from "@mantine/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
 import {
@@ -9,6 +9,7 @@ import {
   type RegisterInput,
   type User,
 } from "../api/client";
+import { OfflinePage, ServerErrorPage } from "../shell/StatusPages";
 import { loginPath } from "./returnPath";
 import { SessionContext, useSession } from "./useSession";
 
@@ -107,14 +108,12 @@ export function RequireUser({ children }: { children: ReactNode }) {
       </Center>
     );
   }
+  // The sign-in couldn't be checked: offline, or the server failed. Either way the User may try again.
   if (unavailable) {
-    return (
-      <Center h="100vh" p="md">
-        <Stack align="center">
-          <Alert color="yellow">We couldn't check your sign-in right now. Please try again.</Alert>
-          <Button onClick={retry}>Try again</Button>
-        </Stack>
-      </Center>
+    return navigator.onLine ? (
+      <ServerErrorPage onRetry={retry} standalone />
+    ) : (
+      <OfflinePage onRetry={retry} standalone />
     );
   }
   if (user) return children;

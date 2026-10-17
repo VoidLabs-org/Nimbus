@@ -1,16 +1,6 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import {
-  Alert,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Pagination,
-  Stack,
-  Title,
-} from "@mantine/core";
+import { Button, Center, Container, Group, Loader, Pagination, Stack, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
@@ -21,7 +11,9 @@ import { actorName, formatTime, grantChips, groupByDay } from "../access/auditVi
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
-import { ApiError, api, type AuditEntry, type AuditPage } from "../api/client";
+import { api, type AuditEntry, type AuditPage } from "../api/client";
+import { failedLoad, type FailedLoad } from "../api/failure";
+import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./AuditLogPage.module.css";
 
 const PAGE_SIZE = 50;
@@ -50,7 +42,7 @@ export default function AuditLogPage() {
     page: number;
     asOf?: number;
     loaded?: AuditPage;
-    error?: string;
+    error?: FailedLoad;
   } | null>(null);
 
   useEffect(() => {
@@ -65,10 +57,7 @@ export default function AuditLogPage() {
         setResult({
           page: view.page,
           asOf: view.asOf,
-          error:
-            failure instanceof ApiError && failure.status === 403
-              ? "You don't have permission to read the audit log."
-              : "Couldn't load the audit log. Please try again.",
+          error: failedLoad(failure),
         });
       });
     return () => {
@@ -83,6 +72,20 @@ export default function AuditLogPage() {
 
   // Grouped per page, so a day that continues on the next page shows its heading there too.
   const days = loaded ? groupByDay(loaded.entries, now) : [];
+
+  // No access, offline or a server error: the status page takes the place of the log. Try again asks for the same
+  // page once more.
+  if (error) {
+    return (
+      <FailedLoadPage
+        failure={error}
+        onRetry={() => {
+          setResult(null);
+          setView({ ...view });
+        }}
+      />
+    );
+  }
 
   return (
     <Container size="lg" px={0} py="xl">
@@ -102,8 +105,7 @@ export default function AuditLogPage() {
             Show newest
           </Button>
         </div>
-        {error && <Alert color="red">{error}</Alert>}
-        {!loaded && !error && (
+        {!loaded && (
           <Center py="xl">
             <Loader />
           </Center>

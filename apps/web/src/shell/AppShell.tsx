@@ -3,11 +3,14 @@ import { useMediaQuery } from "@mantine/hooks";
 import { Glyph } from "@repo/ui/glyph";
 import { ThemeToggles } from "@repo/ui/theme-toggles";
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet } from "react-router";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
 import classes from "./AppShell.module.css";
 import { NimbusLogo } from "./NimbusLogo";
+import { PageErrorBoundary } from "./PageErrorBoundary";
+import { OfflinePage } from "./StatusPages";
+import { useOnline } from "./useOnline";
 import { DESTINATIONS, type Destination } from "./navigation";
 import {
   effectivePosition,
@@ -79,6 +82,23 @@ export function RailLink({
  * capsule folded into a menu next to the account chip. Changing the edge folds the bar into a corner and unfolds it
  * along the new one, like a snake going round the corner.
  */
+/**
+ * The open page, or a status page in its place: the offline page while the browser has no connection (the page
+ * comes back by itself when it returns), the server-error page if the page crashes. Either way the navbar stays.
+ */
+function PageContent() {
+  const online = useOnline();
+  const { pathname } = useLocation();
+  // Nothing to load again while offline: the page returns as soon as the browser is back online.
+  const [, recheck] = useState(0);
+  if (!online) return <OfflinePage onRetry={() => recheck((tries) => tries + 1)} />;
+  return (
+    <PageErrorBoundary key={pathname}>
+      <Outlet />
+    </PageErrorBoundary>
+  );
+}
+
 export function AppShell() {
   // Starts the request (and caches it) on every signed-in page, so Settings lists its groups at once.
   usePlatformPermissions();
@@ -206,7 +226,7 @@ export function AppShell() {
       </nav>
       <div className={classes.content}>
         <Container size="lg">
-          <Outlet />
+          <PageContent />
         </Container>
       </div>
     </div>

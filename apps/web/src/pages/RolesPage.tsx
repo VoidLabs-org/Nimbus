@@ -1,15 +1,6 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import {
-  Alert,
-  Button,
-  Center,
-  Container,
-  Loader,
-  Stack,
-  Title,
-  VisuallyHidden,
-} from "@mantine/core";
+import { Button, Center, Container, Loader, Stack, Title, VisuallyHidden } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { PillTabs } from "@repo/ui/pill-tabs";
 import { Tag } from "@repo/ui/tag";
@@ -19,7 +10,9 @@ import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { NewRoleModal } from "../access/NewRoleModal";
 import { heldBy, permissionCount, roleTag } from "../access/roleRow";
-import { ApiError, api, type Kind, type RoleSummary } from "../api/client";
+import { api, type Kind, type RoleSummary } from "../api/client";
+import { failedLoad, type FailedLoad } from "../api/failure";
+import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./RolesPage.module.css";
 
 const TABS: { value: Kind; label: string }[] = [
@@ -43,7 +36,9 @@ function useKindTab(): [Kind, (kind: Kind) => void] {
  */
 export default function RolesPage() {
   const [roles, setRoles] = useState<RoleSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FailedLoad | null>(null);
+  // Bumped by Try again on the status page, to load the Roles again.
+  const [attempt, setAttempt] = useState(0);
   const [creating, setCreating] = useState(false);
   const [kind, setKind] = useKindTab();
 
@@ -55,17 +50,25 @@ export default function RolesPage() {
         if (current) setRoles(found);
       })
       .catch((failure) => {
-        if (!current) return;
-        setError(
-          failure instanceof ApiError && failure.status === 403
-            ? "You don't have permission to manage Roles."
-            : "Couldn't load the Roles. Please try again.",
-        );
+        if (current) setError(failedLoad(failure));
       });
     return () => {
       current = false;
     };
-  }, []);
+  }, [attempt]);
+
+  // No access, offline or a server error: the status page takes the place of the list.
+  if (error) {
+    return (
+      <FailedLoadPage
+        failure={error}
+        onRetry={() => {
+          setError(null);
+          setAttempt((tries) => tries + 1);
+        }}
+      />
+    );
+  }
 
   return (
     <Container size="lg" px={0} py="xl">
@@ -83,8 +86,7 @@ export default function RolesPage() {
           </div>
           {roles && <Button onClick={() => setCreating(true)}>+ New Role</Button>}
         </div>
-        {error && <Alert color="red">{error}</Alert>}
-        {!roles && !error && (
+        {!roles && (
           <Center py="xl">
             <Loader />
           </Center>

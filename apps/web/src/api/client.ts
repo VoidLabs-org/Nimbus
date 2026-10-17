@@ -1,4 +1,4 @@
-import { loginPath } from "../auth/returnPath";
+import { sessionExpiredPath } from "../auth/returnPath";
 
 export type User = {
   id: string;
@@ -140,8 +140,11 @@ export class ApiError extends Error {
 }
 
 export type ApiClientOptions = {
-  /** Called with the sign-in path (remembering the current page) when the session can't be renewed. */
-  onSessionLost?: (loginPath: string) => void;
+  /**
+   * Called with the session-expired page's path (remembering the current page, to come back to after signing in
+   * again) when the session can't be renewed.
+   */
+  onSessionLost?: (sessionExpiredPath: string) => void;
   /** The page the User is on, to return to after signing in again. */
   currentPath?: () => string;
 };
@@ -254,7 +257,7 @@ export function createApiClient(
       if (error instanceof ApiError && error.status === 401 && !lostReported) {
         lostReported = true;
         accessToken = null;
-        onSessionLost(loginPath(currentPath()));
+        onSessionLost(sessionExpiredPath(currentPath()));
       }
       throw error;
     }

@@ -3,6 +3,13 @@ export function loginPath(returnTo: string): string {
   return returnTo === "/" ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
+/** The page saying the session expired, remembering where to go once signed in again. */
+export function sessionExpiredPath(returnTo: string): string {
+  return returnTo === "/"
+    ? "/session-expired"
+    : `/session-expired?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
 const SAME_ORIGIN = "https://nimbus.invalid";
 
 /**

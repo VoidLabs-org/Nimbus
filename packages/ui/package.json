@@ -5,6 +5,7 @@
   "exports": {
     "./theme": "./src/theme.ts",
     "./themes.css": "./src/themes.css",
+    "./test-support": "./src/test-support.ts",
     "./*": "./src/*.tsx"
   },
   "scripts": {

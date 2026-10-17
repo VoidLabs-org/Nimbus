@@ -12,35 +12,47 @@ import ProfilePage from "./pages/ProfilePage";
 import RolesPage from "./pages/RolesPage";
 import SettingsOverview from "./settings/SettingsOverview";
 import { AppShell } from "./shell/AppShell";
+import { NotFoundPage, SessionExpiredPage } from "./shell/StatusPages";
 
 export default function App() {
   return (
     <BrowserRouter>
       <SessionProvider>
-        <Routes>
-          {/* Every signed-in page, inside the navbar shell. */}
-          <Route
-            element={
-              <RequireUser>
-                <AppShell />
-              </RequireUser>
-            }
-          >
-            <Route path="/" element={<HomePage />} />
-            {/* Settings: the overview list, and the pages it opens. */}
-            <Route path="/settings" element={<SettingsOverview />} />
-            <Route path="/settings/profile" element={<ProfilePage />} />
-            <Route path="/settings/password" element={<PasswordPage />} />
-            <Route path="/settings/appearance" element={<AppearancePage />} />
-            <Route path="/settings/roles" element={<RolesPage />} />
-            <Route path="/settings/roles/:key" element={<RolePage />} />
-            <Route path="/settings/audit" element={<AuditLogPage />} />
-          </Route>
-          <Route path="/auth/callback" element={<AuthCallbackPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-        </Routes>
+        <AppRoutes />
       </SessionProvider>
     </BrowserRouter>
+  );
+}
+
+/** Every page of the app, by address. */
+export function AppRoutes() {
+  return (
+    <Routes>
+      {/* Every signed-in page, inside the navbar shell. */}
+      <Route
+        element={
+          <RequireUser>
+            <AppShell />
+          </RequireUser>
+        }
+      >
+        <Route path="/" element={<HomePage />} />
+        {/* Settings: the overview list, and the pages it opens. */}
+        <Route path="/settings" element={<SettingsOverview />} />
+        <Route path="/settings/profile" element={<ProfilePage />} />
+        <Route path="/settings/password" element={<PasswordPage />} />
+        <Route path="/settings/appearance" element={<AppearancePage />} />
+        <Route path="/settings/roles" element={<RolesPage />} />
+        <Route path="/settings/roles/:key" element={<RolePage />} />
+        <Route path="/settings/audit" element={<AuditLogPage />} />
+        {/* Any other address: not found, with the navbar so the User can leave. */}
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      {/* Where a session lost mid-use lands; no navbar, since nobody is signed in. */}
+      <Route path="/session-expired" element={<SessionExpiredPage />} />
+    </Routes>
   );
 }

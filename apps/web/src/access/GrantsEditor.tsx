@@ -1,191 +1,136 @@
-import {
-  Alert,
-  Badge,
-  Button,
-  Checkbox,
-  Group,
-  Paper,
-  Select,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
-import { useState } from "react";
-import { ApiError, api, type CatalogPermission, type Role, type Scope } from "../api/client";
+import { Alert, Stack, Text, Tooltip, VisuallyHidden } from "@mantine/core";
+import { Panel } from "@repo/ui/panel";
+import { RoundCheck } from "@repo/ui/round-check";
+import { ScopePill } from "@repo/ui/scope-pill";
+import type { CatalogPermission, Role, Scope } from "../api/client";
+import { grantable, scopesIn } from "./grants";
 import { scopeLabels } from "./labels";
-
-/** The Scopes a Permission may have in this Role: project roles use its own, platform roles hold project ones as All. */
-function scopesIn(role: Role, permission: CatalogPermission): Scope[] {
-  if (role.kind === "project") return permission.scopes;
-  return permission.kind === "project" ? ["all"] : [];
-}
+import type { GrantsDraft } from "./useGrantsDraft";
+import classes from "./GrantsEditor.module.css";
 
 /**
- * A Role's Permissions grouped by module heading, each with a checkbox and, where there is a choice, a Scope. Nothing
- * is saved until Save, which replaces all Grants at once and is refused if someone changed the Role meanwhile.
- * Locked Grants and Permissions only Platform admin may hold are shown but can't be changed.
+ * A Role's Permissions grouped by module heading in Panels, each with a round check and, once granted, its Scope.
+ * Locked Grants and Permissions only Platform admin may hold are greyed out, with the reason on hover. Saving is in
+ * the summary panel; this only shows and edits the draft.
  */
 export function GrantsEditor({
   role,
   catalog,
-  onSaved,
+  grants,
 }: {
   role: Role;
   catalog: CatalogPermission[];
-  onSaved: (role: Role) => void;
+  grants: GrantsDraft;
 }) {
-  const initial = new Map(role.grants.map((grant) => [grant.permission, grant.scope]));
-  const [draft, setDraft] = useState(initial);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [failure, setFailure] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
+  const { draft, errors, failure } = grants;
   const locked = new Set(
     role.grants.filter((grant) => grant.locked).map((grant) => grant.permission),
   );
-  const applicable = catalog.filter((permission) =>
-    role.kind === "platform" ? true : permission.kind === "project" && permission.scopes.length > 0,
-  );
+  const applicable = grantable(role.kind, catalog);
   const headings = [...new Set(applicable.map((permission) => permission.heading))];
-  const dirty =
-    draft.size !== initial.size ||
-    [...draft].some(
-      ([permission, scope]) => !initial.has(permission) || initial.get(permission) !== scope,
-    );
-
-  function toggle(permission: CatalogPermission, checked: boolean) {
-    const next = new Map(draft);
-    if (checked) {
-      const scopes = scopesIn(role, permission);
-      next.set(permission.key, scopes.includes("project") ? "project" : (scopes[0] ?? null));
-    } else {
-      next.delete(permission.key);
-    }
-    setDraft(next);
-  }
-
-  function changeScope(permission: string, scope: Scope) {
-    setDraft(new Map(draft).set(permission, scope));
-  }
-
-  async function save() {
-    setSaving(true);
-    setErrors({});
-    setFailure(null);
-    try {
-      const saved = await api.saveGrants(role.key, {
-        grants: [...draft].map(([permission, scope]) => ({ permission, scope })),
-        version: role.version,
-      });
-      onSaved(saved);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 400) {
-        setErrors(error.fieldErrors);
-        setFailure("Some Permissions can't be held like this. See the messages below.");
-      } else if (error instanceof ApiError && error.status === 409) {
-        setFailure(error.message);
-      } else {
-        setFailure("Couldn't save the Permissions. Please try again.");
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <Stack>
       {failure && <Alert color="red">{failure}</Alert>}
       {headings.map((heading) => (
-        <Paper key={heading} withBorder p="md" radius="md">
-          <Title order={4} mb="sm">
-            {heading}
-          </Title>
-          <Stack gap="sm">
+        <Panel key={heading} p={8}>
+          <h3 className={classes.heading}>{heading}</h3>
+          <ul className={classes.list} aria-label={heading}>
             {applicable
               .filter((permission) => permission.heading === heading)
-              .map((permission) => {
-                const granted = draft.has(permission.key);
-                const scope = draft.get(permission.key) ?? null;
-                const scopes = scopesIn(role, permission);
-                const reservedHere = permission.reserved && role.key !== "platform_admin";
-                const fixed = role.locked || locked.has(permission.key) || reservedHere;
-                return (
-                  <Group
-                    key={permission.key}
-                    justify="space-between"
-                    wrap="nowrap"
-                    align="flex-start"
-                  >
-                    <Group gap="sm" wrap="nowrap" align="flex-start">
-                      <Checkbox
-                        checked={granted}
-                        disabled={fixed}
-                        onChange={(event) => toggle(permission, event.currentTarget.checked)}
-                        aria-label={permission.key}
-                      />
-                      <div>
-                        <Text ff="monospace" size="sm">
-                          {permission.key}
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {permission.description}
-                        </Text>
-                        {role.kind === "project" && permission.ownHint && (
-                          <Text size="xs" c="dimmed">
-                            Own: {permission.ownHint}
-                          </Text>
-                        )}
-                        {role.kind === "platform" && permission.kind === "project" && (
-                          <Text size="xs" c="dimmed">
-                            A platform role holds this in every project (Scope All).
-                          </Text>
-                        )}
-                        {locked.has(permission.key) && (
-                          <Text size="xs" c="dimmed">
-                            Always held by this Role.
-                          </Text>
-                        )}
-                        {reservedHere && (
-                          <Text size="xs" c="dimmed">
-                            Only Platform admin may hold this.
-                          </Text>
-                        )}
-                        {errors[permission.key] && (
-                          <Text size="xs" c="red">
-                            {errors[permission.key]}
-                          </Text>
-                        )}
-                      </div>
-                    </Group>
-                    {granted && scopes.length > 1 && !fixed ? (
-                      <Select
-                        w={130}
-                        size="xs"
-                        allowDeselect={false}
-                        aria-label={`Scope for ${permission.key}`}
-                        data={scopes.map((value) => ({ value, label: scopeLabels[value] }))}
-                        value={scope}
-                        onChange={(value) => value && changeScope(permission.key, value as Scope)}
-                      />
-                    ) : (
-                      granted && scope && <Badge variant="light">{scopeLabels[scope]}</Badge>
-                    )}
-                  </Group>
-                );
-              })}
-          </Stack>
-        </Paper>
+              .map((permission) => (
+                <PermissionRow
+                  key={permission.key}
+                  role={role}
+                  permission={permission}
+                  granted={draft.has(permission.key)}
+                  scope={draft.get(permission.key) ?? null}
+                  reason={reasonFixed(role, permission, locked)}
+                  error={errors[permission.key]}
+                  grants={grants}
+                />
+              ))}
+          </ul>
+        </Panel>
       ))}
-      {!role.locked && (
-        <Group justify="flex-end">
-          <Button variant="default" disabled={!dirty || saving} onClick={() => setDraft(initial)}>
-            Discard changes
-          </Button>
-          <Button disabled={!dirty} loading={saving} onClick={save}>
-            Save Permissions
-          </Button>
-        </Group>
-      )}
     </Stack>
+  );
+}
+
+/** Why a Permission can't be changed in this Role, if it can't. */
+function reasonFixed(
+  role: Role,
+  permission: CatalogPermission,
+  locked: Set<string>,
+): string | null {
+  if (permission.reserved && role.key !== "platform_admin")
+    return "Only Platform admin may hold this";
+  if (locked.has(permission.key)) return "Always held by this Role";
+  return null;
+}
+
+function PermissionRow({
+  role,
+  permission,
+  granted,
+  scope,
+  reason,
+  error,
+  grants,
+}: {
+  role: Role;
+  permission: CatalogPermission;
+  granted: boolean;
+  scope: Scope | null;
+  reason: string | null;
+  error: string | undefined;
+  grants: GrantsDraft;
+}) {
+  const scopes = scopesIn(role, permission);
+  const fixed = role.locked || reason !== null || grants.saving;
+  return (
+    <li>
+      <Tooltip label={reason} disabled={reason === null} position="top-start">
+        <div className={classes.row} data-fixed={fixed || undefined}>
+          <RoundCheck
+            checked={granted}
+            disabled={fixed}
+            onChange={(event) => grants.toggle(permission, event.currentTarget.checked)}
+            aria-label={permission.key}
+          />
+          <div className={classes.text}>
+            <div className={classes.description}>{permission.description}</div>
+            <div className={classes.key}>{permission.key}</div>
+            {role.kind === "project" && permission.ownHint && (
+              <Text size="xs" c="dimmed">
+                Own: {permission.ownHint}
+              </Text>
+            )}
+            {role.kind === "platform" && permission.kind === "project" && (
+              <Text size="xs" c="dimmed">
+                A platform role holds this in every project (Scope All).
+              </Text>
+            )}
+            {reason && <VisuallyHidden>{reason}.</VisuallyHidden>}
+            {error && (
+              <Text size="xs" c="red">
+                {error}
+              </Text>
+            )}
+          </div>
+          {granted && scope && scopes.length > 0 && (
+            <div className={classes.scope}>
+              <ScopePill
+                aria-label={`Scope for ${permission.key}`}
+                data={scopes.map((value) => ({ value, label: scopeLabels[value] }))}
+                value={scope}
+                disabled={fixed || scopes.length < 2}
+                onChange={(value) => grants.changeScope(permission.key, value as Scope)}
+              />
+            </div>
+          )}
+        </div>
+      </Tooltip>
+    </li>
   );
 }

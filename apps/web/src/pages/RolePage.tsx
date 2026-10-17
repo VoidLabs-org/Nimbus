@@ -1,7 +1,6 @@
 import {
   Alert,
   Anchor,
-  Badge,
   Button,
   Center,
   Container,
@@ -9,22 +8,22 @@ import {
   Loader,
   Modal,
   Stack,
-  Tabs,
   Text,
-  Textarea,
-  TextInput,
   Title,
 } from "@mantine/core";
-import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
+import { PillTabs } from "@repo/ui/pill-tabs";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { GrantsEditor } from "../access/GrantsEditor";
-import { kindLabels } from "../access/labels";
+import { grantable } from "../access/grants";
+import { RenameRoleModal } from "../access/RenameRoleModal";
 import { RoleHolders } from "../access/RoleHolders";
-import { heldBy } from "../access/roleRow";
+import { RoleSummary } from "../access/RoleSummary";
+import { useGrantsDraft } from "../access/useGrantsDraft";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
+import classes from "./RolePage.module.css";
 
 /**
  * One Role: its name and description, and its Permissions with their Scopes, all editable except for Platform admin.
@@ -40,6 +39,9 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   const [role, setRole] = useState<Role | null>(null);
   const [catalog, setCatalog] = useState<CatalogPermission[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
   const platformPermissions = usePlatformPermissions();
 
   useEffect(() => {
@@ -70,7 +72,13 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
     role.key !== "everyone" &&
     platformPermissions.includes("access:role:assign");
 
-  // The holder count in the header changes when someone is given or loses the Role.
+  // Whatever changed the Role (rename, save, reset), a refusal shown from an earlier try no longer applies.
+  function changed(next: Role) {
+    setFailure(null);
+    setRole(next);
+  }
+
+  // The holder count in the summary changes when someone is given or loses the Role.
   function refresh() {
     api
       .role(key)
@@ -82,11 +90,6 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
         }),
       );
   }
-
-  // Restarts only when the stored Grants change (saved or reset): renaming keeps unsaved ticks.
-  const grants = role && (
-    <GrantsEditor key={grantsSignature(role)} role={role} catalog={catalog} onSaved={setRole} />
-  );
 
   return (
     <Container size="lg" px={0} py="xl">
@@ -100,8 +103,9 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
         </Center>
       )}
       {role && (
-        <Stack>
-          <RoleHeader role={role} onChanged={setRole} />
+        <Stack gap="lg">
+          {failure && <Alert color="red">{failure}</Alert>}
+          <RoleHeader role={role} />
           {role.locked && (
             <Alert color="gray">
               Platform admin is locked: it always holds every Permission, including new ones.
@@ -114,68 +118,137 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
               its defaults.
             </Alert>
           )}
-          {/* Always inside Tabs, so the Grants editor keeps its place (and unsaved ticks) when the People tab
-              appears once the signed-in User's Permissions arrive. */}
-          <Tabs defaultValue="permissions" keepMounted>
-            {hasPeople && (
-              <Tabs.List mb="md">
-                <Tabs.Tab value="permissions">Permissions</Tabs.Tab>
-                <Tabs.Tab value="people">People</Tabs.Tab>
-              </Tabs.List>
-            )}
-            <Tabs.Panel value="permissions">{grants}</Tabs.Panel>
-            {hasPeople && (
-              <Tabs.Panel value="people">
-                <RoleHolders role={role} onChanged={refresh} />
-              </Tabs.Panel>
-            )}
-          </Tabs>
+          <RoleWorkspace
+            role={role}
+            catalog={catalog}
+            hasPeople={hasPeople}
+            onChanged={changed}
+            onRefresh={refresh}
+            onRename={() => setRenaming(true)}
+            onConfirm={setConfirming}
+          />
+          {renaming && (
+            <RenameRoleModal role={role} onClose={() => setRenaming(false)} onChanged={changed} />
+          )}
+          <ConfirmModal
+            role={role}
+            confirming={confirming}
+            onClose={() => setConfirming(null)}
+            onChanged={changed}
+            onFailure={setFailure}
+          />
         </Stack>
       )}
     </Container>
   );
 }
 
-function grantsSignature(role: Role): string {
-  return role.grants
-    .map((grant) => `${grant.permission}=${grant.scope ?? ""}`)
-    .sort()
-    .join(",");
+/**
+ * The Permissions and People tabs beside the summary panel. The unsaved Grants live here, above the tabs, so ticks
+ * survive a visit to People; below about 900px the summary moves under the tabs.
+ */
+function RoleWorkspace({
+  role,
+  catalog,
+  hasPeople,
+  onChanged,
+  onRefresh,
+  onRename,
+  onConfirm,
+}: {
+  role: Role;
+  catalog: CatalogPermission[];
+  hasPeople: boolean;
+  onChanged: (role: Role) => void;
+  onRefresh: () => void;
+  onRename: () => void;
+  onConfirm: (action: "reset" | "delete") => void;
+}) {
+  const [tab, setTab] = useState<"permissions" | "people">("permissions");
+  const grants = useGrantsDraft(role, onChanged);
+  // The People tab appears once the signed-in User's Permissions arrive; without it there is only Permissions.
+  const current = hasPeople ? tab : "permissions";
+
+  return (
+    <div className={classes.layout}>
+      <div className={classes.main}>
+        {hasPeople && (
+          <PillTabs
+            data={[
+              { value: "permissions", label: "Permissions" },
+              { value: "people", label: "People" },
+            ]}
+            value={current}
+            onChange={(value) => setTab(value as typeof tab)}
+            style={{ alignSelf: "flex-start" }}
+          />
+        )}
+        {/* Only mounted while shown, so the Scope pills measure themselves in a visible page; the draft lives above. */}
+        {current === "permissions" && (
+          <GrantsEditor role={role} catalog={catalog} grants={grants} />
+        )}
+        {hasPeople && (
+          <div hidden={current !== "people"}>
+            <RoleHolders role={role} onChanged={onRefresh} />
+          </div>
+        )}
+      </div>
+      <RoleSummary
+        role={role}
+        granted={grants.draft.size}
+        grantable={grantable(role.kind, catalog).length}
+        showSave={current === "permissions"}
+        changes={grants.changes}
+        saving={grants.saving}
+        onSave={grants.save}
+        onDiscard={grants.discard}
+        onRename={onRename}
+        onReset={() => onConfirm("reset")}
+        onDelete={() => onConfirm("delete")}
+      />
+    </div>
+  );
 }
 
-function RoleHeader({ role, onChanged }: { role: Role; onChanged: (role: Role) => void }) {
-  const navigate = useNavigate();
-  const [editing, setEditing] = useState(false);
-  const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const form = useForm({
-    initialValues: { name: role.name, description: role.description },
-    validate: { name: (value) => (value.trim() ? null : "Enter a name") },
-  });
+/** The Role's name and description. */
+function RoleHeader({ role }: { role: Role }) {
+  return (
+    <div>
+      <Title order={1} fz={40} lh={1.05}>
+        {role.name}
+      </Title>
+      {role.description && (
+        <Text mt={8} maw={620} c="var(--color-accent-2-700)">
+          {role.description}
+        </Text>
+      )}
+    </div>
+  );
+}
 
-  async function rename(values: { name: string; description: string }) {
-    setFailure(null);
-    try {
-      onChanged(
-        await api.describeRole(role.key, {
-          name: values.name.trim(),
-          description: values.description.trim(),
-          version: role.version,
-        }),
-      );
-      setEditing(false);
-    } catch (error) {
-      if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0)
-        form.setErrors(error.fieldErrors);
-      else
-        setFailure(error instanceof ApiError ? error.message : "Couldn't save. Please try again.");
-    }
-  }
+/** Asks before resetting a built-in Role to its defaults or deleting a custom one, then does it. */
+function ConfirmModal({
+  role,
+  confirming,
+  onClose,
+  onChanged,
+  onFailure,
+}: {
+  role: Role;
+  confirming: "reset" | "delete" | null;
+  onClose: () => void;
+  onChanged: (role: Role) => void;
+  onFailure: (message: string | null) => void;
+}) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  // The last action asked about, so the window's text doesn't change while it fades out.
+  const [action, setAction] = useState(confirming);
+  if (confirming && confirming !== action) setAction(confirming);
 
   async function confirm() {
     setBusy(true);
-    setFailure(null);
+    onFailure(null);
     try {
       if (confirming === "reset") {
         onChanged(await api.resetRole(role.key, role.version));
@@ -185,10 +258,10 @@ function RoleHeader({ role, onChanged }: { role: Role; onChanged: (role: Role) =
         notifications.show({ message: `Deleted ${role.name}.` });
         navigate("/settings/roles", { replace: true });
       }
-      setConfirming(null);
+      onClose();
     } catch (error) {
-      setConfirming(null);
-      setFailure(
+      onClose();
+      onFailure(
         error instanceof ApiError ? error.message : "Something went wrong. Please try again.",
       );
     } finally {
@@ -197,112 +270,24 @@ function RoleHeader({ role, onChanged }: { role: Role; onChanged: (role: Role) =
   }
 
   return (
-    <div>
-      {failure && (
-        <Alert color="red" mb="sm">
-          {failure}
-        </Alert>
-      )}
-      {editing ? (
-        <form onSubmit={form.onSubmit(rename)}>
-          <Stack gap="xs" maw={560}>
-            <TextInput label="Name" {...form.getInputProps("name")} />
-            <Textarea
-              label="Description"
-              autosize
-              minRows={2}
-              {...form.getInputProps("description")}
-            />
-            <Group>
-              <Button type="submit" loading={form.submitting}>
-                Save
-              </Button>
-              <Button variant="default" onClick={() => setEditing(false)}>
-                Cancel
-              </Button>
-            </Group>
-          </Stack>
-        </form>
-      ) : (
-        <>
-          <Group justify="space-between" align="flex-start">
-            <Group gap="xs">
-              <Title order={2}>{role.name}</Title>
-              {role.builtIn && <Badge variant="light">Built-in</Badge>}
-              {role.customised && (
-                <Badge variant="light" color="yellow">
-                  Customised
-                </Badge>
-              )}
-              <Badge variant="outline">{kindLabels[role.kind]}</Badge>
-            </Group>
-            {!role.locked && (
-              <Group gap="xs">
-                <Button
-                  variant="default"
-                  size="xs"
-                  onClick={() => {
-                    form.setValues({ name: role.name, description: role.description });
-                    setEditing(true);
-                  }}
-                >
-                  Rename
-                </Button>
-                {role.builtIn && role.customised && (
-                  <Button variant="default" size="xs" onClick={() => setConfirming("reset")}>
-                    Reset to defaults
-                  </Button>
-                )}
-                {!role.builtIn && (
-                  <Button
-                    color="red"
-                    variant="light"
-                    size="xs"
-                    onClick={() => setConfirming("delete")}
-                  >
-                    Delete
-                  </Button>
-                )}
-              </Group>
-            )}
-          </Group>
-          <Text c="dimmed">{role.description}</Text>
-          <Text size="sm" c="dimmed" mt={4}>
-            <Text span ff="monospace" size="sm">
-              {role.key}
-            </Text>
-            {" · "}
-            {role.holders === null
-              ? "Every signed-in User holds this Role."
-              : role.holders === 0
-                ? "No one holds this Role yet."
-                : `Held by ${heldBy(role)}.`}
-          </Text>
-        </>
-      )}
-      <Modal
-        opened={confirming !== null}
-        onClose={() => setConfirming(null)}
-        title={confirming === "reset" ? "Reset to defaults?" : `Delete ${role.name}?`}
-      >
-        <Text size="sm" mb="md">
-          {confirming === "reset"
-            ? "Its name, description and Permissions go back to what Nimbus ships with. Your changes are lost."
-            : "This can't be undone. A Role someone still holds can't be deleted."}
-        </Text>
-        <Group justify="flex-end">
-          <Button variant="default" onClick={() => setConfirming(null)}>
-            Cancel
-          </Button>
-          <Button
-            color={confirming === "delete" ? "red" : undefined}
-            loading={busy}
-            onClick={confirm}
-          >
-            {confirming === "reset" ? "Reset" : "Delete"}
-          </Button>
-        </Group>
-      </Modal>
-    </div>
+    <Modal
+      opened={confirming !== null}
+      onClose={onClose}
+      title={action === "reset" ? "Reset to defaults?" : `Delete ${role.name}?`}
+    >
+      <Text size="sm" mb="md">
+        {action === "reset"
+          ? "Its name, description and Permissions go back to what Nimbus ships with. Your changes are lost."
+          : "This can't be undone. A Role someone still holds can't be deleted."}
+      </Text>
+      <Group justify="flex-end">
+        <Button variant="default" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button color={action === "delete" ? "red" : undefined} loading={busy} onClick={confirm}>
+          {action === "reset" ? "Reset" : "Delete"}
+        </Button>
+      </Group>
+    </Modal>
   );
 }

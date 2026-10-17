@@ -74,15 +74,6 @@
   font-size: 16px;
 }
 
-.tag {
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
-}
-
 /* The description, then the key; they wrap apart with a gap, and the key sits alone when there is no description. */
 .summary {
   display: flex;

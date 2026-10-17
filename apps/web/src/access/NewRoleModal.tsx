@@ -1,27 +1,17 @@
-import { Alert, Button, Group, Modal, Radio, Stack, Textarea, TextInput } from "@mantine/core";
+import { Alert, Radio, Stack, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApiError, api, type Kind, type NewRoleInput } from "../api/client";
 import classes from "./NewRoleModal.module.css";
+import { FieldLabel, RoleFormFooter, RoleFormModal } from "./RoleFormModal";
+import { descriptionClassNames, fieldClassNames } from "./roleFormClassNames";
 import { followsName, keyForName, ROLE_KEY } from "./roleKey";
 
 const KINDS: { value: Kind; name: string; hint: string }[] = [
   { value: "project", name: "Project role", hint: "Given to a Member in one project." },
   { value: "platform", name: "Platform role", hint: "Given to a User across all of Nimbus." },
 ];
-
-const fieldClassNames = { wrapper: classes.field, input: classes.fieldInput, label: classes.label };
-
-/** A field's label with a note, such as "Optional", on its right. */
-function FieldLabel({ name, note }: { name: string; note?: string }) {
-  return (
-    <>
-      {name}
-      {note && <span className={classes.note}>{note}</span>}
-    </>
-  );
-}
 
 /**
  * Creates a custom Role with no Permissions, then opens it so they can be ticked. Where it applies starts as
@@ -92,22 +82,12 @@ export function NewRoleModal({
   }
 
   return (
-    <Modal
+    <RoleFormModal
       opened={opened}
       onClose={close}
-      size={560}
-      yOffset={24}
       title="New Role"
-      classNames={{
-        overlay: classes.overlay,
-        content: classes.content,
-        header: classes.header,
-        body: classes.body,
-        title: classes.title,
-        close: classes.close,
-      }}
+      subtitle="Pick where it applies, then name it."
     >
-      <p className={classes.subtitle}>Pick where it applies, then name it.</p>
       <form onSubmit={(event) => form.onSubmit(submit)(event)}>
         <Stack gap={18}>
           {formError && <Alert color="red">{formError}</Alert>}
@@ -153,33 +133,19 @@ export function NewRoleModal({
           />
           <Textarea
             label={<FieldLabel name="Description" note="Optional" />}
-            classNames={{ label: classes.label, input: classes.description }}
+            classNames={descriptionClassNames}
             // A fixed three lines that scroll, so a long description doesn't grow the window.
             rows={3}
             {...form.getInputProps("description")}
           />
-          <div className={classes.footer}>
-            <span className={classes.footerNote}>Starts with no Permissions</span>
-            <Group gap={10}>
-              <Button variant="default" className={classes.cancel} onClick={close}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                loading={form.submitting}
-                className={classes.create}
-                rightSection={
-                  <span className={classes.arrow} aria-hidden>
-                    →
-                  </span>
-                }
-              >
-                Create Role
-              </Button>
-            </Group>
-          </div>
+          <RoleFormFooter
+            note="Starts with no Permissions"
+            submitLabel="Create Role"
+            loading={form.submitting}
+            onCancel={close}
+          />
         </Stack>
       </form>
-    </Modal>
+    </RoleFormModal>
   );
 }

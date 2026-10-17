@@ -276,6 +276,17 @@
   -webkit-backdrop-filter: var(--panel-blur);
 }
 
+/* Tag: a small pill naming a state, such as Built-in or Customised. */
+.nimbus-tag {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+
 /* Pill tabs: the chosen tab is ink on the page colour. */
 .nimbus-pill-tabs {
   background: var(--glass);

@@ -1,0 +1,53 @@
+/* A Role's Permissions, from the "Nimbus Themes" design (Role). Colours come only from the theme variables. */
+.heading {
+  margin: 0;
+  padding: 14px 20px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-accent-2-500);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.row:hover {
+  background: var(--row-hover);
+}
+
+.row[data-fixed] {
+  opacity: 0.55;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.description {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.key {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--color-accent-2-500);
+  overflow-wrap: anywhere;
+}
+
+.scope {
+  flex-shrink: 0;
+}

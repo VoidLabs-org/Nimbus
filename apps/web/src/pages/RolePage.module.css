@@ -19,3 +19,30 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The loading skeleton, with the same padding and gaps as the Permission panels and the summary. */
+.skeletonHeading {
+  padding: 14px 20px 8px;
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.skeletonText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skeletonSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}

@@ -173,3 +173,17 @@ a.role:hover {
     padding: 14px 16px;
   }
 }
+
+/* The loading skeleton's rows are not clickable. */
+.row[data-skeleton] {
+  cursor: default;
+}
+
+.row[data-skeleton]:hover {
+  background: none;
+}
+
+.roleBone {
+  grid-area: role;
+  justify-self: start;
+}

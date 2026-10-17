@@ -1,20 +1,9 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Modal,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Alert, Box, Button, Container, Group, Modal, Stack, Text, Title } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
 import { PillTabs } from "@repo/ui/pill-tabs";
+import { Loading } from "@repo/ui/skeleton";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { GrantsEditor } from "../access/GrantsEditor";
 import { grantable } from "../access/grants";
 import { RenameRoleModal } from "../access/RenameRoleModal";
@@ -28,6 +17,8 @@ import { roleCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./RolePage.module.css";
+import type { OpenedRole } from "./openedRole";
+import { RoleSkeleton } from "./RoleSkeleton";
 
 /**
  * One Role: its name and description, and its Permissions with their Scopes, all editable except for Platform admin.
@@ -49,6 +40,8 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const platformPermissions = usePlatformPermissions();
+  // The Roles list says which kind of Role it opened, so the skeleton can match it.
+  const opened = (useLocation().state as OpenedRole | null) ?? undefined;
 
   useEffect(() => {
     let current = true;
@@ -108,9 +101,16 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
         <BreadcrumbTrail crumbs={roleCrumbs(role)} />
       </Box>
       {!role && (
-        <Center py="xl">
-          <Loader />
-        </Center>
+        <Loading>
+          <RoleSkeleton
+            opened={opened}
+            tabs={
+              opened?.kind === "platform" &&
+              key !== "everyone" &&
+              platformPermissions.includes("access:role:assign")
+            }
+          />
+        </Loading>
       )}
       {role && (
         <Stack gap="lg">
@@ -154,8 +154,8 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
 }
 
 /**
- * The Permissions and People tabs beside the summary panel. The unsaved Grants live here, above the tabs, so ticks
- * survive a visit to People; below about 900px the summary moves under the tabs.
+ * The tabs, then the Permissions beside the summary panel. The unsaved Grants live here, above the tabs, so ticks
+ * survive a visit to People; below about 900px the summary moves under the Permissions.
  */
 function RoleWorkspace({
   role,
@@ -180,43 +180,45 @@ function RoleWorkspace({
   const current = hasPeople ? tab : "permissions";
 
   return (
-    <div className={classes.layout}>
-      <div className={classes.main}>
-        {hasPeople && (
-          <PillTabs
-            data={[
-              { value: "permissions", label: "Permissions" },
-              { value: "people", label: "People" },
-            ]}
-            value={current}
-            onChange={(value) => setTab(value as typeof tab)}
-            style={{ alignSelf: "flex-start" }}
-          />
-        )}
-        {/* Only mounted while shown, so the Scope pills measure themselves in a visible page; the draft lives above. */}
-        {current === "permissions" && (
-          <GrantsEditor role={role} catalog={catalog} grants={grants} />
-        )}
-        {hasPeople && (
-          <div hidden={current !== "people"}>
-            <RoleHolders role={role} onChanged={onRefresh} />
-          </div>
-        )}
+    <>
+      {hasPeople && (
+        <PillTabs
+          data={[
+            { value: "permissions", label: "Permissions" },
+            { value: "people", label: "People" },
+          ]}
+          value={current}
+          onChange={(value) => setTab(value as typeof tab)}
+          style={{ alignSelf: "flex-start" }}
+        />
+      )}
+      <div className={classes.layout}>
+        <div className={classes.main}>
+          {/* Only mounted while shown, so the Scope pills measure themselves in a visible page; the draft lives above. */}
+          {current === "permissions" && (
+            <GrantsEditor role={role} catalog={catalog} grants={grants} />
+          )}
+          {hasPeople && (
+            <div hidden={current !== "people"}>
+              <RoleHolders role={role} onChanged={onRefresh} />
+            </div>
+          )}
+        </div>
+        <RoleSummary
+          role={role}
+          granted={grants.draft.size}
+          grantable={grantable(role.kind, catalog).length}
+          showSave={current === "permissions"}
+          changes={grants.changes}
+          saving={grants.saving}
+          onSave={grants.save}
+          onDiscard={grants.discard}
+          onRename={onRename}
+          onReset={() => onConfirm("reset")}
+          onDelete={() => onConfirm("delete")}
+        />
       </div>
-      <RoleSummary
-        role={role}
-        granted={grants.draft.size}
-        grantable={grantable(role.kind, catalog).length}
-        showSave={current === "permissions"}
-        changes={grants.changes}
-        saving={grants.saving}
-        onSave={grants.save}
-        onDiscard={grants.discard}
-        onRename={onRename}
-        onReset={() => onConfirm("reset")}
-        onDelete={() => onConfirm("delete")}
-      />
-    </div>
+    </>
   );
 }
 

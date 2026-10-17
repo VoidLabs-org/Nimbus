@@ -1,8 +1,9 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import { Button, Center, Container, Loader, Stack, Title, VisuallyHidden } from "@mantine/core";
+import { Button, Container, Stack, Title, VisuallyHidden } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { PillTabs } from "@repo/ui/pill-tabs";
+import { Loading } from "@repo/ui/skeleton";
 import { Tag } from "@repo/ui/tag";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -14,6 +15,8 @@ import { api, type Kind, type RoleSummary } from "../api/client";
 import { failedLoad, type FailedLoad } from "../api/failure";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./RolesPage.module.css";
+import { RoleListSkeleton } from "./RoleListSkeleton";
+import { openedRole } from "./openedRole";
 
 const TABS: { value: Kind; label: string }[] = [
   { value: "project", label: "Project roles" },
@@ -87,9 +90,9 @@ export default function RolesPage() {
           {roles && <Button onClick={() => setCreating(true)}>+ New Role</Button>}
         </div>
         {!roles && (
-          <Center py="xl">
-            <Loader />
-          </Center>
+          <Loading>
+            <RoleListSkeleton />
+          </Loading>
         )}
         {roles && (
           <>
@@ -132,7 +135,11 @@ function RoleList({ label, roles }: { label: string; roles: RoleSummary[] }) {
             const tag = roleTag(role);
             return (
               <li key={role.key}>
-                <Link to={`/settings/roles/${role.key}`} className={classes.row}>
+                <Link
+                  to={`/settings/roles/${role.key}`}
+                  state={openedRole(role)}
+                  className={classes.row}
+                >
                   <div className={classes.role}>
                     <div className={classes.name}>
                       {role.name}

@@ -1,3 +1,4 @@
+import { openedRole } from "../pages/openedRole";
 import { Alert, Radio, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useRef, useState } from "react";
@@ -65,7 +66,7 @@ export function NewRoleModal({
       const role = await api.createRole({ ...values, kind, name: values.name.trim() });
       if (closes.current !== opening) return;
       close();
-      navigate(`/settings/roles/${role.key}`);
+      navigate(`/settings/roles/${role.key}`, { state: openedRole(role) });
     } catch (error) {
       if (closes.current !== opening) return;
       if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {

@@ -1,17 +1,8 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import {
-  Alert,
-  Button,
-  Center,
-  Container,
-  Group,
-  Loader,
-  Pagination,
-  Stack,
-  Title,
-} from "@mantine/core";
+import { Alert, Button, Container, Group, Pagination, Stack, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
+import { Loading } from "@repo/ui/skeleton";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { AuditAvatar } from "../access/AuditAvatar";
@@ -25,6 +16,7 @@ import { api, type AuditEntry, type AuditPage } from "../api/client";
 import { failedLoad, type FailedLoad } from "../api/failure";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./AuditLogPage.module.css";
+import { AuditLogSkeleton } from "./AuditLogSkeleton";
 
 const PAGE_SIZE = 50;
 
@@ -131,9 +123,9 @@ export default function AuditLogPage() {
           </Alert>
         )}
         {!loaded && !error && (
-          <Center py="xl">
-            <Loader />
-          </Center>
+          <Loading>
+            <AuditLogSkeleton />
+          </Loading>
         )}
         {loaded && loaded.entries.length === 0 && (
           <Panel p={8}>

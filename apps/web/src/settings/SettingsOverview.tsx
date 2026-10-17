@@ -35,7 +35,7 @@ export default function SettingsOverview() {
                           : item.description}
                       </span>
                     </span>
-                    <Glyph icon={IconChevronRight} size={16} stroke={1.5} />
+                    <Glyph icon={IconChevronRight} />
                   </Link>
                 </li>
               ))}

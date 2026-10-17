@@ -147,7 +147,7 @@ function RoleList({ label, roles }: { label: string; roles: RoleSummary[] }) {
                   </span>
                   <span className={classes.permissions}>{permissionCount(role)}</span>
                   <span className={classes.arrow}>
-                    <Glyph icon={IconArrowRight} size={16} stroke={1.5} />
+                    <Glyph icon={IconArrowRight} />
                   </span>
                 </Link>
               </li>

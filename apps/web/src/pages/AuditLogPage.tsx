@@ -206,7 +206,7 @@ function AuditRow({
         <span className={classes.role}>{entry.target.key}</span>
       )}
       <span className={classes.arrow}>
-        <Glyph icon={IconArrowRight} size={16} stroke={1.5} />
+        <Glyph icon={IconArrowRight} />
       </span>
     </li>
   );

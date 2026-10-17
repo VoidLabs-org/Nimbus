@@ -8,7 +8,7 @@ import classes from "./UserMenu.module.css";
 import { useSession } from "./useSession";
 
 /**
- * The signed-in User's chip in the navbar (avatar, first name, ▾) and the compact menu it opens: their email,
+ * The signed-in User's chip in the navbar (avatar, first name, a down chevron) and the compact menu it opens: their email,
  * Settings and Sign out. Sign out asks first. Signing out ends this browser's session only. Once it succeeds,
  * RequireUser sends the User to the sign-in page; this doesn't navigate itself.
  */

@@ -117,7 +117,7 @@ export function AuthSubmit({
       className={className ? `${classes.submit} ${className}` : classes.submit}
       rightSection={
         <span className={classes.arrow}>
-          <Glyph icon={IconArrowRight} size={16} stroke={1.5} />
+          <Glyph icon={IconArrowRight} />
         </span>
       }
       {...props}

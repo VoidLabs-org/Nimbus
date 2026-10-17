@@ -12,7 +12,7 @@ const NARROW = "(max-width: 36em)";
 /**
  * Breadcrumbs: where the page is, as quiet text above its title (variant 21a): every crumb but the last is a link, the last is
  * the page itself. On a narrow screen a path of four or more crumbs tucks the ones between the first and last into a
- * "···" menu and adds an "up" button to the parent. Built by hand rather than on Mantine's Breadcrumbs, which is a
+ * dots menu and adds an "up" button to the parent. Built by hand rather than on Mantine's Breadcrumbs, which is a
  * plain div: this one is a nav with an ordered list and marks the current page.
  */
 export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
@@ -60,7 +60,7 @@ export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
                     className={classes.folded}
                     aria-label="Show the steps in between"
                   >
-                    <Glyph icon={IconDots} size={16} />
+                    <Glyph icon={IconDots} />
                   </button>
                 </Menu.Target>
                 <Menu.Dropdown>

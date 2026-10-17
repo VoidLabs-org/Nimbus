@@ -63,15 +63,15 @@
   text-decoration: none;
 }
 
-/* The "···" that stands for the folded steps. */
+/* The dots that stand for the folded steps. */
 .folded {
+  display: flex;
+  align-items: center;
   padding: 4px 10px;
   border: 0;
   border-radius: 999px;
   background: var(--color-accent-100);
   color: var(--color-accent-700);
-  font: inherit;
-  font-weight: 700;
   cursor: pointer;
 }
 

@@ -20,7 +20,7 @@ export function ThemeToggles() {
         title="Light / dark"
         onClick={() => setMode(dark ? "light" : "dark")}
       >
-        <Glyph icon={dark ? IconMoon : IconSun} size={16} />
+        <Glyph icon={dark ? IconMoon : IconSun} />
       </UnstyledButton>
       <span className="nimbus-toggles-divider" aria-hidden="true" />
       <UnstyledButton
@@ -30,7 +30,7 @@ export function ThemeToggles() {
         title="Glass"
         onClick={() => setSurface(glass ? "flat" : "glass")}
       >
-        <Glyph icon={IconBlur} size={16} />
+        <Glyph icon={IconBlur} />
       </UnstyledButton>
     </div>
   );

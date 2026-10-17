@@ -1,6 +1,6 @@
 import {
   Alert,
-  Anchor,
+  Box,
   Button,
   Center,
   Container,
@@ -14,7 +14,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { PillTabs } from "@repo/ui/pill-tabs";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { GrantsEditor } from "../access/GrantsEditor";
 import { grantable } from "../access/grants";
 import { RenameRoleModal } from "../access/RenameRoleModal";
@@ -23,6 +23,8 @@ import { RoleSummary } from "../access/RoleSummary";
 import { useGrantsDraft } from "../access/useGrantsDraft";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
+import { roleCrumbs } from "../settings/crumbs";
+import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import classes from "./RolePage.module.css";
 
 /**
@@ -93,9 +95,9 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
 
   return (
     <Container size="lg" px={0} py="xl">
-      <Anchor component={Link} to="/settings/roles" display="inline-block" mb="md">
-        ← Roles & access
-      </Anchor>
+      <Box mb="md">
+        <BreadcrumbTrail crumbs={roleCrumbs(role, !role && !error, key)} />
+      </Box>
       {error && <Alert color="red">{error}</Alert>}
       {!role && !error && (
         <Center py="xl">

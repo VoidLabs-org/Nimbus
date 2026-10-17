@@ -1,0 +1,88 @@
+/* Breadcrumbs, from the "Nimbus Themes" design (21a, with 21d's fold on a narrow screen). Colours come only from the
+   theme variables. */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.separator {
+  opacity: 0.6;
+}
+
+/* The page itself: not a link, and a long name wraps instead of pushing the page wider. */
+.current {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.up {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--seg);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+/* The "···" that stands for the folded steps. */
+.folded {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dropdown {
+  padding: 6px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+}
+
+.menuItem {
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+}

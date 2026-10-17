@@ -1,3 +1,5 @@
+import { IconArrowRight } from "@tabler/icons-react";
+import { Glyph } from "@repo/ui/glyph";
 import {
   Alert,
   Button,
@@ -203,8 +205,8 @@ function AuditRow({
       ) : (
         <span className={classes.role}>{entry.target.key}</span>
       )}
-      <span className={classes.arrow} aria-hidden>
-        →
+      <span className={classes.arrow}>
+        <Glyph icon={IconArrowRight} />
       </span>
     </li>
   );

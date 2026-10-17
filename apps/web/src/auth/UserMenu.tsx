@@ -1,3 +1,5 @@
+import { IconChevronDown } from "@tabler/icons-react";
+import { Glyph } from "@repo/ui/glyph";
 import { Avatar, Button, Group, Menu, Modal, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
@@ -6,7 +8,7 @@ import classes from "./UserMenu.module.css";
 import { useSession } from "./useSession";
 
 /**
- * The signed-in User's chip in the navbar (avatar, first name, ▾) and the compact menu it opens: their email,
+ * The signed-in User's chip in the navbar (avatar, first name, a down chevron) and the compact menu it opens: their email,
  * Settings and Sign out. Sign out asks first. Signing out ends this browser's session only. Once it succeeds,
  * RequireUser sends the User to the sign-in page; this doesn't navigate itself.
  */
@@ -55,8 +57,8 @@ export function UserMenu() {
               size={36}
             />
             <span className={classes.name}>{user.displayName.split(" ")[0]}</span>
-            <span className={classes.chevron} aria-hidden>
-              ▾
+            <span className={classes.chevron}>
+              <Glyph icon={IconChevronDown} size={14} />
             </span>
           </button>
         </Menu.Target>

@@ -1,3 +1,5 @@
+import { IconArrowRight } from "@tabler/icons-react";
+import { Glyph } from "@repo/ui/glyph";
 import { Button, Group } from "@mantine/core";
 import classes from "./NewRoleModal.module.css";
 
@@ -35,8 +37,8 @@ export function RoleFormFooter({
           loading={loading}
           className={classes.create}
           rightSection={
-            <span className={classes.arrow} aria-hidden>
-              →
+            <span className={classes.arrow}>
+              <Glyph icon={IconArrowRight} />
             </span>
           }
         >

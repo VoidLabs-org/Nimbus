@@ -102,6 +102,8 @@
 }
 
 .arrow {
+  display: flex;
+  align-items: center;
   grid-area: arrow;
   color: var(--color-accent-2-500);
 }

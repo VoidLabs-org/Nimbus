@@ -1,4 +1,6 @@
 import { UnstyledButton } from "@mantine/core";
+import { IconBlur, IconMoon, IconSun } from "@tabler/icons-react";
+import { Glyph } from "./glyph";
 import { useNimbusTheme } from "./nimbus-theme";
 
 /**
@@ -18,7 +20,7 @@ export function ThemeToggles() {
         title="Light / dark"
         onClick={() => setMode(dark ? "light" : "dark")}
       >
-        <span className={dark ? "nimbus-icon-moon" : "nimbus-icon-sun"} aria-hidden="true" />
+        <Glyph icon={dark ? IconMoon : IconSun} />
       </UnstyledButton>
       <span className="nimbus-toggles-divider" aria-hidden="true" />
       <UnstyledButton
@@ -28,7 +30,7 @@ export function ThemeToggles() {
         title="Glass"
         onClick={() => setSurface(glass ? "flat" : "glass")}
       >
-        <span className="nimbus-icon-glass" aria-hidden="true" />
+        <Glyph icon={IconBlur} />
       </UnstyledButton>
     </div>
   );

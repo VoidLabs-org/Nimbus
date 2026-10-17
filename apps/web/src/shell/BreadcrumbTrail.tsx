@@ -1,3 +1,5 @@
+import { IconArrowUp, IconChevronRight, IconDots } from "@tabler/icons-react";
+import { Glyph } from "@repo/ui/glyph";
 import { Menu, Skeleton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Link } from "react-router";
@@ -10,7 +12,7 @@ const NARROW = "(max-width: 36em)";
 /**
  * Breadcrumbs: where the page is, as quiet text above its title (variant 21a): every crumb but the last is a link, the last is
  * the page itself. On a narrow screen a path of four or more crumbs tucks the ones between the first and last into a
- * "···" menu and adds an "up" button to the parent. Built by hand rather than on Mantine's Breadcrumbs, which is a
+ * dots menu and adds an "up" button to the parent. Built by hand rather than on Mantine's Breadcrumbs, which is a
  * plain div: this one is a nav with an ordered list and marks the current page.
  */
 export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
@@ -38,7 +40,7 @@ export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
           aria-label={`Up to ${up.label}`}
           title={`Up to ${up.label}`}
         >
-          ↑
+          <Glyph icon={IconArrowUp} size={18} />
         </Link>
       )}
       <ol className={classes.list}>
@@ -58,7 +60,7 @@ export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
                     className={classes.folded}
                     aria-label="Show the steps in between"
                   >
-                    ···
+                    <Glyph icon={IconDots} />
                   </button>
                 </Menu.Target>
                 <Menu.Dropdown>
@@ -87,8 +89,8 @@ export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
               </span>
             )}
             {index < steps.length - 1 && (
-              <span className={classes.separator} aria-hidden>
-                ›
+              <span className={classes.separator}>
+                <Glyph icon={IconChevronRight} size={14} />
               </span>
             )}
           </li>

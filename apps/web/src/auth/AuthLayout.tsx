@@ -1,3 +1,5 @@
+import { IconArrowRight } from "@tabler/icons-react";
+import { Glyph } from "@repo/ui/glyph";
 import {
   Button,
   PasswordInput,
@@ -114,8 +116,8 @@ export function AuthSubmit({
       justify="space-between"
       className={className ? `${classes.submit} ${className}` : classes.submit}
       rightSection={
-        <span className={classes.arrow} aria-hidden>
-          →
+        <span className={classes.arrow}>
+          <Glyph icon={IconArrowRight} />
         </span>
       }
       {...props}

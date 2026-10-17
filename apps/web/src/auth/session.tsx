@@ -1,4 +1,3 @@
-import { Center, Loader } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
@@ -11,6 +10,7 @@ import {
   type User,
 } from "../api/client";
 import { failedLoad } from "../api/failure";
+import { SignInCheck } from "../shell/SignInCheck";
 import { OfflinePage, ServerErrorPage } from "../shell/StatusPages";
 import { loginPath } from "./returnPath";
 import { SessionContext, useSession } from "./useSession";
@@ -113,11 +113,7 @@ export function RequireUser({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (restoring) {
-    return (
-      <Center h="100vh">
-        <Loader />
-      </Center>
-    );
+    return <SignInCheck />;
   }
   // The sign-in couldn't be checked: offline, or the server failed. Either way the User may try again.
   if (unavailable) {

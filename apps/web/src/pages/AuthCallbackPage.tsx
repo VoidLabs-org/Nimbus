@@ -1,7 +1,8 @@
-import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
+import { Alert, Button, Center, Stack } from "@mantine/core";
 import { Navigate, useSearchParams } from "react-router";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
+import { SignInCheck } from "../shell/SignInCheck";
 
 /**
  * Where the server sends the browser after "Continue with Google" or "Continue with GitHub" worked. The server has already set the
@@ -15,11 +16,7 @@ export default function AuthCallbackPage() {
   const returnTo = safeReturnPath(searchParams.get("returnTo"));
 
   if (restoring) {
-    return (
-      <Center h="100vh">
-        <Loader />
-      </Center>
-    );
+    return <SignInCheck />;
   }
   if (user) return <Navigate to={returnTo} replace />;
   if (unavailable) {

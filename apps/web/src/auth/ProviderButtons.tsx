@@ -1,4 +1,4 @@
-import { Button, Group } from "@mantine/core";
+import { Button, Group, Loader } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../api/client";
@@ -19,13 +19,24 @@ const PROVIDERS = [
  * said which are on, an invisible row holds their place, so the form below doesn't jump when they appear. Nothing
  * shows, not even the "or", when none are on or the server can't be asked: the form still works. The page's `returnTo` goes along; the server keeps it through the handshake and hands it to
  * `/auth/callback`.
+ * Between the click and the browser leaving, the page stays as it was: the clicked button works, the other is held
+ * back and the "or" under them says where the User is being taken. Coming back with the Back button starts again.
  */
 export function ProviderButtons() {
   // null until the server answers.
   const [enabled, setEnabled] = useState<string[] | null>(null);
+  // The provider the User chose, from the click until the browser leaves.
+  const [going, setGoing] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnPath(searchParams.get("returnTo"));
   const query = returnTo === "/" ? "" : `?returnTo=${encodeURIComponent(returnTo)}`;
+
+  // The browser may restore this page as it was left when the User comes back: the chosen button must not stay busy.
+  useEffect(() => {
+    const restored = () => setGoing(null);
+    window.addEventListener("pageshow", restored);
+    return () => window.removeEventListener("pageshow", restored);
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -68,12 +79,22 @@ export function ProviderButtons() {
             className={classes.provider}
             leftSection={provider.icon}
             aria-label={`Continue with ${provider.name}`}
+            loading={going === provider.id}
+            disabled={going !== null && going !== provider.id}
+            onClick={() => setGoing(provider.id)}
           >
             {provider.name}
           </Button>
         ))}
       </Group>
-      <div className={classes.or}>or</div>
+      {going === null ? (
+        <div className={classes.or}>or</div>
+      ) : (
+        <div className={`${classes.or} ${classes.going}`} role="status">
+          <Loader size={14} />
+          Taking you to {PROVIDERS.find((provider) => provider.id === going)?.name}…
+        </div>
+      )}
     </>
   );
 }

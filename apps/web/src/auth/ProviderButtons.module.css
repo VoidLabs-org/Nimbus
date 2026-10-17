@@ -25,3 +25,27 @@
 .pending {
   visibility: hidden;
 }
+
+/* Replaces "or" once a provider is chosen: same row, so nothing below moves. */
+.going {
+  justify-content: center;
+  color: var(--color-text);
+}
+
+.going::before,
+.going::after {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .going {
+    animation: arrive 200ms ease-out;
+  }
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

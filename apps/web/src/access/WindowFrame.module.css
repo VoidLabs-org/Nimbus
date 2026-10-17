@@ -43,7 +43,10 @@
   }
 }
 
+/* Not sticky: Mantine pins the header, so a window shorter than the form scrolls the form up under the title and the
+   line beneath it. Here the title scrolls away with the rest. */
 .header {
+  position: relative;
   align-items: flex-start;
   padding: 28px 28px 0;
   background: transparent;
@@ -75,4 +78,28 @@
   border-radius: 50%;
   background: var(--seg);
   color: var(--color-text);
+}
+
+/* A window shorter than the roomy layout: the frame is tighter too (see NewRoleModal.module.css for the form). */
+@media (max-height: 860px) {
+  .header {
+    padding: 20px 24px 0;
+  }
+
+  .body {
+    padding: 0 24px 20px;
+  }
+
+  .title {
+    font-size: 22px;
+  }
+
+  .subtitle {
+    margin: -8px 0 12px;
+  }
+
+  .close {
+    width: 36px;
+    height: 36px;
+  }
 }

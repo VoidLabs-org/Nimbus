@@ -162,3 +162,55 @@
     flex-direction: column;
   }
 }
+
+/* The form's fields in a column. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* A window shorter than the roomy form: everything a little tighter, so New Role fits without scrolling. */
+@media (max-height: 860px) {
+  .form {
+    gap: 12px;
+  }
+
+  .label {
+    margin-bottom: 4px;
+  }
+
+  .kind {
+    padding: 10px 14px;
+  }
+
+  .kindHint {
+    margin-top: 2px;
+    font-size: 12px;
+  }
+
+  .fieldInput {
+    --input-height: 40px;
+    --input-size: 40px;
+    --input-line-height: 38px;
+  }
+
+  .fromName {
+    height: 28px;
+  }
+
+  .description {
+    height: 68px;
+    padding: 8px 16px;
+  }
+
+  .cancel,
+  .create {
+    height: 40px;
+  }
+
+  .arrow {
+    width: 28px;
+    height: 28px;
+  }
+}

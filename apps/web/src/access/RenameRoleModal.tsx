@@ -1,10 +1,10 @@
-import { Alert, Stack, Textarea, TextInput } from "@mantine/core";
+import { Alert, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { ApiError, api, type Role } from "../api/client";
 import { RoleFormFooter } from "./RoleFormParts";
 import { WindowFrame } from "./WindowFrame";
-import { descriptionClassNames, fieldClassNames } from "./roleFormClassNames";
+import { descriptionClassNames, fieldClassNames, formClassName } from "./roleFormClassNames";
 
 /**
  * Changes a Role's name and description, in the same window as New Role. Mount it when it opens, so the form starts
@@ -54,7 +54,7 @@ export function RenameRoleModal({
       subtitle={`The key, ${role.key}, stays the same.`}
     >
       <form onSubmit={form.onSubmit(submit)}>
-        <Stack gap={18}>
+        <div className={formClassName}>
           {formError && <Alert color="red">{formError}</Alert>}
           <TextInput
             label="Name"
@@ -69,7 +69,7 @@ export function RenameRoleModal({
             {...form.getInputProps("description")}
           />
           <RoleFormFooter submitLabel="Save" loading={form.submitting} onCancel={onClose} />
-        </Stack>
+        </div>
       </form>
     </WindowFrame>
   );

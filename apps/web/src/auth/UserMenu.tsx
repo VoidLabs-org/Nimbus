@@ -1,6 +1,6 @@
 import { IconChevronDown } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import { Avatar, Button, Group, Menu, Modal, Text } from "@mantine/core";
+import { Avatar, Button, Group, Menu, Modal, Text, type FloatingPosition } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -8,11 +8,20 @@ import classes from "./UserMenu.module.css";
 import { useSession } from "./useSession";
 
 /**
- * The signed-in User's chip in the navbar (avatar, first name, a down chevron) and the compact menu it opens: their email,
+ * The signed-in User's chip in the navbar (avatar, first name, a down chevron; just the avatar in the vertical rail) and
+ * the compact menu it opens, towards the free side of the window: their email,
  * Settings and Sign out. Sign out asks first. Signing out ends this browser's session only. Once it succeeds,
  * RequireUser sends the User to the sign-in page; this doesn't navigate itself.
  */
-export function UserMenu() {
+export function UserMenu({
+  compact = false,
+  placement = "bottom-end",
+}: {
+  /** Just the avatar, for the vertical rail. */
+  compact?: boolean;
+  /** Which side of the chip the menu opens on; towards the free side of the window. */
+  placement?: FloatingPosition;
+}) {
   const { user, logout } = useSession();
   const [confirming, setConfirming] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -36,15 +45,17 @@ export function UserMenu() {
   return (
     <>
       <Menu
-        position="bottom-end"
-        width={240}
-        offset={10}
+        position={placement}
+        width={260}
+        // From the rail the menu must clear the bar itself (its padding and a gap), not just the avatar.
+        offset={compact ? 32 : 10}
         classNames={{ dropdown: classes.dropdown, item: classes.item, label: classes.label }}
       >
         <Menu.Target>
           <button
             type="button"
-            className={classes.chip}
+            className={compact ? `${classes.chip} ${classes.compact}` : classes.chip}
+            data-nav-focus="account"
             aria-label={`Account menu for ${user.displayName}`}
           >
             {/* Falls back to initials of the name when there is no image, or it fails to load. No referrer:
@@ -56,14 +67,18 @@ export function UserMenu() {
               color="initials"
               size={36}
             />
-            <span className={classes.name}>{user.displayName.split(" ")[0]}</span>
-            <span className={classes.chevron}>
-              <Glyph icon={IconChevronDown} size={14} />
-            </span>
+            {!compact && (
+              <>
+                <span className={classes.name}>{user.displayName.split(" ")[0]}</span>
+                <span className={classes.chevron}>
+                  <Glyph icon={IconChevronDown} size={14} />
+                </span>
+              </>
+            )}
           </button>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Label>{user.email}</Menu.Label>
+          <Menu.Label title={user.email}>{user.email}</Menu.Label>
           <Menu.Item component={Link} to="/settings">
             Settings
           </Menu.Item>

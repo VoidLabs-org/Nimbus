@@ -1,0 +1,115 @@
+/* The navbar position cards, from the "Navbar Position" design. Colours come only from the theme variables. */
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+/* The group's name is in the heading above it; this is for screen readers. */
+.legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  max-width: 560px;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 18px;
+  background: var(--seg);
+  cursor: pointer;
+}
+
+.card[data-checked] {
+  background: var(--color-accent-100);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+/* The radio itself is hidden; the card shows the state. Keyboard focus rings the card. */
+.input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.card:has(.input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* A small window with the bar drawn on its edge. */
+.preview {
+  display: flex;
+  height: 64px;
+  padding: 6px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  background: var(--color-bg);
+  border: 1px solid var(--line);
+}
+
+.preview[data-edge="top"] {
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.preview[data-edge="bottom"] {
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.preview[data-edge="left"] {
+  flex-direction: row;
+  justify-content: flex-start;
+}
+
+.preview[data-edge="right"] {
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+.mark {
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.preview[data-edge="top"] .mark,
+.preview[data-edge="bottom"] .mark {
+  width: 100%;
+  height: 12px;
+}
+
+.preview[data-edge="left"] .mark,
+.preview[data-edge="right"] .mark {
+  width: 12px;
+  height: 100%;
+}
+
+.card[data-checked] .mark {
+  background: var(--color-accent);
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.card[data-checked] .label {
+  font-weight: 600;
+}

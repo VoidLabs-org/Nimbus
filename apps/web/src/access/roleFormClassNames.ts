@@ -9,3 +9,6 @@ export const fieldClassNames = {
 
 /** The multi-line description field's class names. */
 export const descriptionClassNames = { label: classes.label, input: classes.description };
+
+/** The form inside a Role window: its fields in a column, tighter when the window is short. */
+export const formClassName = classes.form;

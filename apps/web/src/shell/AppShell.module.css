@@ -1,15 +1,165 @@
-/* The pill navbar, from the "Nimbus Themes" design. Colours come only from the theme variables. */
+/* The navbar and the room around it, from the "Nimbus Themes" and "Navbar Position" designs. Colours come only from the
+   theme variables. The bar is fixed 16px from the chosen edge; the page gets padding for it on that edge.
+
+   Every state gives the bar explicit left, top, width and height, so changing edge can animate: the bar folds into a
+   pill in a corner (data-folded, data-corner), its layout swaps there, and it unfolds along the new edge. The timing
+   matches navMove.ts (RETRACT_MS and the rest); change both together. */
+.shell {
+  --nav-edge: 16px;
+  --nav-bar: 64px;
+  --nav-rail: 72px;
+  --nav-pill: 64px;
+  /* The horizontal bar is as wide as the page's content, centred. */
+  --nav-bar-w: min(calc(var(--container-size-lg, 1140px) - 32px), calc(100% - 2 * var(--nav-edge)));
+  --nav-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --nav-ms: 260ms;
+}
+
 .bar {
+  position: fixed;
+  z-index: 100;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 8px 8px 20px;
-  border-radius: 999px;
+  box-sizing: border-box;
   background: var(--card);
   border: 1px solid var(--line);
   box-shadow: var(--shadow-sm);
   backdrop-filter: var(--panel-blur);
   -webkit-backdrop-filter: var(--panel-blur);
+  transition:
+    left var(--nav-ms) var(--nav-ease),
+    top var(--nav-ms) var(--nav-ease),
+    width var(--nav-ms) var(--nav-ease),
+    height var(--nav-ms) var(--nav-ease),
+    padding var(--nav-ms) var(--nav-ease);
+}
+
+/* Top and bottom: the horizontal bar. */
+.shell[data-nav="top"] .bar,
+.shell[data-nav="bottom"] .bar {
+  left: calc((100% - var(--nav-bar-w)) / 2);
+  width: var(--nav-bar-w);
+  height: var(--nav-bar);
+  padding: 8px 8px 8px 20px;
+  border-radius: 999px;
+}
+
+.shell[data-nav="top"] .bar {
+  top: var(--nav-edge);
+}
+
+.shell[data-nav="bottom"] .bar {
+  top: calc(100% - var(--nav-edge) - var(--nav-bar));
+}
+
+/* Left and right: a narrow rail, logo and links at one end, the switches and the account chip at the other. */
+.shell[data-nav="left"] .bar,
+.shell[data-nav="right"] .bar {
+  top: var(--nav-edge);
+  width: var(--nav-rail);
+  height: calc(100% - 2 * var(--nav-edge));
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-radius: 36px;
+}
+
+.shell[data-nav="left"] .bar {
+  left: var(--nav-edge);
+}
+
+.shell[data-nav="right"] .bar {
+  left: calc(100% - var(--nav-edge) - var(--nav-rail));
+}
+
+/* Folded: a pill in a corner, whichever edge's layout is underneath. */
+.shell[data-folded] .bar {
+  width: var(--nav-pill);
+  height: var(--nav-pill);
+  padding: 0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.shell[data-folded][data-corner="tl"] .bar,
+.shell[data-folded][data-corner="bl"] .bar {
+  left: var(--nav-edge);
+}
+
+.shell[data-folded][data-corner="tr"] .bar,
+.shell[data-folded][data-corner="br"] .bar {
+  left: calc(100% - var(--nav-edge) - var(--nav-pill));
+}
+
+.shell[data-folded][data-corner="tl"] .bar,
+.shell[data-folded][data-corner="tr"] .bar {
+  top: var(--nav-edge);
+}
+
+.shell[data-folded][data-corner="bl"] .bar,
+.shell[data-folded][data-corner="br"] .bar {
+  top: calc(100% - var(--nav-edge) - var(--nav-pill));
+}
+
+/* The bar's contents fade out as it folds and back in as it unfolds; the logo stands in for them while it is a pill. */
+.contents {
+  display: contents;
+}
+
+.contents > * {
+  opacity: 1;
+  transition: opacity 180ms ease 120ms;
+}
+
+.shell[data-folded] .contents > * {
+  opacity: 0;
+  transition-delay: 0ms;
+}
+
+.pillLogo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+.shell[data-folded] .pillLogo {
+  opacity: 1;
+  transition-delay: 100ms;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The page makes room for the bar on its edge, and keeps a little air on the others. It follows the bar smoothly. */
+.content {
+  padding: var(--nav-edge);
+  transition: padding var(--nav-ms) var(--nav-ease);
+}
+
+.shell[data-nav="top"] .content {
+  padding-top: calc(var(--nav-edge) + var(--nav-bar));
+}
+
+.shell[data-nav="bottom"] .content {
+  padding-bottom: calc(var(--nav-edge) + var(--nav-bar) + var(--nav-edge));
+}
+
+.shell[data-nav="left"] .content {
+  padding-left: calc(var(--nav-edge) + var(--nav-rail));
+}
+
+.shell[data-nav="right"] .content {
+  padding-right: calc(var(--nav-edge) + var(--nav-rail));
 }
 
 .brand {
@@ -20,6 +170,15 @@
   font-weight: 700;
   font-size: 17px;
   color: var(--color-text);
+}
+
+.logoLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
 }
 
 .link {
@@ -39,4 +198,41 @@
 .active:hover {
   background: var(--color-text);
   color: var(--color-bg);
+}
+
+/* A destination in the rail: its icon in a round button, filled while its page is open. */
+.railItem {
+  display: flex;
+}
+
+/* A soft round background, so it reads as a button like the switches below; filled with ink on its own page. */
+.railLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--seg);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.railLink:hover {
+  background: var(--line);
+}
+
+.railActive,
+.railActive:hover {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .content,
+  .contents > *,
+  .pillLogo {
+    transition: none;
+  }
 }

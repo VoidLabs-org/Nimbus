@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, createApiClient } from "./client";
+import { ApiError, createApiClient, NetworkError } from "./client";
 
 const alice = { id: "5b0c", email: "alice@example.com", displayName: "Alice", avatarUrl: null };
 
@@ -44,6 +44,15 @@ describe("api client", () => {
 
     await expect(api.me()).rejects.toBeInstanceOf(ApiError);
     expect(authorization(server.calls[0])).toBeNull();
+  });
+
+  it("fails with a NetworkError when the request can't reach the server", async () => {
+    const api = createApiClient(() => Promise.reject(new TypeError("Failed to fetch")), {
+      onSessionLost: () => {},
+      currentPath: () => "/",
+    });
+
+    await expect(api.providers()).rejects.toBeInstanceOf(NetworkError);
   });
 
   it("signs the User in on register and sends their access token afterwards", async () => {
@@ -220,17 +229,17 @@ describe("api client", () => {
     ]);
   });
 
-  it("sends the User to sign in, and back here afterwards, when the session can't be renewed", async () => {
+  it("tells the User their session expired, remembering this page to come back to, when it can't be renewed", async () => {
     const server = routedServer(() => json(401, { status: 401 }));
     const lost: string[] = [];
     const api = createApiClient(server.fetchFn, {
-      onSessionLost: (loginPath) => lost.push(loginPath),
+      onSessionLost: (path) => lost.push(path),
       currentPath: () => "/projects/7?tab=board",
     });
 
     await expect(api.me()).rejects.toMatchObject({ status: 401 });
 
-    expect(lost).toEqual(["/login?returnTo=%2Fprojects%2F7%3Ftab%3Dboard"]);
+    expect(lost).toEqual(["/session-expired?returnTo=%2Fprojects%2F7%3Ftab%3Dboard"]);
   });
 
   it("keeps the User signed in when renewing fails for a reason other than an ended session", async () => {

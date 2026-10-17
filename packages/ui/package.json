@@ -5,6 +5,7 @@
   "exports": {
     "./theme": "./src/theme.ts",
     "./themes.css": "./src/themes.css",
+    "./test-support": "./src/test-support.ts",
     "./*": "./src/*.tsx"
   },
   "scripts": {
@@ -16,6 +17,7 @@
   "dependencies": {
     "@fontsource/poppins": "^5.3.0",
     "@mantine/core": "^9.7.1",
+    "@mantine/notifications": "^9.7.1",
     "@tabler/icons-react": "^3.49.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"

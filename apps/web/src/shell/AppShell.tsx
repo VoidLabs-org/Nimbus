@@ -3,11 +3,14 @@ import { useMediaQuery } from "@mantine/hooks";
 import { Glyph } from "@repo/ui/glyph";
 import { ThemeToggles } from "@repo/ui/theme-toggles";
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet } from "react-router";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
 import classes from "./AppShell.module.css";
 import { NimbusLogo } from "./NimbusLogo";
+import { PageErrorBoundary } from "./PageErrorBoundary";
+import { OfflinePage } from "./StatusPages";
+import { useOnline } from "./useOnline";
 import { DESTINATIONS, type Destination } from "./navigation";
 import {
   effectivePosition,
@@ -69,6 +72,26 @@ export function RailLink({
         </NavLink>
       </span>
     </Tooltip>
+  );
+}
+
+/**
+ * The open page, with the offline page over it while the browser has no connection, and the crashed page in its place
+ * if it crashes while drawing. Either way the navbar stays. Offline, the page is hidden rather than removed, so
+ * unsaved work on it (ticked Permissions, a half-filled window) is still there when the connection comes back.
+ */
+function PageContent() {
+  const online = useOnline();
+  const location = useLocation();
+  return (
+    <>
+      {!online && <OfflinePage />}
+      <div hidden={!online}>
+        <PageErrorBoundary resetKey={location.key}>
+          <Outlet />
+        </PageErrorBoundary>
+      </div>
+    </>
   );
 }
 
@@ -206,7 +229,7 @@ export function AppShell() {
       </nav>
       <div className={classes.content}>
         <Container size="lg">
-          <Outlet />
+          <PageContent />
         </Container>
       </div>
     </div>

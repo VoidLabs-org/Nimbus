@@ -143,22 +143,11 @@
   padding-left: 20px;
 }
 
-/* The primary button: the label on the left, a round arrow on the right. */
+/* The primary button (an ArrowButton), a little larger than elsewhere. */
 .submit {
-  height: 52px;
-  padding: 0 8px 0 24px;
+  --arrow-button-height: 52px;
+  --arrow-size: 36px;
   font-size: 16px;
-}
-
-.arrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--color-text);
-  color: var(--color-bg);
 }
 
 /* Below about 900px only the form shows, full width. */

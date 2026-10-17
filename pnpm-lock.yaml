@@ -83,6 +83,9 @@ importers:
       babel-plugin-react-compiler:
         specifier: ^1.0.0
         version: 1.0.0
+      jsdom:
+        specifier: ^30.1.3
+        version: 30.1.3
       oxlint:
         specifier: ^1.87.0
         version: 1.87.0
@@ -115,6 +118,9 @@ importers:
       '@mantine/core':
         specifier: ^9.7.1
         version: 9.7.1(@mantine/hooks@9.7.1(react@19.2.8))(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@mantine/notifications':
+        specifier: ^9.7.1
+        version: 9.7.1(@mantine/core@9.7.1(@mantine/hooks@9.7.1(react@19.2.8))(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@mantine/hooks@9.7.1(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tabler/icons-react':
         specifier: ^3.49.0
         version: 3.49.0(react@19.2.8)

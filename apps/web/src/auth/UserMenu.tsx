@@ -1,7 +1,7 @@
 import { IconChevronDown } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
 import { Avatar, Button, Group, Menu, Modal, Text, type FloatingPosition } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
+import { toast } from "@repo/ui/toast";
 import { useState } from "react";
 import classes from "./UserMenu.module.css";
 import { useSession } from "./useSession";
@@ -30,10 +30,7 @@ export function UserMenu({
     try {
       await logout();
     } catch {
-      notifications.show({
-        color: "red",
-        message: "Couldn't sign out. Check your connection and try again.",
-      });
+      toast.error("Couldn't sign out. Check your connection and try again.");
       setConfirming(false);
       setSigningOut(false);
     }

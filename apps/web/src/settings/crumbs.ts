@@ -12,14 +12,9 @@ export function settingsCrumbs(page: string): Crumb[] {
 /**
  * A Role's path: Settings › Roles & access › Project roles (or Platform roles) › the Role. The tab crumb links to the
  * list on that tab, so coming back from a platform Role lands on the Platform roles tab. While the Role loads, the
- * tab and the Role are pending placeholders. If it couldn't be loaded, the path is Settings › Roles & access › the
- * key from the address, so the way back to the list stays a link.
+ * tab and the Role are pending placeholders (`null`). A Role that can't be loaded gets a status page instead.
  */
-export function roleCrumbs(
-  role: { kind: Kind; name: string } | null,
-  loading: boolean,
-  key: string,
-): Crumb[] {
+export function roleCrumbs(role: { kind: Kind; name: string } | null): Crumb[] {
   if (role)
     return [
       SETTINGS,
@@ -29,6 +24,5 @@ export function roleCrumbs(
         : { label: "Project roles", to: ROLES.to },
       { label: role.name },
     ];
-  if (loading) return [SETTINGS, ROLES, { label: "", pending: true }, { label: "", pending: true }];
-  return [SETTINGS, ROLES, { label: key }];
+  return [SETTINGS, ROLES, { label: "", pending: true }, { label: "", pending: true }];
 }

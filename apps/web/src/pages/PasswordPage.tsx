@@ -1,6 +1,6 @@
 import { Button, Container, Group, PasswordInput, Stack, Text, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { notifications } from "@mantine/notifications";
+import { toast } from "@repo/ui/toast";
 import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { passwordError } from "../auth/password";
@@ -37,12 +37,11 @@ export default function PasswordPage() {
         currentPassword: hasPassword ? currentPassword : undefined,
         newPassword,
       });
-      notifications.show({
-        color: "green",
-        message: hasPassword
+      toast.success(
+        hasPassword
           ? "Password changed. Your other devices will be signed out shortly."
           : "Password set. You can now sign in with your email and password.",
-      });
+      );
       form.reset();
     } catch (error) {
       if (error instanceof ApiError && !hasPassword && error.fieldErrors.currentPassword) {

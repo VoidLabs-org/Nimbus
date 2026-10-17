@@ -1,4 +1,4 @@
-import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
+import { Center, Loader } from "@mantine/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
 import {
@@ -9,6 +9,8 @@ import {
   type RegisterInput,
   type User,
 } from "../api/client";
+import { failedLoad } from "../api/failure";
+import { OfflinePage, ServerErrorPage } from "../shell/StatusPages";
 import { loginPath } from "./returnPath";
 import { SessionContext, useSession } from "./useSession";
 
@@ -17,7 +19,7 @@ import { SessionContext, useSession } from "./useSession";
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [restoring, setRestoring] = useState(true);
-  const [unavailable, setUnavailable] = useState(false);
+  const [unavailable, setUnavailable] = useState<"offline" | "server" | null>(null);
   const [signedOutOnPurpose, setSignedOutOnPurpose] = useState(false);
 
   // Only a 401 means there is no session. A rate limit or an outage says nothing about it, so the User
@@ -28,14 +30,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch((error: unknown) => {
         if (error instanceof ApiError && error.status === 401) setUser(null);
-        else setUnavailable(true);
+        else setUnavailable(failedLoad(error) === "offline" ? "offline" : "server");
       })
       .finally(() => setRestoring(false));
   }
 
   function retry() {
     setRestoring(true);
-    setUnavailable(false);
+    setUnavailable(null);
     restore();
   }
 
@@ -107,14 +109,12 @@ export function RequireUser({ children }: { children: ReactNode }) {
       </Center>
     );
   }
+  // The sign-in couldn't be checked: offline, or the server failed. Either way the User may try again.
   if (unavailable) {
-    return (
-      <Center h="100vh" p="md">
-        <Stack align="center">
-          <Alert color="yellow">We couldn't check your sign-in right now. Please try again.</Alert>
-          <Button onClick={retry}>Try again</Button>
-        </Stack>
-      </Center>
+    return unavailable === "offline" ? (
+      <OfflinePage onRetry={retry} standalone />
+    ) : (
+      <ServerErrorPage onRetry={retry} standalone />
     );
   }
   if (user) return children;

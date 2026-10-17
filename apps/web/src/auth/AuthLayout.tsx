@@ -1,7 +1,5 @@
-import { IconArrowRight } from "@tabler/icons-react";
-import { Glyph } from "@repo/ui/glyph";
+import { ArrowButton } from "@repo/ui/arrow-button";
 import {
-  Button,
   PasswordInput,
   TextInput,
   Title,
@@ -110,19 +108,14 @@ export function AuthSubmit({
   ...props
 }: Omit<ButtonProps, "rightSection" | "justify" | "fullWidth"> & { children: ReactNode }) {
   return (
-    <Button
+    <ArrowButton
       type="submit"
       fullWidth
       justify="space-between"
       className={className ? `${classes.submit} ${className}` : classes.submit}
-      rightSection={
-        <span className={classes.arrow}>
-          <Glyph icon={IconArrowRight} />
-        </span>
-      }
       {...props}
     >
       {children}
-    </Button>
+    </ArrowButton>
   );
 }

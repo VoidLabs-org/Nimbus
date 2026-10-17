@@ -141,20 +141,10 @@
   padding: 0 24px;
 }
 
+/* The submit button (an ArrowButton), sized to the window. */
 .create {
-  height: 46px;
-  padding: 0 8px 0 24px;
-}
-
-.arrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--color-text);
-  color: var(--color-bg);
+  --arrow-button-height: 46px;
+  --arrow-size: 32px;
 }
 
 @media (max-width: 36em) {
@@ -204,13 +194,12 @@
     padding: 8px 16px;
   }
 
-  .cancel,
-  .create {
+  .cancel {
     height: 40px;
   }
 
-  .arrow {
-    width: 28px;
-    height: 28px;
+  .create {
+    --arrow-button-height: 40px;
+    --arrow-size: 28px;
   }
 }

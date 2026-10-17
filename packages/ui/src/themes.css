@@ -68,6 +68,14 @@
   --diff-removed-fg: #7f1d1d;
   --seg-on: #fff;
   --seg-on-fg: #201d1a;
+  /* Toast status icons, the same in every theme: green for done (not orange, which means "selected"), amber for a
+     caveat, red for a failure. */
+  --toast-success: #16a34a;
+  --toast-success-fg: #ffffff;
+  --toast-warning: #f59e0b;
+  --toast-warning-fg: #201d1a;
+  --toast-error: #e5484d;
+  --toast-error-fg: #ffffff;
 
   --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
   --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
@@ -435,4 +443,111 @@
 
 .nimbus-swatch[data-swatch="system"] {
   background: linear-gradient(135deg, var(--theme-paper-bg) 50%, var(--theme-ink-bg) 50%);
+}
+
+/*
+ * Toasts (design 24a): a pill on the theme's raised surface, frosted on Fog and Slate, with a round status icon, the
+ * message and a close button. The radius is half a one-line toast's height, so one line is a pill and a message that
+ * wraps becomes a rounded card instead of a tall pill.
+ */
+.nimbus-toasts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* At the top of the window the newest toast sits nearest the corner, as it does at the bottom. */
+.nimbus-toasts[data-position^="top"] > div {
+  flex-direction: column-reverse;
+}
+
+.nimbus-toasts .mantine-Notifications-notification {
+  margin-top: 0;
+}
+
+/* No padding on the toast itself: its parts carry the spacing, so closing (Mantine shrinks max-height to 0) folds it
+   away completely instead of leaving a padded strip that snaps shut. */
+.nimbus-toast {
+  --notification-radius: 24px;
+  gap: 12px;
+  padding: 0;
+  background: var(--modal-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  color: var(--color-text);
+}
+
+.nimbus-toast[data-kind="error"] {
+  border-color: var(--toast-error);
+}
+
+.nimbus-toast .mantine-Notification-icon {
+  flex: none;
+  align-self: flex-start;
+  width: 32px;
+  height: 32px;
+  margin: 8px 0 8px 8px;
+  border-radius: 50%;
+}
+
+.nimbus-toast[data-kind="success"] .mantine-Notification-icon {
+  background: var(--toast-success);
+  color: var(--toast-success-fg);
+}
+
+/* Info is muted, so it never outshines an error beside it. */
+.nimbus-toast[data-kind="info"] .mantine-Notification-icon {
+  background: var(--seg);
+  color: var(--color-accent-2-700);
+}
+
+.nimbus-toast[data-kind="warning"] .mantine-Notification-icon {
+  background: var(--toast-warning);
+  color: var(--toast-warning-fg);
+}
+
+.nimbus-toast[data-kind="error"] .mantine-Notification-icon {
+  background: var(--toast-error);
+  color: var(--toast-error-fg);
+}
+
+.nimbus-toast .mantine-Notification-body {
+  margin: 0;
+  padding: 14px 0;
+}
+
+.nimbus-toast .mantine-Notification-description {
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.nimbus-toast .mantine-Notification-closeButton {
+  flex: none;
+  align-self: flex-start;
+  width: 32px;
+  height: 32px;
+  margin: 8px 8px 8px 0;
+  border-radius: 50%;
+  color: var(--color-accent-2-500);
+}
+
+/* The main action (ArrowButton): the label on the left, a round arrow on the right. Callers size it with
+   --arrow-button-height and --arrow-size. */
+.nimbus-arrow-button {
+  height: var(--arrow-button-height, 50px);
+  padding: 0 8px 0 24px;
+}
+
+.nimbus-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--arrow-size, 34px);
+  height: var(--arrow-size, 34px);
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
 }

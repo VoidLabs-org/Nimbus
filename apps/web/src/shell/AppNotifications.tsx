@@ -1,5 +1,5 @@
 import { useMediaQuery } from "@mantine/hooks";
-import { Notifications } from "@mantine/notifications";
+import { NimbusToasts } from "@repo/ui/toast";
 import {
   effectivePosition,
   NARROW_QUERY,
@@ -11,5 +11,5 @@ import {
 export function AppNotifications() {
   const [chosen] = useNavPosition();
   const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
-  return <Notifications position={notificationPosition(effectivePosition(chosen, narrow))} />;
+  return <NimbusToasts position={notificationPosition(effectivePosition(chosen, narrow))} />;
 }

@@ -1,4 +1,4 @@
-import { loginPath } from "../auth/returnPath";
+import { sessionExpiredPath } from "../auth/returnPath";
 
 export type User = {
   id: string;
@@ -139,9 +139,20 @@ export class ApiError extends Error {
   }
 }
 
+/** A request that never reached the server: no network, or the server can't be found. Carries fetch's own error. */
+export class NetworkError extends Error {
+  constructor(cause: unknown) {
+    super("The request couldn't reach the server", { cause });
+    this.name = "NetworkError";
+  }
+}
+
 export type ApiClientOptions = {
-  /** Called with the sign-in path (remembering the current page) when the session can't be renewed. */
-  onSessionLost?: (loginPath: string) => void;
+  /**
+   * Called with the session-expired page's path (remembering the current page, to come back to after signing in
+   * again) when the session can't be renewed.
+   */
+  onSessionLost?: (sessionExpiredPath: string) => void;
   /** The page the User is on, to return to after signing in again. */
   currentPath?: () => string;
 };
@@ -172,7 +183,12 @@ export function createApiClient(
     if (init.body !== undefined) headers.set("Content-Type", "application/json");
     if (authenticated && accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
-    const response = await fetchFn(path, { ...init, headers });
+    let response: Response;
+    try {
+      response = await fetchFn(path, { ...init, headers });
+    } catch (failure) {
+      throw new NetworkError(failure);
+    }
     const body = await response.json().catch(() => undefined);
     if (!response.ok) {
       const retryAfter = Number(response.headers.get("Retry-After"));
@@ -254,7 +270,7 @@ export function createApiClient(
       if (error instanceof ApiError && error.status === 401 && !lostReported) {
         lostReported = true;
         accessToken = null;
-        onSessionLost(loginPath(currentPath()));
+        onSessionLost(sessionExpiredPath(currentPath()));
       }
       throw error;
     }

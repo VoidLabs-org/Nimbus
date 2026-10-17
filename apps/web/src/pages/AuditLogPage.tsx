@@ -21,12 +21,21 @@ import { actorName, formatTime, grantChips, groupByDay } from "../access/auditVi
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
-import { ApiError, api, type AuditEntry, type AuditPage } from "../api/client";
+import { api, type AuditEntry, type AuditPage } from "../api/client";
+import { failedLoad, type FailedLoad } from "../api/failure";
+import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./AuditLogPage.module.css";
 
 const PAGE_SIZE = 50;
 
 const CHIP_MARK = { added: "+", removed: "−", changed: "~" } as const;
+
+/** What went wrong loading a later page of the log, said inline above the list. */
+function pageFailureMessage(failure: FailedLoad): string {
+  if (failure === "no-access") return "You don't have permission to read the audit log.";
+  if (failure === "offline") return "You're offline. Check your connection, then try again.";
+  return "Couldn't load this page of the log.";
+}
 
 /**
  * Settings → Audit log: every change to Roles and their Permissions, newest first, with who made it. Entries are
@@ -50,7 +59,7 @@ export default function AuditLogPage() {
     page: number;
     asOf?: number;
     loaded?: AuditPage;
-    error?: string;
+    error?: FailedLoad;
   } | null>(null);
 
   useEffect(() => {
@@ -65,10 +74,7 @@ export default function AuditLogPage() {
         setResult({
           page: view.page,
           asOf: view.asOf,
-          error:
-            failure instanceof ApiError && failure.status === 403
-              ? "You don't have permission to read the audit log."
-              : "Couldn't load the audit log. Please try again.",
+          error: failedLoad(failure),
         });
       });
     return () => {
@@ -83,6 +89,18 @@ export default function AuditLogPage() {
 
   // Grouped per page, so a day that continues on the next page shows its heading there too.
   const days = loaded ? groupByDay(loaded.entries, now) : [];
+
+  // Asks for the same page once more.
+  function retry() {
+    setResult(null);
+    setView({ ...view });
+  }
+
+  // The log couldn't be opened at all: the status page takes its place. A later page that fails is shown inline
+  // instead (below), so Show newest stays at hand to start again.
+  if (error && view.page === 0 && view.asOf === undefined) {
+    return <FailedLoadPage failure={error} onRetry={retry} />;
+  }
 
   return (
     <Container size="lg" px={0} py="xl">
@@ -102,7 +120,16 @@ export default function AuditLogPage() {
             Show newest
           </Button>
         </div>
-        {error && <Alert color="red">{error}</Alert>}
+        {error && (
+          <Alert color="red">
+            <Group justify="space-between" gap="sm">
+              {pageFailureMessage(error)}
+              <Button variant="default" size="xs" onClick={retry}>
+                Try again
+              </Button>
+            </Group>
+          </Alert>
+        )}
         {!loaded && !error && (
           <Center py="xl">
             <Loader />

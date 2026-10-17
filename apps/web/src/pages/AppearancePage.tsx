@@ -1,6 +1,7 @@
 import { Container, Stack, Text, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { ThemePicker } from "@repo/ui/theme-picker";
+import { NavPositionPicker } from "../shell/NavPositionPicker";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 
@@ -25,6 +26,20 @@ export default function AppearancePage() {
               Paper and Fog are light; Ink and Slate are dark. System follows your device&apos;s
               light or dark setting, and keeps flat or glass as you last chose.
             </Text>
+          </Stack>
+        </Panel>
+        <Panel p="lg">
+          <Stack gap="md">
+            <div>
+              <Title order={2} fz={20}>
+                Navbar position
+              </Title>
+              <Text size="sm" c="dimmed" mt={4}>
+                Put the navbar on any edge. Top and bottom keep it horizontal; left and right turn
+                it into a narrow rail. Your choice is kept in this browser.
+              </Text>
+            </div>
+            <NavPositionPicker />
           </Stack>
         </Panel>
       </Stack>

@@ -23,6 +23,10 @@
   opacity: 0.7;
 }
 
+.compact {
+  padding: 4px;
+}
+
 /* On a phone the chip is just the avatar, so it fits beside the logo and the menu button. */
 @media (max-width: 36em) {
   .name,
@@ -48,8 +52,10 @@
   font-size: 13px;
   color: var(--color-accent-2-700);
   text-transform: none;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  /* One line: a long address is cut with an ellipsis, and the full one is in its tooltip and on the Profile page. */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .item {

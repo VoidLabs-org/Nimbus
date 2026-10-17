@@ -1,4 +1,4 @@
-import { Alert, Radio, Stack, Textarea, TextInput } from "@mantine/core";
+import { Alert, Radio, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -6,7 +6,7 @@ import { ApiError, api, type Kind, type NewRoleInput } from "../api/client";
 import classes from "./NewRoleModal.module.css";
 import { FieldLabel, RoleFormFooter } from "./RoleFormParts";
 import { WindowFrame } from "./WindowFrame";
-import { descriptionClassNames, fieldClassNames } from "./roleFormClassNames";
+import { descriptionClassNames, fieldClassNames, formClassName } from "./roleFormClassNames";
 import { followsName, keyForName, ROLE_KEY } from "./roleKey";
 
 const KINDS: { value: Kind; name: string; hint: string }[] = [
@@ -90,7 +90,7 @@ export function NewRoleModal({
       subtitle="Pick where it applies, then name it."
     >
       <form onSubmit={(event) => form.onSubmit(submit)(event)}>
-        <Stack gap={18}>
+        <div className={formClassName}>
           {formError && <Alert color="red">{formError}</Alert>}
           <Radio.Group
             label="Where it applies"
@@ -145,7 +145,7 @@ export function NewRoleModal({
             loading={form.submitting}
             onCancel={close}
           />
-        </Stack>
+        </div>
       </form>
     </WindowFrame>
   );

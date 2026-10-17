@@ -362,6 +362,16 @@
   background: var(--line-strong);
 }
 
+/* Stacked, for the vertical rail: the divider lies down between the buttons. */
+.nimbus-toggles[data-orientation="vertical"] {
+  flex-direction: column;
+}
+
+.nimbus-toggles[data-orientation="vertical"] .nimbus-toggles-divider {
+  width: 18px;
+  height: 1px;
+}
+
 .nimbus-toggle {
   display: flex;
   align-items: center;

@@ -13,8 +13,9 @@ import {
 import { useForm } from "@mantine/form";
 import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ApiError, api, type Role, type RoleHolder } from "../api/client";
+import { loadFailure, refreshFailed, useRoleHolders, useRolesChanged } from "../api/queries";
 import { useSession } from "../auth/useSession";
 import { HoldersSkeleton } from "./HoldersSkeleton";
 
@@ -22,13 +23,20 @@ import { HoldersSkeleton } from "./HoldersSkeleton";
  * A platform role's People tab: who holds it, giving it to a User by email, and taking it away. The signed-in User's
  * own row has no Remove: nobody changes their own Role assignments, and the server refuses it anyway.
  */
-export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => void }) {
+export function RoleHolders({ role }: { role: Role }) {
   const { user } = useSession();
-  const [holders, setHolders] = useState<RoleHolder[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  // Bumped after every change: the list is read again from the server, so it stays complete and sorted and shows
-  // what other admins changed meanwhile.
-  const [loads, setLoads] = useState(0);
+  const holdersQuery = useRoleHolders(role.key);
+  const holders = holdersQuery.data ?? null;
+  // A first load that failed, or a refresh that did (after giving or taking the Role) and left the list out of date.
+  const loadError =
+    loadFailure(holdersQuery) || refreshFailed(holdersQuery)
+      ? holdersQuery.error instanceof ApiError
+        ? holdersQuery.error.message
+        : "Couldn't load who holds this Role."
+      : null;
+  // Every change refreshes the holders, the Role's holder count and whatever else shows them, so the list stays
+  // complete and sorted and shows what other admins changed meanwhile.
+  const rolesChanged = useRolesChanged();
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<RoleHolder | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,29 +53,8 @@ export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => 
     },
   });
 
-  useEffect(() => {
-    let current = true;
-    api
-      .roleHolders(role.key)
-      .then((found) => {
-        if (!current) return;
-        setHolders(found);
-        setLoadError(null);
-      })
-      .catch((failure) => {
-        if (current)
-          setLoadError(
-            failure instanceof ApiError ? failure.message : "Couldn't load who holds this Role.",
-          );
-      });
-    return () => {
-      current = false;
-    };
-  }, [role.key, loads]);
-
   function changed() {
-    setLoads((count) => count + 1);
-    onChanged();
+    void rolesChanged();
   }
 
   async function give(values: { email: string }) {
@@ -114,7 +101,7 @@ export function RoleHolders({ role, onChanged }: { role: Role; onChanged: () => 
       {loadError && (
         <Alert color="red">
           {loadError}{" "}
-          <Button size="compact-xs" variant="subtle" onClick={() => setLoads((count) => count + 1)}>
+          <Button size="compact-xs" variant="subtle" onClick={() => void holdersQuery.refetch()}>
             Try again
           </Button>
         </Alert>

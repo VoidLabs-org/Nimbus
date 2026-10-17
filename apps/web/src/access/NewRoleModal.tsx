@@ -2,6 +2,7 @@ import { Alert, Radio, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { useRolesChanged } from "../api/queries";
 import { openedRole } from "./openedRole";
 import { ApiError, api, type Kind, type NewRoleInput } from "../api/client";
 import classes from "./NewRoleModal.module.css";
@@ -31,6 +32,7 @@ export function NewRoleModal({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
+  const rolesChanged = useRolesChanged();
   const [formError, setFormError] = useState<string | null>(null);
   // null until the User picks one, so the window follows the tab it is opened from.
   const [chosenKind, setChosenKind] = useState<Kind | null>(null);
@@ -64,6 +66,7 @@ export function NewRoleModal({
     const opening = closes.current;
     try {
       const role = await api.createRole({ ...values, kind, name: values.name.trim() });
+      void rolesChanged();
       if (closes.current !== opening) return;
       close();
       navigate(`/settings/roles/${role.key}`, { state: openedRole(role) });

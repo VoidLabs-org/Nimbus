@@ -1,4 +1,5 @@
 import { Center, Loader } from "@mantine/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
 import {
@@ -21,6 +22,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [restoring, setRestoring] = useState(true);
   const [unavailable, setUnavailable] = useState<"offline" | "server" | null>(null);
   const [signedOutOnPurpose, setSignedOutOnPurpose] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Cached server data belongs to the User who loaded it, so it goes just before they sign out or someone else signs
+  // in: before the new User's pages render, so they never start from it and never fetch twice.
 
   // Only a 401 means there is no session. A rate limit or an outage says nothing about it, so the User
   // keeps their place and can retry instead of being sent to sign in again.
@@ -44,12 +49,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(restore, []);
 
   async function register(input: RegisterInput) {
-    setUser(await api.register(input));
+    const registered = await api.register(input);
+    queryClient.clear();
+    setUser(registered);
     setSignedOutOnPurpose(false);
   }
 
   async function login(input: LoginInput) {
-    setUser(await api.login(input));
+    const signedIn = await api.login(input);
+    queryClient.clear();
+    setUser(signedIn);
     setSignedOutOnPurpose(false);
   }
 
@@ -70,6 +79,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await api.logout();
+    queryClient.clear();
     setSignedOutOnPurpose(true);
     setUser(null);
   }

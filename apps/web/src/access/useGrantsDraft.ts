@@ -6,7 +6,7 @@ import { changeCount, grantsSignature, scopesIn } from "./grants";
  * A Role's unsaved Grants. They live above the tabs and the summary so Save and Discard can sit in the summary and
  * ticks survive a visit to the People tab. Nothing is saved until `save`, which replaces all Grants at once and is
  * refused if someone changed the Role meanwhile. The draft starts again when the stored Grants change (saved or
- * reset); renaming keeps it. Changes are ignored while a save runs, so none are lost when it returns.
+ * reset), unless it has unsaved ticks that a refresh would lose; renaming keeps it. Changes are ignored while a save runs, so none are lost when it returns.
  */
 export function useGrantsDraft(role: Role, onSaved: (role: Role) => void) {
   const saved = new Map(role.grants.map((grant) => [grant.permission, grant.scope]));
@@ -15,14 +15,19 @@ export function useGrantsDraft(role: Role, onSaved: (role: Role) => void) {
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // The stored Grants changed under the draft: start from them.
+  // The stored Grants changed under the draft (saved, reset, or changed by someone else, which a refresh shows): start
+  // from them, unless there are unsaved ticks, which a refresh must not throw away. Saving them is then refused if the
+  // Role changed meanwhile, and the page says so. Resetting starts the page again (see RolePage).
   const signature = grantsSignature(role);
-  const [seen, setSeen] = useState(signature);
-  if (seen !== signature) {
-    setSeen(signature);
-    setDraft(saved);
-    setErrors({});
-    setFailure(null);
+  const [seen, setSeen] = useState({ signature, saved });
+  if (seen.signature !== signature) {
+    const untouched = changeCount(seen.saved, draft) === 0;
+    setSeen({ signature, saved });
+    if (untouched) {
+      setDraft(saved);
+      setErrors({});
+      setFailure(null);
+    }
   }
 
   function toggle(permission: CatalogPermission, checked: boolean) {

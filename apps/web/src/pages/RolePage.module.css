@@ -1,0 +1,21 @@
+/* A Role's page, from the "Nimbus Themes" design (Role). Colours come only from the theme variables. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* The summary follows the Permissions in the page, so below about 900px it simply lands underneath them. */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -10,6 +10,7 @@ import {
 } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { PillTabs } from "@repo/ui/pill-tabs";
+import { Tag } from "@repo/ui/tag";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { NewRoleModal } from "../access/NewRoleModal";
@@ -128,7 +129,7 @@ function RoleList({ label, roles }: { label: string; roles: RoleSummary[] }) {
                   <div className={classes.role}>
                     <div className={classes.name}>
                       {role.name}
-                      {tag && <span className={classes.tag}>{tag}</span>}
+                      {tag && <Tag>{tag}</Tag>}
                     </div>
                     <div className={classes.summary}>
                       {role.description && <span>{role.description}</span>}

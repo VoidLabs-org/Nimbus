@@ -1,0 +1,57 @@
+/* The Role summary panel, from the "Nimbus Themes" design (Role). Colours come only from the theme variables. */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+}
+
+.facts dt {
+  font-size: 12px;
+  color: var(--color-accent-2-500);
+}
+
+.facts dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+
+.facts .count {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.facts .key {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The number of unsaved changes, a round chip inside the Save button. */
+.badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--color-text);
+  color: var(--color-bg);
+}

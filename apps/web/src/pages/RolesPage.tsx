@@ -13,7 +13,7 @@ import { PillTabs } from "@repo/ui/pill-tabs";
 import { Tag } from "@repo/ui/tag";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { Breadcrumbs } from "../shell/Breadcrumbs";
+import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { NewRoleModal } from "../access/NewRoleModal";
 import { heldBy, permissionCount, roleTag } from "../access/roleRow";
@@ -68,7 +68,7 @@ export default function RolesPage() {
   return (
     <Container size="lg" px={0} py="xl">
       <Stack gap="lg">
-        <Breadcrumbs crumbs={settingsCrumbs("Roles & access")} />
+        <BreadcrumbTrail crumbs={settingsCrumbs("Roles & access")} />
         <div className={classes.header}>
           <div>
             <Title order={1} fz={40} lh={1.05}>

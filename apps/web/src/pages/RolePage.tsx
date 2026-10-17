@@ -24,7 +24,7 @@ import { useGrantsDraft } from "../access/useGrantsDraft";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
 import { roleCrumbs } from "../settings/crumbs";
-import { Breadcrumbs } from "../shell/Breadcrumbs";
+import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import classes from "./RolePage.module.css";
 
 /**
@@ -96,7 +96,7 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   return (
     <Container size="lg" px={0} py="xl">
       <Box mb="md">
-        <Breadcrumbs crumbs={roleCrumbs(role, !role && !error)} />
+        <BreadcrumbTrail crumbs={roleCrumbs(role, !role && !error, key)} />
       </Box>
       {error && <Alert color="red">{error}</Alert>}
       {!role && !error && (

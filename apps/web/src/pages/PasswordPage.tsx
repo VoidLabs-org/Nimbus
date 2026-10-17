@@ -5,7 +5,7 @@ import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { passwordError } from "../auth/password";
 import { useSession } from "../auth/useSession";
-import { Breadcrumbs } from "../shell/Breadcrumbs";
+import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 
 /**
@@ -72,7 +72,7 @@ export default function PasswordPage() {
   return (
     <Container size="sm" px={0} py="xl">
       <Stack gap="lg" maw={520}>
-        <Breadcrumbs crumbs={settingsCrumbs("Password")} />
+        <BreadcrumbTrail crumbs={settingsCrumbs("Password")} />
         <div>
           <Title order={1} fz={32} lh={1.1}>
             Password

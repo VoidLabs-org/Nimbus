@@ -5,7 +5,7 @@ import { ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { displayNameError } from "../auth/displayName";
 import { useSession } from "../auth/useSession";
-import { Breadcrumbs } from "../shell/Breadcrumbs";
+import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 
 /** Settings → Profile: the User's avatar, name and email, and a Display name they can change. */
@@ -16,7 +16,7 @@ export default function ProfilePage() {
   return (
     <Container size="sm" px={0} py="xl">
       <Stack gap="lg" maw={520}>
-        <Breadcrumbs crumbs={settingsCrumbs("Profile")} />
+        <BreadcrumbTrail crumbs={settingsCrumbs("Profile")} />
         <div>
           <Title order={1} fz={32} lh={1.1}>
             Profile

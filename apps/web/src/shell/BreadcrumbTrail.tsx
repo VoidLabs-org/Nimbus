@@ -1,26 +1,31 @@
 import { Menu, Skeleton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Link } from "react-router";
-import { collapseCrumbs, type Crumb } from "../settings/crumbs";
-import classes from "./Breadcrumbs.module.css";
+import classes from "./BreadcrumbTrail.module.css";
+import { collapseCrumbs, type Crumb } from "./crumbs";
 
 /** Below this a long path folds its middle into a menu (variant 21d of the design). */
 const NARROW = "(max-width: 36em)";
 
 /**
- * Where the page is, as quiet text above its title (variant 21a): every crumb but the last is a link, the last is
+ * Breadcrumbs: where the page is, as quiet text above its title (variant 21a): every crumb but the last is a link, the last is
  * the page itself. On a narrow screen a path of four or more crumbs tucks the ones between the first and last into a
- * "···" menu and adds an "up" button to the parent.
+ * "···" menu and adds an "up" button to the parent. Built by hand rather than on Mantine's Breadcrumbs, which is a
+ * plain div: this one is a nav with an ordered list and marks the current page.
  */
-export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
+export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
   const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
   const loading = crumbs.some((crumb) => crumb.pending);
-  // A path still loading stays whole: there is nothing to put in the menu yet.
-  const { shown, hidden, up } = collapseCrumbs(crumbs, narrow && !loading);
+  const { shown, hidden, up } = collapseCrumbs(crumbs, narrow);
+  // The menu lists the folded steps that go somewhere, once each: a placeholder or the page itself has no link, and
+  // two steps that lead to the same place (a tab and the list it is on) are one entry.
+  const menu = hidden.filter(
+    (crumb, index) => crumb.to && hidden.findIndex((other) => other.to === crumb.to) === index,
+  );
   // The first crumb, the folded ones (when there are any), then the rest.
   const steps: ({ crumb: Crumb } | "folded")[] = [
     { crumb: shown[0]! },
-    ...(hidden.length > 0 ? (["folded"] as const) : []),
+    ...(menu.length > 0 ? (["folded"] as const) : []),
     ...shown.slice(1).map((crumb) => ({ crumb })),
   ];
 
@@ -57,8 +62,8 @@ export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
                   </button>
                 </Menu.Target>
                 <Menu.Dropdown>
-                  {hidden.map((crumb) => (
-                    <Menu.Item key={crumb.label} component={Link} to={crumb.to ?? "#"}>
+                  {menu.map((crumb) => (
+                    <Menu.Item key={crumb.to} component={Link} to={crumb.to!}>
                       {crumb.label}
                     </Menu.Item>
                   ))}

@@ -16,7 +16,7 @@ import { AuditAvatar } from "../access/AuditAvatar";
 import { AuditEntryModal } from "../access/AuditEntryModal";
 import { describeAuditEntry } from "../access/auditText";
 import { actorName, formatTime, grantChips, groupByDay } from "../access/auditView";
-import { Breadcrumbs } from "../shell/Breadcrumbs";
+import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { ApiError, api, type AuditEntry, type AuditPage } from "../api/client";
@@ -85,7 +85,7 @@ export default function AuditLogPage() {
   return (
     <Container size="lg" px={0} py="xl">
       <Stack gap="lg">
-        <Breadcrumbs crumbs={settingsCrumbs("Audit log")} />
+        <BreadcrumbTrail crumbs={settingsCrumbs("Audit log")} />
         <div className={classes.header}>
           <div>
             <Title order={1} fz={40} lh={1.05}>

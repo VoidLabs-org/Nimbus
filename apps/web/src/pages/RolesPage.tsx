@@ -1,30 +1,46 @@
 import {
   Alert,
-  Anchor,
-  Badge,
   Button,
   Center,
   Container,
-  Group,
   Loader,
   Stack,
-  Table,
-  Text,
   Title,
+  VisuallyHidden,
 } from "@mantine/core";
+import { Panel } from "@repo/ui/panel";
+import { PillTabs } from "@repo/ui/pill-tabs";
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { NewRoleModal } from "../access/NewRoleModal";
+import { heldBy, permissionCount, roleTag } from "../access/roleRow";
 import { ApiError, api, type Kind, type RoleSummary } from "../api/client";
+import classes from "./RolesPage.module.css";
+
+const TABS: { value: Kind; label: string }[] = [
+  { value: "project", label: "Project roles" },
+  { value: "platform", label: "Platform roles" },
+];
+
+/** The open tab, kept in the address (?kind=platform) so coming back from a Role returns to it. */
+function useKindTab(): [Kind, (kind: Kind) => void] {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kind: Kind = searchParams.get("kind") === "platform" ? "platform" : "project";
+  function setKind(next: Kind) {
+    setSearchParams(next === "project" ? {} : { kind: next }, { replace: true });
+  }
+  return [kind, setKind];
+}
 
 /**
- * Settings → Roles: every Role, platform roles and project roles in two sections, and "New Role". Only Users with
+ * Settings → Roles: every Role, project roles and platform roles on two tabs, and "New Role". Only Users with
  * access:role:manage get the list; anyone else sees why not.
  */
 export default function RolesPage() {
   const [roles, setRoles] = useState<RoleSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [kind, setKind] = useKindTab();
 
   useEffect(() => {
     let current = true;
@@ -48,75 +64,91 @@ export default function RolesPage() {
 
   return (
     <Container size="lg" px={0} py="xl">
-      <Group justify="space-between" align="flex-start">
-        <Title order={2}>Roles & access</Title>
-        {roles && <Button onClick={() => setCreating(true)}>New Role</Button>}
-      </Group>
-      <Text c="dimmed" mb="lg">
-        A Role bundles Permissions. Platform roles apply across Nimbus; project roles apply to a
-        Member in one project.
-      </Text>
-      {error && <Alert color="red">{error}</Alert>}
-      {!roles && !error && (
-        <Center py="xl">
-          <Loader />
-        </Center>
-      )}
-      {roles && (
-        <Stack gap="xl">
-          <RoleSection title="Platform roles" kind="platform" roles={roles} />
-          <RoleSection title="Project roles" kind="project" roles={roles} />
-        </Stack>
-      )}
-      <NewRoleModal opened={creating} onClose={() => setCreating(false)} />
+      <Stack gap="lg">
+        <div className={classes.header}>
+          <div>
+            <Title order={1} fz={40} lh={1.05}>
+              Roles & access
+            </Title>
+            <div className={classes.description}>
+              A Role bundles Permissions. Platform roles apply across Nimbus; project roles apply to
+              a Member in one project.
+            </div>
+          </div>
+          {roles && <Button onClick={() => setCreating(true)}>+ New Role</Button>}
+        </div>
+        {error && <Alert color="red">{error}</Alert>}
+        {!roles && !error && (
+          <Center py="xl">
+            <Loader />
+          </Center>
+        )}
+        {roles && (
+          <>
+            <PillTabs
+              data={TABS}
+              value={kind}
+              onChange={(value) => setKind(value as Kind)}
+              style={{ alignSelf: "flex-start" }}
+            />
+            <RoleList
+              label={TABS.find((tab) => tab.value === kind)!.label}
+              roles={roles.filter((role) => role.kind === kind)}
+            />
+          </>
+        )}
+      </Stack>
+      <NewRoleModal opened={creating} initialKind={kind} onClose={() => setCreating(false)} />
     </Container>
   );
 }
 
-function RoleSection({ title, kind, roles }: { title: string; kind: Kind; roles: RoleSummary[] }) {
-  const shown = roles.filter((role) => role.kind === kind);
+/**
+ * The Roles of one kind in a panel; each row opens the Role. A list of links, with "Held by" said to screen readers,
+ * since the column titles above are only visual.
+ */
+function RoleList({ label, roles }: { label: string; roles: RoleSummary[] }) {
   return (
-    <Stack gap="xs">
-      <Title order={4}>{title}</Title>
-      {/* Fixed layout and the same widths in both sections, so their columns line up. */}
-      <Table highlightOnHover layout="fixed">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Name</Table.Th>
-            <Table.Th w={200}>Key</Table.Th>
-            <Table.Th w={130}>{kind === "platform" ? "People" : "Assignments"}</Table.Th>
-            <Table.Th w={120}>Permissions</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {shown.map((role) => (
-            <Table.Tr key={role.key}>
-              <Table.Td>
-                <Group gap="xs">
-                  <Anchor component={Link} to={`/settings/roles/${role.key}`}>
-                    {role.name}
-                  </Anchor>
-                  {role.builtIn && (
-                    <Badge size="xs" variant="light">
-                      Built-in
-                    </Badge>
-                  )}
-                </Group>
-                <Text size="sm" c="dimmed">
-                  {role.description}
-                </Text>
-              </Table.Td>
-              <Table.Td>
-                <Text ff="monospace" size="sm">
-                  {role.key}
-                </Text>
-              </Table.Td>
-              <Table.Td>{role.holders ?? "Everyone"}</Table.Td>
-              <Table.Td>{role.permissions}</Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-    </Stack>
+    <Panel p={8}>
+      <div className={classes.columns} aria-hidden>
+        <span>Role</span>
+        <span>Held by</span>
+        <span>Permissions</span>
+        <span />
+      </div>
+      {roles.length === 0 ? (
+        <p className={classes.empty}>No {label.toLowerCase()} yet.</p>
+      ) : (
+        <ul className={classes.list} aria-label={label}>
+          {roles.map((role) => {
+            const tag = roleTag(role);
+            return (
+              <li key={role.key}>
+                <Link to={`/settings/roles/${role.key}`} className={classes.row}>
+                  <div className={classes.role}>
+                    <div className={classes.name}>
+                      {role.name}
+                      {tag && <span className={classes.tag}>{tag}</span>}
+                    </div>
+                    <div className={classes.summary}>
+                      {role.description && <span>{role.description}</span>}
+                      <span className={classes.key}>{role.key}</span>
+                    </div>
+                  </div>
+                  <span className={classes.held}>
+                    <VisuallyHidden>Held by </VisuallyHidden>
+                    {heldBy(role)}
+                  </span>
+                  <span className={classes.permissions}>{permissionCount(role)}</span>
+                  <span className={classes.arrow} aria-hidden>
+                    →
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Panel>
   );
 }

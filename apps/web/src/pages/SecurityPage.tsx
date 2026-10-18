@@ -8,7 +8,7 @@ import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { ApiError, api, type SessionInfo } from "../api/client";
 import { loadFailure, queryKeys, useSessions } from "../api/queries";
-import { activityText, isPhone, signedInText } from "../settings/sessionView";
+import { activityText, isPhone, sessionName, signedInText } from "../settings/sessionView";
 import { settingsCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { FailedLoadPage } from "../shell/StatusPages";
@@ -30,13 +30,21 @@ export default function SecurityPage() {
   const sessions = query.data;
 
   async function signOut(session: SessionInfo) {
+    const name = sessionName(session, now);
     setSigningOut(session.id);
     try {
       await api.endSession(session.id);
-      toast.success(`Signed out ${session.device}.`);
+      toast.success(`Signed out ${name}.`);
     } catch (failure) {
-      // Already over (another tab, or it expired): the list below is what's left, and nothing went wrong.
-      if (!(failure instanceof ApiError && failure.status === 404)) {
+      // A 401 means this session ended too: the app is already sending the User to sign in again.
+      if (failure instanceof ApiError && failure.status === 401) {
+        setSigningOut(null);
+        return;
+      }
+      if (failure instanceof ApiError && failure.status === 404) {
+        // Already over (another tab, or it expired): nothing went wrong, and the list below is what's left.
+        toast.info(`${name} was already signed out.`);
+      } else {
         toast.error("Couldn't sign out that device. Please try again.");
         setSigningOut(null);
         return;
@@ -90,7 +98,7 @@ export default function SecurityPage() {
                         className={classes.signOut}
                         loading={signingOut === session.id}
                         disabled={signingOut !== null}
-                        aria-label={`Sign out ${session.device}`}
+                        aria-label={`Sign out ${sessionName(session, now)}`}
                         onClick={() => void signOut(session)}
                       >
                         Sign out

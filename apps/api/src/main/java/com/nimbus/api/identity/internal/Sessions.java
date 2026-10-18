@@ -143,9 +143,7 @@ class Sessions {
 	List<SessionView> listFor(UUID userId, UUID currentSessionId) {
 		// One instant for both questions, so a session ending between them can't be running for one and over for the other.
 		var now = now();
-		if (!isActiveAt(currentSessionId, userId, now)) {
-			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
-		}
+		requireActive(currentSessionId, userId, now);
 		var views = sessions.findRunningOf(userId, now, now.minus(properties.sessionIdleTimeout()))
 			.stream()
 			.map(session -> new SessionView(session.getId(), deviceLabels.of(session.getUserAgent()),
@@ -161,6 +159,13 @@ class Sessions {
 		return views;
 	}
 
+	/** @throws InvalidBearerTokenException when the session has ended: its access token may still work for a while */
+	private void requireActive(UUID sessionId, UUID userId, Instant now) {
+		if (!isActiveAt(sessionId, userId, now)) {
+			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
+		}
+	}
+
 	private static long idleSeconds(Instant lastActiveAt, Instant now) {
 		return Math.max(0, Duration.between(lastActiveAt, now).getSeconds());
 	}
@@ -171,19 +176,27 @@ class Sessions {
 	 * @param currentSessionId the session of the access token making the request
 	 * @throws InvalidBearerTokenException when that session has ended, so a signed-out browser whose access token
 	 * still works can't sign the User out elsewhere
-	 * @throws SessionNotFoundException when no session has that id or it belongs to another User, so the ids of
+	 * @throws SessionNotFoundException when no session has that id (or it is not an id at all) or it belongs to another User, so the ids of
 	 * other Users' sessions are never revealed
 	 */
 	@Transactional
-	void endOne(UUID userId, UUID currentSessionId, UUID sessionId) {
+	void endOne(UUID userId, UUID currentSessionId, String sessionId) {
 		var now = now();
-		if (!isActiveAt(currentSessionId, userId, now)) {
-			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
-		}
-		sessions.findById(sessionId)
+		requireActive(currentSessionId, userId, now);
+		sessions.findById(parse(sessionId))
 			.filter(session -> session.userId().equals(userId))
 			.orElseThrow(SessionNotFoundException::new)
 			.revoke(now);
+	}
+
+	// An id that isn't a UUID is as unknown as one nobody holds.
+	private static UUID parse(String sessionId) {
+		try {
+			return UUID.fromString(sessionId);
+		}
+		catch (IllegalArgumentException e) {
+			throw new SessionNotFoundException();
+		}
 	}
 
 	/** Ends every session of a User except one, on every other browser. */

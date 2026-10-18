@@ -93,10 +93,6 @@ li:first-child.row {
     flex-wrap: wrap;
   }
 
-  .text {
-    flex-basis: calc(100% - 56px);
-  }
-
   .signOut {
     flex: 1 1 100%;
     min-height: 44px;

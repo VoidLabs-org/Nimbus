@@ -76,6 +76,14 @@ class SessionSignOutOneTests {
 	}
 
 	@Test
+	void anIdThatIsNotAUuidIsNotFound() {
+		register("Turing", "turing-one@example.com");
+		var laptop = signIn("turing-one@example.com", CHROME_ON_WINDOWS);
+
+		signOut(laptop.accessToken(), "abc").expectStatus().isNotFound();
+	}
+
+	@Test
 	void anotherUsersSessionIsNotFoundAndStaysRunning() {
 		register("Euler", "euler-one@example.com");
 		register("Fermat", "fermat-one@example.com");

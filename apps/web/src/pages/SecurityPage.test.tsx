@@ -185,7 +185,22 @@ describe("signing out one device", () => {
     await screen.findByText("Safari on iOS");
     const rows = await rowsOfCard();
     expect(within(rows[0]!).queryByRole("button", { name: /Sign out/ })).toBeNull();
-    expect(within(rows[1]!).getByRole("button", { name: "Sign out Safari on iOS" })).toBeTruthy();
+    expect(
+      within(rows[1]!).getByRole("button", { name: /^Sign out Safari on iOS \(signed in .+\)$/ }),
+    ).toBeTruthy();
+  });
+
+  it("tells two browsers with the same label apart by when they were signed in", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue([
+      sessionInfo("s1", "Chrome on Windows", true, 2 * DAY, 0),
+      sessionInfo("s2", "Chrome on Windows", false, 9 * DAY, 2 * HOUR),
+      sessionInfo("s3", "Chrome on Windows", false, 40 * DAY, 3 * DAY),
+    ]);
+
+    show();
+
+    const buttons = await screen.findAllByRole("button", { name: /^Sign out Chrome on Windows/ });
+    expect(new Set(buttons.map((button) => button.getAttribute("aria-label"))).size).toBe(2);
   });
 
   it("signs the row out, reloads the list and confirms with a toast", async () => {
@@ -197,12 +212,16 @@ describe("signing out one device", () => {
     const success = vi.spyOn(toast, "success");
 
     show();
-    fireEvent.click(await screen.findByRole("button", { name: "Sign out Safari on iOS" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Sign out Safari on iOS \(signed in .+\)$/ }),
+    );
 
     await waitFor(() => expect(screen.queryByText("Safari on iOS")).toBeNull());
     expect(endSession).toHaveBeenCalledWith("s2");
     expect(sessions).toHaveBeenCalledTimes(2);
-    expect(success).toHaveBeenCalledWith("Signed out Safari on iOS.");
+    expect(success).toHaveBeenCalledWith(
+      expect.stringMatching(/^Signed out Safari on iOS \(signed in .+\)\.$/),
+    );
   });
 
   it("just reloads the list when that session had already ended", async () => {
@@ -212,13 +231,19 @@ describe("signing out one device", () => {
       .mockResolvedValue([list()[0]!]);
     vi.spyOn(api, "endSession").mockRejectedValue(new ApiError(404, undefined));
     const error = vi.spyOn(toast, "error");
+    const info = vi.spyOn(toast, "info");
 
     show();
-    fireEvent.click(await screen.findByRole("button", { name: "Sign out Safari on iOS" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Sign out Safari on iOS \(signed in .+\)$/ }),
+    );
 
     await waitFor(() => expect(screen.queryByText("Safari on iOS")).toBeNull());
     expect(sessions).toHaveBeenCalledTimes(2);
     expect(error).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledWith(
+      expect.stringMatching(/^Safari on iOS \(signed in .+\) was already signed out\.$/),
+    );
   });
 
   it("says so, and keeps the row, when signing out fails", async () => {
@@ -227,7 +252,9 @@ describe("signing out one device", () => {
     const error = vi.spyOn(toast, "error");
 
     show();
-    fireEvent.click(await screen.findByRole("button", { name: "Sign out Safari on iOS" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Sign out Safari on iOS \(signed in .+\)$/ }),
+    );
 
     await waitFor(() => expect(error).toHaveBeenCalled());
     expect(screen.getByText("Safari on iOS")).toBeTruthy();

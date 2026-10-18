@@ -547,7 +547,7 @@ paths:
       summary: Sign out one of the signed-in User's sessions
       description: >-
         Ends the session at once, without a password; its refresh tokens stop working. Its access tokens keep working
-        for up to 15 minutes. Ending a session of the User that is already over also gives `204`. The request must come
+        for up to 15 minutes. Ending a session of the User that is already over also gives `204`, until the cleanup job deletes it (7 days after it ended). The request must come
         from a session that is still running.
       parameters:
         - name: id
@@ -564,7 +564,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: No session of the signed-in User has this id (unknown, or another User's)
+          description: No session of the signed-in User has this id (unknown, not a UUID, or another User's)
           content:
             application/problem+json:
               schema:

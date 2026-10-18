@@ -70,7 +70,7 @@ class UsersController {
 
 	/** Ends one of the User's sessions, without asking for a password; a session that is already over also gives 204. */
 	@DeleteMapping("/me/sessions/{id}")
-	ResponseEntity<Void> endSession(@AuthenticationPrincipal Jwt token, @PathVariable UUID id) {
+	ResponseEntity<Void> endSession(@AuthenticationPrincipal Jwt token, @PathVariable String id) {
 		sessions.endOne(currentUser.id(), sessionOf(token), id);
 		return ResponseEntity.noContent().build();
 	}

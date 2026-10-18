@@ -6,6 +6,7 @@ import { RequireUser, SessionProvider } from "./auth/session";
 import AppearancePage from "./pages/AppearancePage";
 import AuditLogPage from "./pages/AuditLogPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -58,6 +59,7 @@ export function AppRoutes() {
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       {/* Where a session lost mid-use lands; no navbar, since nobody is signed in. */}
       <Route path="/session-expired" element={<SessionExpiredPage />} />
     </Routes>

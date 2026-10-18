@@ -1,7 +1,7 @@
-import { Alert, Anchor, Text } from "@mantine/core";
+import { Alert, Anchor, Group, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
 import { providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
 import {
@@ -19,6 +19,10 @@ export default function LoginPage() {
   const { login } = useSession();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // After a password reset the User arrives with their email kept, so only the new password is left to type.
+  const location = useLocation();
+  const keptEmail = (location.state as { email?: unknown } | null)?.email;
+  const resetEmail = typeof keptEmail === "string" ? keptEmail : "";
   const [formError, setFormError] = useState<string | null>(null);
   // Set by the server when a provider sign-in ended back here with a reason. It describes the last provider
   // attempt only, so it goes away once the User tries the form instead.
@@ -28,7 +32,7 @@ export default function LoginPage() {
     : null;
 
   const form = useForm<LoginInput>({
-    initialValues: { email: "", password: "" },
+    initialValues: { email: resetEmail, password: "" },
     // Same limits as the server, so oversized input is caught before submitting.
     validate: {
       email: (value) => {
@@ -76,8 +80,16 @@ export default function LoginPage() {
           {...form.getInputProps("email")}
         />
         <AuthPasswordInput
-          label="Password"
+          label={
+            <Group justify="space-between" component="span" wrap="nowrap">
+              <span>Password</span>
+              <Anchor component={Link} to="/forgot-password" size="sm" fw={500}>
+                Forgot password?
+              </Anchor>
+            </Group>
+          }
           autoComplete="current-password"
+          autoFocus={resetEmail !== ""}
           {...form.getInputProps("password")}
         />
         <AuthSubmit loading={form.submitting}>Sign in</AuthSubmit>

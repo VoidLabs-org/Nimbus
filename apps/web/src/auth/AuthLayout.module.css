@@ -121,6 +121,12 @@
   color: var(--color-accent-2-700);
 }
 
+/* The label spans the field, so something placed at its end ("Forgot password?") sits at the field's right edge. */
+.fieldLabel {
+  display: block;
+  width: 100%;
+}
+
 /* Pill fields on the card colour, with the hint and errors under the field. */
 .field {
   --input-padding: 20px;
@@ -342,5 +348,34 @@
   .progressFill {
     animation: none;
     width: 100%;
+  }
+}
+
+/* The reset page, from designs 31k and 31l: on a phone the six boxes are 48 x 60 with 8px gaps and no dash, and
+   the button stays within reach at the bottom of the screen, above the keyboard. */
+@media (max-width: 480px) {
+  .pin.resetPin {
+    gap: 8px;
+  }
+
+  .pin.resetPin::after {
+    display: none;
+  }
+
+  .pin.resetPin > :nth-child(3) {
+    margin-right: 0;
+  }
+
+  .pin.resetPin .pinInput {
+    --input-height: 60px;
+    --input-size: 60px;
+    width: 48px;
+    height: 60px;
+  }
+
+  .pinnedSubmit {
+    position: sticky;
+    bottom: 16px;
+    z-index: 1;
   }
 }

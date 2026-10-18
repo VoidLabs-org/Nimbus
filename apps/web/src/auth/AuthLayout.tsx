@@ -64,6 +64,7 @@ export function AuthLayout({
 
 const fieldClassNames = {
   wrapper: classes.field,
+  label: classes.fieldLabel,
   input: classes.fieldInput,
   description: classes.fieldNote,
   error: classes.fieldNote,

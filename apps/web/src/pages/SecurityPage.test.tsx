@@ -333,7 +333,7 @@ describe("signing out all other devices", () => {
     expect(endOthers).toHaveBeenCalledTimes(1);
     expect(sessions).toHaveBeenCalledTimes(2);
     expect(await rowsOfCard()).toHaveLength(1);
-    expect(success).toHaveBeenCalledWith("Signed out 2 other devices.");
+    expect(success).toHaveBeenCalledWith("Signed out your other devices.");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 

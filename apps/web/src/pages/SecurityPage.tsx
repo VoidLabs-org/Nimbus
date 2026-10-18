@@ -23,7 +23,9 @@ export default function SecurityPage() {
   const query = useSessions();
   const client = useQueryClient();
   const [signingOut, setSigningOut] = useState<string | null>(null);
-  const [confirmingOthers, setConfirmingOthers] = useState(false);
+  // The devices the dialog was opened with: what the User agrees to is what they were shown, not a later refetch.
+  const [confirmingOthers, setConfirmingOthers] = useState<SessionInfo[]>([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [signingOutOthers, setSigningOutOthers] = useState(false);
   const error = loadFailure(query);
   if (error) return <FailedLoadPage failure={error} onRetry={() => void query.refetch()} />;
@@ -59,8 +61,6 @@ export default function SecurityPage() {
   }
 
   async function signOutOthers() {
-    // The count the User agreed to, not whatever the list says by the time it answers.
-    const count = others.length;
     setSigningOutOthers(true);
     try {
       await api.endOtherSessions();
@@ -71,8 +71,8 @@ export default function SecurityPage() {
         toast.error("Couldn't sign out your other devices. Please try again.");
       return;
     }
-    toast.success(`Signed out ${count} other ${count === 1 ? "device" : "devices"}.`);
-    setConfirmingOthers(false);
+    toast.success("Signed out your other devices.");
+    setConfirmOpen(false);
     setSigningOutOthers(false);
     await client.invalidateQueries({ queryKey: queryKeys.sessions });
   }
@@ -96,7 +96,11 @@ export default function SecurityPage() {
               <Button
                 variant="default"
                 className={classes.signOutOthers}
-                onClick={() => setConfirmingOthers(true)}
+                disabled={signingOut !== null}
+                onClick={() => {
+                  setConfirmingOthers(others);
+                  setConfirmOpen(true);
+                }}
               >
                 Sign out all other devices
               </Button>
@@ -131,7 +135,7 @@ export default function SecurityPage() {
                         variant="default"
                         className={classes.signOut}
                         loading={signingOut === session.id}
-                        disabled={signingOut !== null}
+                        disabled={signingOut !== null || signingOutOthers}
                         aria-label={`Sign out ${sessionName(session, now)}`}
                         onClick={() => void signOut(session)}
                       >
@@ -149,12 +153,12 @@ export default function SecurityPage() {
         </section>
       </Stack>
       <SignOutOthersDialog
-        opened={confirmingOthers}
-        others={others}
+        opened={confirmOpen}
+        others={confirmingOthers}
         now={now}
         busy={signingOutOthers}
         onConfirm={() => void signOutOthers()}
-        onClose={() => setConfirmingOthers(false)}
+        onClose={() => setConfirmOpen(false)}
       />
     </Container>
   );

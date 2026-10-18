@@ -32,7 +32,8 @@ export function SignOutOthersDialog({
   return (
     <WindowFrame
       opened={opened}
-      onClose={onClose}
+      // Not while the request is under way, so its result lands in a dialog that is still there.
+      onClose={busy ? () => {} : onClose}
       title="Sign out all other devices?"
       subtitle="You stay signed in on this device. Each one below is signed out the next time it renews its sign-in, within 15 minutes."
     >

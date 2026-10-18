@@ -7,9 +7,18 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 
-/** One sign-in on one browser: a family of refresh tokens that replace each other. */
+/**
+ * One sign-in on one browser: a family of refresh tokens that replace each other.
+ *
+ * <p>
+ * Updates write only the columns that changed. A refresh loads the session, then marks it active; if it wrote every
+ * column, it would put back the {@code revoked_at} that a bulk revoke ("sign out all other devices", a password
+ * change) committed in between, and the session would stay signed in.
+ */
 @Entity
+@DynamicUpdate
 @Table(name = "sessions")
 class Session {
 

@@ -208,9 +208,8 @@ class Sessions {
 	 */
 	@Transactional
 	void endOthers(UUID userId, UUID currentSessionId) {
-		var now = now();
-		requireActive(currentSessionId, userId, now);
-		sessions.revokeAllOfExcept(userId, currentSessionId, now);
+		requireActive(currentSessionId, userId, now());
+		endAllExcept(userId, currentSessionId);
 	}
 
 	/** Ends every session of a User except one, on every other browser. */

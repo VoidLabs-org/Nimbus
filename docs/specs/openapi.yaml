@@ -303,6 +303,41 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/auth/verify-email/resend:
+    post:
+      tags: [auth]
+      summary: Email the signed-in User a new Verification code
+      description: >-
+        Needs the access token of a signed-in User, who may be unverified. Issues a new code, which replaces and
+        cancels the old one, and emails it after commit. Emails to one address are at least 60 seconds apart and at
+        most 5 an hour; the send at registration counts.
+      responses:
+        "204":
+          description: A new code was issued and emailed
+        "401":
+          description: Not signed in
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The email is already verified
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many emails to this address; the live code is unchanged
+          headers:
+            Retry-After:
+              description: Seconds until a send is allowed
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /api/auth/providers:
     get:
       tags: [auth]

@@ -7,21 +7,23 @@ import {
   type PasswordInputProps,
   type TextInputProps,
 } from "@mantine/core";
-import type { CSSProperties, FormEventHandler, ReactNode } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties, FormEventHandler, ReactNode } from "react";
 import { NimbusLogo } from "../shell/NimbusLogo";
 import classes from "./AuthLayout.module.css";
 
 /**
  * The sign-in and register page: the Nimbus panel (logo, the "Backlog / to done, / with a little AI" bars and the
  * tagline) on the left, the heading and the page's form on the right. `gap` (pixels) spaces the right column and
- * the fields of its `AuthForm` alike. Below about 900px only the form shows, under a small logo.
+ * the fields of its `AuthForm` alike. An optional `icon` sits above the heading. Below about 900px only the form shows, under a small logo.
  */
 export function AuthLayout({
   title,
   subtitle,
   gap,
+  icon,
   children,
 }: {
+  icon?: ReactNode;
   title: string;
   subtitle: ReactNode;
   gap: number;
@@ -47,6 +49,7 @@ export function AuthLayout({
           <NimbusLogo size={24} />
           nimbus
         </div>
+        {icon}
         <div>
           <Title order={1} fz={40} lh={1.1}>
             {title}
@@ -101,12 +104,13 @@ export function AuthPasswordInput(props: Omit<PasswordInputProps, FieldLook>) {
   return <PasswordInput classNames={fieldClassNames} inputWrapperOrder={fieldOrder} {...props} />;
 }
 
-/** The form's primary button: an orange pill with the label on the left and a round arrow on the right. */
+/** The form's primary button (a submit button, or `type="button"` with an `onClick`): an orange pill with the label on the left and a round arrow on the right. */
 export function AuthSubmit({
   className,
   children,
   ...props
-}: Omit<ButtonProps, "rightSection" | "justify" | "fullWidth"> & { children: ReactNode }) {
+}: Omit<ButtonProps, "rightSection" | "justify" | "fullWidth"> &
+  Omit<ComponentPropsWithoutRef<"button">, keyof ButtonProps> & { children: ReactNode }) {
   return (
     <ArrowButton
       type="submit"

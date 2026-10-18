@@ -25,7 +25,10 @@ import org.springframework.validation.annotation.Validated;
  * emails
  * @param registrationsPerAddress registration attempts allowed from one IP address within {@code limitWindow}
  * @param refreshesPerAddress refresh attempts allowed from one IP address within {@code limitWindow}
- * @param limitWindow the sliding window all limits count over
+ * @param emailSendInterval the least time between two emails to one address (a Verification code, later also a
+ * password reset)
+ * @param emailSendsPerHour emails allowed to one address within an hour
+ * @param limitWindow the sliding window the other limits count over
  * @param publicUrl the origin browsers use to reach Nimbus (PUBLIC_URL), without a trailing slash; the OAuth providers (Google, GitHub) and the
  * post-login redirects use it instead of the request's host, which behind a proxy is the API's own
  */
@@ -43,10 +46,15 @@ record AuthProperties(
 		@DefaultValue("20") @Positive int signInsPerAddress,
 		@DefaultValue("10") @Positive int registrationsPerAddress,
 		@DefaultValue("60") @Positive int refreshesPerAddress,
+		@DefaultValue("60s") Duration emailSendInterval,
+		@DefaultValue("5") @Positive int emailSendsPerHour,
 		@DefaultValue("15m") Duration limitWindow,
 		@DefaultValue("http://localhost:3000") String publicUrl) {
 
 	AuthProperties {
+		if (emailSendInterval.isZero() || emailSendInterval.isNegative()) {
+			throw new IllegalArgumentException("nimbus.auth.email-send-interval must be positive");
+		}
 		publicUrl = publicUrl.strip().replaceAll("/+$", "");
 	}
 

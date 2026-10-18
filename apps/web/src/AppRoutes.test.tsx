@@ -34,6 +34,8 @@ function session(user: User | null): Session {
     updateDisplayName: unused,
     changePassword: unused,
     verifyEmail: unused,
+    confirmingEmail: false,
+    finishVerifying: () => {},
     logout: unused,
   };
 }

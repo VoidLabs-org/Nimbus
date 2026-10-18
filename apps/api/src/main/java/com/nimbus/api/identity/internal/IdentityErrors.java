@@ -21,6 +21,11 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail alreadyVerified(EmailVerification.AlreadyVerifiedException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+	}
+
+	@ExceptionHandler
 	ProblemDetail wrongCode(EmailVerification.WrongCodeException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", "invalid_code");

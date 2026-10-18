@@ -2,7 +2,9 @@ package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
 import java.util.Locale;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import javax.crypto.SecretKey;
 
@@ -11,7 +13,7 @@ import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import jakarta.annotation.PreDestroy;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -50,14 +52,27 @@ class PasswordReset {
 
 	private final TransactionTemplate transaction;
 
-	private final Executor background;
+	private final VerificationCodeRepository verificationCodes;
+
+	/**
+	 * Its own small pool with a bounded queue, not the application's shared one: this work is triggered by
+	 * anyone without signing in, so a flood must neither grow a queue without bound nor starve other modules'
+	 * async work. When it is full the request is dropped and logged. Not a bean, because a bean of type
+	 * {@code Executor} would switch off Spring Boot's own.
+	 */
+	private final ThreadPoolExecutor background = new ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS,
+			new ArrayBlockingQueue<>(100), runnable -> {
+				var thread = new Thread(runnable, "password-reset");
+				thread.setDaemon(true);
+				return thread;
+			});
 
 	private final EmailedCodes hashing;
 
 	PasswordReset(UserRepository users, ResetCodeRepository codes, PasswordEncoder passwordEncoder, Sessions sessions,
 			SignIn signIn, Mailer mailer, MailAssets mailAssets, Clock clock, ApplicationEventPublisher events,
 			PlatformTransactionManager transactionManager, SecretKey jwtKey,
-			@Qualifier("applicationTaskExecutor") Executor background) {
+			VerificationCodeRepository verificationCodes) {
 		this.users = users;
 		this.codes = codes;
 		this.passwordEncoder = passwordEncoder;
@@ -68,8 +83,13 @@ class PasswordReset {
 		this.clock = clock;
 		this.events = events;
 		this.transaction = new TransactionTemplate(transactionManager);
-		this.background = background;
+		this.verificationCodes = verificationCodes;
 		this.hashing = new EmailedCodes(jwtKey, "nimbus:reset-code");
+	}
+
+	@PreDestroy
+	void stop() {
+		background.shutdown();
 	}
 
 	/**
@@ -146,6 +166,8 @@ class PasswordReset {
 				user.changePassword(passwordHash);
 				if (!user.emailVerified()) {
 					user.verifyEmail();
+					// As entering it would: a pending Verification code has nothing left to prove.
+					verificationCodes.deleteById(user.getId());
 					events.publishEvent(new EmailVerified(user.getId(), user.email()));
 				}
 				sessions.endAll(user);

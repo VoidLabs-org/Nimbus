@@ -230,6 +230,18 @@ class PasswordResetTests {
 	}
 
 	@Test
+	void aResetThatVerifiesTheEmailUsesUpThePendingVerificationCode() {
+		var email = "pr-ned@example.com";
+		register(email);
+		assertThat(verificationCodeRows(email)).isEqualTo(1);
+
+		request(email).expectStatus().isNoContent();
+		reset(email, awaitResetCode(email, 1), "new password").expectStatus().isNoContent();
+
+		assertThat(verificationCodeRows(email)).isZero();
+	}
+
+	@Test
 	void theDatabaseNeverHoldsTheResetCodeInPlainText() {
 		var email = "pr-kim@example.com";
 		register(email);
@@ -308,6 +320,11 @@ class PasswordResetTests {
 	private static Mail lastResetMail(String email) {
 		var mails = RecordingMailer.sentTo(email).stream().filter(mail -> mail.subject().equals(RESET_SUBJECT)).toList();
 		return mails.get(mails.size() - 1);
+	}
+
+	private int verificationCodeRows(String email) {
+		return jdbc.sql("SELECT count(*) FROM verification_codes WHERE user_id = (SELECT id FROM users WHERE email = ?)")
+			.param(email).query(Integer.class).single();
 	}
 
 	private String storedResetHash(String email) {

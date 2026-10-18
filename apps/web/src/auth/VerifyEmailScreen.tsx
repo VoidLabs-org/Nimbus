@@ -1,13 +1,12 @@
-import { Anchor, Loader, PinInput, VisuallyHidden } from "@mantine/core";
+import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
 import { useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { AuthForm, AuthLayout, AuthSubmit } from "./AuthLayout";
+import { CODE_LENGTH, CodePinInput, PinnedSubmit } from "./CodeEntry";
 import classes from "./AuthLayout.module.css";
 import { clock, RESEND_WAIT_SECONDS, useCountdown } from "./countdown";
 import { useSession } from "./useSession";
-
-const CODE_LENGTH = 6;
 
 /** How long "Email verified" stays up before the app opens (the progress bar fills over this time). */
 const CONFIRM_MS = 1500;
@@ -145,6 +144,7 @@ export function VerifyEmailScreen() {
   return (
     <AuthLayout
       title="Verify your email"
+      phoneFill
       subtitle={
         <>
           We sent a 6-digit code to <strong>{user?.email}</strong>. It expires in 15 minutes.
@@ -158,14 +158,7 @@ export function VerifyEmailScreen() {
           if (code.length === CODE_LENGTH && !checking) void check(code);
         }}
       >
-        <PinInput
-          length={CODE_LENGTH}
-          type="number"
-          inputMode="numeric"
-          oneTimeCode
-          autoFocus
-          size="lg"
-          classNames={{ root: classes.pin, pinInput: classes.pinInput }}
+        <CodePinInput
           value={code}
           onChange={setCode}
           onComplete={(value) => void check(value)}
@@ -189,9 +182,11 @@ export function VerifyEmailScreen() {
             {shownNotice}
           </div>
         )}
-        <AuthSubmit loading={checking} disabled={code.length < CODE_LENGTH}>
-          Verify
-        </AuthSubmit>
+        <PinnedSubmit>
+          <AuthSubmit loading={checking} disabled={code.length < CODE_LENGTH}>
+            Verify
+          </AuthSubmit>
+        </PinnedSubmit>
         <div className={classes.codeLinks}>
           {/* Stays a button while it counts down, so keyboard focus isn't lost when it is pressed. */}
           <Anchor

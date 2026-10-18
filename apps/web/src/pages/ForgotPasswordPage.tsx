@@ -1,4 +1,4 @@
-import { Anchor, Loader, PinInput, VisuallyHidden } from "@mantine/core";
+import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
 import { useState, type ReactNode, type SyntheticEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
@@ -12,11 +12,10 @@ import {
   AuthTextInput,
 } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
+import { CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
 import { clock, RESEND_WAIT_SECONDS, useCountdown } from "../auth/countdown";
 import { passwordError } from "../auth/password";
 import { useSession } from "../auth/useSession";
-
-const CODE_LENGTH = 6;
 
 const GENERIC_ERROR = "Something went wrong. Please try again.";
 
@@ -250,6 +249,7 @@ export default function ForgotPasswordPage() {
   return (
     <AuthLayout
       title="Check your email"
+      phoneFill
       subtitle={
         <>
           If <strong>{email}</strong> is registered, we sent a 6-digit code.
@@ -258,14 +258,7 @@ export default function ForgotPasswordPage() {
       gap={22}
     >
       <AuthForm onSubmit={(event) => void submitReset(event)}>
-        <PinInput
-          length={CODE_LENGTH}
-          type="number"
-          inputMode="numeric"
-          oneTimeCode
-          autoFocus
-          size="lg"
-          classNames={{ root: `${classes.pin} ${classes.resetPin}`, pinInput: classes.pinInput }}
+        <CodePinInput
           value={code}
           onChange={(value) => {
             setCode(value);
@@ -290,15 +283,19 @@ export default function ForgotPasswordPage() {
             {shownNotice}
           </div>
         )}
+        {/* Above the button, which sits at the bottom of a phone's screen, so the error stays near the fields. */}
+        {formError && <Alert>{formError}</Alert>}
         {expired ? (
-          <AuthSubmit
-            type="button"
-            loading={resending}
-            disabled={waiting}
-            onClick={() => void sendNewCode()}
-          >
-            {waiting ? `Send a new code in ${clock(secondsToResend)}` : "Send a new code"}
-          </AuthSubmit>
+          <PinnedSubmit>
+            <AuthSubmit
+              type="button"
+              loading={resending}
+              disabled={waiting}
+              onClick={() => void sendNewCode()}
+            >
+              {waiting ? `Send a new code in ${clock(secondsToResend)}` : "Send a new code"}
+            </AuthSubmit>
+          </PinnedSubmit>
         ) : (
           <>
             <AuthPasswordInput
@@ -310,14 +307,13 @@ export default function ForgotPasswordPage() {
               error={passwordMessage}
               disabled={rateLimited}
             />
-            <div className={classes.pinnedSubmit}>
+            <PinnedSubmit>
               <AuthSubmit loading={checking} disabled={code.length < CODE_LENGTH || rateLimited}>
                 Reset password
               </AuthSubmit>
-            </div>
+            </PinnedSubmit>
           </>
         )}
-        {formError && <Alert>{formError}</Alert>}
         <div className={classes.codeLinks}>
           {/* Stays a button while it counts down, so keyboard focus isn't lost when it is pressed. */}
           <Anchor

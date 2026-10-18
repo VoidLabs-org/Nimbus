@@ -345,32 +345,45 @@
   }
 }
 
-/* The reset page, from designs 31k and 31l: on a phone the six boxes are 48 x 60 with 8px gaps and no dash, and
+/* The code pages (reset password, from designs 31k and 31l, and Verify email): on a phone the six boxes are 48 x 60 with 8px gaps and no dash, and
    the button stays within reach at the bottom of the screen, above the keyboard. */
 @media (max-width: 480px) {
-  .pin.resetPin {
+  .pin.phonePin {
     gap: 8px;
   }
 
-  .pin.resetPin::after {
+  .pin.phonePin::after {
     display: none;
   }
 
-  .pin.resetPin > :nth-child(3) {
+  .pin.phonePin > :nth-child(3) {
     margin-right: 0;
   }
 
-  .pin.resetPin .pinInput {
+  .pin.phonePin .pinInput {
     --input-height: 60px;
     --input-size: 60px;
     width: min(48px, calc((100vw - 32px - 40px) / 6));
     height: 60px;
   }
 
+  /* The page fills the screen, the code at the top and the button at the bottom (with the links under it). */
+  .phoneFill {
+    justify-content: flex-start;
+  }
+
+  .phoneFill > form {
+    flex: 1;
+  }
+
   .pinnedSubmit {
     position: sticky;
     bottom: 16px;
     z-index: 1;
+  }
+
+  .phoneFill .pinnedSubmit {
+    margin-top: auto;
   }
 }
 

@@ -14,16 +14,19 @@ import classes from "./AuthLayout.module.css";
 /**
  * The sign-in and register page: the Nimbus panel (logo, the "Backlog / to done, / with a little AI" bars and the
  * tagline) on the left, the heading and the page's form on the right. `gap` (pixels) spaces the right column and
- * the fields of its `AuthForm` alike. An optional `icon` sits above the heading. Below about 900px only the form shows, under a small logo.
+ * the fields of its `AuthForm` alike. With `phoneFill`, a phone's form fills the screen: the content at the top and
+ * the button (wrapped in `pinnedSubmit`) at the bottom, as the code pages do. The page's own min-height stretches it. An optional `icon` sits above the heading. Below about 900px only the form shows, under a small logo.
  */
 export function AuthLayout({
   title,
   subtitle,
   gap,
   icon,
+  phoneFill,
   children,
 }: {
   icon?: ReactNode;
+  phoneFill?: boolean;
   title: string;
   subtitle: ReactNode;
   gap: number;
@@ -43,7 +46,7 @@ export function AuthLayout({
         </div>
         <div className={classes.tagline}>Projects, issues, boards and sprints for small teams.</div>
       </div>
-      <main className={classes.form}>
+      <main className={phoneFill ? `${classes.form} ${classes.phoneFill}` : classes.form}>
         {/* The panel is hidden on narrow screens, so the brand moves above the heading there. */}
         <div className={`${classes.brand} ${classes.compactBrand}`}>
           <NimbusLogo size={24} />

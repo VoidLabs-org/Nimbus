@@ -68,6 +68,10 @@ class Session {
 		return id;
 	}
 
+	Instant startedAt() {
+		return startedAt;
+	}
+
 	UUID userId() {
 		return userId;
 	}

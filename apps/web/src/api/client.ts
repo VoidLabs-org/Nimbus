@@ -510,6 +510,16 @@ export function createApiClient(
         method: "DELETE",
       }),
 
+    /**
+     * A one-time ticket for starting to connect a provider with a full page load to
+     * `/api/auth/oauth2/<provider>?link=<ticket>`. 403 `reauth_required` when this sign-in is too old.
+     */
+    linkTicket: (provider: string) =>
+      request<{ ticket: string }>(
+        `/api/users/me/linked-identities/${encodeURIComponent(provider)}/link-ticket`,
+        { method: "POST" },
+      ),
+
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>
       request<AuditPage>(

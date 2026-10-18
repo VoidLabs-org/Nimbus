@@ -1,12 +1,14 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,13 +42,26 @@ class LinkedIdentities {
 
 	private final Clock clock;
 
+	private final EnabledProviders enabledProviders;
+
+	private final MailAssets mailAssets;
+
+	private final LinkTickets tickets;
+
+	private final Duration linkRecentSignIn;
+
 	private final String securityUrl;
 
 	private final TransactionTemplate transaction;
 
 	LinkedIdentities(LinkedIdentityRepository identities, DisconnectedProviders disconnectedProviders,
 			UserRepository users, Sessions sessions, Mailer mailer, Clock clock, AuthProperties properties,
-			PlatformTransactionManager transactionManager) {
+			PlatformTransactionManager transactionManager, EnabledProviders enabledProviders, MailAssets mailAssets,
+			LinkTickets tickets) {
+		this.enabledProviders = enabledProviders;
+		this.mailAssets = mailAssets;
+		this.tickets = tickets;
+		this.linkRecentSignIn = properties.linkRecentSignIn();
 		this.identities = identities;
 		this.disconnectedProviders = disconnectedProviders;
 		this.users = users;
@@ -55,6 +70,43 @@ class LinkedIdentities {
 		this.clock = clock;
 		this.securityUrl = properties.publicUrl() + "/settings/security";
 		this.transaction = new TransactionTemplate(transactionManager);
+	}
+
+	/**
+	 * A ticket for starting to connect {@code provider} with a full page load. The Session must have started within
+	 * {@code nimbus.auth.link-recent-sign-in}, so a stolen access token alone can't attach someone else's account.
+	 *
+	 * @throws UnknownProviderException when {@code provider} is unknown or switched off
+	 * @throws AlreadyConnectedException when the User has a Linked identity for it already
+	 * @throws Sessions.ReauthRequiredException when the Session is older than that
+	 * @throws InvalidBearerTokenException when the Session has ended
+	 */
+	LinkTickets.Issued issueLinkTicket(UUID userId, UUID currentSessionId, String provider) {
+		sessions.requireActive(currentSessionId, userId);
+		// What would fail anyway comes before asking for a new sign-in that would not help.
+		if (!enabledProviders.isEnabled(provider)) {
+			throw new UnknownProviderException();
+		}
+		if (identities.findByUserId(userId).stream().anyMatch(identity -> identity.provider().equals(provider))) {
+			throw new AlreadyConnectedException();
+		}
+		sessions.requireStartedWithin(currentSessionId, userId, linkRecentSignIn);
+		return tickets.issue(userId, currentSessionId, provider);
+	}
+
+	/** Tells the User a provider was connected, after the commit; a failed send is only logged. */
+	void announceConnected(UUID userId, String provider) {
+		var user = users.findById(userId).orElse(null);
+		if (user == null) {
+			return;
+		}
+		try {
+			mailer.send(ProviderMail.connected(user.email(), NAMES.getOrDefault(provider, provider), clock.instant(),
+					securityUrl, mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
+		}
+		catch (RuntimeException e) {
+			log.warn("Could not tell user {} that {} was connected", userId, provider, e);
+		}
 	}
 
 	/**
@@ -94,7 +146,8 @@ class LinkedIdentities {
 			return;
 		}
 		try {
-			mailer.send(DisconnectMail.to(email, NAMES.get(provider), disconnectedAt[0], securityUrl));
+			mailer.send(ProviderMail.disconnected(email, NAMES.get(provider), disconnectedAt[0], securityUrl,
+					mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
 		}
 		catch (RuntimeException e) {
 			// Fire and forget, as the mail module promises: the disconnect has happened and stays.
@@ -134,6 +187,14 @@ class LinkedIdentities {
 
 		UnknownProviderException() {
 			super("Nimbus has no such provider");
+		}
+
+	}
+
+	static class AlreadyConnectedException extends RuntimeException {
+
+		AlreadyConnectedException() {
+			super("This provider is already connected");
 		}
 
 	}

@@ -17,6 +17,7 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.WebUtils;
 
 /**
  * Ends the OAuth handshake. On success it signs the User in like any other sign-in: a session, and its refresh
@@ -34,12 +35,19 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 
 	private final Sessions sessions;
 
+	private final LinkTickets tickets;
+
+	private final LinkedIdentities linkedIdentities;
+
 	/** Where the browser sees Nimbus, without a trailing slash. */
 	private final String publicUrl;
 
-	OAuthLoginHandler(ExternalSignIn externalSignIn, Sessions sessions, AuthProperties properties) {
+	OAuthLoginHandler(ExternalSignIn externalSignIn, Sessions sessions, LinkTickets tickets,
+			LinkedIdentities linkedIdentities, AuthProperties properties) {
 		this.externalSignIn = externalSignIn;
 		this.sessions = sessions;
+		this.tickets = tickets;
+		this.linkedIdentities = linkedIdentities;
 		this.publicUrl = properties.publicUrl();
 	}
 
@@ -47,7 +55,12 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
 			Authentication authentication) throws IOException {
 		var returnTo = ReturnPath.recall(request);
+		var ticket = LinkTicket.recall(request);
 		endHandshake(request);
+		if (ticket.isPresent()) {
+			connect(request, response, (OAuth2AuthenticationToken) authentication, ticket.get());
+			return;
+		}
 		var provider = "";
 		try {
 			var login = (OAuth2AuthenticationToken) authentication;
@@ -74,6 +87,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
 			AuthenticationException exception) throws IOException {
 		var returnTo = ReturnPath.recall(request);
+		var ticket = LinkTicket.recall(request);
 		endHandshake(request);
 		// The provider reports "access_denied" when the person declines on its consent screen.
 		var declined = exception instanceof OAuth2AuthenticationException oauth
@@ -82,7 +96,56 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			log.warn("Sign-in with a provider failed", exception);
 		}
 		var provider = providerOf(request);
+		if (ticket.isPresent()) {
+			// The connect is over, so its ticket is no use any more.
+			tickets.discard(ticket.get());
+			redirect(response, securityError(declined ? "cancelled" : "failed", provider), Optional.empty());
+			return;
+		}
 		redirect(response, loginError(declined ? "cancelled" : "failed", provider), returnTo);
+	}
+
+	/**
+	 * Ends a handshake that was started to connect a provider to the User who asked for it, not to sign anyone in:
+	 * no session, no cookie. The browser goes back to the Security page with the result.
+	 */
+	private void connect(HttpServletRequest request, HttpServletResponse response, OAuth2AuthenticationToken login,
+			String ticketValue) throws IOException {
+		var provider = login.getAuthorizedClientRegistrationId();
+		try {
+			// Only the browser that asked for the ticket holds the cookie that goes with it.
+			var binder = WebUtils.getCookie(request, LinkTickets.COOKIE);
+			var ticket = tickets.redeem(ticketValue, provider, binder == null ? null : binder.getValue());
+			if (ticket.isEmpty()) {
+				redirect(response, securityError("expired", provider), Optional.empty());
+				return;
+			}
+			if (externalSignIn.connect(ticket.get().userId(), ticket.get().sessionId(), profileOf(login))) {
+				linkedIdentities.announceConnected(ticket.get().userId(), provider);
+			}
+			redirect(response, "/settings/security?connected=" + provider, Optional.empty());
+		}
+		catch (ExternalSignIn.EmailUnverifiedException e) {
+			redirect(response, securityError("email_unverified", provider), Optional.empty());
+		}
+		catch (ExternalSignIn.AlreadyLinkedException e) {
+			redirect(response, securityError("already_linked", provider), Optional.empty());
+		}
+		catch (ExternalSignIn.ProviderAlreadyConnectedException e) {
+			redirect(response, securityError("already_connected", provider), Optional.empty());
+		}
+		catch (ExternalSignIn.ConnectExpiredException e) {
+			redirect(response, securityError("expired", provider), Optional.empty());
+		}
+		catch (RuntimeException e) {
+			log.warn("Connecting a provider failed", e);
+			redirect(response, securityError("failed", provider), Optional.empty());
+		}
+	}
+
+	private static String securityError(String code, String provider) {
+		var known = GoogleProfiles.PROVIDER.equals(provider) || GithubProfiles.PROVIDER.equals(provider);
+		return "/settings/security?error=" + code + (known ? "&provider=" + provider : "");
 	}
 
 	// Tells the login page which provider the error is about, so it can say "Google" or "GitHub". The failure

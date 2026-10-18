@@ -1,14 +1,19 @@
 import { Button } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { ApiError, api } from "../api/client";
+import { connectErrorMessage } from "../api/messages";
 import { PROVIDERS } from "../auth/providers";
+import { loginPath } from "../auth/returnPath";
+import { goTo } from "../auth/redirect";
 import { useSession } from "../auth/useSession";
 import { queryKeys, useLinkedIdentities, useProviders } from "../api/queries";
 import { DisconnectDialog, SetPasswordFirstDialog } from "./DisconnectDialogs";
+import { ReauthDialog } from "./ReauthDialog";
 import classes from "./SecurityPage.module.css";
 
 /**
@@ -20,8 +25,69 @@ import classes from "./SecurityPage.module.css";
 export function ConnectedAccountsCard() {
   const providers = useProviders();
   const identities = useLinkedIdentities();
-  const { user } = useSession();
+  const { user, logout } = useSession();
   const client = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The provider whose "Sign in again" window is open (kept after closing so it still names it while fading).
+  const [reauth, setReauth] = useState<{ id: string; open: boolean } | null>(null);
+  const closeReauth = () => setReauth((current) => current && { ...current, open: false });
+
+  // The server sends the browser back here with the result of a connect: tell the User, reload the list, and
+  // take the parameters out of the address so a reload doesn't say it again.
+  const handled = useRef(false);
+  const connectedParam = searchParams.get("connected");
+  const errorParam = searchParams.get("error");
+  const providerParam = searchParams.get("provider");
+  useEffect(() => {
+    if (handled.current || (connectedParam === null && errorParam === null)) return;
+    handled.current = true;
+    if (connectedParam !== null) {
+      const known = PROVIDERS.find((provider) => provider.id === connectedParam);
+      toast.success(known ? `Connected ${known.name}.` : "Connected.");
+    } else if (errorParam !== null) {
+      const known = PROVIDERS.find((provider) => provider.id === providerParam);
+      toast.error(connectErrorMessage(errorParam, known?.id ?? null));
+    }
+    void client.invalidateQueries({ queryKey: queryKeys.linkedIdentities });
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        ["connected", "error", "provider"].forEach((name) => next.delete(name));
+        return next;
+      },
+      { replace: true },
+    );
+  }, [connectedParam, errorParam, providerParam, client, setSearchParams]);
+
+  const connect = useMutation({
+    mutationFn: (id: string) => api.linkTicket(id),
+    onSuccess: ({ ticket }, id) => {
+      // A full page load: the API starts the handshake and hands the browser on to the provider.
+      goTo(`/api/auth/oauth2/${encodeURIComponent(id)}?link=${encodeURIComponent(ticket)}`);
+    },
+    onError: (failure, id) => {
+      // A 401 means this session ended: the app is already sending the User to sign in again.
+      if (failure instanceof ApiError && failure.status === 401) return;
+      if (failure instanceof ApiError && failure.code === "reauth_required") {
+        setReauth({ id, open: true });
+        return;
+      }
+      if (failure instanceof ApiError && failure.status === 409) {
+        // Connected elsewhere in the meantime: say so, and the list shows what's true.
+        toast.info(`${nameOf(id)} is already connected.`);
+        void client.invalidateQueries({ queryKey: queryKeys.linkedIdentities });
+        return;
+      }
+      toast.error(`Couldn’t start connecting ${nameOf(id)}. Please try again.`);
+    },
+  });
+  const signInAgain = useMutation({
+    mutationFn: async () => {
+      await logout();
+      void navigate(loginPath("/settings/security"));
+    },
+  });
   // The provider the open dialog is about, and which one: the question, or the "set a password first" answer.
   const [dialog, setDialog] = useState<{
     id: string;
@@ -114,6 +180,21 @@ export function ConnectedAccountsCard() {
                         : "Connected"}
                   </div>
                 </div>
+                {!identity && (
+                  <Button
+                    variant="default"
+                    className={classes.disconnect}
+                    aria-label={`Connect ${provider.name}`}
+                    loading={
+                      (connect.isPending || connect.isSuccess) && connect.variables === provider.id
+                    }
+                    // Also once the ticket is in: the page is on its way out, and a second click would start a second handshake.
+                    disabled={connect.isPending || connect.isSuccess}
+                    onClick={() => connect.mutate(provider.id)}
+                  >
+                    Connect
+                  </Button>
+                )}
                 {identity && (
                   <Button
                     variant="default"
@@ -145,6 +226,13 @@ export function ConnectedAccountsCard() {
         busy={disconnect.isPending}
         onConfirm={() => dialog && disconnect.mutate(dialog.id)}
         onClose={closeDialog}
+      />
+      <ReauthDialog
+        opened={reauth?.open === true}
+        provider={nameOf(reauth?.id ?? "")}
+        busy={signInAgain.isPending}
+        onConfirm={() => signInAgain.mutate()}
+        onClose={closeReauth}
       />
       <SetPasswordFirstDialog
         opened={dialog?.step === "password" && dialog.open}

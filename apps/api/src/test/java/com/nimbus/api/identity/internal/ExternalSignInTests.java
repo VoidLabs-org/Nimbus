@@ -214,6 +214,102 @@ class ExternalSignInTests {
 	}
 
 	@Test
+	void connectingLinksTheProviderAccountEvenWhenItsEmailIsDifferent() {
+		var user = registration.create("Con", "con@example.com", "correct horse");
+		var session = sessions.start(user, null);
+
+		var linked = externalSignIn.connect(user.getId(), session.sessionId(), google("g-con", "con.work@example.com", true, "Con", null));
+
+		assertThat(linked).isTrue();
+		assertThat(linkedIdentities.listFor(user.getId())).singleElement()
+			.satisfies(identity -> assertThat(identity.accountName()).isEqualTo("con.work@example.com"));
+		// Nothing about the User changes: not the email, not the verification state, not the password, not a session.
+		var after = users.findById(user.getId()).orElseThrow();
+		assertThat(after.email()).isEqualTo("con@example.com");
+		assertThat(after.emailVerified()).isFalse();
+		assertThat(after.passwordHash()).isNotNull();
+		assertThat(sessions.refresh(session.value(), "client-con").user().getId()).isEqualTo(user.getId());
+	}
+
+	@Test
+	void connectingAnAccountThatBelongsToAnotherUserIsRefusedAndChangesNothing() {
+		var owner = externalSignIn.signIn(google("g-own", "own@example.com", true, "Own", null));
+		var other = registration.create("Oth", "oth@example.com", "correct horse");
+		var otherSession = sessions.start(other, null);
+
+		assertThatThrownBy(() -> externalSignIn.connect(other.getId(), otherSession.sessionId(), google("g-own", "own@example.com", true, "Own", null)))
+			.isInstanceOf(ExternalSignIn.AlreadyLinkedException.class);
+
+		assertThat(linkedIdentities.listFor(owner.getId())).hasSize(1);
+		assertThat(linkedIdentities.listFor(other.getId())).isEmpty();
+	}
+
+	@Test
+	void connectingAnAccountTheUserAlreadyHasOnlyRefreshesItsName() {
+		var user = externalSignIn.signIn(google("g-same", "same@example.com", true, "Same", null));
+		var session = sessions.start(user, null);
+
+		var linked = externalSignIn.connect(user.getId(), session.sessionId(), new ExternalProfile("google", "g-same", "same@example.com",
+				true, "Same", null, "renamed@example.com"));
+
+		assertThat(linked).isFalse();
+		assertThat(linkedIdentities.listFor(user.getId())).singleElement()
+			.satisfies(identity -> assertThat(identity.accountName()).isEqualTo("renamed@example.com"));
+	}
+
+	@Test
+	void connectingAnotherAccountOfAProviderTheUserHasIsRefusedWithItsOwnReason() {
+		var user = externalSignIn.signIn(google("g-two-a", "two@example.com", true, "Two", null));
+		var session = sessions.start(user, null);
+
+		assertThatThrownBy(() -> externalSignIn.connect(user.getId(), session.sessionId(),
+				google("g-two-b", "two.work@example.com", true, "Two", null)))
+			.isInstanceOf(ExternalSignIn.ProviderAlreadyConnectedException.class);
+		assertThat(linkedIdentities.listFor(user.getId())).hasSize(1);
+	}
+
+	@Test
+	void connectingForASessionThatHasEndedChangesNothing() {
+		var user = registration.create("End", "end@example.com", "correct horse");
+		var session = sessions.start(user, null);
+		sessions.endAll(user);
+
+		assertThatThrownBy(() -> externalSignIn.connect(user.getId(), session.sessionId(),
+				google("g-end", "end.work@example.com", true, "End", null)))
+			.isInstanceOf(ExternalSignIn.ConnectExpiredException.class);
+		assertThat(linkedIdentities.listFor(user.getId())).isEmpty();
+	}
+
+	@Test
+	void connectingStillNeedsAVerifiedEmailFromTheProvider() {
+		var user = registration.create("Unv", "unv@example.com", "correct horse");
+		var session = sessions.start(user, null);
+
+		assertThatThrownBy(() -> externalSignIn.connect(user.getId(), session.sessionId(), google("g-unv", "unv@example.com", false, "Unv", null)))
+			.isInstanceOf(ExternalSignIn.EmailUnverifiedException.class);
+		assertThat(linkedIdentities.listFor(user.getId())).isEmpty();
+	}
+
+	@Test
+	void connectingClearsTheMarkSoASignInOnTheUsersEmailWorksAgain() {
+		var user = externalSignIn.signIn(google("g-back", "back@example.com", true, "Back", null));
+		jdbc.update("DELETE FROM linked_identities WHERE user_id = ?", user.getId());
+		jdbc.update("INSERT INTO disconnected_providers (user_id, provider, disconnected_at) VALUES (?, 'google', now())",
+				user.getId());
+		assertThatThrownBy(() -> externalSignIn.signIn(google("g-back2", "back@example.com", true, "Back", null)))
+			.isInstanceOf(ExternalSignIn.ProviderDisconnectedException.class);
+
+		externalSignIn.connect(user.getId(), sessions.start(user, null).sessionId(),
+				google("g-back2", "back.other@example.com", true, "Back", null));
+
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM disconnected_providers WHERE user_id = ?", Integer.class,
+				user.getId())).isZero();
+		jdbc.update("DELETE FROM linked_identities WHERE user_id = ?", user.getId());
+		assertThat(externalSignIn.signIn(google("g-back2", "back@example.com", true, "Back", null)).getId())
+			.isEqualTo(user.getId());
+	}
+
+	@Test
 	void aLongNameIsCutBetweenCharactersNeverInsideAnEmoji() {
 		var emoji = new String(Character.toChars(0x1F600));
 		var name = "a".repeat(99) + emoji + "bcd";

@@ -1,12 +1,14 @@
 package com.nimbus.api.identity.internal;
 
+import static com.nimbus.api.identity.internal.MailFrame.MUTED_STYLE;
+import static com.nimbus.api.identity.internal.MailFrame.escape;
+
 import java.time.Duration;
 import java.util.Optional;
 
 /**
- * The layout of the emails that carry a code (a Verification code, a Reset code): the "Ink header band" design
- * (30e), a dark band with the logo and heading, and the code in large type. Built from tables and inline styles,
- * which is what mail programs support. Each email supplies its own wording.
+ * The emails that carry a code (a Verification code, a Reset code): the shared {@link MailFrame} with the code in
+ * large type. Each email supplies its own wording.
  */
 final class CodeMail {
 
@@ -16,51 +18,16 @@ final class CodeMail {
 	/**
 	 * @param title the subject; it is also the title and the hidden preview line, so it must not hold the code
 	 * @param codeLabel the sentence directly before the code
-	 * @param logoUrl the public address of the Nimbus icon; without one the header shows an orange circle instead,
-	 * because a mail program can't reach {@code localhost} and blocks images by default
+	 * @param logoUrl see {@link MailFrame#html}
 	 */
 	static String html(String title, String heading, String line, String codeLabel, String code, String footer,
 			Duration lifetime, Optional<String> logoUrl) {
-		var logo = logoUrl
-			.map(url -> "<img src=\"" + escape(url) + "\" width=\"28\" height=\"28\" alt=\"Nimbus\" "
-					+ "style=\"display:block;width:28px;height:28px;border:0\">")
-			.orElse("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>"
-					+ "<td width=\"28\" height=\"28\" bgcolor=\"#ff6b3d\" style=\"width:28px;height:28px;"
-					+ "border-radius:50%;background:#ff6b3d;font-size:0;line-height:0\">&nbsp;</td></tr></table>");
-		return """
-				<!DOCTYPE html>
-				<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
-				<head>
-				<meta charset="utf-8">
-				<meta name="viewport" content="width=device-width,initial-scale=1">
-				<meta name="color-scheme" content="light dark">
-				<meta name="supported-color-schemes" content="light dark">
-				<title>%6$s</title>
-				<!--[if mso]><style>table,td{font-family:Arial,sans-serif!important}</style><![endif]-->
-				<style>
-				@media (max-width:620px){.px{padding-left:24px!important;padding-right:24px!important}.code{font-size:34px!important;letter-spacing:8px!important}}
-				@media (prefers-color-scheme:dark){.bg{background:#121110!important}.card{background:#1d1b19!important}.ink,h1{color:#f4f2ef!important}.muted{color:#c9c4bf!important}.tile{background:#2a2725!important}.foot{color:#a8a29d!important}}
-				</style>
-				</head>
-				<body style="margin:0;padding:0;background:#f4f2ef" class="bg">
-				<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f4f2ef;opacity:0">%6$s. It expires in %2$d minutes.&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
-				<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%" bgcolor="#f4f2ef" class="bg" style="background:#f4f2ef"><tr><td align="center" style="padding:40px 12px">
-				<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%%;max-width:600px">
-				<tr><td bgcolor="#201d1a" class="px" style="background:#201d1a;border-radius:28px 28px 0 0;padding:32px 40px 36px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td valign="middle">%3$s</td><td valign="middle" style="padding-left:10px;font-family:Helvetica,Arial,sans-serif;font-size:20px;line-height:28px;font-weight:bold;color:#f4f2ef;letter-spacing:-0.3px">nimbus</td></tr></table>
-				<h1 style="margin:28px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:30px;line-height:36px;mso-line-height-rule:exactly;font-weight:bold;color:#f4f2ef;letter-spacing:-0.5px">%7$s</h1></td></tr>
-				<tr><td bgcolor="#fffefc" class="card px" style="background:#fffefc;border-radius:0 0 28px 28px;padding:36px 40px 40px">
-				<p class="muted" style="margin:0 0 16px 0;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:24px;mso-line-height-rule:exactly;color:#6b6763">%1$s</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%" style="margin:4px 0 20px 0"><tr><td align="center" class="tile" bgcolor="#f4f2ef" style="background:#f4f2ef;border-radius:20px;padding:22px 16px"><div class="muted" style="margin:0 0 4px 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#6b6763">%8$s</div><span class="code ink" style="font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:44px;line-height:56px;font-weight:bold;letter-spacing:12px;color:#201d1a;white-space:nowrap">%4$s</span></td></tr></table>
-				<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%"><tr><td class="tile muted" bgcolor="#f4f2ef" style="padding:14px 20px;border-radius:16px;background:#f4f2ef;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#6b6763"><b class="ink" style="color:#201d1a">Nimbus will never ask for this code</b> by phone, chat or email.</td></tr></table>
-				</td></tr>
-				<tr><td class="px foot" style="padding:24px 40px 0 40px;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#878381">%5$s</td></tr>
-				</table></td></tr></table>
-				</body></html>
-				""".formatted(escape(line), lifetime.toMinutes(), logo, escape(code), escape(footer), escape(title),
-					escape(heading), escape(codeLabel));
-	}
-
-	private static String escape(String value) {
-		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+		var card = """
+				<p class="muted" style="margin:0 0 16px 0;%1$s">%2$s</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%" style="margin:4px 0 20px 0"><tr><td align="center" class="tile" bgcolor="#f4f2ef" style="background:#f4f2ef;border-radius:20px;padding:22px 16px"><div class="muted" style="margin:0 0 4px 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#6b6763">%3$s</div><span class="code ink" style="font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:44px;line-height:56px;font-weight:bold;letter-spacing:12px;color:#201d1a;white-space:nowrap">%4$s</span></td></tr></table>
+				<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%"><tr><td class="tile muted" bgcolor="#f4f2ef" style="padding:14px 20px;border-radius:16px;background:#f4f2ef;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#6b6763"><b class="ink" style="color:#201d1a">Nimbus will never ask for this code</b> by phone, chat or email.</td></tr></table>"""
+			.formatted(MUTED_STYLE, escape(line), escape(codeLabel), escape(code));
+		return MailFrame.html(title, title + ". It expires in " + lifetime.toMinutes() + " minutes.", heading, logoUrl,
+				card, footer);
 	}
 
 }

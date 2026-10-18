@@ -4,12 +4,15 @@ import { stubMatchMedia } from "@repo/ui/test-support";
 import { toast } from "@repo/ui/toast";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError, type LinkedIdentity, type SessionInfo, type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
+import { goTo } from "../auth/redirect";
 import { SessionContext, type Session } from "../auth/useSession";
 import { AppRoutes } from "../App";
+
+vi.mock("../auth/redirect", () => ({ goTo: vi.fn() }));
 
 const alice: User = {
   id: "u1",
@@ -23,7 +26,7 @@ const alice: User = {
 const unused = () => Promise.resolve();
 
 /** A session that has finished loading: Alice signed in. */
-function session(user: User | null): Session {
+function session(user: User | null, logout: () => Promise<void> = unused): Session {
   return {
     user,
     restoring: false,
@@ -37,7 +40,7 @@ function session(user: User | null): Session {
     verifyEmail: unused,
     confirmingEmail: false,
     finishVerifying: () => {},
-    logout: unused,
+    logout,
   };
 }
 
@@ -480,7 +483,7 @@ describe("the Connected accounts card", () => {
     expect(identities).toHaveBeenCalledTimes(2);
   });
 
-  it("offers Disconnect on a connected row only, and no Connect yet", async () => {
+  it("offers Disconnect on a connected row and Connect on the others", async () => {
     sessionsFor();
     vi.spyOn(api, "providers").mockResolvedValue(["google", "github"]);
     vi.spyOn(api, "linkedIdentities").mockResolvedValue([identity("google", "udula@gmail.com")]);
@@ -490,7 +493,8 @@ describe("the Connected accounts card", () => {
     await accountRows();
     expect(screen.getAllByRole("button", { name: /^Disconnect/ })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Disconnect Google" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Connect/ })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Connect/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Connect GitHub" })).toBeTruthy();
   });
 
   it("does not hold up the sessions list while it loads", async () => {
@@ -618,5 +622,143 @@ describe("disconnecting a provider", () => {
 
     await waitFor(() => expect(error).toHaveBeenCalled());
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+});
+
+describe("connecting a provider", () => {
+  const google: LinkedIdentity = {
+    provider: "google",
+    accountName: "udula@gmail.com",
+    connectedAt: new Date(Date.now() - 3 * DAY).toISOString(),
+  };
+
+  /** Shows where the router is, so a test can see the parameters leave the address. */
+  function Where() {
+    const location = useLocation();
+    return <output aria-label="location">{location.pathname + location.search}</output>;
+  }
+
+  function setUp(path = "/settings/security", logout?: () => Promise<void>) {
+    vi.spyOn(api, "sessions").mockResolvedValue([
+      sessionInfo("s1", "Chrome on Windows", true, DAY, 0),
+    ]);
+    vi.spyOn(api, "providers").mockResolvedValue(["google", "github"]);
+    const linked = vi.spyOn(api, "linkedIdentities").mockResolvedValue([google]);
+    render(
+      <NimbusThemeProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <QueryClientProvider client={createQueryClient()}>
+            <SessionContext value={session(alice, logout)}>
+              <AppRoutes />
+              <Where />
+            </SessionContext>
+          </QueryClientProvider>
+        </MemoryRouter>
+      </NimbusThemeProvider>,
+    );
+    return linked;
+  }
+
+  it("asks for a ticket, then leaves with a full page load to the OAuth start", async () => {
+    const linkTicket = vi.spyOn(api, "linkTicket").mockResolvedValue({ ticket: "t-1" });
+    setUp();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Connect GitHub" }));
+
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith("/api/auth/oauth2/github?link=t-1"));
+    expect(linkTicket).toHaveBeenCalledWith("github");
+  });
+
+  it("asks the User to sign in again when the sign-in is too old", async () => {
+    vi.spyOn(api, "linkTicket").mockRejectedValue(
+      new ApiError(403, "Sign in again to do this", {}, null, "reauth_required"),
+    );
+    const logout = vi.fn(() => Promise.resolve());
+    setUp("/settings/security", logout);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Connect GitHub" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Sign in again to connect GitHub")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sign in again" }));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByLabelText("location").textContent).toBe(
+        "/login?returnTo=%2Fsettings%2Fsecurity",
+      ),
+    );
+    expect(goTo).not.toHaveBeenCalled();
+  });
+
+  it("keeps Connect off once the page is on its way to the provider", async () => {
+    vi.spyOn(api, "linkTicket").mockResolvedValue({ ticket: "t-2" });
+    setUp();
+
+    const button = await screen.findByRole("button", { name: "Connect GitHub" });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(goTo).toHaveBeenCalledTimes(1));
+    expect(button.hasAttribute("disabled") || button.hasAttribute("data-disabled")).toBe(true);
+    fireEvent.click(button);
+    expect(goTo).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the User when the provider turns out to be connected already", async () => {
+    vi.spyOn(api, "linkTicket").mockRejectedValue(
+      new ApiError(409, "This provider is already connected", {}, null, "already_connected"),
+    );
+    const info = vi.spyOn(toast, "info");
+    setUp();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Connect GitHub" }));
+
+    await waitFor(() => expect(info).toHaveBeenCalledWith("GitHub is already connected."));
+    expect(goTo).not.toHaveBeenCalled();
+  });
+
+  it("says so when the ticket can't be had", async () => {
+    vi.spyOn(api, "linkTicket").mockRejectedValue(new ApiError(500, undefined));
+    const error = vi.spyOn(toast, "error");
+    setUp();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Connect GitHub" }));
+
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    expect(goTo).not.toHaveBeenCalled();
+  });
+
+  it("confirms a connect with a toast and clears the address", async () => {
+    const success = vi.spyOn(toast, "success");
+    setUp("/settings/security?connected=github");
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith("Connected GitHub."));
+    await waitFor(() =>
+      expect(screen.getByLabelText("location").textContent).toBe("/settings/security"),
+    );
+    expect(success).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the message for an error, naming the provider", async () => {
+    const error = vi.spyOn(toast, "error");
+    setUp("/settings/security?error=already_linked&provider=github");
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        "That GitHub account is already connected to another Nimbus account.",
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("location").textContent).toBe("/settings/security"),
+    );
+  });
+
+  it("shows a generic message for a code or provider it doesn't know, without echoing them", async () => {
+    const error = vi.spyOn(toast, "error");
+    setUp("/settings/security?error=%3Cb%3Eboom&provider=%3Cb%3Ex");
+
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    const message = error.mock.calls[0]![0] as string;
+    expect(message).toMatch(/went wrong/);
+    expect(message).not.toContain("<");
   });
 });

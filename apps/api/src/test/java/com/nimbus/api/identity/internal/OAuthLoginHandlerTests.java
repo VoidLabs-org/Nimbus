@@ -7,7 +7,10 @@ import java.util.List;
 import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
+import com.nimbus.api.RecordingMailer;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.mail.Mail;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,6 +39,18 @@ class OAuthLoginHandlerTests {
 
 	@Autowired
 	Sessions sessions;
+
+	@Autowired
+	LinkTickets tickets;
+
+	@Autowired
+	LinkedIdentities linkedIdentities;
+
+	@Autowired
+	Registration registration;
+
+	@Autowired
+	ExternalSignIn externalSignIn;
 
 	@Test
 	void successSetsARefreshCookieThatWorksAndRedirectsWithoutAnyTokenInTheUrl() throws Exception {
@@ -138,6 +153,149 @@ class OAuthLoginHandlerTests {
 				new OAuth2AuthenticationException(new OAuth2Error("access_denied")));
 		assertThat(declined.getRedirectedUrl())
 			.isEqualTo("http://localhost:3000/login?error=cancelled&provider=github&returnTo=%2Fprojects%2F42");
+	}
+
+	@Test
+	void withATicketSuccessLinksTheAccountAndGoesBackToSecurityWithNoCookie() throws Exception {
+		var user = registration.create("Con", "handler-con@example.com", "correct horse");
+		var session = sessions.start(user, null);
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationSuccess(connecting(user, session, "google"), response,
+				google(claims("g-handler-1", "handler-con.work@example.com", true)));
+
+		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/settings/security?connected=google");
+		assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
+		assertThat(linkedIdentities.listFor(user.getId())).hasSize(1);
+		var mails = RecordingMailer.sentTo("handler-con@example.com");
+		assertThat(mails).extracting(Mail::subject).contains("Google was connected to your Nimbus account");
+		assertThat(mails).filteredOn(mail -> mail.subject().contains("connected")).singleElement().satisfies(mail -> {
+			assertThat(mail.html()).contains(RecordingMailer.IMAGE_HOST + "/nimbus-icon-dark.png")
+				.contains("Google connected").contains("Review sign-in methods");
+			assertThat(mail.text()).contains("/settings/security");
+		});
+		assertThat(sessions.isActive(session.sessionId(), user.getId())).isTrue();
+	}
+
+	@Test
+	void withATicketAFailureGoesBackToSecurityWithTheCodeAndProvider() throws Exception {
+		var user = registration.create("Con", "handler-fail@example.com", "correct horse");
+		var session = sessions.start(user, null);
+
+		var unverified = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(connecting(user, session, "google"), unverified,
+				google(claims("g-handler-2", "handler-fail@example.com", false)));
+		assertThat(unverified.getRedirectedUrl())
+			.isEqualTo("http://localhost:3000/settings/security?error=email_unverified&provider=google");
+
+		var owner = externalSignIn.signIn(
+				new ExternalProfile("google", "g-handler-3", "handler-owner@example.com", true, "Own", null, "own"));
+		var taken = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(connecting(user, session, "google"), taken,
+				google(claims("g-handler-3", "handler-owner@example.com", true)));
+		assertThat(taken.getRedirectedUrl())
+			.isEqualTo("http://localhost:3000/settings/security?error=already_linked&provider=google");
+		assertThat(linkedIdentities.listFor(owner.getId())).hasSize(1);
+		assertThat(linkedIdentities.listFor(user.getId())).isEmpty();
+		assertThat(RecordingMailer.sentTo("handler-fail@example.com")).extracting(Mail::subject)
+			.noneMatch(subject -> subject.contains("connected"));
+
+		var declined = connecting(user, session, "github");
+		declined.setRequestURI("/api/auth/oauth2/callback/github");
+		var cancelled = new MockHttpServletResponse();
+		handler.onAuthenticationFailure(declined, cancelled,
+				new OAuth2AuthenticationException(new OAuth2Error("access_denied")));
+		assertThat(cancelled.getRedirectedUrl())
+			.isEqualTo("http://localhost:3000/settings/security?error=cancelled&provider=github");
+	}
+
+	@Test
+	void anotherAccountOfAProviderTheUserHasIsAlreadyConnectedNotAlreadyLinked() throws Exception {
+		var user = externalSignIn.signIn(
+				new ExternalProfile("google", "g-handler-7", "handler-two@example.com", true, "Two", null, "two"));
+		var session = sessions.start(user, null);
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationSuccess(connecting(user, session, "google"), response,
+				google(claims("g-handler-8", "handler-two.work@example.com", true)));
+
+		assertThat(response.getRedirectedUrl())
+			.isEqualTo("http://localhost:3000/settings/security?error=already_connected&provider=google");
+	}
+
+	@Test
+	void aTicketThatIsUnknownUsedOrFromAnEndedSessionIsExpired() throws Exception {
+		var user = registration.create("Con", "handler-exp@example.com", "correct horse");
+		var session = sessions.start(user, null);
+		var expired = "http://localhost:3000/settings/security?error=expired&provider=google";
+
+		var unknown = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(connectingWith("not-a-ticket", "any-binder"), unknown,
+				google(claims("g-handler-4", "handler-exp@example.com", true)));
+		assertThat(unknown.getRedirectedUrl()).isEqualTo(expired);
+
+		var issued = tickets.issue(user.getId(), session.sessionId(), "google");
+		handler.onAuthenticationSuccess(connectingWith(issued.ticket(), issued.binder()), new MockHttpServletResponse(),
+				google(claims("g-handler-4", "handler-exp@example.com", true)));
+		var used = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(connectingWith(issued.ticket(), issued.binder()), used,
+				google(claims("g-handler-5", "handler-exp@example.com", true)));
+		assertThat(used.getRedirectedUrl()).isEqualTo(expired);
+
+		var other = registration.create("End", "handler-end@example.com", "correct horse");
+		var otherSession = sessions.start(other, null);
+		var ended = connecting(other, otherSession, "google");
+		sessions.endAll(other);
+		var response = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(ended, response,
+				google(claims("g-handler-6", "handler-end@example.com", true)));
+		assertThat(response.getRedirectedUrl()).isEqualTo(expired);
+		assertThat(linkedIdentities.listFor(other.getId())).isEmpty();
+	}
+
+	// A link carrying somebody's ticket, opened in a browser that never asked for it, connects nothing.
+	@Test
+	void aTicketFollowedInAnotherBrowserOrForAnotherProviderIsExpired() throws Exception {
+		var user = registration.create("Con", "handler-csrf@example.com", "correct horse");
+		var session = sessions.start(user, null);
+		var expired = "http://localhost:3000/settings/security?error=expired&provider=google";
+
+		var issued = tickets.issue(user.getId(), session.sessionId(), "google");
+		var noCookie = new MockHttpServletRequest();
+		noCookie.setSession(new MockHttpSession());
+		noCookie.setParameter(LinkTicket.PARAMETER, issued.ticket());
+		LinkTicket.remember(noCookie);
+		var victim = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(noCookie, victim,
+				google(claims("g-handler-9", "victim@example.com", true)));
+		assertThat(victim.getRedirectedUrl()).isEqualTo(expired);
+
+		var github = tickets.issue(user.getId(), session.sessionId(), "github");
+		var wrongProvider = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(connectingWith(github.ticket(), github.binder()), wrongProvider,
+				google(claims("g-handler-10", "handler-csrf@example.com", true)));
+		assertThat(wrongProvider.getRedirectedUrl()).isEqualTo(expired);
+		assertThat(linkedIdentities.listFor(user.getId())).isEmpty();
+	}
+
+	// A handshake started from the Security page with ?link=<ticket>, in the browser that was given the cookie.
+	private MockHttpServletRequest connecting(User user, Sessions.IssuedToken session, String provider) {
+		var issued = tickets.issue(user.getId(), session.sessionId(), provider);
+		return connectingWith(issued.ticket(), issued.binder());
+	}
+
+	private static MockHttpServletRequest connectingWith(String ticket, String binder) {
+		var request = new MockHttpServletRequest();
+		request.setSession(new MockHttpSession());
+		request.setParameter(LinkTicket.PARAMETER, ticket);
+		LinkTicket.remember(request);
+		request.removeParameter(LinkTicket.PARAMETER);
+		request.setCookies(new Cookie(LinkTickets.COOKIE, binder));
+		return request;
+	}
+
+	private static Map<String, Object> claims(String sub, String email, boolean verified) {
+		return Map.of("sub", sub, "email", email, "email_verified", verified, "name", "Someone");
 	}
 
 	// A handshake started from /login?returnTo=<page>, as ReturnPathAuthorizationRequestResolver leaves it.

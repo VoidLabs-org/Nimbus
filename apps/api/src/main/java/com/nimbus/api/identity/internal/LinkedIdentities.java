@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,8 @@ class LinkedIdentities {
 
 	private final EnabledProviders enabledProviders;
 
+	private final MailAssets mailAssets;
+
 	private final LinkTickets tickets;
 
 	private final Duration linkRecentSignIn;
@@ -53,9 +56,10 @@ class LinkedIdentities {
 
 	LinkedIdentities(LinkedIdentityRepository identities, DisconnectedProviders disconnectedProviders,
 			UserRepository users, Sessions sessions, Mailer mailer, Clock clock, AuthProperties properties,
-			PlatformTransactionManager transactionManager, EnabledProviders enabledProviders,
+			PlatformTransactionManager transactionManager, EnabledProviders enabledProviders, MailAssets mailAssets,
 			LinkTickets tickets) {
 		this.enabledProviders = enabledProviders;
+		this.mailAssets = mailAssets;
 		this.tickets = tickets;
 		this.linkRecentSignIn = properties.linkRecentSignIn();
 		this.identities = identities;
@@ -98,7 +102,7 @@ class LinkedIdentities {
 		}
 		try {
 			mailer.send(ProviderMail.connected(user.email(), NAMES.getOrDefault(provider, provider), clock.instant(),
-					securityUrl));
+					securityUrl, mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
 		}
 		catch (RuntimeException e) {
 			log.warn("Could not tell user {} that {} was connected", userId, provider, e);
@@ -142,7 +146,8 @@ class LinkedIdentities {
 			return;
 		}
 		try {
-			mailer.send(ProviderMail.disconnected(email, NAMES.get(provider), disconnectedAt[0], securityUrl));
+			mailer.send(ProviderMail.disconnected(email, NAMES.get(provider), disconnectedAt[0], securityUrl,
+					mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
 		}
 		catch (RuntimeException e) {
 			// Fire and forget, as the mail module promises: the disconnect has happened and stays.

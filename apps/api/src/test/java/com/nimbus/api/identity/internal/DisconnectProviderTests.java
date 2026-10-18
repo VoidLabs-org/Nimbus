@@ -58,6 +58,10 @@ class DisconnectProviderTests {
 		assertThat(mails).hasSize(1);
 		assertThat(mails.get(0).subject()).isEqualTo("Google was disconnected from your Nimbus account");
 		assertThat(mails.get(0).text()).contains("/settings/security");
+		// The same "Ink header band" layout as the code emails: Nimbus logo, heading, and a button to the Security page.
+		assertThat(mails.get(0).html()).contains(RecordingMailer.IMAGE_HOST + "/nimbus-icon-dark.png")
+			.contains("<h1").contains("Google disconnected").contains("Review sign-in methods")
+			.contains("href=\"http://localhost:3000/settings/security\"");
 	}
 
 	@Test

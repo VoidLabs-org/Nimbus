@@ -169,6 +169,11 @@ class OAuthLoginHandlerTests {
 		assertThat(linkedIdentities.listFor(user.getId())).hasSize(1);
 		var mails = RecordingMailer.sentTo("handler-con@example.com");
 		assertThat(mails).extracting(Mail::subject).contains("Google was connected to your Nimbus account");
+		assertThat(mails).filteredOn(mail -> mail.subject().contains("connected")).singleElement().satisfies(mail -> {
+			assertThat(mail.html()).contains(RecordingMailer.IMAGE_HOST + "/nimbus-icon-dark.png")
+				.contains("Google connected").contains("Review sign-in methods");
+			assertThat(mail.text()).contains("/settings/security");
+		});
 		assertThat(sessions.isActive(session.sessionId(), user.getId())).isTrue();
 	}
 

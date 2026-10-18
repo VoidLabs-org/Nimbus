@@ -1,5 +1,6 @@
 package com.nimbus.api.identity.internal;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -23,21 +24,26 @@ class PasswordResetController {
 		this.passwordReset = passwordReset;
 	}
 
-	/** Always {@code 204}, registered email or not; the Reset code is issued and mailed afterwards. */
+	/**
+	 * {@code 204}, registered email or not; the Reset code is issued and mailed afterwards. {@code 429} with
+	 * {@code Retry-After} when the IP address asked too often or the email was mailed too recently or too often,
+	 * again whether or not it is registered.
+	 */
 	@PostMapping
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	void request(@Valid @RequestBody ResetRequest request) {
-		passwordReset.request(request.email());
+	void request(@Valid @RequestBody ResetRequest request, HttpServletRequest http) {
+		passwordReset.request(request.email(), http.getRemoteAddr());
 	}
 
 	/**
 	 * Sets the new password when the code is right; the User then signs in with it. A new password that breaks
-	 * the rule is refused before the code is looked at, so it costs no try.
+	 * the rule is refused before the code is looked at, so it costs no try. {@code 429} with {@code Retry-After}
+	 * when the IP address tried too often.
 	 */
 	@PostMapping("/confirm")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	void confirm(@Valid @RequestBody ConfirmRequest request) {
-		passwordReset.reset(request.email(), request.code(), request.newPassword());
+	void confirm(@Valid @RequestBody ConfirmRequest request, HttpServletRequest http) {
+		passwordReset.reset(request.email(), request.code(), request.newPassword(), http.getRemoteAddr());
 	}
 
 	/** Capped like sign-in, so oversized input never reaches the background work. */

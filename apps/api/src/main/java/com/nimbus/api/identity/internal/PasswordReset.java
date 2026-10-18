@@ -66,9 +66,20 @@ class PasswordReset {
 
 	private final EmailedCodes codes;
 
+	private final EmailSendBudget sendBudget;
+
+	private final SlidingWindowLimiter requestsByAddress;
+
+	private final SlidingWindowLimiter resetsByAddress;
+
 	PasswordReset(UserRepository users, EmailedCodeKinds codeKinds, PasswordEncoder passwordEncoder, Sessions sessions,
 			SignIn signIn, Mailer mailer, MailAssets mailAssets, Clock clock, ApplicationEventPublisher events,
-			PlatformTransactionManager transactionManager) {
+			PlatformTransactionManager transactionManager, AuthProperties properties, EmailSendBudget sendBudget) {
+		this.sendBudget = sendBudget;
+		this.requestsByAddress = new SlidingWindowLimiter(properties.passwordResetRequestsPerAddress(),
+				properties.limitWindow(), clock);
+		this.resetsByAddress = new SlidingWindowLimiter(properties.passwordResetsPerAddress(),
+				properties.limitWindow(), clock);
 		this.users = users;
 		this.passwordEncoder = passwordEncoder;
 		this.sessions = sessions;
@@ -91,9 +102,27 @@ class PasswordReset {
 	 * Issues a Reset code for the User with {@code email}, replacing any live one, and mails it. Everything,
 	 * including finding out whether such a User exists, happens after this returns, on a background thread, so
 	 * the caller's wait is the same for every email. Failures are logged, never reported.
+	 * <p>
+	 * What is checked before returning is the same for every email too: the caller's IP address, then the send
+	 * budget of the address typed, which is spent whether or not a User has it, so a refusal never says whether
+	 * one does.
+	 *
+	 * @param fromAddress the caller's IP address; each address gets a limited number of requests
+	 * @throws SlidingWindowLimiter.LimitExceededException when the IP address asked too often or the email was
+	 * mailed too recently or too often; nothing is issued or sent then, and a live code is left alone
 	 */
-	void request(String email) {
+	void request(String email, String fromAddress) {
 		var normalizedEmail = email.toLowerCase(Locale.ROOT);
+		var slot = requestsByAddress.acquire(fromAddress,
+				"Too many password reset requests from this network. Try again later.");
+		try {
+			sendBudget.spend(normalizedEmail);
+		}
+		catch (SlidingWindowLimiter.LimitExceededException e) {
+			// Nothing was sent, so it must not use up the network's allowance (an office shares one address).
+			requestsByAddress.release(fromAddress, slot);
+			throw e;
+		}
 		try {
 			background.execute(() -> issueAndSend(normalizedEmail));
 		}
@@ -129,12 +158,15 @@ class PasswordReset {
 	 * though it fails, so the counting is committed before the failure is reported.
 	 *
 	 * @param newPassword already checked against the password rule
+	 * @param fromAddress the caller's IP address; each address gets a limited number of attempts
+	 * @throws SlidingWindowLimiter.LimitExceededException when this IP address tried too often
 	 * @throws EmailedCodes.WrongCodeException when the code is wrong and tries are left
 	 * @throws EmailedCodes.CodeExpiredException when there is no live code (expired, never issued, or cancelled,
 	 * which the fifth wrong try itself does) or no User has this email
 	 */
-	void reset(String email, String code, String newPassword) {
+	void reset(String email, String code, String newPassword, String fromAddress) {
 		var normalizedEmail = email.toLowerCase(Locale.ROOT);
+		resetsByAddress.acquire(fromAddress, "Too many password reset attempts from this network. Try again later.");
 		// Slow, so outside any transaction, and done for every request, so an unknown email takes as long as a
 		// known one.
 		var passwordHash = passwordEncoder.encode(newPassword);

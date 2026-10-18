@@ -10,6 +10,7 @@ import java.util.Map;
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.RecordingMailer;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.identity.MovableClock;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -23,7 +24,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
  * password reset proves the address too, so they become Platform admin. A class of its own: it needs its own admin
  * email, and so its own database.
  */
-@Import(TestcontainersConfiguration.class)
+@Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
 @TestPropertySource(properties = { "nimbus.admin.email=reset-owner@example.com", "nimbus.admin.password=" })
@@ -32,12 +33,17 @@ class AdminEmailVerifiedByResetTests {
 	@Autowired
 	RestTestClient client;
 
+	@Autowired
+	MovableClock clock;
+
 	@Test
 	void theRealOwnerBecomesPlatformAdminAfterResettingThePassword() {
 		var email = "reset-owner@example.com";
 		client.post().uri("/api/auth/register")
 			.body(Map.of("displayName", "Owner", "email", email, "password", "correct horse"))
 			.exchange().expectStatus().isCreated();
+		// Registering mailed a Verification code; the address may be mailed again a minute later.
+		clock.advance(Duration.ofSeconds(61));
 
 		client.post().uri("/api/auth/password-reset").body(Map.of("email", email))
 			.exchange().expectStatus().isNoContent();

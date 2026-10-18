@@ -1,3 +1,10 @@
+import { clock } from "../auth/countdown";
+
+/** Text for a 429 whose wait is shown counting down, e.g. "0:42". */
+export function tooManyAttemptsIn(seconds: number): string {
+  return `Too many attempts. Try again in ${clock(seconds)}.`;
+}
+
 /** Text for a 429, using Retry-After when the server sent it. */
 export function tooManyAttemptsMessage(retryAfterSeconds: number | null): string {
   if (!retryAfterSeconds) return "Too many attempts. Try again later.";

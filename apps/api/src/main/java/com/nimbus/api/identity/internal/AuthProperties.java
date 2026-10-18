@@ -25,8 +25,10 @@ import org.springframework.validation.annotation.Validated;
  * emails
  * @param registrationsPerAddress registration attempts allowed from one IP address within {@code limitWindow}
  * @param refreshesPerAddress refresh attempts allowed from one IP address within {@code limitWindow}
- * @param emailSendInterval the least time between two emails to one address (a Verification code, later also a
- * password reset)
+ * @param passwordResetRequestsPerAddress forgot-password requests allowed from one IP address within {@code limitWindow}
+ * @param passwordResetsPerAddress password reset attempts (code and new password) allowed from one IP address within
+ * {@code limitWindow}
+ * @param emailSendInterval the least time between two emails to one address (a Verification code or a Reset code)
  * @param emailSendsPerHour emails allowed to one address within an hour
  * @param limitWindow the sliding window the other limits count over
  * @param publicUrl the origin browsers use to reach Nimbus (PUBLIC_URL), without a trailing slash; the OAuth providers (Google, GitHub) and the
@@ -46,6 +48,8 @@ record AuthProperties(
 		@DefaultValue("20") @Positive int signInsPerAddress,
 		@DefaultValue("10") @Positive int registrationsPerAddress,
 		@DefaultValue("60") @Positive int refreshesPerAddress,
+		@DefaultValue("10") @Positive int passwordResetRequestsPerAddress,
+		@DefaultValue("10") @Positive int passwordResetsPerAddress,
 		@DefaultValue("60s") Duration emailSendInterval,
 		@DefaultValue("5") @Positive int emailSendsPerHour,
 		@DefaultValue("15m") Duration limitWindow,

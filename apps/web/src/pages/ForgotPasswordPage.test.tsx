@@ -164,7 +164,7 @@ describe("the forgot-password page, step 1", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Send code/ }));
 
-    await screen.findByText("Too many attempts. Try again in 2 minutes.");
+    await screen.findByText("Too many attempts. Try again in 2:00.");
     expect(screen.queryByRole("heading", { name: "Check your email" })).toBeNull();
   });
 
@@ -426,7 +426,50 @@ describe("the forgot-password page, resetting", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Reset password/ }));
 
-    await screen.findByText("Too many attempts. Try again in 1 minute.");
+    await screen.findByText("Too many attempts. Try again in 1:00.");
+    // The rate-limited layout: nothing can be typed or pressed, and Resend says it is paused.
+    for (const box of screen.getAllByRole("textbox")) {
+      expect((box as HTMLInputElement).disabled).toBe(true);
+    }
+    expect((screen.getByLabelText("New password") as HTMLInputElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /Reset password/ }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByRole("button", { name: "Resend paused" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Resend code/ })).toBeNull();
+  });
+
+  it("counts the rate-limited wait down, then gives the form back with the code still in it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(api, "resetPassword").mockRejectedValue(new ApiError(429, "Too many", {}, 3));
+    await reachStepTwo();
+    paste("123456");
+    typePassword("a new password");
+    fireEvent.click(screen.getByRole("button", { name: /Reset password/ }));
+    await screen.findByText("Too many attempts. Try again in 0:03.");
+
+    await wait(1);
+    await screen.findByText("Too many attempts. Try again in 0:02.");
+    await wait(2);
+
+    await waitFor(() => expect(screen.queryByText(/Too many attempts/)).toBeNull());
+    expect(codeBoxes()).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect((screen.getByLabelText("New password") as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("shows the rate-limited layout when Resend is refused, and Resend waits for the server's time", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await reachStepTwo();
+    await wait(60);
+    vi.mocked(api.requestPasswordReset).mockRejectedValue(new ApiError(429, "Too many", {}, 125));
+
+    fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
+
+    await screen.findByText("Too many attempts. Try again in 2:05.");
+    expect(screen.getByRole("button", { name: "Resend paused" })).toBeTruthy();
+    for (const box of screen.getAllByRole("textbox")) {
+      expect((box as HTMLInputElement).disabled).toBe(true);
+    }
   });
 
   it("stays put with a message when the reset fails for another reason", async () => {
@@ -492,6 +535,9 @@ describe("Resend on the forgot-password page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
-    await screen.findByRole("button", { name: "Resend code in 0:42" });
+    await screen.findByText("Too many attempts. Try again in 0:42.");
+    expect(screen.getByRole("button", { name: "Resend paused" })).toBeTruthy();
+    await wait(42);
+    await screen.findByRole("button", { name: "Resend code" });
   });
 });

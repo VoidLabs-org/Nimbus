@@ -64,7 +64,7 @@ export default function SecurityPage() {
                   </li>
                 ))}
               </ul>
-              {sessions.every((session) => session.current) && (
+              {sessions.length > 0 && sessions.every((session) => session.current) && (
                 <p className={classes.alone}>You’re not signed in anywhere else.</p>
               )}
             </Panel>

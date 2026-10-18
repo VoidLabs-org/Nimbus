@@ -126,6 +126,15 @@ describe("the Security page", () => {
     expect(await rowsOfCard()).toHaveLength(1);
   });
 
+  it("does not claim the User is alone when the list comes back empty", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue([]);
+
+    show();
+
+    await screen.findByRole("region", { name: "Where you’re signed in" });
+    expect(screen.queryByText("You’re not signed in anywhere else.")).toBeNull();
+  });
+
   it("does not claim the User is alone while the list is still loading", async () => {
     vi.spyOn(api, "sessions").mockReturnValue(new Promise(() => {}));
 

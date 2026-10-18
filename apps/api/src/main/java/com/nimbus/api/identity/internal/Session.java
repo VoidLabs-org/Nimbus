@@ -36,9 +36,19 @@ class Session {
 	/** @param userAgent the browser's {@code User-Agent} header, or null when it sent none */
 	Session(UUID userId, Instant startedAt, Instant expiresAt, String userAgent) {
 		this.userId = userId;
-		this.userAgent = userAgent == null ? null : userAgent.substring(0, Math.min(userAgent.length(), MAX_USER_AGENT));
+		this.userAgent = userAgent == null ? null : cut(userAgent);
 		this.startedAt = startedAt;
 		this.expiresAt = expiresAt;
+	}
+
+	/** At most {@link #MAX_USER_AGENT} characters, never ending between the two halves of one character. */
+	private static String cut(String userAgent) {
+		if (userAgent.length() <= MAX_USER_AGENT) {
+			return userAgent;
+		}
+		var end = Character.isHighSurrogate(userAgent.charAt(MAX_USER_AGENT - 1)) ? MAX_USER_AGENT - 1
+				: MAX_USER_AGENT;
+		return userAgent.substring(0, end);
 	}
 
 	UUID id() {

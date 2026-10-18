@@ -123,8 +123,12 @@ class Sessions {
 	/** Whether the session is the User's own and still running. */
 	@Transactional(readOnly = true)
 	boolean isActive(UUID sessionId, UUID userId) {
+		return isActiveAt(sessionId, userId, now());
+	}
+
+	private boolean isActiveAt(UUID sessionId, UUID userId, Instant now) {
 		return sessions.findById(sessionId)
-			.filter(session -> session.userId().equals(userId) && session.isActiveAt(now()))
+			.filter(session -> session.userId().equals(userId) && session.isActiveAt(now))
 			.isPresent();
 	}
 
@@ -137,16 +141,23 @@ class Sessions {
 	 */
 	@Transactional(readOnly = true)
 	List<SessionView> listFor(UUID userId, UUID currentSessionId) {
-		if (!isActive(currentSessionId, userId)) {
+		// One instant for both questions, so a session ending between them can't be running for one and over for the other.
+		var now = now();
+		if (!isActiveAt(currentSessionId, userId, now)) {
 			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
 		}
-		return sessions.findRunningOf(userId, now())
+		var views = sessions.findRunningOf(userId, now)
 			.stream()
 			.map(session -> new SessionView(session.getId(), deviceLabels.of(session.getUserAgent()),
 					session.getId().equals(currentSessionId), session.getStartedAt(), session.getLastActiveAt()))
 			.sorted(Comparator.comparing(SessionView::current).reversed()
 				.thenComparing(SessionView::lastActiveAt, Comparator.reverseOrder()))
 			.toList();
+		// The caller's own session must be in its list; if it isn't, it ended in the meantime.
+		if (views.stream().noneMatch(SessionView::current)) {
+			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
+		}
+		return views;
 	}
 
 	/** Ends every session of a User except one, on every other browser. */

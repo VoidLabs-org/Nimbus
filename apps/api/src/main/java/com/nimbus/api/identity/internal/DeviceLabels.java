@@ -13,13 +13,18 @@ class DeviceLabels {
 
 	static final String UNKNOWN = "Unknown browser";
 
+	static final String IN_APP = "In-app browser";
+
 	private final Parser parser;
 
 	DeviceLabels() {
 		this.parser = new Parser();
 	}
 
-	/** "Chrome on Windows"; just one half when only that is known; {@value #UNKNOWN} when neither is. */
+	/**
+	 * "Chrome on Windows". When only the browser is known, just its name ("Firefox"); when only the system is,
+	 * "Unknown browser on Linux"; {@value #UNKNOWN} when neither is.
+	 */
 	String of(String userAgent) {
 		if (userAgent == null || userAgent.isBlank()) {
 			return UNKNOWN;
@@ -40,6 +45,10 @@ class DeviceLabels {
 	private static String browserName(String family) {
 		if (family == null) {
 			return null;
+		}
+		// A page inside another app's web view has no browser of its own to name.
+		if (family.contains("WebView")) {
+			return IN_APP;
 		}
 		var name = family.replace(" Mobile iOS", "").replace(" Mobile", "").replace("Mobile ", "").strip();
 		return name.isEmpty() ? family : name;

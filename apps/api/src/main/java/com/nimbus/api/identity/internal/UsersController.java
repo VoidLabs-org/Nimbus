@@ -71,7 +71,12 @@ class UsersController {
 		if (sessionId == null) {
 			throw new InvalidBearerTokenException("This token belongs to no session. Sign in again.");
 		}
-		return UUID.fromString(sessionId);
+		try {
+			return UUID.fromString(sessionId);
+		}
+		catch (IllegalArgumentException e) {
+			throw new InvalidBearerTokenException("This token belongs to no session. Sign in again.");
+		}
 	}
 
 	/** Same length rules as registration; passwords are kept exactly as typed. */

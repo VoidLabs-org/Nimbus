@@ -119,6 +119,15 @@ class DisconnectProviderTests {
 	}
 
 	@Test
+	void anEndedSessionIs401EvenForAnUnknownProvider() {
+		var user = externalSignIn.signIn(profile("google", "g-dc8", "dc8@example.com"));
+		var token = tokenFor(user);
+		sessions.endAll(user);
+
+		disconnect(token, "myspace").expectStatus().isUnauthorized();
+	}
+
+	@Test
 	void anUnverifiedUserIsStoppedByTheEmailGate() {
 		var response = client.post().uri("/api/auth/register")
 			.body(Map.of("displayName", "Noyce", "email", "noyce-dc@example.com", "password", "correct horse"))

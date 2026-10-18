@@ -23,19 +23,25 @@ export function ConnectedAccountsCard() {
   const { user } = useSession();
   const client = useQueryClient();
   // The provider the open dialog is about, and which one: the question, or the "set a password first" answer.
-  const [dialog, setDialog] = useState<{ id: string; step: "confirm" | "password" } | null>(null);
+  const [dialog, setDialog] = useState<{
+    id: string;
+    step: "confirm" | "password";
+    open: boolean;
+  } | null>(null);
+  // Closing keeps the provider, so the window still names it while it fades out.
+  const closeDialog = () => setDialog((current) => current && { ...current, open: false });
   const disconnect = useMutation({
     mutationFn: (id: string) => api.disconnectProvider(id),
     onSuccess: (_, id) => {
       toast.success(`Disconnected ${nameOf(id)}.`);
-      setDialog(null);
+      closeDialog();
       return client.invalidateQueries({ queryKey: queryKeys.linkedIdentities });
     },
     onError: (failure, id) => {
       // A 401 means this session ended: the app is already sending the User to sign in again.
       if (failure instanceof ApiError && failure.status === 401) return;
       if (failure instanceof ApiError && failure.code === "last_sign_in_method") {
-        setDialog({ id, step: "password" });
+        setDialog({ id, step: "password", open: true });
         return;
       }
       toast.error("Couldn’t disconnect. Please try again.");
@@ -111,12 +117,13 @@ export function ConnectedAccountsCard() {
                 {identity && (
                   <Button
                     variant="default"
-                    className={classes.signOut}
+                    className={classes.disconnect}
                     aria-label={`Disconnect ${provider.name}`}
                     onClick={() =>
                       // Their only way in: say so up front, not after a click that cannot work.
                       setDialog({
                         id: provider.id,
+                        open: true,
                         step:
                           user?.hasPassword === false && identities.data.length === 1
                             ? "password"
@@ -133,14 +140,16 @@ export function ConnectedAccountsCard() {
         </ul>
       </Panel>
       <DisconnectDialog
-        provider={dialog?.step === "confirm" ? nameOf(dialog.id) : null}
+        opened={dialog?.step === "confirm" && dialog.open}
+        provider={nameOf(dialog?.id ?? "")}
         busy={disconnect.isPending}
         onConfirm={() => dialog && disconnect.mutate(dialog.id)}
-        onClose={() => setDialog(null)}
+        onClose={closeDialog}
       />
       <SetPasswordFirstDialog
-        provider={dialog?.step === "password" ? nameOf(dialog.id) : null}
-        onClose={() => setDialog(null)}
+        opened={dialog?.step === "password" && dialog.open}
+        provider={nameOf(dialog?.id ?? "")}
+        onClose={closeDialog}
       />
     </Card>
   );

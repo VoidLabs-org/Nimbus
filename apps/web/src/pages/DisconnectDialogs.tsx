@@ -7,24 +7,26 @@ import classes from "./DisconnectDialogs.module.css";
  * Asks before a provider stops signing in as the User (design 32g). Cancel, ✕ and Escape change nothing.
  */
 export function DisconnectDialog({
+  opened,
   provider,
   busy,
   onConfirm,
   onClose,
 }: {
-  /** The provider's display name, e.g. "Google"; null while the dialog is closed. */
-  provider: string | null;
+  opened: boolean;
+  /** The provider's display name, e.g. "Google"; kept while the window fades out. */
+  provider: string;
   busy: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
   return (
     <WindowFrame
-      opened={provider !== null}
+      opened={opened}
       // Not while the request is under way, so its result lands in a dialog that is still there.
       onClose={busy ? () => {} : onClose}
-      title={`Disconnect ${provider ?? ""}?`}
-      subtitle={`You won’t be able to sign in with ${provider ?? ""}. You can connect it again any time.`}
+      title={`Disconnect ${provider}?`}
+      subtitle={`You won’t be able to sign in with ${provider}. You can connect it again any time.`}
     >
       <div className={classes.footer}>
         <Button variant="default" onClick={onClose} disabled={busy}>
@@ -42,19 +44,21 @@ export function DisconnectDialog({
  * Stops the User disconnecting the only way they can sign in, and points them at setting a password (design 32h).
  */
 export function SetPasswordFirstDialog({
+  opened,
   provider,
   onClose,
 }: {
-  /** The provider's display name, e.g. "Google"; null while the dialog is closed. */
-  provider: string | null;
+  opened: boolean;
+  /** The provider's display name, e.g. "Google"; kept while the window fades out. */
+  provider: string;
   onClose: () => void;
 }) {
   return (
     <WindowFrame
-      opened={provider !== null}
+      opened={opened}
       onClose={onClose}
       title="Set a password first"
-      subtitle={`${provider ?? "This account"} is the only way you can sign in right now. Set a password, then you can disconnect it.`}
+      subtitle={`${provider} is the only way you can sign in right now. Set a password, then you can disconnect it.`}
     >
       <div className={classes.footer}>
         <Button variant="default" onClick={onClose}>

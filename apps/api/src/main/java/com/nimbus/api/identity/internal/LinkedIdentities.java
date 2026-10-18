@@ -68,14 +68,16 @@ class LinkedIdentities {
 	 * @throws org.springframework.security.oauth2.server.resource.InvalidBearerTokenException when the session has ended
 	 */
 	void disconnect(UUID userId, UUID currentSessionId, String provider) {
-		if (!NAMES.containsKey(provider)) {
-			throw new UnknownProviderException();
-		}
-		var disconnectedAt = clock.instant();
+		var disconnectedAt = new Instant[1];
 		var email = transaction.execute(status -> {
 			var user = users.findLockedById(userId).orElseThrow(() -> new InvalidBearerTokenException(
 					"The User for this token no longer exists"));
+			// Before the provider is looked at, so an ended session is a 401 whatever was asked.
 			sessions.requireActive(currentSessionId, userId);
+			if (!NAMES.containsKey(provider)) {
+				throw new UnknownProviderException();
+			}
+			disconnectedAt[0] = clock.instant();
 			var linked = identities.findByUserId(userId);
 			var removing = linked.stream().filter(identity -> identity.provider().equals(provider)).toList();
 			if (removing.isEmpty()) {
@@ -85,14 +87,14 @@ class LinkedIdentities {
 				throw new LastSignInMethodException();
 			}
 			identities.deleteAll(removing);
-			disconnectedProviders.mark(userId, provider, disconnectedAt);
+			disconnectedProviders.mark(userId, provider, disconnectedAt[0]);
 			return user.email();
 		});
 		if (email == null) {
 			return;
 		}
 		try {
-			mailer.send(DisconnectMail.to(email, NAMES.get(provider), disconnectedAt, securityUrl));
+			mailer.send(DisconnectMail.to(email, NAMES.get(provider), disconnectedAt[0], securityUrl));
 		}
 		catch (RuntimeException e) {
 			// Fire and forget, as the mail module promises: the disconnect has happened and stays.

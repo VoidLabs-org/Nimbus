@@ -57,6 +57,8 @@ class ExternalSignIn {
 		if (user == null) {
 			return create(profile);
 		}
+		// Under the row lock a disconnect takes, so one that overlaps this sign-in is either seen here or waits.
+		users.findLockedById(user.getId()).orElseThrow();
 		if (disconnectedProviders.isMarked(user.getId(), profile.provider())) {
 			throw new ProviderDisconnectedException();
 		}

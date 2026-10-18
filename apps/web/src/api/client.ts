@@ -484,6 +484,9 @@ export function createApiClient(
 
     /** The User's running sign-ins, this browser's first. */
     sessions: () => request<SessionInfo[]>("/api/users/me/sessions"),
+    /** Ends another of the User's sessions at once; no password needed. 404 when it is not theirs or never existed. */
+    endSession: (id: string) =>
+      request<void>(`/api/users/me/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>

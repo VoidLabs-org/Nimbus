@@ -82,3 +82,19 @@ li:first-child.row {
   font-size: 14px;
   color: var(--color-accent-2-700);
 }
+
+.signOut {
+  flex: none;
+}
+
+/* On a phone the button drops under the text, full width and tall enough to tap. */
+@media (max-width: 36em) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .signOut {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+}

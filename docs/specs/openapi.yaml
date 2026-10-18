@@ -541,6 +541,34 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/users/me/sessions/{id}:
+    delete:
+      tags: [users]
+      summary: Sign out one of the signed-in User's sessions
+      description: >-
+        Ends the session at once, without a password; its refresh tokens stop working. Its access tokens keep working
+        for up to 15 minutes. Ending a session of the User that is already over also gives `204`, until the cleanup job deletes it (7 days after it ended). The request must come
+        from a session that is still running.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: The session is over
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No session of the signed-in User has this id (unknown, not a UUID, or another User's)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /api/access/permissions:
     get:

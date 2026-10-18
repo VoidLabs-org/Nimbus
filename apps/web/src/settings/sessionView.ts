@@ -34,6 +34,14 @@ export function signedInText(startedAt: string, now: Date): string {
   return `Signed in ${date}`;
 }
 
+/**
+ * What names one session in a button or a toast: the device, and when it was signed in, since two browsers can have
+ * the same device label ("Chrome on Windows (signed in 12 Oct)").
+ */
+export function sessionName(session: Pick<SessionInfo, "device" | "startedAt">, now: Date): string {
+  return `${session.device} (${signedInText(session.startedAt, now).replace("Signed", "signed")})`;
+}
+
 /** Whether the label names a phone or tablet, which gets the phone icon. */
 export function isPhone(device: string): boolean {
   return / on (iOS|Android)$/.test(device);

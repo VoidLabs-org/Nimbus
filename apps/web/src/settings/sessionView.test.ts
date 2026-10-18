@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityText, isPhone, signedInText } from "./sessionView";
+import { activityText, isPhone, sessionName, signedInText } from "./sessionView";
 
 const now = new Date("2026-10-18T12:00:00Z");
 const MINUTE = 60;
@@ -53,5 +53,15 @@ describe("isPhone", () => {
   it("is false for everything else, including an unknown browser", () => {
     expect(isPhone("Chrome on Windows")).toBe(false);
     expect(isPhone("Unknown browser")).toBe(false);
+  });
+});
+
+describe("sessionName", () => {
+  it("names a session by its device and when it was signed in", () => {
+    const now = new Date("2026-10-18T12:00:00Z");
+
+    expect(
+      sessionName({ device: "Chrome on Windows", startedAt: "2026-10-03T12:00:00Z" }, now),
+    ).toMatch(/^Chrome on Windows \(signed in .*3.*\)$/);
   });
 });

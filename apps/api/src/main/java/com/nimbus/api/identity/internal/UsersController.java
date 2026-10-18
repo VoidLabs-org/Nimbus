@@ -11,8 +11,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -64,6 +66,13 @@ class UsersController {
 	@GetMapping("/me/sessions")
 	List<Sessions.SessionView> sessions(@AuthenticationPrincipal Jwt token) {
 		return sessions.listFor(currentUser.id(), sessionOf(token));
+	}
+
+	/** Ends one of the User's sessions, without asking for a password; a session that is already over also gives 204. */
+	@DeleteMapping("/me/sessions/{id}")
+	ResponseEntity<Void> endSession(@AuthenticationPrincipal Jwt token, @PathVariable String id) {
+		sessions.endOne(currentUser.id(), sessionOf(token), id);
+		return ResponseEntity.noContent().build();
 	}
 
 	private static UUID sessionOf(Jwt token) {

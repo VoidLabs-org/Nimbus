@@ -256,6 +256,53 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/auth/verify-email:
+    post:
+      tags: [auth]
+      summary: Verify the signed-in User's email with the code emailed to them
+      description: >-
+        Needs the access token of a signed-in User, who may be unverified (this is how they stop being). A right
+        code marks the email verified, deletes the code and publishes `EmailVerified`. A User who is already
+        verified gets `200` again. A wrong try is counted; the fifth wrong try cancels the code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                  description: The 6 digits from the email. Spaces are ignored.
+      responses:
+        "200":
+          description: The User, now verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: >-
+            The code is missing or malformed (`errors.code`), wrong (`code` is `invalid_code`, with `triesLeft`), or there is
+            no live code (`code` is `code_expired`: expired, cancelled after 5 wrong tries, or never issued)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      triesLeft:
+                        type: integer
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/auth/providers:
     get:
       tags: [auth]
@@ -913,7 +960,7 @@ components:
 
     User:
       type: object
-      required: [id, email, displayName, avatarUrl, hasPassword]
+      required: [id, email, displayName, avatarUrl, hasPassword, emailVerified]
       properties:
         id:
           type: string
@@ -929,6 +976,12 @@ components:
         hasPassword:
           type: boolean
           description: False for Users who only sign in with Google or GitHub; the app asks for a current password only when true
+        emailVerified:
+          type: boolean
+          description: >-
+            False until the User has entered the emailed code or signed in with Google or GitHub on the email.
+            An Unverified User gets `403` with `code` `email_unverified` from every endpoint except
+            `GET /api/users/me` and those under `/api/auth/`.
 
     CatalogPermission:
       type: object
@@ -1195,6 +1248,11 @@ components:
           type: string
         instance:
           type: string
+        code:
+          type: string
+          description: >-
+            A machine-readable reason where the status alone isn't enough, e.g. `email_unverified` (403),
+            `invalid_code` or `code_expired` (400)
 
   responses:
     InvalidFields:

@@ -16,6 +16,7 @@ const alice: User = {
   displayName: "Alice",
   avatarUrl: null,
   hasPassword: true,
+  emailVerified: true,
 };
 
 const unused = () => Promise.resolve();
@@ -32,6 +33,7 @@ function session(user: User | null): Session {
     login: unused,
     updateDisplayName: unused,
     changePassword: unused,
+    verifyEmail: unused,
     logout: unused,
   };
 }

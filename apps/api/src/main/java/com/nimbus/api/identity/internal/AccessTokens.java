@@ -16,6 +16,9 @@ class AccessTokens {
 
 	static final String SESSION_CLAIM = "sid";
 
+	/** True when the User's email was verified at issue time. Absent or false means "look it up". */
+	static final String VERIFIED_CLAIM = "ev";
+
 	private final JwtEncoder encoder;
 
 	private final AuthProperties properties;
@@ -34,6 +37,7 @@ class AccessTokens {
 		var claims = JwtClaimsSet.builder()
 			.subject(user.getId().toString())
 			.claim(SESSION_CLAIM, sessionId.toString())
+			.claim(VERIFIED_CLAIM, user.emailVerified())
 			.issuedAt(now)
 			.expiresAt(now.plus(properties.accessTokenTtl()))
 			.build();

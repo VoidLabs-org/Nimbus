@@ -21,6 +21,11 @@ export type Session = {
   updateDisplayName: (displayName: string) => Promise<void>;
   /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */
   changePassword: (input: ChangePasswordInput) => Promise<void>;
+  /**
+   * Checks the Verification code the signed-in User typed. Rejects with an ApiError ("invalid_code" with
+   * `triesLeft`, or "code_expired") if refused; on success the User is verified and the app opens.
+   */
+  verifyEmail: (code: string) => Promise<void>;
   /** Ends this browser's session. Rejects, leaving the User signed in, if the server can't be reached. */
   logout: () => Promise<void>;
 };

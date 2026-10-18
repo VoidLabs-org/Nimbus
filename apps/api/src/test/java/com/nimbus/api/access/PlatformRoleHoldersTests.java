@@ -9,6 +9,7 @@ import java.util.concurrent.CyclicBarrier;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.identity.EmailCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -98,12 +99,18 @@ class PlatformRoleHoldersTests {
 		// Anyone can register someone else's address with a password before its owner does.
 		var mallory = registerUnverified("carol@example.com", "Carol");
 
-		give("platform_admin", "carol@example.com", admin).expectStatus().isEqualTo(409);
+		give("platform_admin", "carol@example.com", admin).expectStatus().isEqualTo(409)
+			.expectBody().jsonPath("$.detail").value(detail -> assertThat((String) detail).contains("code emailed"));
 
-		assertThat((List<String>) JsonPath.read(myPermissions(mallory.token()), "$.platform"))
-			.doesNotContain("access:role:manage");
+		// Mallory is stopped at the gate, so she can't use any permission.
+		client.get().uri("/api/access/me/permissions").header("Authorization", "Bearer " + mallory.token())
+			.exchange().expectStatus().isForbidden();
 		assertThat((List<String>) JsonPath.read(holders("platform_admin", admin), "$.users[*].email"))
 			.doesNotContain("carol@example.com");
+
+		// Once the address's owner enters the emailed code, the role can be given.
+		EmailCodes.verify(client, mallory.token(), "carol@example.com");
+		give("platform_admin", "carol@example.com", admin).expectStatus().isCreated();
 	}
 
 	@Test

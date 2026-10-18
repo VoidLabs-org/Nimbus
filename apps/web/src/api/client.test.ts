@@ -551,6 +551,36 @@ describe("api client", () => {
     expect(lost).toEqual([]);
   });
 
+  it("renews the access token after a correct code, so the server stops looking the User up", async () => {
+    const verified = { ...alice, emailVerified: true };
+    const server = routedServer((call) =>
+      call.url === "/api/auth/verify-email"
+        ? json(200, verified)
+        : json(200, { accessToken: "token-verified", user: verified }),
+    );
+    const api = createApiClient(server.fetchFn);
+
+    const user = await api.verifyEmail("123456");
+
+    expect(user).toEqual(verified);
+    expect(server.calls.map((call) => call.url)).toEqual([
+      "/api/auth/verify-email",
+      "/api/auth/refresh",
+    ]);
+    await api.me().catch(() => {});
+    expect(authorization(server.calls[2]!)).toBe("Bearer token-verified");
+  });
+
+  it("is still verified when renewing the token afterwards fails", async () => {
+    const verified = { ...alice, emailVerified: true };
+    const server = routedServer((call) =>
+      call.url === "/api/auth/verify-email" ? json(200, verified) : json(500, { status: 500 }),
+    );
+    const api = createApiClient(server.fetchFn);
+
+    await expect(api.verifyEmail("123456")).resolves.toEqual(verified);
+  });
+
   it("reports field errors from the server", async () => {
     const server = fakeServer(
       json(400, {

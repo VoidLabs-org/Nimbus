@@ -66,7 +66,7 @@ class PlatformAdminBootstrap {
 	private void grantIfVerified(UserSummary user) {
 		if (!user.emailVerified()) {
 			log.warn("NIMBUS_ADMIN_EMAIL is {}, but that User has not verified the email, so they are not made "
-					+ "Platform admin. Signing in once with Google or GitHub on that email verifies it.", user.email());
+					+ "Platform admin. Entering the code emailed to them, or signing in once with Google or GitHub on that email, verifies it.", user.email());
 			return;
 		}
 		if (holders.makePlatformAdmin(user)) {

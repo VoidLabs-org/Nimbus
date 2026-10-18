@@ -7,6 +7,7 @@ import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.identity.EmailCodes;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -41,12 +42,10 @@ class UnverifiedAdminEmailTests {
 			.header("Authorization", "Bearer " + token)
 			.exchange()
 			.expectStatus().isForbidden();
-		var mine = client.get().uri("/api/access/me/permissions")
+		client.get().uri("/api/access/me/permissions")
 			.header("Authorization", "Bearer " + token)
 			.exchange()
-			.expectStatus().isOk()
-			.expectBody(String.class).returnResult().getResponseBody();
-		assertThat((List<String>) JsonPath.read(mine, "$.platform")).containsExactly("projects:project:create");
+			.expectStatus().isForbidden();
 	}
 
 }

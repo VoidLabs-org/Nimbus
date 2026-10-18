@@ -135,7 +135,7 @@ The Platform admin edits Roles on the Roles page (all of it needs `access:role:m
 The Platform admin gives platform roles to Users and takes them away on a Role's People tab (all of it needs `access:role:assign`, which only Platform admin holds):
 
 - **Give** a platform role to an existing User found by exact email (any case, surrounding whitespace ignored): `404` if no User has it, `409` if they already hold it. A User may hold several platform roles.
-- **Only Users who proved their email** get a platform role (`409` otherwise): those who signed in once with Google or GitHub on it, or the seeded admin. A password sign-up never proves the email, and anyone can register someone else's address before its owner does, so they would receive what the admin meant for the real owner. It is the same rule the admin email follows at startup.
+- **Only Users who proved their email** get a platform role (`409` otherwise): those who entered the code emailed to them, or signed in once with Google or GitHub on it, or the seeded admin. A password sign-up alone never proves the email, and anyone can register someone else's address before its owner does, so they would receive what the admin meant for the real owner. It is the same rule the admin email follows at startup.
 - **Take** it away: `404` if they don't hold it.
 - **Everyone** has no holders to list, give or take (`409`): every signed-in User holds it. **Project roles** are given on a project's Members page, not here (`409`).
 - **Nobody changes their own Role assignments** (`403`), so nobody promotes themselves or locks themselves out by mistake.

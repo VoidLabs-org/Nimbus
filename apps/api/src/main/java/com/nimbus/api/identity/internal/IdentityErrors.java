@@ -21,6 +21,21 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail wrongCode(EmailVerification.WrongCodeException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "invalid_code");
+		problem.setProperty("triesLeft", e.triesLeft());
+		return problem;
+	}
+
+	@ExceptionHandler
+	ProblemDetail codeExpired(EmailVerification.CodeExpiredException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "code_expired");
+		return problem;
+	}
+
+	@ExceptionHandler
 	ResponseEntity<ProblemDetail> limitExceeded(SlidingWindowLimiter.LimitExceededException e) {
 		var seconds = Math.max(1, (e.retryAfter().toMillis() + 999) / 1000);
 		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)

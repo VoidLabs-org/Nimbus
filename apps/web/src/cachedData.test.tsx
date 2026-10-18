@@ -111,6 +111,7 @@ describe("a different User", () => {
     email: `${id}@example.com`,
     avatarUrl: null,
     hasPassword: true,
+    emailVerified: true,
   });
 
   /** Signs out and in as the other User, with the Roles page up for whoever is signed in. */

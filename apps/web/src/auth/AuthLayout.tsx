@@ -23,7 +23,7 @@ export function AuthLayout({
   children,
 }: {
   title: string;
-  subtitle: string;
+  subtitle: ReactNode;
   gap: number;
   children: ReactNode;
 }) {

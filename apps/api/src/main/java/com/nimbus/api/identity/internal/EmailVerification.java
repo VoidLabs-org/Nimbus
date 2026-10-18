@@ -1,17 +1,9 @@
 package com.nimbus.api.identity.internal;
 
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.Clock;
-import java.time.Duration;
-import java.util.HexFormat;
 import java.util.UUID;
 
-import javax.crypto.Mac;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 
 import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.mail.MailAssets;
@@ -35,14 +27,6 @@ class EmailVerification {
 
 	private static final Logger log = LoggerFactory.getLogger(EmailVerification.class);
 
-	static final Duration CODE_LIFETIME = Duration.ofMinutes(15);
-
-	static final int MAX_WRONG_TRIES = 5;
-
-	private static final int CODE_DIGITS = 6;
-
-	private static final SecureRandom RANDOM = new SecureRandom();
-
 	private final UserRepository users;
 
 	private final VerificationCodeRepository codes;
@@ -55,7 +39,7 @@ class EmailVerification {
 
 	private final TransactionTemplate transaction;
 
-	private final SecretKeySpec hashKey;
+	private final EmailedCodes hashing;
 
 	private final EmailSendBudget sendBudget;
 
@@ -72,9 +56,7 @@ class EmailVerification {
 		this.clock = clock;
 		this.events = events;
 		this.transaction = new TransactionTemplate(transactionManager);
-		// A key of its own, derived from the signing key, so a signed token can never be mistaken for a code hash.
-		this.hashKey = new SecretKeySpec(hmac(jwtKey, "nimbus:verification-code".getBytes(StandardCharsets.UTF_8)),
-				"HmacSHA256");
+		this.hashing = new EmailedCodes(jwtKey, "nimbus:verification-code");
 	}
 
 	/**
@@ -123,23 +105,23 @@ class EmailVerification {
 	}
 
 	private void issueAndSend(User user, boolean mail) {
-		var code = newCode();
-		var now = clock.instant();
-		var hash = hash(user.getId(), code);
+		var code = EmailedCodes.newCode();
+		var now = EmailedCodes.issuedAt(clock);
+		var hash = hashing.hash(user.getId(), code);
 		transaction.executeWithoutResult(status -> {
 			// The User's row serialises everything that changes their code.
 			users.findLockedById(user.getId()).orElseThrow();
 			var existing = codes.findLockedByUserId(user.getId());
 			if (existing.isPresent()) {
-				existing.get().replaceWith(hash, now, now.plus(CODE_LIFETIME));
+				existing.get().replaceWith(hash, now, now.plus(EmailedCodes.LIFETIME));
 			}
 			else {
-				codes.save(new VerificationCode(user.getId(), hash, now, now.plus(CODE_LIFETIME)));
+				codes.save(new VerificationCode(user.getId(), hash, now, now.plus(EmailedCodes.LIFETIME)));
 			}
 		});
 		if (mail) {
 			try {
-				mailer.send(VerificationMail.to(user.email(), code, CODE_LIFETIME,
+				mailer.send(VerificationMail.to(user.email(), code, EmailedCodes.LIFETIME,
 						mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
 			}
 			catch (RuntimeException e) {
@@ -154,8 +136,8 @@ class EmailVerification {
 	 * is already verified is left alone. A wrong try is counted even though it fails, so the counting is committed
 	 * before the failure is reported.
 	 *
-	 * @throws WrongCodeException when the code is wrong and tries are left
-	 * @throws CodeExpiredException when there is no live code: expired, never issued, or cancelled, which the
+	 * @throws EmailedCodes.WrongCodeException when the code is wrong and tries are left
+	 * @throws EmailedCodes.CodeExpiredException when there is no live code: expired, never issued, or cancelled, which the
 	 * fifth wrong try itself does
 	 */
 	User verify(UUID userId, String code) {
@@ -169,14 +151,14 @@ class EmailVerification {
 			if (stored == null || stored.isExpiredAt(clock.instant())) {
 				return new Outcome(user, -1, false);
 			}
-			if (matches(stored.codeHash(), hash(userId, code))) {
+			if (EmailedCodes.matches(stored.codeHash(), hashing.hash(userId, code))) {
 				codes.delete(stored);
 				user.verifyEmail();
 				events.publishEvent(new EmailVerified(user.getId(), user.email()));
 				return new Outcome(user, 0, true);
 			}
 			stored.countWrongTry();
-			var left = MAX_WRONG_TRIES - stored.wrongTries();
+			var left = EmailedCodes.MAX_WRONG_TRIES - stored.wrongTries();
 			if (left <= 0) {
 				codes.delete(stored);
 				return new Outcome(user, -1, false);
@@ -187,36 +169,12 @@ class EmailVerification {
 			return outcome.user();
 		}
 		if (outcome.triesLeft() < 0) {
-			throw new CodeExpiredException();
+			throw new EmailedCodes.CodeExpiredException();
 		}
-		throw new WrongCodeException(outcome.triesLeft());
+		throw new EmailedCodes.WrongCodeException(outcome.triesLeft());
 	}
 
 	private record Outcome(User user, int triesLeft, boolean verified) {
-	}
-
-	private static String newCode() {
-		return String.format("%06d", RANDOM.nextInt(1_000_000));
-	}
-
-	private String hash(UUID userId, String code) {
-		return HexFormat.of().formatHex(hmac(hashKey, (userId + ":" + code).getBytes(StandardCharsets.UTF_8)));
-	}
-
-	private static boolean matches(String storedHash, String givenHash) {
-		return MessageDigest.isEqual(storedHash.getBytes(StandardCharsets.UTF_8),
-				givenHash.getBytes(StandardCharsets.UTF_8));
-	}
-
-	private static byte[] hmac(SecretKey key, byte[] data) {
-		try {
-			var mac = Mac.getInstance("HmacSHA256");
-			mac.init(key);
-			return mac.doFinal(data);
-		}
-		catch (GeneralSecurityException e) {
-			throw new IllegalStateException(e);
-		}
 	}
 
 	/** The email is already verified, so there is nothing to send a code for. */
@@ -224,31 +182,6 @@ class EmailVerification {
 
 		AlreadyVerifiedException() {
 			super("This email is already verified");
-		}
-
-	}
-
-	/** The code was wrong; the User may try again {@code triesLeft} more times. */
-	static class WrongCodeException extends RuntimeException {
-
-		private final int triesLeft;
-
-		WrongCodeException(int triesLeft) {
-			super("That code is wrong");
-			this.triesLeft = triesLeft;
-		}
-
-		int triesLeft() {
-			return triesLeft;
-		}
-
-	}
-
-	/** There is no live code: it expired, was cancelled after too many wrong tries, or was never issued. */
-	static class CodeExpiredException extends RuntimeException {
-
-		CodeExpiredException() {
-			super("That code has expired. Ask for a new one.");
 		}
 
 	}

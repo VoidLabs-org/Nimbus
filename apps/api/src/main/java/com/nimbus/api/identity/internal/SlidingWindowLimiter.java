@@ -76,6 +76,11 @@ class SlidingWindowLimiter {
 		});
 	}
 
+	/** Forgets every attempt counted for {@code key}, e.g. once its owner proved who they are another way. */
+	void clear(String key) {
+		attempts.remove(key);
+	}
+
 	private void sweepIfDue(Instant now) {
 		var due = nextSweep.get();
 		// Only the thread that wins the compare-and-set sweeps; the others carry on.

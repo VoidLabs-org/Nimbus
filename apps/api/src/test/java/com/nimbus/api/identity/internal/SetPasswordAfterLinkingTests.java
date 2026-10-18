@@ -2,9 +2,12 @@ package com.nimbus.api.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
+import java.time.Duration;
 import java.util.Map;
 
+import com.nimbus.api.RecordingMailer;
 import com.nimbus.api.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -102,6 +105,24 @@ class SetPasswordAfterLinkingTests {
 
 		setPassword(tokenFor(owner), Map.of("newPassword", "owners password")).expectStatus().isNoContent();
 		login("dee@example.com", "owners password").expectStatus().isOk();
+	}
+
+	@Test
+	void aGoogleOnlyUserCanSetAPasswordWithAResetCodeAndKeepsTheirGoogleLogin() {
+		var user = externalSignIn.signIn(profile("google", "g-gina", "gina@example.com"));
+		assertThat(user.passwordHash()).isNull();
+
+		client.post().uri("/api/auth/password-reset").body(Map.of("email", "gina@example.com"))
+			.exchange().expectStatus().isNoContent();
+		await().atMost(Duration.ofSeconds(10)).until(() -> !RecordingMailer.sentTo("gina@example.com").isEmpty());
+		client.post().uri("/api/auth/password-reset/confirm")
+			.body(Map.of("email", "gina@example.com", "code", RecordingMailer.lastCodeFor("gina@example.com"),
+					"newPassword", "first password"))
+			.exchange().expectStatus().isNoContent();
+
+		login("gina@example.com", "first password").expectStatus().isOk();
+		assertThat(externalSignIn.signIn(profile("google", "g-gina", "gina@example.com")).getId())
+			.isEqualTo(user.getId());
 	}
 
 	private void hasPassword(String accessToken, boolean expected) {

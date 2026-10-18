@@ -338,6 +338,88 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/auth/password-reset:
+    post:
+      tags: [auth]
+      summary: Email a Reset code to a User who forgot their password
+      security: []
+      description: >-
+        Always `204`, whether or not a User has the email, so the answer never says who is registered. For a
+        registered email (Users with no password included) a Reset code is issued, replacing any live one, and
+        emailed. The lookup, the code and the send all happen after the response, and a failure is logged, never
+        shown.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  maxLength: 254
+                  description: Any case; surrounding whitespace is ignored
+      responses:
+        "204":
+          description: Accepted. A code is on its way if the email is registered
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+
+  /api/auth/password-reset/confirm:
+    post:
+      tags: [auth]
+      summary: Set a new password with the Reset code from the email
+      security: []
+      description: >-
+        A right code sets the password, deletes the code, marks the email verified (publishing `EmailVerified` if it
+        wasn't), ends every session of the User and clears the failed sign-ins for the email. The User is not signed
+        in. A wrong try is counted; the fifth cancels the code. An unknown email gets the same answer as an expired
+        code. A new password that breaks the rule, or a malformed code, is refused without counting a try.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, newPassword]
+              properties:
+                email:
+                  type: string
+                  maxLength: 254
+                code:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                  description: The 6 digits from the email. Spaces are ignored.
+                newPassword:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+      responses:
+        "204":
+          description: The password was changed; sign in with it
+        "400":
+          description: >-
+            A field is invalid (`errors.newPassword`, `errors.code`, `errors.email`), the code is wrong (`code` is
+            `invalid_code`, with `triesLeft`), or there is no live code for the email (`code` is `code_expired`:
+            expired, cancelled after 5 wrong tries, never issued, or no User has the email)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      code:
+                        type: string
+                        enum: [invalid_code, code_expired]
+                      triesLeft:
+                        type: integer
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: string
+
   /api/auth/providers:
     get:
       tags: [auth]

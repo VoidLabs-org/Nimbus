@@ -26,10 +26,13 @@ public class RecordingMailer implements Mailer, MailAssets {
 
 	private static final List<Mail> SENT = new CopyOnWriteArrayList<>();
 
+	private static final List<Mail> ATTEMPTED = new CopyOnWriteArrayList<>();
+
 	private static volatile boolean failing;
 
 	@Override
 	public void send(Mail mail) {
+		ATTEMPTED.add(mail);
 		if (failing) {
 			throw new IllegalStateException("The mail service is down");
 		}
@@ -49,6 +52,11 @@ public class RecordingMailer implements Mailer, MailAssets {
 
 	public static List<Mail> sentTo(String email) {
 		return SENT.stream().filter(mail -> mail.to().equals(email)).toList();
+	}
+
+	/** Every email Nimbus tried to send to {@code email}, including those that failed while {@link #failing} was on. */
+	public static List<Mail> attemptedTo(String email) {
+		return ATTEMPTED.stream().filter(mail -> mail.to().equals(email)).toList();
 	}
 
 	/** The 6-digit code in the newest email sent to {@code email}. */

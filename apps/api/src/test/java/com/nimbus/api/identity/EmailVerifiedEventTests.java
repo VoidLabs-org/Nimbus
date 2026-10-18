@@ -1,7 +1,9 @@
 package com.nimbus.api.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -51,6 +53,56 @@ class EmailVerifiedEventTests {
 
 		assertThat(listener.about("ev-lena@example.com")).hasSize(1);
 		assertThat(listener.about("ev-lena@example.com").get(0).userId().toString()).isEqualTo(id);
+	}
+
+	// Someone registered an address they don't own. Its real owner reads the Reset code in their inbox and takes it
+	// back: the squatter's password and sessions stop working, and the address is verified.
+	@Test
+	void theRealOwnerRecoversASquattedAddressWithAResetCode() {
+		var email = "ev-squat@example.com";
+		var registered = client.post().uri("/api/auth/register")
+			.body(Map.of("displayName", "Squatter", "email", email, "password", "squatter pass"))
+			.exchange().expectStatus().isCreated()
+			.expectBody(String.class).returnResult();
+		String id = JsonPath.read(registered.getResponseBody(), "$.user.id");
+		var squatterCookie = RefreshCookies.valueOf(registered);
+
+		client.post().uri("/api/auth/password-reset").body(Map.of("email", email))
+			.exchange().expectStatus().isNoContent();
+		await().atMost(Duration.ofSeconds(10)).until(() -> RecordingMailer.sentTo(email).size() == 2);
+		client.post().uri("/api/auth/password-reset/confirm")
+			.body(Map.of("email", email, "code", RecordingMailer.lastCodeFor(email), "newPassword", "owners password"))
+			.exchange().expectStatus().isNoContent();
+
+		client.post().uri("/api/auth/login").body(Map.of("email", email, "password", "squatter pass"))
+			.exchange().expectStatus().isUnauthorized();
+		client.post().uri("/api/auth/refresh").header("X-Requested-With", "nimbus")
+			.cookie("refresh_token", squatterCookie)
+			.exchange().expectStatus().isUnauthorized();
+		client.post().uri("/api/auth/login").body(Map.of("email", email, "password", "owners password"))
+			.exchange().expectStatus().isOk()
+			.expectBody().jsonPath("$.user.emailVerified").isEqualTo(true);
+		assertThat(listener.about(email)).hasSize(1);
+		assertThat(listener.about(email).get(0).userId().toString()).isEqualTo(id);
+	}
+
+	@Test
+	void aResetForAVerifiedUserPublishesNothingMore() {
+		var email = "ev-verified-reset@example.com";
+		var response = client.post().uri("/api/auth/register")
+			.body(Map.of("displayName", "Vera", "email", email, "password", "correct horse"))
+			.exchange().expectStatus().isCreated()
+			.expectBody(String.class).returnResult().getResponseBody();
+		EmailCodes.verify(client, JsonPath.read(response, "$.accessToken"), email);
+
+		client.post().uri("/api/auth/password-reset").body(Map.of("email", email))
+			.exchange().expectStatus().isNoContent();
+		await().atMost(Duration.ofSeconds(10)).until(() -> RecordingMailer.sentTo(email).size() == 2);
+		client.post().uri("/api/auth/password-reset/confirm")
+			.body(Map.of("email", email, "code", RecordingMailer.lastCodeFor(email), "newPassword", "new password"))
+			.exchange().expectStatus().isNoContent();
+
+		assertThat(listener.about(email)).hasSize(1);
 	}
 
 	@TestConfiguration(proxyBeanMethods = false)

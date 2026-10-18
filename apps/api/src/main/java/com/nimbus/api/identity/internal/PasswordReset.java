@@ -6,8 +6,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import javax.crypto.SecretKey;
-
 import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
@@ -22,9 +20,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Forgot password: a Reset code emailed to the address lets whoever reads it set a new password. Reading the email
- * proves they own the address, so a right code also verifies it. Nothing here says whether an email is registered:
- * a request answers the same, as fast, for every email, and a reset for an unknown email fails like an expired
- * code. Reset codes follow the rules of {@link EmailedCodes} and are kept apart from Verification codes, so a
+ * proves they own the address, so a right code also verifies it. A request answers the same, as fast, for every
+ * email, so it never says whether an email is registered. The reset step can: a wrong code for a registered
+ * email answers {@code invalid_code}, while an unknown email always fails like an expired code. That is
+ * accepted, because registering already answers {@code 409} for a registered email. Reset codes follow the rules of {@link EmailedCodes} and are kept apart from Verification codes, so a
  * pending code of one kind never replaces the other.
  */
 @Service
@@ -33,8 +32,6 @@ class PasswordReset {
 	private static final Logger log = LoggerFactory.getLogger(PasswordReset.class);
 
 	private final UserRepository users;
-
-	private final ResetCodeRepository codes;
 
 	private final PasswordEncoder passwordEncoder;
 
@@ -52,7 +49,7 @@ class PasswordReset {
 
 	private final TransactionTemplate transaction;
 
-	private final VerificationCodeRepository verificationCodes;
+	private final EmailedCodes verificationCodes;
 
 	/**
 	 * Its own small pool with a bounded queue, not the application's shared one: this work is triggered by
@@ -67,14 +64,12 @@ class PasswordReset {
 				return thread;
 			});
 
-	private final EmailedCodes hashing;
+	private final EmailedCodes codes;
 
-	PasswordReset(UserRepository users, ResetCodeRepository codes, PasswordEncoder passwordEncoder, Sessions sessions,
+	PasswordReset(UserRepository users, EmailedCodeKinds codeKinds, PasswordEncoder passwordEncoder, Sessions sessions,
 			SignIn signIn, Mailer mailer, MailAssets mailAssets, Clock clock, ApplicationEventPublisher events,
-			PlatformTransactionManager transactionManager, SecretKey jwtKey,
-			VerificationCodeRepository verificationCodes) {
+			PlatformTransactionManager transactionManager) {
 		this.users = users;
-		this.codes = codes;
 		this.passwordEncoder = passwordEncoder;
 		this.sessions = sessions;
 		this.signIn = signIn;
@@ -83,8 +78,8 @@ class PasswordReset {
 		this.clock = clock;
 		this.events = events;
 		this.transaction = new TransactionTemplate(transactionManager);
-		this.verificationCodes = verificationCodes;
-		this.hashing = new EmailedCodes(jwtKey, "nimbus:reset-code");
+		this.verificationCodes = codeKinds.verification();
+		this.codes = codeKinds.reset();
 	}
 
 	@PreDestroy
@@ -113,19 +108,10 @@ class PasswordReset {
 			return;
 		}
 		try {
-			var code = EmailedCodes.newCode();
-			var hash = hashing.hash(user.getId(), code);
-			var now = EmailedCodes.issuedAt(clock);
-			transaction.executeWithoutResult(status -> {
+			var code = transaction.execute(status -> {
 				// The User's row serialises everything that changes their code.
 				users.findLockedById(user.getId()).orElseThrow();
-				var existing = codes.findLockedByUserId(user.getId());
-				if (existing.isPresent()) {
-					existing.get().replaceWith(hash, now, now.plus(EmailedCodes.LIFETIME));
-				}
-				else {
-					codes.save(new ResetCode(user.getId(), hash, now, now.plus(EmailedCodes.LIFETIME)));
-				}
+				return codes.issue(user.getId());
 			});
 			// After the commit, and never in an event: events are stored, so the code would sit in the database.
 			mailer.send(ResetMail.to(user.email(), code, EmailedCodes.LIFETIME,
@@ -152,43 +138,29 @@ class PasswordReset {
 		// Slow, so outside any transaction, and done for every request, so an unknown email takes as long as a
 		// known one.
 		var passwordHash = passwordEncoder.encode(newPassword);
-		var triesLeft = transaction.execute(status -> {
+		var check = transaction.execute(status -> {
 			var user = users.findLockedByEmail(normalizedEmail).orElse(null);
 			if (user == null) {
-				return -1;
+				return EmailedCodes.Check.NONE;
 			}
-			var stored = codes.findLockedByUserId(user.getId()).orElse(null);
-			if (stored == null || stored.isExpiredAt(clock.instant())) {
-				return -1;
-			}
-			if (EmailedCodes.matches(stored.codeHash(), hashing.hash(user.getId(), code))) {
-				codes.delete(stored);
+			var checked = codes.check(user.getId(), code);
+			if (checked.isRight()) {
 				user.changePassword(passwordHash);
 				if (!user.emailVerified()) {
 					user.verifyEmail();
 					// As entering it would: a pending Verification code has nothing left to prove.
-					verificationCodes.deleteById(user.getId());
+					verificationCodes.discard(user.getId());
 					events.publishEvent(new EmailVerified(user.getId(), user.email()));
 				}
 				sessions.endAll(user);
-				return 0;
 			}
-			stored.countWrongTry();
-			var left = EmailedCodes.MAX_WRONG_TRIES - stored.wrongTries();
-			if (left <= 0) {
-				codes.delete(stored);
-				return -1;
-			}
-			return left;
+			return checked;
 		});
-		if (triesLeft == 0) {
-			signIn.clearFailures(normalizedEmail);
-			return;
+		// Thrown only now: throwing inside the transaction would roll back the count of a wrong try.
+		if (!check.isRight()) {
+			throw check.failure();
 		}
-		if (triesLeft < 0) {
-			throw new EmailedCodes.CodeExpiredException();
-		}
-		throw new EmailedCodes.WrongCodeException(triesLeft);
+		signIn.clearFailures(normalizedEmail);
 	}
 
 }

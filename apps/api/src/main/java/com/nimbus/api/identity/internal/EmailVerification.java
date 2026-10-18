@@ -3,8 +3,6 @@ package com.nimbus.api.identity.internal;
 import java.time.Clock;
 import java.util.UUID;
 
-import javax.crypto.SecretKey;
-
 import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
@@ -29,8 +27,6 @@ class EmailVerification {
 
 	private final UserRepository users;
 
-	private final VerificationCodeRepository codes;
-
 	private final Mailer mailer;
 
 	private final Clock clock;
@@ -39,24 +35,23 @@ class EmailVerification {
 
 	private final TransactionTemplate transaction;
 
-	private final EmailedCodes hashing;
+	private final EmailedCodes codes;
 
 	private final EmailSendBudget sendBudget;
 
 	private final MailAssets mailAssets;
 
-	EmailVerification(UserRepository users, VerificationCodeRepository codes, Mailer mailer, Clock clock,
-			ApplicationEventPublisher events, PlatformTransactionManager transactionManager, SecretKey jwtKey,
+	EmailVerification(UserRepository users, EmailedCodeKinds codeKinds, Mailer mailer, Clock clock,
+			ApplicationEventPublisher events, PlatformTransactionManager transactionManager,
 			EmailSendBudget sendBudget, MailAssets mailAssets) {
 		this.sendBudget = sendBudget;
 		this.mailAssets = mailAssets;
 		this.users = users;
-		this.codes = codes;
 		this.mailer = mailer;
 		this.clock = clock;
 		this.events = events;
 		this.transaction = new TransactionTemplate(transactionManager);
-		this.hashing = new EmailedCodes(jwtKey, "nimbus:verification-code");
+		this.codes = codeKinds.verification();
 	}
 
 	/**
@@ -105,19 +100,10 @@ class EmailVerification {
 	}
 
 	private void issueAndSend(User user, boolean mail) {
-		var code = EmailedCodes.newCode();
-		var now = EmailedCodes.issuedAt(clock);
-		var hash = hashing.hash(user.getId(), code);
-		transaction.executeWithoutResult(status -> {
+		var code = transaction.execute(status -> {
 			// The User's row serialises everything that changes their code.
 			users.findLockedById(user.getId()).orElseThrow();
-			var existing = codes.findLockedByUserId(user.getId());
-			if (existing.isPresent()) {
-				existing.get().replaceWith(hash, now, now.plus(EmailedCodes.LIFETIME));
-			}
-			else {
-				codes.save(new VerificationCode(user.getId(), hash, now, now.plus(EmailedCodes.LIFETIME)));
-			}
+			return codes.issue(user.getId());
 		});
 		if (mail) {
 			try {
@@ -142,39 +128,26 @@ class EmailVerification {
 	 */
 	User verify(UUID userId, String code) {
 		var outcome = transaction.execute(status -> {
-			var user = users.findLockedById(userId).orElseThrow(
+			var locked = users.findLockedById(userId).orElseThrow(
 					() -> new InvalidBearerTokenException("The User for this token no longer exists"));
-			if (user.emailVerified()) {
-				return new Outcome(user, 0, true);
+			if (locked.emailVerified()) {
+				return new Outcome(locked, EmailedCodes.Check.RIGHT);
 			}
-			var stored = codes.findLockedByUserId(userId).orElse(null);
-			if (stored == null || stored.isExpiredAt(clock.instant())) {
-				return new Outcome(user, -1, false);
+			var check = codes.check(userId, code);
+			if (check.isRight()) {
+				locked.verifyEmail();
+				events.publishEvent(new EmailVerified(locked.getId(), locked.email()));
 			}
-			if (EmailedCodes.matches(stored.codeHash(), hashing.hash(userId, code))) {
-				codes.delete(stored);
-				user.verifyEmail();
-				events.publishEvent(new EmailVerified(user.getId(), user.email()));
-				return new Outcome(user, 0, true);
-			}
-			stored.countWrongTry();
-			var left = EmailedCodes.MAX_WRONG_TRIES - stored.wrongTries();
-			if (left <= 0) {
-				codes.delete(stored);
-				return new Outcome(user, -1, false);
-			}
-			return new Outcome(user, left, false);
+			return new Outcome(locked, check);
 		});
-		if (outcome.verified()) {
-			return outcome.user();
+		// Thrown only now: throwing inside the transaction would roll back the count of a wrong try.
+		if (!outcome.check().isRight()) {
+			throw outcome.check().failure();
 		}
-		if (outcome.triesLeft() < 0) {
-			throw new EmailedCodes.CodeExpiredException();
-		}
-		throw new EmailedCodes.WrongCodeException(outcome.triesLeft());
+		return outcome.user();
 	}
 
-	private record Outcome(User user, int triesLeft, boolean verified) {
+	private record Outcome(User user, EmailedCodes.Check check) {
 	}
 
 	/** The email is already verified, so there is nothing to send a code for. */

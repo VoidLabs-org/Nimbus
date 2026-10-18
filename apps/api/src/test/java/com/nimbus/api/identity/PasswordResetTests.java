@@ -323,12 +323,12 @@ class PasswordResetTests {
 	}
 
 	private int verificationCodeRows(String email) {
-		return jdbc.sql("SELECT count(*) FROM verification_codes WHERE user_id = (SELECT id FROM users WHERE email = ?)")
+		return jdbc.sql("SELECT count(*) FROM emailed_codes WHERE kind = 'VERIFICATION' AND user_id = (SELECT id FROM users WHERE email = ?)")
 			.param(email).query(Integer.class).single();
 	}
 
 	private String storedResetHash(String email) {
-		return jdbc.sql("SELECT code_hash FROM reset_codes WHERE user_id = (SELECT id FROM users WHERE email = ?)")
+		return jdbc.sql("SELECT code_hash FROM emailed_codes WHERE kind = 'RESET' AND user_id = (SELECT id FROM users WHERE email = ?)")
 			.param(email).query(String.class).single();
 	}
 

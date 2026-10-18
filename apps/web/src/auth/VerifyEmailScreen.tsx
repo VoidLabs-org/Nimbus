@@ -4,31 +4,13 @@ import { api, ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { AuthForm, AuthLayout, AuthSubmit } from "./AuthLayout";
 import classes from "./AuthLayout.module.css";
+import { clock, RESEND_WAIT_SECONDS, useCountdown } from "./countdown";
 import { useSession } from "./useSession";
 
 const CODE_LENGTH = 6;
 
-/** How long Resend stays off after a send, matching the server's 60 seconds between emails to one address. */
-const RESEND_WAIT_SECONDS = 60;
-
 /** How long "Email verified" stays up before the app opens (the progress bar fills over this time). */
 const CONFIRM_MS = 1500;
-
-/** Counts {@code seconds} down to 0, one a second, once it is set above 0. */
-function useCountdown() {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    if (seconds <= 0) return;
-    const timer = setTimeout(() => setSeconds(seconds - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [seconds]);
-  return [seconds, setSeconds] as const;
-}
-
-/** 42 seconds as "0:42", 60 as "1:00". */
-function clock(seconds: number): string {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 /** What to tell the User when the server refused their code. */
 function verificationErrorMessage(error: unknown): string {

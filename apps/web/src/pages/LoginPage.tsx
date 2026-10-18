@@ -1,7 +1,7 @@
 import { Alert, Anchor, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
 import { providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
 import {
@@ -11,6 +11,7 @@ import {
   AuthSubmit,
   AuthTextInput,
 } from "../auth/AuthLayout";
+import classes from "../auth/AuthLayout.module.css";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -19,6 +20,10 @@ export default function LoginPage() {
   const { login } = useSession();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // After a password reset the User arrives with their email kept, so only the new password is left to type.
+  const location = useLocation();
+  const keptEmail = (location.state as { email?: unknown } | null)?.email;
+  const resetEmail = typeof keptEmail === "string" ? keptEmail : "";
   const [formError, setFormError] = useState<string | null>(null);
   // Set by the server when a provider sign-in ended back here with a reason. It describes the last provider
   // attempt only, so it goes away once the User tries the form instead.
@@ -28,7 +33,7 @@ export default function LoginPage() {
     : null;
 
   const form = useForm<LoginInput>({
-    initialValues: { email: "", password: "" },
+    initialValues: { email: resetEmail, password: "" },
     // Same limits as the server, so oversized input is caught before submitting.
     validate: {
       email: (value) => {
@@ -75,11 +80,18 @@ export default function LoginPage() {
           autoComplete="email"
           {...form.getInputProps("email")}
         />
-        <AuthPasswordInput
-          label="Password"
-          autoComplete="current-password"
-          {...form.getInputProps("password")}
-        />
+        {/* The link sits on the label's row but outside the label, so the field's name stays "Password". */}
+        <div className={classes.passwordField}>
+          <AuthPasswordInput
+            label="Password"
+            autoComplete="current-password"
+            autoFocus={resetEmail !== ""}
+            {...form.getInputProps("password")}
+          />
+          <Anchor component={Link} to="/forgot-password" size="sm" className={classes.forgotLink}>
+            Forgot password?
+          </Anchor>
+        </div>
         <AuthSubmit loading={form.submitting}>Sign in</AuthSubmit>
       </AuthForm>
       <Text size="sm">

@@ -21,6 +21,8 @@ export type ChangePasswordInput = {
 
 export type LoginInput = { email: string; password: string };
 
+export type ResetPasswordInput = { email: string; code: string; newPassword: string };
+
 /** Where a Role is held and where a Permission applies: across Nimbus, or inside one project. */
 export type Kind = "platform" | "project";
 
@@ -351,6 +353,32 @@ export function createApiClient(
      */
     resendVerificationCode: async () => {
       await request<void>("/api/auth/verify-email/resend", { method: "POST" });
+    },
+
+    /**
+     * Emails a Reset code to the address, if a User has it. Answers the same either way, so it never says
+     * whether the address is registered. Public, so no access token goes along. A 429 means too many requests;
+     * `retryAfterSeconds` says how long to wait.
+     */
+    requestPasswordReset: async (email: string) => {
+      await request<void>(
+        "/api/auth/password-reset",
+        { method: "POST", body: JSON.stringify({ email }) },
+        { authenticated: false },
+      );
+    },
+
+    /**
+     * Sets a new password when the Reset code is right; the User is not signed in and signs in with it. A 400
+     * says the code is wrong (`code` "invalid_code", with `triesLeft`), that a new one is needed
+     * ("code_expired"), or that the password breaks the rule (`fieldErrors.newPassword`).
+     */
+    resetPassword: async (input: ResetPasswordInput) => {
+      await request<void>(
+        "/api/auth/password-reset/confirm",
+        { method: "POST", body: JSON.stringify(input) },
+        { authenticated: false },
+      );
     },
 
     /**

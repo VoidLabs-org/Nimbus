@@ -344,3 +344,45 @@
     width: 100%;
   }
 }
+
+/* The reset page, from designs 31k and 31l: on a phone the six boxes are 48 x 60 with 8px gaps and no dash, and
+   the button stays within reach at the bottom of the screen, above the keyboard. */
+@media (max-width: 480px) {
+  .pin.resetPin {
+    gap: 8px;
+  }
+
+  .pin.resetPin::after {
+    display: none;
+  }
+
+  .pin.resetPin > :nth-child(3) {
+    margin-right: 0;
+  }
+
+  .pin.resetPin .pinInput {
+    --input-height: 60px;
+    --input-size: 60px;
+    width: min(48px, calc((100vw - 32px - 40px) / 6));
+    height: 60px;
+  }
+
+  .pinnedSubmit {
+    position: sticky;
+    bottom: 16px;
+    z-index: 1;
+  }
+}
+
+/* "Forgot password?" on the password label's row, at the field's right edge. It is a sibling of the field, not
+   part of its label, so the label stays "Password" for screen readers and password managers. */
+.passwordField {
+  position: relative;
+}
+
+.forgotLink {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-weight: 500;
+}

@@ -581,6 +581,47 @@ describe("api client", () => {
     await expect(api.verifyEmail("123456")).resolves.toEqual(verified);
   });
 
+  it("asks for a Reset code and resets the password without the access token", async () => {
+    const server = fakeServer(
+      new Response(null, { status: 204 }),
+      new Response(null, { status: 204 }),
+    );
+    const api = createApiClient(server.fetchFn);
+
+    await api.requestPasswordReset("alice@example.com");
+    await api.resetPassword({
+      email: "alice@example.com",
+      code: "123456",
+      newPassword: "a new password",
+    });
+
+    expect(server.calls.map((call) => [call.init.method, call.url])).toEqual([
+      ["POST", "/api/auth/password-reset"],
+      ["POST", "/api/auth/password-reset/confirm"],
+    ]);
+    expect(JSON.parse(String(server.calls[0]!.init.body))).toEqual({ email: "alice@example.com" });
+    expect(JSON.parse(String(server.calls[1]!.init.body))).toEqual({
+      email: "alice@example.com",
+      code: "123456",
+      newPassword: "a new password",
+    });
+    expect(authorization(server.calls[0]!)).toBeNull();
+    expect(authorization(server.calls[1]!)).toBeNull();
+  });
+
+  it("reports a wrong Reset code with the tries left", async () => {
+    const server = fakeServer(
+      json(400, { status: 400, detail: "That code is wrong", code: "invalid_code", triesLeft: 3 }),
+    );
+    const api = createApiClient(server.fetchFn);
+
+    const error = await api
+      .resetPassword({ email: "a@example.com", code: "000000", newPassword: "a new password" })
+      .catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ status: 400, code: "invalid_code", triesLeft: 3 });
+  });
+
   it("reports field errors from the server", async () => {
     const server = fakeServer(
       json(400, {

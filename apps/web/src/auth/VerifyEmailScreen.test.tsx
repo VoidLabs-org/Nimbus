@@ -66,7 +66,7 @@ describe("the verification screen", () => {
     vi.spyOn(api, "refresh").mockResolvedValue(unverified);
     show();
 
-    await screen.findByRole("heading", { name: "Check your email" });
+    await screen.findByRole("heading", { name: "Verify your email" });
     expect(document.body.textContent).toContain("alice@example.com");
     expect(screen.getAllByRole("textbox")).toHaveLength(6);
     expect(screen.queryByText("The app")).toBeNull();
@@ -76,12 +76,33 @@ describe("the verification screen", () => {
     vi.spyOn(api, "refresh").mockResolvedValue(unverified);
     const check = vi.spyOn(api, "verifyEmail").mockResolvedValue(verified);
     show();
-    await screen.findByRole("heading", { name: "Check your email" });
+    await screen.findByRole("heading", { name: "Verify your email" });
 
     paste("123456");
 
+    await screen.findByRole("heading", { name: "Email verified" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("The app");
     expect(check).toHaveBeenCalledWith("123456");
+  });
+
+  it("shows the email as verified for a moment, then opens the app by itself", async () => {
+    vi.spyOn(api, "refresh").mockResolvedValue(unverified);
+    vi.spyOn(api, "verifyEmail").mockResolvedValue(verified);
+    show();
+    await screen.findByRole("heading", { name: "Verify your email" });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    paste("123456");
+
+    await screen.findByRole("heading", { name: "Email verified" });
+    expect(document.body.textContent).toContain("alice@example.com is confirmed");
+    expect(screen.queryByText("The app")).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1600);
+    });
+    expect(screen.getByText("The app")).toBeTruthy();
+    vi.useRealTimers();
   });
 
   it("says how many tries are left after a wrong code, and clears the boxes", async () => {
@@ -90,12 +111,12 @@ describe("the verification screen", () => {
       new ApiError(400, "That code is wrong", {}, null, "invalid_code", 4),
     );
     show();
-    await screen.findByRole("heading", { name: "Check your email" });
+    await screen.findByRole("heading", { name: "Verify your email" });
 
     paste("000000");
 
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "That code is wrong. 4 tries left.",
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "That code isn’t right. 4 tries left.",
     );
     await waitFor(() =>
       expect(screen.getAllByRole("textbox").map((box) => (box as HTMLInputElement).value)).toEqual([
@@ -115,7 +136,7 @@ describe("the verification screen", () => {
       new ApiError(400, "That code has expired", {}, null, "code_expired"),
     );
     show();
-    await screen.findByRole("heading", { name: "Check your email" });
+    await screen.findByRole("heading", { name: "Verify your email" });
 
     paste("111111");
 
@@ -126,9 +147,9 @@ describe("the verification screen", () => {
     vi.spyOn(api, "refresh").mockResolvedValue(unverified);
     const logout = vi.spyOn(api, "logout").mockResolvedValue(undefined);
     show();
-    await screen.findByRole("heading", { name: "Check your email" });
+    await screen.findByRole("heading", { name: "Verify your email" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use a different email" }));
 
     await waitFor(() => expect(logout).toHaveBeenCalled());
   });
@@ -142,19 +163,18 @@ describe("the verification screen", () => {
       vi.spyOn(api, "refresh").mockResolvedValue(unverified);
       const resend = vi.spyOn(api, "resendVerificationCode").mockResolvedValue(undefined);
       show();
-      await screen.findByRole("heading", { name: "Check your email" });
+      await screen.findByRole("heading", { name: "Verify your email" });
       vi.useFakeTimers({ shouldAdvanceTime: true });
 
-      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
-      const waiting = await screen.findByRole("button", { name: "Resend in 60s" });
+      await screen.findByText("Resend code in 1:00");
       expect(resend).toHaveBeenCalledTimes(1);
-      expect((waiting as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.queryByRole("button", { name: "Resend code" })).toBeNull();
       await wait(20);
-      expect(screen.getByRole("button", { name: "Resend in 40s" })).toBeTruthy();
+      expect(screen.getByText("Resend code in 0:40")).toBeTruthy();
       await wait(40);
-      const ready = screen.getByRole("button", { name: "Resend" }) as HTMLButtonElement;
-      expect(ready.disabled).toBe(false);
+      expect(screen.getByRole("button", { name: "Resend code" })).toBeTruthy();
     });
 
     it("counts down from the server's Retry-After when sending is limited", async () => {
@@ -163,11 +183,11 @@ describe("the verification screen", () => {
         new ApiError(429, "Too many emails", {}, 42),
       );
       show();
-      await screen.findByRole("heading", { name: "Check your email" });
+      await screen.findByRole("heading", { name: "Verify your email" });
 
-      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
-      await screen.findByRole("button", { name: "Resend in 42s" });
+      await screen.findByText("Resend code in 0:42");
     });
 
     it("clears a wrong or expired code message once a new code is sent", async () => {
@@ -177,11 +197,11 @@ describe("the verification screen", () => {
       );
       vi.spyOn(api, "resendVerificationCode").mockResolvedValue(undefined);
       show();
-      await screen.findByRole("heading", { name: "Check your email" });
+      await screen.findByRole("heading", { name: "Verify your email" });
       paste("111111");
       await screen.findByRole("alert");
 
-      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
       await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     });
@@ -192,10 +212,10 @@ describe("the verification screen", () => {
         new ApiError(409, "This email is already verified"),
       );
       show();
-      await screen.findByRole("heading", { name: "Check your email" });
+      await screen.findByRole("heading", { name: "Verify your email" });
       refresh.mockResolvedValue(verified);
 
-      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
       await screen.findByText("The app");
     });
@@ -209,13 +229,13 @@ describe("the verification screen", () => {
         new ApiError(429, "Too many emails", {}, 30),
       );
       show();
-      await screen.findByRole("heading", { name: "Check your email" });
+      await screen.findByRole("heading", { name: "Verify your email" });
       paste("000000");
       await screen.findByRole("alert");
 
-      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
-      await screen.findByRole("button", { name: "Resend in 30s" });
+      await screen.findByText("Resend code in 0:30");
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
@@ -223,14 +243,14 @@ describe("the verification screen", () => {
       vi.spyOn(api, "refresh").mockResolvedValue(unverified);
       vi.spyOn(api, "resendVerificationCode").mockRejectedValue(new ApiError(500, "Boom"));
       show();
-      await screen.findByRole("heading", { name: "Check your email" });
+      await screen.findByRole("heading", { name: "Verify your email" });
 
-      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
       expect((await screen.findByRole("alert")).textContent).toContain("Something went wrong");
-      expect((screen.getByRole("button", { name: "Resend" }) as HTMLButtonElement).disabled).toBe(
-        false,
-      );
+      expect(
+        (screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
     });
   });
 
@@ -246,6 +266,6 @@ describe("the verification screen", () => {
 
     act(() => refuse());
 
-    await screen.findByRole("heading", { name: "Check your email" });
+    await screen.findByRole("heading", { name: "Verify your email" });
   });
 });

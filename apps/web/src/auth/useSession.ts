@@ -23,9 +23,13 @@ export type Session = {
   changePassword: (input: ChangePasswordInput) => Promise<void>;
   /**
    * Checks the Verification code the signed-in User typed. Rejects with an ApiError ("invalid_code" with
-   * `triesLeft`, or "code_expired") if refused; on success the User is verified and the app opens.
+   * `triesLeft`, or "code_expired") if refused; on success the User is verified and the screen confirms it, then the app opens.
    */
   verifyEmail: (code: string) => Promise<void>;
+  /** True from a correct code until {@link finishVerifying}: the verification screen stays up to confirm it. */
+  confirmingEmail: boolean;
+  /** Closes the confirmation, which opens the app. */
+  finishVerifying: () => void;
   /** Ends this browser's session. Rejects, leaving the User signed in, if the server can't be reached. */
   logout: () => Promise<void>;
 };

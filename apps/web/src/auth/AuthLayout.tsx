@@ -14,14 +14,16 @@ import classes from "./AuthLayout.module.css";
 /**
  * The sign-in and register page: the Nimbus panel (logo, the "Backlog / to done, / with a little AI" bars and the
  * tagline) on the left, the heading and the page's form on the right. `gap` (pixels) spaces the right column and
- * the fields of its `AuthForm` alike. Below about 900px only the form shows, under a small logo.
+ * the fields of its `AuthForm` alike. An optional `icon` sits above the heading. Below about 900px only the form shows, under a small logo.
  */
 export function AuthLayout({
   title,
   subtitle,
   gap,
+  icon,
   children,
 }: {
+  icon?: ReactNode;
   title: string;
   subtitle: ReactNode;
   gap: number;
@@ -47,6 +49,7 @@ export function AuthLayout({
           <NimbusLogo size={24} />
           nimbus
         </div>
+        {icon}
         <div>
           <Title order={1} fz={40} lh={1.1}>
             {title}

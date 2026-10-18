@@ -170,3 +170,128 @@
     padding: 24px 0;
   }
 }
+
+/* The Verification code page, from the "Verify code" design (29a, 29c, 29d). */
+
+/* Six boxes with a dash between the third and fourth. The dash sits in the middle of the row, which is the middle
+   of the widened gap. */
+.pin {
+  position: relative;
+  gap: 10px;
+}
+
+.pin::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line-strong);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.pin > :nth-child(3) {
+  margin-right: 24px;
+}
+
+.pinInput {
+  --input-height: 72px;
+  --input-size: 72px;
+  --input-radius: 20px;
+  width: 60px;
+  height: 72px;
+  font-size: 30px;
+  font-weight: 600;
+  text-align: center;
+}
+
+:root .pinInput[data-variant="default"] {
+  --input-bg: var(--card);
+}
+
+/* A wrong code: red boxes and a red line under them. */
+.pinInput[data-error] {
+  --input-bd: var(--toast-error);
+  box-shadow: inset 0 0 0 1px var(--toast-error);
+}
+
+.codeError {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--toast-error);
+}
+
+.codeErrorMark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--toast-error);
+  color: var(--toast-error-fg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* "Resend code" on the left, "Use a different email" on the right. */
+.codeLinks {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}
+
+/* The round tick above "Email verified". */
+.verifiedMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-size: 32px;
+  font-weight: 700;
+}
+
+/* Fills over the time the screen waits before opening the app. */
+.progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--seg);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+  animation: fill var(--confirm-ms) linear forwards;
+}
+
+@keyframes fill {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressFill {
+    animation: none;
+    width: 100%;
+  }
+}

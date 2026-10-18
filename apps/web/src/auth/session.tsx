@@ -23,6 +23,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [restoring, setRestoring] = useState(true);
   const [unavailable, setUnavailable] = useState<"offline" | "server" | null>(null);
   const [signedOutOnPurpose, setSignedOutOnPurpose] = useState(false);
+  // Right after a correct code the screen stays up to say so, before the app opens.
+  const [confirmingEmail, setConfirmingEmail] = useState(false);
   const queryClient = useQueryClient();
 
   // Cached server data belongs to the User who loaded it, so it goes just before they sign out or someone else signs
@@ -97,12 +99,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower check.
     setUser((current) => (current?.id === signedIn ? verified : current));
+    setConfirmingEmail(true);
+  }
+
+  function finishVerifying() {
+    setConfirmingEmail(false);
   }
 
   async function logout() {
     await api.logout();
     queryClient.clear();
     setSignedOutOnPurpose(true);
+    setConfirmingEmail(false);
     setUser(null);
   }
 
@@ -119,6 +127,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         updateDisplayName,
         changePassword,
         verifyEmail,
+        confirmingEmail,
+        finishVerifying,
         logout,
       }}
     >
@@ -132,7 +142,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
  * them back here afterwards.
  */
 export function RequireUser({ children }: { children: ReactNode }) {
-  const { user, restoring, unavailable, signedOutOnPurpose, retry } = useSession();
+  const { user, restoring, unavailable, signedOutOnPurpose, confirmingEmail, retry } = useSession();
   const location = useLocation();
 
   if (restoring) {
@@ -146,7 +156,7 @@ export function RequireUser({ children }: { children: ReactNode }) {
       <ServerErrorPage onRetry={retry} standalone />
     );
   }
-  if (user && !user.emailVerified) return <VerifyEmailScreen />;
+  if (user && (!user.emailVerified || confirmingEmail)) return <VerifyEmailScreen />;
   if (user) return children;
   const to = signedOutOnPurpose ? "/login" : loginPath(location.pathname + location.search);
   return <Navigate to={to} replace />;

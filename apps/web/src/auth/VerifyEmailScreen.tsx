@@ -1,14 +1,19 @@
-import { Alert, Anchor, Button, PinInput, Text } from "@mantine/core";
-import { useEffect, useState } from "react";
+import { Anchor, PinInput } from "@mantine/core";
+import { ArrowButton } from "@repo/ui/arrow-button";
+import { useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
-import { AuthLayout } from "./AuthLayout";
+import { AuthForm, AuthLayout, AuthSubmit } from "./AuthLayout";
+import classes from "./AuthLayout.module.css";
 import { useSession } from "./useSession";
 
 const CODE_LENGTH = 6;
 
 /** How long Resend stays off after a send, matching the server's 60 seconds between emails to one address. */
 const RESEND_WAIT_SECONDS = 60;
+
+/** How long "Email verified" stays up before the app opens (the progress bar fills over this time). */
+const CONFIRM_MS = 1500;
 
 /** Counts {@code seconds} down to 0, one a second, once it is set above 0. */
 function useCountdown() {
@@ -21,14 +26,19 @@ function useCountdown() {
   return [seconds, setSeconds] as const;
 }
 
+/** 42 seconds as "0:42", 60 as "1:00". */
+function clock(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 /** What to tell the User when the server refused their code. */
 function verificationErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "invalid_code") {
       const left = error.triesLeft;
       return left === null
-        ? "That code is wrong."
-        : `That code is wrong. ${left} ${left === 1 ? "try" : "tries"} left.`;
+        ? "That code isn’t right."
+        : `That code isn’t right. ${left} ${left === 1 ? "try" : "tries"} left.`;
     }
     if (error.code === "code_expired") {
       return "That code has expired, or was cancelled after too many wrong tries.";
@@ -41,17 +51,25 @@ function verificationErrorMessage(error: unknown): string {
 /**
  * What a signed-in User sees, in place of the whole app, until they enter the Verification code emailed to
  * them. The code goes in six boxes that submit by themselves after the last digit (a pasted code fills them
- * all). Resend mails a new code, then waits (60 seconds, or the server's Retry-After) before it works again. A correct code opens the app at the address they were on. "Wrong email? Sign out" is the way out for a
- * typo.
+ * all). Resend mails a new code, then waits (60 seconds, or the server's Retry-After) before it works again. A
+ * correct code first shows "Email verified" for a moment, then opens the app at the address they were on.
+ * "Use a different email" signs out, which is the way out of a typo.
  */
 export function VerifyEmailScreen() {
-  const { user, verifyEmail, logout, retry } = useSession();
+  const { user, verifyEmail, finishVerifying, logout, retry } = useSession();
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [secondsToResend, setSecondsToResend] = useCountdown();
+  const verified = user?.emailVerified === true;
+
+  useEffect(() => {
+    if (!verified) return;
+    const timer = setTimeout(finishVerifying, CONFIRM_MS);
+    return () => clearTimeout(timer);
+  }, [verified, finishVerifying]);
 
   async function resend() {
     setResending(true);
@@ -98,54 +116,105 @@ export function VerifyEmailScreen() {
     }
   }
 
+  if (verified) {
+    return (
+      <AuthLayout
+        title="Email verified"
+        subtitle={
+          <>
+            <strong>{user?.email}</strong> is confirmed. Taking you to Nimbus…
+          </>
+        }
+        gap={22}
+        icon={
+          <span className={classes.verifiedMark} aria-hidden>
+            ✓
+          </span>
+        }
+      >
+        <div className={classes.progress} aria-hidden>
+          <div
+            className={classes.progressFill}
+            style={{ "--confirm-ms": `${CONFIRM_MS}ms` } as CSSProperties}
+          />
+        </div>
+        <ArrowButton
+          fullWidth
+          justify="space-between"
+          className={classes.submit}
+          onClick={finishVerifying}
+        >
+          Continue
+        </ArrowButton>
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout
-      title="Check your email"
+      title="Verify your email"
       subtitle={
         <>
-          We sent a 6-digit code to <strong>{user?.email}</strong>.
+          We sent a 6-digit code to <strong>{user?.email}</strong>. It expires in 15 minutes.
         </>
       }
-      gap={24}
+      gap={22}
     >
-      {error && (
-        <Alert color="red" role="alert">
-          {error}
-        </Alert>
-      )}
-      <PinInput
-        length={CODE_LENGTH}
-        type="number"
-        inputMode="numeric"
-        oneTimeCode
-        autoFocus
-        size="lg"
-        value={code}
-        onChange={setCode}
-        onComplete={(value) => void check(value)}
-        disabled={checking}
-        error={error !== null}
-        ariaLabel="Verification code digit"
-      />
-      <Button
-        variant="default"
-        onClick={() => void resend()}
-        loading={resending}
-        disabled={secondsToResend > 0}
+      <AuthForm
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (code.length === CODE_LENGTH && !checking) void check(code);
+        }}
       >
-        {secondsToResend > 0 ? `Resend in ${secondsToResend}s` : "Resend"}
-      </Button>
-      <Text size="sm">
-        Wrong email?{" "}
-        <Anchor
-          component="button"
-          type="button"
-          onClick={() => void signOut()}
-          disabled={signingOut}
-        >
-          Sign out
-        </Anchor>
-      </Text>
+        <PinInput
+          length={CODE_LENGTH}
+          type="number"
+          inputMode="numeric"
+          oneTimeCode
+          autoFocus
+          size="lg"
+          classNames={{ root: classes.pin, pinInput: classes.pinInput }}
+          value={code}
+          onChange={setCode}
+          onComplete={(value) => void check(value)}
+          disabled={checking}
+          error={error !== null}
+          ariaLabel="Verification code digit"
+        />
+        {error && (
+          <div className={classes.codeError} role="alert">
+            <span className={classes.codeErrorMark} aria-hidden>
+              !
+            </span>
+            {error}
+          </div>
+        )}
+        <AuthSubmit loading={checking} disabled={code.length < CODE_LENGTH}>
+          Verify
+        </AuthSubmit>
+        <div className={classes.codeLinks}>
+          {secondsToResend > 0 ? (
+            <span>Resend code in {clock(secondsToResend)}</span>
+          ) : (
+            <Anchor
+              component="button"
+              type="button"
+              onClick={() => void resend()}
+              disabled={resending}
+            >
+              Resend code
+            </Anchor>
+          )}
+          <Anchor
+            component="button"
+            type="button"
+            onClick={() => void signOut()}
+            disabled={signingOut}
+          >
+            Use a different email
+          </Anchor>
+        </div>
+      </AuthForm>
     </AuthLayout>
   );
 }

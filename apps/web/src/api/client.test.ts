@@ -35,6 +35,33 @@ const json = (status: number, body: unknown) =>
 const authorization = (call: Call) => new Headers(call.init.headers).get("Authorization");
 
 describe("api client", () => {
+  it("creates a project and opens it using the signed-in User's token", async () => {
+    const project = {
+      id: "p1",
+      key: "NIM",
+      name: "Nimbus",
+      description: null,
+      archived: false,
+      createdAt: "2026-10-18T00:00:00Z",
+    };
+    const server = fakeServer(
+      json(200, { accessToken: "token-1", user: alice }),
+      json(201, project),
+      json(200, project),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.login({ email: alice.email, password: "correct horse" });
+
+    expect(await api.createProject({ key: "nim", name: "Nimbus" })).toEqual(project);
+    expect(await api.project("NIM")).toEqual(project);
+    expect(server.calls[1].url).toBe("/api/projects");
+    expect(server.calls[1].init.method).toBe("POST");
+    expect(JSON.parse(server.calls[1].init.body as string)).toEqual({ key: "nim", name: "Nimbus" });
+    expect(authorization(server.calls[1])).toBe("Bearer token-1");
+    expect(server.calls[2].url).toBe("/api/projects/NIM");
+    expect(authorization(server.calls[2])).toBe("Bearer token-1");
+  });
+
   it("sends no access token before the User is signed in", async () => {
     const server = fakeServer(json(401, { status: 401 }), json(401, { status: 401 }));
     const api = createApiClient(server.fetchFn, {

@@ -11,6 +11,8 @@ security:
   - bearerAuth: []
 
 tags:
+  - name: projects
+    description: Projects and project membership
   - name: auth
     description: Registration, sign-in and sessions (identity module)
   - name: users
@@ -19,6 +21,72 @@ tags:
     description: Permissions, Roles and Role assignments (access module)
 
 paths:
+  /api/projects:
+    post:
+      tags: [projects]
+      summary: Create a project and become its first Member
+      description: Requires a verified email. The project and membership are saved together.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Email not verified (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Project key is already taken, including by an Archived project; errors.key explains the conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}:
+    get:
+      tags: [projects]
+      summary: Open a project the User is a Member of
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Email not verified (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Project not found (also returned for a non-Member)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/auth/register:
     post:
       tags: [auth]
@@ -1209,6 +1277,40 @@ components:
         type: string
 
   schemas:
+    CreateProjectRequest:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+          pattern: "^[A-Za-z][A-Za-z0-9]{1,9}$"
+          description: Stored uppercase; cannot be changed or reused
+        name:
+          type: string
+          description: Trimmed, 1–100 Unicode code points, no ISO control characters; need not be unique
+        description:
+          type: [string, "null"]
+          maxLength: 1000
+          description: Optional plain text
+    Project:
+      type: object
+      required: [id, key, name, description, archived, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          pattern: "^[A-Z][A-Z0-9]{1,9}$"
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        archived:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
     RegisterRequest:
       type: object
       required: [displayName, email, password]

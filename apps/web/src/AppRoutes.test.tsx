@@ -67,7 +67,7 @@ const NAVBAR = 'data-nav-focus="home"';
 
 describe("the app's routes", () => {
   it("shows the not-found page, inside the navbar, at an address that doesn't exist", () => {
-    const page = pageAt("/projects/nope", alice);
+    const page = pageAt("/unknown-page", alice);
 
     expect(page).toContain("This page isn’t here.");
     expect(page).toContain(NAVBAR);

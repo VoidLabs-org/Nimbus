@@ -13,6 +13,8 @@ import RegisterPage from "./pages/RegisterPage";
 import RolePage from "./pages/RolePage";
 import PasswordPage from "./pages/PasswordPage";
 import ProfilePage from "./pages/ProfilePage";
+import ProjectPage from "./pages/ProjectPage";
+import ProjectsPage from "./pages/ProjectsPage";
 import RolesPage from "./pages/RolesPage";
 import SecurityPage from "./pages/SecurityPage";
 import SettingsOverview from "./settings/SettingsOverview";
@@ -46,6 +48,8 @@ export function AppRoutes() {
         }
       >
         <Route path="/" element={<HomePage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/projects/:key" element={<ProjectPage />} />
         {/* Settings: the overview list, and the pages it opens. */}
         <Route path="/settings" element={<SettingsOverview />} />
         <Route path="/settings/profile" element={<ProfilePage />} />

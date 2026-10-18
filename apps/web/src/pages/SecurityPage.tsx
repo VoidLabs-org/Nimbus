@@ -1,9 +1,13 @@
 import { IconDeviceDesktop, IconDeviceMobile } from "@tabler/icons-react";
-import { Container, Stack, Title } from "@mantine/core";
+import { Button, Container, Stack, Title } from "@mantine/core";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "@repo/ui/toast";
 import { Glyph } from "@repo/ui/glyph";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
-import { loadFailure, useSessions } from "../api/queries";
+import { ApiError, api, type SessionInfo } from "../api/client";
+import { loadFailure, queryKeys, useSessions } from "../api/queries";
 import { activityText, isPhone, signedInText } from "../settings/sessionView";
 import { settingsCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
@@ -16,12 +20,31 @@ import classes from "./SecurityPage.module.css";
  */
 export default function SecurityPage() {
   const query = useSessions();
+  const client = useQueryClient();
+  const [signingOut, setSigningOut] = useState<string | null>(null);
   const error = loadFailure(query);
   if (error) return <FailedLoadPage failure={error} onRetry={() => void query.refetch()} />;
 
   // Only for the date of a sign-in (and whether it was this year); how long ago a session was active comes from the server.
   const now = new Date(query.dataUpdatedAt);
   const sessions = query.data;
+
+  async function signOut(session: SessionInfo) {
+    setSigningOut(session.id);
+    try {
+      await api.endSession(session.id);
+      toast.success(`Signed out ${session.device}.`);
+    } catch (failure) {
+      // Already over (another tab, or it expired): the list below is what's left, and nothing went wrong.
+      if (!(failure instanceof ApiError && failure.status === 404)) {
+        toast.error("Couldn't sign out that device. Please try again.");
+        setSigningOut(null);
+        return;
+      }
+    }
+    await client.invalidateQueries({ queryKey: queryKeys.sessions });
+    setSigningOut(null);
+  }
 
   return (
     <Container size="sm" px={0} py="xl">
@@ -61,6 +84,18 @@ export default function SecurityPage() {
                         {signedInText(session.startedAt, now)} · {activityText(session)}
                       </div>
                     </div>
+                    {!session.current && (
+                      <Button
+                        variant="default"
+                        className={classes.signOut}
+                        loading={signingOut === session.id}
+                        disabled={signingOut !== null}
+                        aria-label={`Sign out ${session.device}`}
+                        onClick={() => void signOut(session)}
+                      >
+                        Sign out
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>

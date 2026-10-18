@@ -21,6 +21,11 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail sessionNotFound(Sessions.SessionNotFoundException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+	}
+
+	@ExceptionHandler
 	ProblemDetail alreadyVerified(EmailVerification.AlreadyVerifiedException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 	}

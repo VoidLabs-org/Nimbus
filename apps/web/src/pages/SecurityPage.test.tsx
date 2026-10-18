@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
+import { toast } from "@repo/ui/toast";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError, type SessionInfo, type User } from "../api/client";
@@ -167,5 +168,68 @@ describe("the Security page", () => {
     expect(links.indexOf("/settings/security")).toBeGreaterThan(
       links.indexOf("/settings/password"),
     );
+  });
+});
+
+describe("signing out one device", () => {
+  const list = () => [
+    sessionInfo("s1", "Chrome on Windows", true, 2 * DAY, 0),
+    sessionInfo("s2", "Safari on iOS", false, 9 * DAY, 2 * HOUR),
+  ];
+
+  it("offers Sign out on every row except This device", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue(list());
+
+    show();
+
+    await screen.findByText("Safari on iOS");
+    const rows = await rowsOfCard();
+    expect(within(rows[0]!).queryByRole("button", { name: /Sign out/ })).toBeNull();
+    expect(within(rows[1]!).getByRole("button", { name: "Sign out Safari on iOS" })).toBeTruthy();
+  });
+
+  it("signs the row out, reloads the list and confirms with a toast", async () => {
+    const sessions = vi
+      .spyOn(api, "sessions")
+      .mockResolvedValueOnce(list())
+      .mockResolvedValue([list()[0]!]);
+    const endSession = vi.spyOn(api, "endSession").mockResolvedValue(undefined);
+    const success = vi.spyOn(toast, "success");
+
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out Safari on iOS" }));
+
+    await waitFor(() => expect(screen.queryByText("Safari on iOS")).toBeNull());
+    expect(endSession).toHaveBeenCalledWith("s2");
+    expect(sessions).toHaveBeenCalledTimes(2);
+    expect(success).toHaveBeenCalledWith("Signed out Safari on iOS.");
+  });
+
+  it("just reloads the list when that session had already ended", async () => {
+    const sessions = vi
+      .spyOn(api, "sessions")
+      .mockResolvedValueOnce(list())
+      .mockResolvedValue([list()[0]!]);
+    vi.spyOn(api, "endSession").mockRejectedValue(new ApiError(404, undefined));
+    const error = vi.spyOn(toast, "error");
+
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out Safari on iOS" }));
+
+    await waitFor(() => expect(screen.queryByText("Safari on iOS")).toBeNull());
+    expect(sessions).toHaveBeenCalledTimes(2);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("says so, and keeps the row, when signing out fails", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue(list());
+    vi.spyOn(api, "endSession").mockRejectedValue(new ApiError(500, undefined));
+    const error = vi.spyOn(toast, "error");
+
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out Safari on iOS" }));
+
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    expect(screen.getByText("Safari on iOS")).toBeTruthy();
   });
 });

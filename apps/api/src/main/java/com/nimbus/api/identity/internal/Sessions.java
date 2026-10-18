@@ -165,6 +165,27 @@ class Sessions {
 		return Math.max(0, Duration.between(lastActiveAt, now).getSeconds());
 	}
 
+	/**
+	 * Ends one of the User's sessions. Ending one that is already over is fine and changes nothing.
+	 *
+	 * @param currentSessionId the session of the access token making the request
+	 * @throws InvalidBearerTokenException when that session has ended, so a signed-out browser whose access token
+	 * still works can't sign the User out elsewhere
+	 * @throws SessionNotFoundException when no session has that id or it belongs to another User, so the ids of
+	 * other Users' sessions are never revealed
+	 */
+	@Transactional
+	void endOne(UUID userId, UUID currentSessionId, UUID sessionId) {
+		var now = now();
+		if (!isActiveAt(currentSessionId, userId, now)) {
+			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
+		}
+		sessions.findById(sessionId)
+			.filter(session -> session.userId().equals(userId))
+			.orElseThrow(SessionNotFoundException::new)
+			.revoke(now);
+	}
+
 	/** Ends every session of a User except one, on every other browser. */
 	@Transactional
 	void endAllExcept(UUID userId, UUID keepSessionId) {
@@ -209,6 +230,15 @@ class Sessions {
 
 	/** The session's User and the refresh token that replaces the presented one. */
 	record Refreshed(User user, IssuedToken token) {
+	}
+
+	/** The same for an unknown id and another User's, so a caller learns nothing about other Users' sessions. */
+	static class SessionNotFoundException extends RuntimeException {
+
+		SessionNotFoundException() {
+			super("No such session");
+		}
+
 	}
 
 	/** The same for every reason, so a caller learns nothing about which tokens exist. */

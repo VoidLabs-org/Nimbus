@@ -26,6 +26,11 @@ class DisconnectedProviders {
 				Boolean.class, userId, provider));
 	}
 
+	/** Forgets the mark, as connecting the provider again does. */
+	void clear(UUID userId, String provider) {
+		jdbc.update("DELETE FROM disconnected_providers WHERE user_id = ? AND provider = ?", userId, provider);
+	}
+
 	/** Marks the provider, or moves the time of the mark it already has. */
 	void mark(UUID userId, String provider, Instant at) {
 		jdbc.update("""

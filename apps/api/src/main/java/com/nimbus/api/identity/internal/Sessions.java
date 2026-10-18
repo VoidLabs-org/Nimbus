@@ -168,6 +168,29 @@ class Sessions {
 		requireActive(sessionId, userId, now());
 	}
 
+	/**
+	 * @throws InvalidBearerTokenException when the session has ended
+	 * @throws ReauthRequiredException when it started more than {@code maxAge} ago
+	 */
+	@Transactional(readOnly = true)
+	void requireStartedWithin(UUID sessionId, UUID userId, Duration maxAge) {
+		var now = now();
+		var session = sessions.findById(sessionId)
+			.filter(found -> found.userId().equals(userId) && found.isActiveAt(now))
+			.orElseThrow(() -> new InvalidBearerTokenException("Your session has ended. Sign in again."));
+		if (session.startedAt().isBefore(now.minus(maxAge))) {
+			throw new ReauthRequiredException();
+		}
+	}
+
+	static class ReauthRequiredException extends RuntimeException {
+
+		ReauthRequiredException() {
+			super("Sign in again to do this");
+		}
+
+	}
+
 	/** @throws InvalidBearerTokenException when the session has ended: its access token may still work for a while */
 	private void requireActive(UUID sessionId, UUID userId, Instant now) {
 		if (!isActiveAt(sessionId, userId, now)) {

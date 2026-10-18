@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { providerSignInErrorMessage } from "./messages";
+import { connectErrorMessage, providerSignInErrorMessage } from "./messages";
+
+describe("connectErrorMessage", () => {
+  it("explains each code the server redirects to the Security page with", () => {
+    expect(connectErrorMessage("already_linked", "google")).toMatch(/already connected/);
+    expect(connectErrorMessage("email_unverified", "github")).toMatch(/GitHub.+verified/);
+    expect(connectErrorMessage("cancelled", "google")).toMatch(/cancelled/);
+    expect(connectErrorMessage("expired", "google")).toMatch(/too long/);
+  });
+
+  it("treats a code it doesn't know generically and doesn't echo an unknown provider", () => {
+    const message = connectErrorMessage("<script>", "<b>x</b>");
+
+    expect(message).toMatch(/went wrong/);
+    expect(message).not.toContain("<");
+  });
+});
 
 describe("providerSignInErrorMessage", () => {
   it("says nothing when the sign-in page was opened without an error", () => {

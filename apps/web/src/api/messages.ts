@@ -1,5 +1,27 @@
 import { clock } from "../auth/countdown";
 
+/**
+ * Text for the `error` code (and the `provider` it is about) the server puts on `/settings/security` when
+ * connecting a provider fails. Unknown codes get the generic text, and an unknown provider is not echoed.
+ */
+export function connectErrorMessage(code: string, provider: string | null): string {
+  const name = providerName(provider);
+  switch (code) {
+    case "already_linked":
+      return `That ${name ?? "provider"} account is already connected to another Nimbus account.`;
+    case "email_unverified":
+      return name
+        ? `Your ${name} account needs a verified email address. Verify it with ${name}, then try again.`
+        : "Your account needs a verified email address. Verify it with your provider, then try again.";
+    case "cancelled":
+      return `Connecting ${name ?? "your provider"} was cancelled.`;
+    case "expired":
+      return `That took too long. Try connecting ${name ?? "your provider"} again.`;
+    default:
+      return `Something went wrong connecting ${name ?? "your provider"}. Please try again.`;
+  }
+}
+
 /** Text for a 429 whose wait is shown counting down, e.g. "0:42". */
 export function tooManyAttemptsIn(seconds: number): string {
   return `Too many attempts. Try again in ${clock(seconds)}.`;

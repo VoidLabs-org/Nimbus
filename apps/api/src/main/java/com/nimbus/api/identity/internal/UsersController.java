@@ -100,6 +100,15 @@ class UsersController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/** A one-time ticket for starting to connect the provider; needs a Session that started recently. */
+	@PostMapping("/me/linked-identities/{provider}/link-ticket")
+	LinkTicketResponse linkTicket(@AuthenticationPrincipal Jwt token, @PathVariable String provider) {
+		return new LinkTicketResponse(linkedIdentities.issueLinkTicket(currentUser.id(), sessionOf(token), provider));
+	}
+
+	record LinkTicketResponse(String ticket) {
+	}
+
 	private static UUID sessionOf(Jwt token) {
 		var sessionId = token.getClaimAsString(AccessTokens.SESSION_CLAIM);
 		if (sessionId == null) {

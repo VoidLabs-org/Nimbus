@@ -31,6 +31,7 @@ import org.springframework.validation.annotation.Validated;
  * @param emailSendInterval the least time between two emails to one address (a Verification code or a Reset code)
  * @param emailSendsPerHour emails allowed to one address within an hour
  * @param limitWindow the sliding window the other limits count over
+ * @param linkRecentSignIn how recently the Session must have started for the User to connect a provider
  * @param publicUrl the origin browsers use to reach Nimbus (PUBLIC_URL), without a trailing slash; the OAuth providers (Google, GitHub) and the
  * post-login redirects use it instead of the request's host, which behind a proxy is the API's own
  */
@@ -53,6 +54,7 @@ record AuthProperties(
 		@DefaultValue("60s") Duration emailSendInterval,
 		@DefaultValue("5") @Positive int emailSendsPerHour,
 		@DefaultValue("15m") Duration limitWindow,
+		@DefaultValue("10m") Duration linkRecentSignIn,
 		@DefaultValue("http://localhost:3000") String publicUrl) {
 
 	AuthProperties {

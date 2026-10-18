@@ -1,6 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
+import java.util.UUID;
 
 import com.nimbus.api.identity.EmailVerified;
 import com.nimbus.api.identity.UserRegistered;
@@ -65,6 +66,38 @@ class ExternalSignIn {
 		return link(user, profile);
 	}
 
+	/**
+	 * Links the provider account to a User who asked for it from the Security page. Nothing about the User changes
+	 * (email, verification, password, sessions); the provider's disconnected mark is cleared. The provider's email may
+	 * differ from the User's but must still be verified.
+	 *
+	 * @return whether the account was newly linked; false when it was already this User's (its name is refreshed)
+	 * @throws EmailUnverifiedException when the provider doesn't vouch for its email
+	 * @throws AlreadyLinkedException when the account, or another account of the same provider, is linked already
+	 */
+	@Transactional
+	boolean connect(UUID userId, ExternalProfile profile) {
+		if (!profile.emailVerified() || profile.email() == null) {
+			throw new EmailUnverifiedException();
+		}
+		users.findLockedById(userId).orElseThrow();
+		var existing = identities.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId());
+		if (existing.isPresent()) {
+			if (!existing.get().userId().equals(userId)) {
+				throw new AlreadyLinkedException();
+			}
+			existing.get().refreshAccountName(profile.accountName());
+			return false;
+		}
+		if (identities.findByUserId(userId).stream().anyMatch(identity -> identity.provider().equals(profile.provider()))) {
+			throw new AlreadyLinkedException();
+		}
+		identities.saveAndFlush(new LinkedIdentity(userId, profile.provider(), profile.providerUserId(),
+				profile.accountName(), clock.instant()));
+		disconnectedProviders.clear(userId, profile.provider());
+		return true;
+	}
+
 	private User create(ExternalProfile profile) {
 		var user = users.saveAndFlush(User.fromProvider(profile.email(), displayNameOf(profile), profile.avatarUrl(),
 				clock.instant()));
@@ -107,6 +140,15 @@ class ExternalSignIn {
 			name = DisplayName.clean(profile.email().substring(0, profile.email().indexOf('@')));
 		}
 		return name.isEmpty() ? "User" : name;
+	}
+
+	/** The provider account belongs to another User, or the User has another account of this provider. */
+	static class AlreadyLinkedException extends RuntimeException {
+
+		AlreadyLinkedException() {
+			super("This provider account is already connected");
+		}
+
 	}
 
 	/** The User on this email disconnected this provider, so it can't sign in as them until they connect it again. */

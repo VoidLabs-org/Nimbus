@@ -31,6 +31,20 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail reauthRequired(Sessions.ReauthRequiredException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
+		problem.setProperty("code", "reauth_required");
+		return problem;
+	}
+
+	@ExceptionHandler
+	ProblemDetail alreadyConnected(LinkedIdentities.AlreadyConnectedException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		problem.setProperty("code", "already_connected");
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail lastSignInMethod(LinkedIdentities.LastSignInMethodException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 		problem.setProperty("code", "last_sign_in_method");

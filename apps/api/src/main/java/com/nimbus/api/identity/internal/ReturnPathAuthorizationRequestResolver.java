@@ -8,7 +8,7 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 
 /**
  * Starts the handshake at {@code /api/auth/oauth2/<provider>} as Spring does, and also remembers the page it
- * started from ({@link ReturnPath}). The redirect to the provider is Spring's own, so the page is not in it.
+ * started from ({@link ReturnPath}) and the ticket of a connect ({@link LinkTicket}). The redirect to the provider is Spring's own, so the page is not in it.
  */
 class ReturnPathAuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {
 
@@ -34,6 +34,7 @@ class ReturnPathAuthorizationRequestResolver implements OAuth2AuthorizationReque
 			OAuth2AuthorizationRequest authorization) {
 		if (authorization != null) {
 			ReturnPath.remember(request);
+			LinkTicket.remember(request);
 		}
 		return authorization;
 	}

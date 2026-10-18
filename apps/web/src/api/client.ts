@@ -504,6 +504,12 @@ export function createApiClient(
     /** The Google and GitHub accounts connected to the User, Google first. */
     linkedIdentities: () => request<LinkedIdentity[]>("/api/users/me/linked-identities"),
 
+    /** Stops a provider signing in as the User; 204 also when it wasn't connected. 409 `last_sign_in_method` if it is their only way in. */
+    disconnectProvider: (provider: string) =>
+      request<void>(`/api/users/me/linked-identities/${encodeURIComponent(provider)}`, {
+        method: "DELETE",
+      }),
+
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>
       request<AuditPage>(

@@ -61,6 +61,9 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		catch (ExternalSignIn.EmailUnverifiedException e) {
 			redirect(response, loginError("email_unverified", provider), returnTo);
 		}
+		catch (ExternalSignIn.ProviderDisconnectedException e) {
+			redirect(response, loginError("disconnected", provider), returnTo);
+		}
 		catch (RuntimeException e) {
 			log.warn("Sign-in with a provider failed", e);
 			redirect(response, loginError("failed", provider), returnTo);

@@ -9,6 +9,9 @@ describe("providerSignInErrorMessage", () => {
   it("explains each code the server redirects with", () => {
     expect(providerSignInErrorMessage("email_unverified")).toMatch(/verified/i);
     expect(providerSignInErrorMessage("cancelled")).toMatch(/cancel/i);
+    expect(providerSignInErrorMessage("disconnected", "google")).toMatch(
+      /disconnected Google.+Security/,
+    );
     expect(providerSignInErrorMessage("failed")).toMatch(/went wrong/i);
   });
 

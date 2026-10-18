@@ -40,6 +40,8 @@ export function providerSignInErrorMessage(
       return name
         ? `Your ${name} account needs a verified email address. Verify it with ${name}, or use another way to sign in.`
         : "Your account needs a verified email address. Verify it with your sign-in provider, or use another way to sign in.";
+    case "disconnected":
+      return `You disconnected ${name ?? "this provider"} from your Nimbus account. Sign in another way, then connect it again from Security.`;
     case "cancelled":
       return `Sign-in with ${name ?? "your provider"} was cancelled.`;
     default:

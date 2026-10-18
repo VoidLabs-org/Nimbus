@@ -93,6 +93,13 @@ class UsersController {
 		return linkedIdentities.listFor(currentUser.id(), sessionOf(token));
 	}
 
+	/** Stops the provider signing in as the User, keeping their sessions; 204 also when it wasn't linked. */
+	@DeleteMapping("/me/linked-identities/{provider}")
+	ResponseEntity<Void> disconnect(@AuthenticationPrincipal Jwt token, @PathVariable String provider) {
+		linkedIdentities.disconnect(currentUser.id(), sessionOf(token), provider);
+		return ResponseEntity.noContent().build();
+	}
+
 	private static UUID sessionOf(Jwt token) {
 		var sessionId = token.getClaimAsString(AccessTokens.SESSION_CLAIM);
 		if (sessionId == null) {

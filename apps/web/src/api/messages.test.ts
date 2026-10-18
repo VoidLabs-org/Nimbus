@@ -4,6 +4,7 @@ import { connectErrorMessage, providerSignInErrorMessage } from "./messages";
 describe("connectErrorMessage", () => {
   it("explains each code the server redirects to the Security page with", () => {
     expect(connectErrorMessage("already_linked", "google")).toMatch(/already connected/);
+    expect(connectErrorMessage("already_connected", "github")).toMatch(/already have a GitHub/);
     expect(connectErrorMessage("email_unverified", "github")).toMatch(/GitHub.+verified/);
     expect(connectErrorMessage("cancelled", "google")).toMatch(/cancelled/);
     expect(connectErrorMessage("expired", "google")).toMatch(/too long/);

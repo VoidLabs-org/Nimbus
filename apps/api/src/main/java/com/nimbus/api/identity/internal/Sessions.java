@@ -12,6 +12,7 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
@@ -127,9 +128,12 @@ class Sessions {
 	}
 
 	private boolean isActiveAt(UUID sessionId, UUID userId, Instant now) {
-		return sessions.findById(sessionId)
-			.filter(session -> session.userId().equals(userId) && session.isActiveAt(now))
-			.isPresent();
+		return activeSession(sessionId, userId, now).isPresent();
+	}
+
+	/** The User's own session when it is still running; the one place that decides what counts as running. */
+	private Optional<Session> activeSession(UUID sessionId, UUID userId, Instant now) {
+		return sessions.findById(sessionId).filter(session -> session.userId().equals(userId) && session.isActiveAt(now));
 	}
 
 	/**
@@ -175,8 +179,7 @@ class Sessions {
 	@Transactional(readOnly = true)
 	void requireStartedWithin(UUID sessionId, UUID userId, Duration maxAge) {
 		var now = now();
-		var session = sessions.findById(sessionId)
-			.filter(found -> found.userId().equals(userId) && found.isActiveAt(now))
+		var session = activeSession(sessionId, userId, now)
 			.orElseThrow(() -> new InvalidBearerTokenException("Your session has ended. Sign in again."));
 		if (session.startedAt().isBefore(now.minus(maxAge))) {
 			throw new ReauthRequiredException();

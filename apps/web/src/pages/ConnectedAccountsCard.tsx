@@ -74,7 +74,8 @@ export function ConnectedAccountsCard() {
         return;
       }
       if (failure instanceof ApiError && failure.status === 409) {
-        // Connected elsewhere in the meantime: the list is what's true.
+        // Connected elsewhere in the meantime: say so, and the list shows what's true.
+        toast.info(`${nameOf(id)} is already connected.`);
         void client.invalidateQueries({ queryKey: queryKeys.linkedIdentities });
         return;
       }
@@ -184,8 +185,11 @@ export function ConnectedAccountsCard() {
                     variant="default"
                     className={classes.disconnect}
                     aria-label={`Connect ${provider.name}`}
-                    loading={connect.isPending && connect.variables === provider.id}
-                    disabled={connect.isPending}
+                    loading={
+                      (connect.isPending || connect.isSuccess) && connect.variables === provider.id
+                    }
+                    // Also once the ticket is in: the page is on its way out, and a second click would start a second handshake.
+                    disabled={connect.isPending || connect.isSuccess}
                     onClick={() => connect.mutate(provider.id)}
                   >
                     Connect

@@ -690,6 +690,32 @@ describe("connecting a provider", () => {
     expect(goTo).not.toHaveBeenCalled();
   });
 
+  it("keeps Connect off once the page is on its way to the provider", async () => {
+    vi.spyOn(api, "linkTicket").mockResolvedValue({ ticket: "t-2" });
+    setUp();
+
+    const button = await screen.findByRole("button", { name: "Connect GitHub" });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(goTo).toHaveBeenCalledTimes(1));
+    expect(button.hasAttribute("disabled") || button.hasAttribute("data-disabled")).toBe(true);
+    fireEvent.click(button);
+    expect(goTo).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the User when the provider turns out to be connected already", async () => {
+    vi.spyOn(api, "linkTicket").mockRejectedValue(
+      new ApiError(409, "This provider is already connected", {}, null, "already_connected"),
+    );
+    const info = vi.spyOn(toast, "info");
+    setUp();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Connect GitHub" }));
+
+    await waitFor(() => expect(info).toHaveBeenCalledWith("GitHub is already connected."));
+    expect(goTo).not.toHaveBeenCalled();
+  });
+
   it("says so when the ticket can't be had", async () => {
     vi.spyOn(api, "linkTicket").mockRejectedValue(new ApiError(500, undefined));
     const error = vi.spyOn(toast, "error");

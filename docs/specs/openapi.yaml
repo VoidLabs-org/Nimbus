@@ -547,7 +547,8 @@ paths:
       summary: A one-time ticket for connecting Google or GitHub
       description: >-
         Returns a random ticket to pass as `link` on the full page load to `/api/auth/oauth2/{provider}`. It lasts 2
-        minutes, works once and is bound to the session that asked. The session must have started within
+        minutes, works once and is bound to the session that asked, to the provider and to the browser: the answer sets the
+        cookie `link_binder`, which must come back on the callback. The session must have started within
         `nimbus.auth.link-recent-sign-in` (default 10 minutes) and be still running.
       parameters:
         - name: provider
@@ -1186,7 +1187,7 @@ components:
         A ticket from `POST /api/users/me/linked-identities/{provider}/link-ticket`. With it the handshake connects the
         provider account to that ticket's User instead of signing anyone in: no session, no refresh cookie. It ends at
         `/settings/security?connected=<provider>`, or `/settings/security?error=<code>&provider=<provider>` with
-        `already_linked`, `email_unverified`, `cancelled`, `failed` or `expired`.
+        `already_linked`, `already_connected`, `email_unverified`, `cancelled`, `failed` or `expired`.
       schema:
         type: string
     ReturnTo:

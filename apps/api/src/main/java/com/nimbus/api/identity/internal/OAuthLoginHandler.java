@@ -17,6 +17,7 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.WebUtils;
 
 /**
  * Ends the OAuth handshake. On success it signs the User in like any other sign-in: a session, and its refresh
@@ -57,7 +58,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		var ticket = LinkTicket.recall(request);
 		endHandshake(request);
 		if (ticket.isPresent()) {
-			connect(response, (OAuth2AuthenticationToken) authentication, ticket.get());
+			connect(request, response, (OAuth2AuthenticationToken) authentication, ticket.get());
 			return;
 		}
 		var provider = "";
@@ -97,7 +98,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		var provider = providerOf(request);
 		if (ticket.isPresent()) {
 			// The connect is over, so its ticket is no use any more.
-			tickets.redeem(ticket.get());
+			tickets.discard(ticket.get());
 			redirect(response, securityError(declined ? "cancelled" : "failed", provider), Optional.empty());
 			return;
 		}
@@ -108,17 +109,18 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	 * Ends a handshake that was started to connect a provider to the User who asked for it, not to sign anyone in:
 	 * no session, no cookie. The browser goes back to the Security page with the result.
 	 */
-	private void connect(HttpServletResponse response, OAuth2AuthenticationToken login, String ticketValue)
-			throws IOException {
+	private void connect(HttpServletRequest request, HttpServletResponse response, OAuth2AuthenticationToken login,
+			String ticketValue) throws IOException {
 		var provider = login.getAuthorizedClientRegistrationId();
 		try {
-			var ticket = tickets.redeem(ticketValue)
-				.filter(found -> sessions.isActive(found.sessionId(), found.userId()));
+			// Only the browser that asked for the ticket holds the cookie that goes with it.
+			var binder = WebUtils.getCookie(request, LinkTickets.COOKIE);
+			var ticket = tickets.redeem(ticketValue, provider, binder == null ? null : binder.getValue());
 			if (ticket.isEmpty()) {
 				redirect(response, securityError("expired", provider), Optional.empty());
 				return;
 			}
-			if (externalSignIn.connect(ticket.get().userId(), profileOf(login))) {
+			if (externalSignIn.connect(ticket.get().userId(), ticket.get().sessionId(), profileOf(login))) {
 				linkedIdentities.announceConnected(ticket.get().userId(), provider);
 			}
 			redirect(response, "/settings/security?connected=" + provider, Optional.empty());
@@ -128,6 +130,12 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		}
 		catch (ExternalSignIn.AlreadyLinkedException e) {
 			redirect(response, securityError("already_linked", provider), Optional.empty());
+		}
+		catch (ExternalSignIn.ProviderAlreadyConnectedException e) {
+			redirect(response, securityError("already_connected", provider), Optional.empty());
+		}
+		catch (ExternalSignIn.ConnectExpiredException e) {
+			redirect(response, securityError("expired", provider), Optional.empty());
 		}
 		catch (RuntimeException e) {
 			log.warn("Connecting a provider failed", e);

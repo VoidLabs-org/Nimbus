@@ -73,14 +73,20 @@ class ExternalSignIn {
 	 *
 	 * @return whether the account was newly linked; false when it was already this User's (its name is refreshed)
 	 * @throws EmailUnverifiedException when the provider doesn't vouch for its email
-	 * @throws AlreadyLinkedException when the account, or another account of the same provider, is linked already
+	 * @throws AlreadyLinkedException when the account belongs to another User
+	 * @throws ProviderAlreadyConnectedException when the User has another account of this provider
+	 * @throws ConnectExpiredException when the Session that asked for the connect has ended
 	 */
 	@Transactional
-	boolean connect(UUID userId, ExternalProfile profile) {
+	boolean connect(UUID userId, UUID sessionId, ExternalProfile profile) {
 		if (!profile.emailVerified() || profile.email() == null) {
 			throw new EmailUnverifiedException();
 		}
 		users.findLockedById(userId).orElseThrow();
+		// Under the lock, so a "sign out everywhere" either comes first (and this fails) or waits for the link.
+		if (!sessions.isActive(sessionId, userId)) {
+			throw new ConnectExpiredException();
+		}
 		var existing = identities.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId());
 		if (existing.isPresent()) {
 			if (!existing.get().userId().equals(userId)) {
@@ -90,7 +96,7 @@ class ExternalSignIn {
 			return false;
 		}
 		if (identities.findByUserId(userId).stream().anyMatch(identity -> identity.provider().equals(profile.provider()))) {
-			throw new AlreadyLinkedException();
+			throw new ProviderAlreadyConnectedException();
 		}
 		identities.saveAndFlush(new LinkedIdentity(userId, profile.provider(), profile.providerUserId(),
 				profile.accountName(), clock.instant()));
@@ -142,11 +148,29 @@ class ExternalSignIn {
 		return name.isEmpty() ? "User" : name;
 	}
 
-	/** The provider account belongs to another User, or the User has another account of this provider. */
+	/** The provider account belongs to another User. */
 	static class AlreadyLinkedException extends RuntimeException {
 
 		AlreadyLinkedException() {
-			super("This provider account is already connected");
+			super("This provider account is already connected to another User");
+		}
+
+	}
+
+	/** The User already has an account of this provider connected. */
+	static class ProviderAlreadyConnectedException extends RuntimeException {
+
+		ProviderAlreadyConnectedException() {
+			super("The User has an account of this provider already");
+		}
+
+	}
+
+	/** The Session that asked for the connect has ended. */
+	static class ConnectExpiredException extends RuntimeException {
+
+		ConnectExpiredException() {
+			super("The Session that asked for this has ended");
 		}
 
 	}

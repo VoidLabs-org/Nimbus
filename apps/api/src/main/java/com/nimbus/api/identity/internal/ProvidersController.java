@@ -2,8 +2,6 @@ package com.nimbus.api.identity.internal;
 
 import java.util.List;
 
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,25 +14,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth/providers")
 class ProvidersController {
 
-	/** The order the buttons appear in. */
-	private static final List<String> KNOWN = List.of(GoogleProfiles.PROVIDER, GithubProfiles.PROVIDER);
+	private final EnabledProviders enabled;
 
-	private final ObjectProvider<ClientRegistrationRepository> registrations;
-
-	ProvidersController(ObjectProvider<ClientRegistrationRepository> registrations) {
-		this.registrations = registrations;
+	ProvidersController(EnabledProviders enabled) {
+		this.enabled = enabled;
 	}
 
 	@GetMapping
 	ProvidersResponse providers() {
-		var repository = registrations.getIfAvailable();
-		return new ProvidersResponse(repository == null ? List.of() : enabled(repository));
-	}
-
-	private static List<String> enabled(ClientRegistrationRepository repository) {
-		return KNOWN.stream()
-			.filter(provider -> repository.findByRegistrationId(provider) != null)
-			.toList();
+		return new ProvidersResponse(enabled.ids());
 	}
 
 	record ProvidersResponse(List<String> providers) {

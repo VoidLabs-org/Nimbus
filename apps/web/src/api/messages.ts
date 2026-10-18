@@ -9,6 +9,8 @@ export function connectErrorMessage(code: string, provider: string | null): stri
   switch (code) {
     case "already_linked":
       return `That ${name ?? "provider"} account is already connected to another Nimbus account.`;
+    case "already_connected":
+      return `You already have a ${name ?? "provider"} account connected. Disconnect it first to connect another.`;
     case "email_unverified":
       return name
         ? `Your ${name} account needs a verified email address. Verify it with ${name}, then try again.`

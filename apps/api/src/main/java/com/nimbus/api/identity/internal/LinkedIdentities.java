@@ -11,8 +11,6 @@ import java.util.UUID;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -43,7 +41,7 @@ class LinkedIdentities {
 
 	private final Clock clock;
 
-	private final ObjectProvider<ClientRegistrationRepository> registrations;
+	private final EnabledProviders enabledProviders;
 
 	private final LinkTickets tickets;
 
@@ -55,9 +53,9 @@ class LinkedIdentities {
 
 	LinkedIdentities(LinkedIdentityRepository identities, DisconnectedProviders disconnectedProviders,
 			UserRepository users, Sessions sessions, Mailer mailer, Clock clock, AuthProperties properties,
-			PlatformTransactionManager transactionManager, ObjectProvider<ClientRegistrationRepository> registrations,
+			PlatformTransactionManager transactionManager, EnabledProviders enabledProviders,
 			LinkTickets tickets) {
-		this.registrations = registrations;
+		this.enabledProviders = enabledProviders;
 		this.tickets = tickets;
 		this.linkRecentSignIn = properties.linkRecentSignIn();
 		this.identities = identities;
@@ -79,16 +77,17 @@ class LinkedIdentities {
 	 * @throws Sessions.ReauthRequiredException when the Session is older than that
 	 * @throws InvalidBearerTokenException when the Session has ended
 	 */
-	String issueLinkTicket(UUID userId, UUID currentSessionId, String provider) {
-		sessions.requireStartedWithin(currentSessionId, userId, linkRecentSignIn);
-		var repository = registrations.getIfAvailable();
-		if (!NAMES.containsKey(provider) || repository == null || repository.findByRegistrationId(provider) == null) {
+	LinkTickets.Issued issueLinkTicket(UUID userId, UUID currentSessionId, String provider) {
+		sessions.requireActive(currentSessionId, userId);
+		// What would fail anyway comes before asking for a new sign-in that would not help.
+		if (!enabledProviders.isEnabled(provider)) {
 			throw new UnknownProviderException();
 		}
 		if (identities.findByUserId(userId).stream().anyMatch(identity -> identity.provider().equals(provider))) {
 			throw new AlreadyConnectedException();
 		}
-		return tickets.issue(userId, currentSessionId);
+		sessions.requireStartedWithin(currentSessionId, userId, linkRecentSignIn);
+		return tickets.issue(userId, currentSessionId, provider);
 	}
 
 	/** Tells the User a provider was connected, after the commit; a failed send is only logged. */

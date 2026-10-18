@@ -6,6 +6,7 @@ import java.util.UUID;
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -102,8 +103,12 @@ class UsersController {
 
 	/** A one-time ticket for starting to connect the provider; needs a Session that started recently. */
 	@PostMapping("/me/linked-identities/{provider}/link-ticket")
-	LinkTicketResponse linkTicket(@AuthenticationPrincipal Jwt token, @PathVariable String provider) {
-		return new LinkTicketResponse(linkedIdentities.issueLinkTicket(currentUser.id(), sessionOf(token), provider));
+	ResponseEntity<LinkTicketResponse> linkTicket(@AuthenticationPrincipal Jwt token, @PathVariable String provider) {
+		var issued = linkedIdentities.issueLinkTicket(currentUser.id(), sessionOf(token), provider);
+		// The cookie ties the ticket to this browser, so a link sent to somebody else's browser connects nothing.
+		return ResponseEntity.ok()
+			.header(HttpHeaders.SET_COOKIE, LinkTickets.cookie(issued.binder()).toString())
+			.body(new LinkTicketResponse(issued.ticket()));
 	}
 
 	record LinkTicketResponse(String ticket) {

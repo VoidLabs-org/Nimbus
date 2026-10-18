@@ -47,19 +47,33 @@ export default function ForgotPasswordPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [secondsToResend, setSecondsToResend] = useCountdown();
+  // The address the countdown is for: the server limits sends per address, so another one is not held up by it.
+  const [countdownFor, setCountdownFor] = useState<string | null>(null);
   const waiting = secondsToResend > 0;
+  const waitingForTyped = waiting && countdownFor === email.trim().toLowerCase();
   // The confirmation goes with the countdown: a minute on, it is no longer news.
   const shownNotice = waiting ? notice : null;
 
   if (user) return <Navigate to="/" replace />;
 
-  function clearCodeState() {
+  /** The code and what was said about it go; the password the User typed stays. */
+  function clearCode() {
     setCode("");
-    setPassword("");
-    setPasswordMessage(null);
     setCodeMessage(null);
     setCodeRejected(false);
     setExpired(false);
+  }
+
+  /** Back to an empty form, for another address. */
+  function clearCodeState() {
+    clearCode();
+    setPassword("");
+    setPasswordMessage(null);
+  }
+
+  function startCountdown(address: string, seconds: number) {
+    setCountdownFor(address.toLowerCase());
+    setSecondsToResend(seconds);
   }
 
   /** Asks for a code. Returns true when it is on its way. */
@@ -69,7 +83,7 @@ export default function ForgotPasswordPage() {
       return true;
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 429) {
-        if (failure.retryAfterSeconds) setSecondsToResend(failure.retryAfterSeconds);
+        if (failure.retryAfterSeconds) startCountdown(address, failure.retryAfterSeconds);
         setFormError(tooManyAttemptsMessage(failure.retryAfterSeconds));
       } else {
         setFormError(GENERIC_ERROR);
@@ -90,6 +104,7 @@ export default function ForgotPasswordPage() {
       setEmailError("Email must be at most 254 characters");
       return;
     }
+    if (waitingForTyped) return;
     setEmailError(null);
     setSending(true);
     const sent = await requestCode(address);
@@ -98,7 +113,7 @@ export default function ForgotPasswordPage() {
     setEmail(address);
     clearCodeState();
     setNotice(null);
-    setSecondsToResend(RESEND_WAIT_SECONDS);
+    startCountdown(address, RESEND_WAIT_SECONDS);
     setStep("code");
   }
 
@@ -109,14 +124,15 @@ export default function ForgotPasswordPage() {
     const sent = await requestCode(email);
     setResending(false);
     if (!sent) return;
-    clearCodeState();
+    clearCode();
     setNotice("New code sent. Check your inbox.");
-    setSecondsToResend(RESEND_WAIT_SECONDS);
+    startCountdown(email, RESEND_WAIT_SECONDS);
   }
 
   async function submitReset(event: SyntheticEvent) {
     event.preventDefault();
-    if (code.length < CODE_LENGTH || checking) return;
+    // Nothing to send once the code is gone: that would only spend a try on a dead code.
+    if (code.length < CODE_LENGTH || checking || expired) return;
     const tooShort = passwordError(password);
     setPasswordMessage(tooShort);
     if (tooShort) return;
@@ -176,10 +192,15 @@ export default function ForgotPasswordPage() {
             type="email"
             autoComplete="email"
             value={email}
-            onChange={(event) => setEmail(event.currentTarget.value)}
+            onChange={(event) => {
+              setEmail(event.currentTarget.value);
+              setEmailError(null);
+            }}
             error={emailError}
           />
-          <AuthSubmit loading={sending}>Send code</AuthSubmit>
+          <AuthSubmit loading={sending} disabled={waitingForTyped}>
+            {waitingForTyped ? `Send code in ${clock(secondsToResend)}` : "Send code"}
+          </AuthSubmit>
           {formError && (
             <div className={classes.codeError} role="alert">
               {formError}
@@ -243,8 +264,13 @@ export default function ForgotPasswordPage() {
           </div>
         )}
         {expired ? (
-          <AuthSubmit type="button" loading={resending} onClick={() => void sendNewCode()}>
-            Send a new code
+          <AuthSubmit
+            type="button"
+            loading={resending}
+            disabled={waiting}
+            onClick={() => void sendNewCode()}
+          >
+            {waiting ? `Send a new code in ${clock(secondsToResend)}` : "Send a new code"}
           </AuthSubmit>
         ) : (
           <>

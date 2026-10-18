@@ -108,6 +108,18 @@ describe("the sign-in page", () => {
   });
 });
 
+describe("the sign-in page label", () => {
+  it("keeps the link out of the password field's label", async () => {
+    show("/login");
+
+    const input = await screen.findByLabelText("Password");
+    const link = screen.getByRole("link", { name: "Forgot password?" });
+
+    expect(input.getAttribute("autocomplete")).toBe("current-password");
+    expect(link.closest("label")).toBeNull();
+  });
+});
+
 describe("the forgot-password page, step 1", () => {
   it("asks for the email, and offers the way back to sign in", async () => {
     show();
@@ -173,6 +185,46 @@ describe("the forgot-password page, step 1", () => {
 
     await waitFor(() => expect(screen.queryByRole("heading", { name: /password/ })).toBeNull());
     expect(screen.queryByLabelText("Email")).toBeNull();
+  });
+});
+
+describe("the forgot-password page, step 1 limits", () => {
+  it("waits out a rate limit, and stops saying Enter your email once one is typed", async () => {
+    vi.spyOn(api, "requestPasswordReset").mockRejectedValue(new ApiError(429, "Too many", {}, 60));
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: /Send code/ }));
+    await screen.findByText("Enter your email");
+
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "alice@example.com" } });
+    expect(screen.queryByText("Enter your email")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Send code/ }));
+
+    const waiting = (await screen.findByRole("button", {
+      name: /Send code in 1:00/,
+    })) as HTMLButtonElement;
+    expect(waiting.disabled).toBe(true);
+    expect(api.requestPasswordReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the wait for one address only, so a different address can be sent to at once", async () => {
+    const request = vi.spyOn(api, "requestPasswordReset").mockResolvedValue(undefined);
+    await reachStepTwo("alice@example.com");
+
+    fireEvent.click(screen.getByRole("button", { name: "Use a different email" }));
+    await screen.findByRole("heading", { name: "Forgot your password?" });
+
+    // The same address is still waiting out its minute.
+    expect(
+      (screen.getByRole("button", { name: /Send code in 1:00/ }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "bob@example.com" } });
+    expect(
+      (screen.getByRole("button", { name: /^Send code$/ }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /Send code/ }));
+
+    await screen.findByRole("heading", { name: "Check your email" });
+    expect(request).toHaveBeenLastCalledWith("bob@example.com");
   });
 });
 
@@ -292,9 +344,10 @@ describe("the forgot-password page, resetting", () => {
   });
 
   it("offers a new code in place of the password field when the code has expired", async () => {
-    vi.spyOn(api, "resetPassword").mockRejectedValue(
-      new ApiError(400, "That code has expired", {}, null, "code_expired"),
-    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const reset = vi
+      .spyOn(api, "resetPassword")
+      .mockRejectedValue(new ApiError(400, "That code has expired", {}, null, "code_expired"));
     await reachStepTwo();
     paste("123456");
     typePassword("a new password");
@@ -304,12 +357,35 @@ describe("the forgot-password page, resetting", () => {
 
     expect(screen.queryByLabelText("New password")).toBeNull();
     expect(screen.queryByRole("button", { name: /Reset password/ })).toBeNull();
-    // Asking for a new code brings the form back, empty, and counts down again.
+    // Pressing Enter in the boxes does not send the dead code again.
+    fireEvent.submit(document.querySelector("form")!);
+    expect(reset).toHaveBeenCalledTimes(1);
+    // The new code waits for the same countdown as Resend, so it cannot be refused for coming too soon.
+    const asking = screen.getByRole("button", { name: /Send a new code/ }) as HTMLButtonElement;
+    expect(asking.disabled).toBe(true);
+    expect(asking.textContent).toContain("1:00");
+    await wait(60);
     fireEvent.click(screen.getByRole("button", { name: /Send a new code/ }));
     await screen.findByLabelText("New password");
     expect(api.requestPasswordReset).toHaveBeenCalledTimes(2);
     expect(codeBoxes()).toEqual(["", "", "", "", "", ""]);
     expect(screen.queryByText("This code has expired.")).toBeNull();
+  });
+
+  it("keeps the new password the User typed when a new code is sent", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await reachStepTwo();
+    paste("123456");
+    typePassword("a new password");
+    await wait(60);
+
+    fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
+
+    await screen.findByRole("button", { name: "Resend code in 1:00" });
+    expect(codeBoxes()).toEqual(["", "", "", "", "", ""]);
+    expect((screen.getByLabelText("New password") as HTMLInputElement).value).toBe(
+      "a new password",
+    );
   });
 
   it("shows a rejected password under the field, in place of the hint, and keeps the code", async () => {

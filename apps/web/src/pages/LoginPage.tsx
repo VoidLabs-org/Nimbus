@@ -1,4 +1,4 @@
-import { Alert, Anchor, Group, Text } from "@mantine/core";
+import { Alert, Anchor, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
@@ -11,6 +11,7 @@ import {
   AuthSubmit,
   AuthTextInput,
 } from "../auth/AuthLayout";
+import classes from "../auth/AuthLayout.module.css";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -79,19 +80,18 @@ export default function LoginPage() {
           autoComplete="email"
           {...form.getInputProps("email")}
         />
-        <AuthPasswordInput
-          label={
-            <Group justify="space-between" component="span" wrap="nowrap">
-              <span>Password</span>
-              <Anchor component={Link} to="/forgot-password" size="sm" fw={500}>
-                Forgot password?
-              </Anchor>
-            </Group>
-          }
-          autoComplete="current-password"
-          autoFocus={resetEmail !== ""}
-          {...form.getInputProps("password")}
-        />
+        {/* The link sits on the label's row but outside the label, so the field's name stays "Password". */}
+        <div className={classes.passwordField}>
+          <AuthPasswordInput
+            label="Password"
+            autoComplete="current-password"
+            autoFocus={resetEmail !== ""}
+            {...form.getInputProps("password")}
+          />
+          <Anchor component={Link} to="/forgot-password" size="sm" className={classes.forgotLink}>
+            Forgot password?
+          </Anchor>
+        </div>
         <AuthSubmit loading={form.submitting}>Sign in</AuthSubmit>
       </AuthForm>
       <Text size="sm">

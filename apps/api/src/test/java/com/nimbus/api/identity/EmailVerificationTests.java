@@ -230,6 +230,167 @@ class EmailVerificationTests {
 			.expectBody().jsonPath("$.code").isEqualTo("code_expired");
 	}
 
+	@Test
+	void resendingIssuesANewCodeThatReplacesTheOldOne() {
+		var email = "ev-resend-a@example.com";
+		var token = accessToken(register(email));
+		var old = RecordingMailer.lastCodeFor(email);
+		var oldHash = storedHash(email);
+		clock.advance(Duration.ofSeconds(61));
+
+		resend(token).expectStatus().isNoContent();
+
+		assertThat(RecordingMailer.sentTo(email)).hasSize(2);
+		var fresh = RecordingMailer.lastCodeFor(email);
+		assertThat(storedHash(email)).isNotEqualTo(oldHash);
+		if (!old.equals(fresh)) {
+			verify(token, old).expectStatus().isBadRequest()
+				.expectBody().jsonPath("$.code").isEqualTo("invalid_code");
+		}
+		verify(token, fresh).expectStatus().isOk()
+			.expectBody().jsonPath("$.emailVerified").isEqualTo(true);
+	}
+
+	@Test
+	void aResentCodeGivesBackTheTriesAndRevivesAnExpiredCode() {
+		var email = "ev-resend-b@example.com";
+		var token = accessToken(register(email));
+		clock.advance(Duration.ofMinutes(16));
+		verify(token, "123456").expectStatus().isBadRequest()
+			.expectBody().jsonPath("$.code").isEqualTo("code_expired");
+
+		resend(token).expectStatus().isNoContent();
+
+		verify(token, RecordingMailer.lastCodeFor(email)).expectStatus().isOk();
+	}
+
+	@Test
+	void aSecondSendWithinSixtySecondsIsRefusedWithRetryAfter() {
+		var email = "ev-resend-c@example.com";
+		var token = accessToken(register(email));
+		clock.advance(Duration.ofSeconds(20));
+
+		resend(token).expectStatus().isEqualTo(429)
+			.expectHeader().valueEquals("Retry-After", "40");
+		assertThat(RecordingMailer.sentTo(email)).hasSize(1);
+
+		clock.advance(Duration.ofSeconds(40));
+		resend(token).expectStatus().isNoContent();
+	}
+
+	@Test
+	void aRefusedResendLeavesTheLiveCodeWorking() {
+		var email = "ev-resend-d@example.com";
+		var token = accessToken(register(email));
+		var code = RecordingMailer.lastCodeFor(email);
+
+		resend(token).expectStatus().isEqualTo(429);
+
+		verify(token, code).expectStatus().isOk();
+	}
+
+	@Test
+	void atMostFiveSendsAnHourIncludingTheOneAtRegistration() {
+		var email = "ev-resend-e@example.com";
+		var token = accessToken(register(email));
+		for (var i = 0; i < 4; i++) {
+			clock.advance(Duration.ofSeconds(61));
+			resend(token).expectStatus().isNoContent();
+		}
+		assertThat(RecordingMailer.sentTo(email)).hasSize(5);
+
+		clock.advance(Duration.ofSeconds(61));
+		resend(token).expectStatus().isEqualTo(429)
+			.expectHeader().exists("Retry-After");
+		assertThat(RecordingMailer.sentTo(email)).hasSize(5);
+
+		// The first send leaves the hour 5 * 61 seconds after it was made.
+		clock.advance(Duration.ofHours(1));
+		resend(token).expectStatus().isNoContent();
+	}
+
+	@Test
+	void theHourlyLimitReportsTheWaitUntilTheOldestSendLeavesTheHour() {
+		var email = "ev-resend-f@example.com";
+		var token = accessToken(register(email));
+		for (var i = 0; i < 4; i++) {
+			clock.advance(Duration.ofSeconds(61));
+			resend(token).expectStatus().isNoContent();
+		}
+		clock.advance(Duration.ofSeconds(61));
+
+		var retryAfter = Long.parseLong(resend(token).expectStatus().isEqualTo(429)
+			.returnResult(String.class).getResponseHeaders().getFirst("Retry-After"));
+
+		// Registration was 5 * 61 seconds ago.
+		assertThat(retryAfter).isEqualTo(3600 - 5 * 61);
+	}
+
+	@Test
+	void theBudgetIsPerEmailAddress() {
+		var token = accessToken(register("ev-resend-g@example.com"));
+		var other = accessToken(register("ev-resend-h@example.com"));
+
+		resend(token).expectStatus().isEqualTo(429);
+		clock.advance(Duration.ofSeconds(61));
+		resend(other).expectStatus().isNoContent();
+	}
+
+	@Test
+	void resendingForAVerifiedUserIsAConflict() {
+		var email = "ev-resend-i@example.com";
+		var token = accessToken(register(email));
+		verify(token, RecordingMailer.lastCodeFor(email)).expectStatus().isOk();
+		clock.advance(Duration.ofSeconds(61));
+
+		resend(token).expectStatus().isEqualTo(409);
+		assertThat(RecordingMailer.sentTo(email)).hasSize(1);
+	}
+
+	@Test
+	void resendNeedsASignedInUser() {
+		client.post().uri("/api/auth/verify-email/resend").exchange().expectStatus().isUnauthorized();
+	}
+
+	@Test
+	void aUserWithNoCodeYetCanAskForOne() {
+		var email = "ev-resend-j@example.com";
+		var token = accessToken(register(email));
+		jdbc.sql("DELETE FROM verification_codes WHERE user_id = (SELECT id FROM users WHERE email = 'ev-resend-j@example.com')")
+			.update();
+		clock.advance(Duration.ofHours(2));
+
+		resend(token).expectStatus().isNoContent();
+
+		verify(token, RecordingMailer.lastCodeFor(email)).expectStatus().isOk();
+	}
+
+	@Test
+	void aRegistrationOverTheSendLimitStillGetsACodeButItIsNotEmailed() {
+		var email = "ev-resend-k@example.com";
+		register(email);
+		// The same address registers again within the minute, e.g. after its first User was removed.
+		jdbc.sql("DELETE FROM users WHERE email = '" + email + "'").update();
+
+		var token = accessToken(register(email));
+
+		assertThat(RecordingMailer.sentTo(email)).hasSize(1);
+		resend(token).expectStatus().isEqualTo(429);
+		clock.advance(Duration.ofSeconds(61));
+		resend(token).expectStatus().isNoContent();
+		verify(token, RecordingMailer.lastCodeFor(email)).expectStatus().isOk();
+	}
+
+	private String storedHash(String email) {
+		return jdbc.sql("SELECT code_hash FROM verification_codes WHERE user_id = (SELECT id FROM users WHERE email = ?)")
+			.param(email).query(String.class).single();
+	}
+
+	private RestTestClient.ResponseSpec resend(String token) {
+		return client.post().uri("/api/auth/verify-email/resend").header("Authorization", "Bearer " + token)
+			.exchange();
+	}
+
 	private RestTestClient.ResponseSpec verify(String token, String code) {
 		return client.post().uri("/api/auth/verify-email").header("Authorization", "Bearer " + token)
 			.body(Map.of("code", code))

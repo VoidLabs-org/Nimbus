@@ -46,6 +46,15 @@ function show() {
   );
 }
 
+/** Lets {@code seconds} pass one second at a time, so each tick renders before the next is due. */
+async function wait(seconds: number) {
+  for (let i = 0; i < seconds; i++) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+  }
+}
+
 /** Pastes a code into the first of the six boxes, as a person copying it from the email would. */
 function paste(code: string) {
   const [first] = screen.getAllByRole("textbox");
@@ -122,6 +131,107 @@ describe("the verification screen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
 
     await waitFor(() => expect(logout).toHaveBeenCalled());
+  });
+
+  describe("Resend", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("mails a new code and counts down 60 seconds before it works again", async () => {
+      vi.spyOn(api, "refresh").mockResolvedValue(unverified);
+      const resend = vi.spyOn(api, "resendVerificationCode").mockResolvedValue(undefined);
+      show();
+      await screen.findByRole("heading", { name: "Check your email" });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+
+      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+
+      const waiting = await screen.findByRole("button", { name: "Resend in 60s" });
+      expect(resend).toHaveBeenCalledTimes(1);
+      expect((waiting as HTMLButtonElement).disabled).toBe(true);
+      await wait(20);
+      expect(screen.getByRole("button", { name: "Resend in 40s" })).toBeTruthy();
+      await wait(40);
+      const ready = screen.getByRole("button", { name: "Resend" }) as HTMLButtonElement;
+      expect(ready.disabled).toBe(false);
+    });
+
+    it("counts down from the server's Retry-After when sending is limited", async () => {
+      vi.spyOn(api, "refresh").mockResolvedValue(unverified);
+      vi.spyOn(api, "resendVerificationCode").mockRejectedValue(
+        new ApiError(429, "Too many emails", {}, 42),
+      );
+      show();
+      await screen.findByRole("heading", { name: "Check your email" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+
+      await screen.findByRole("button", { name: "Resend in 42s" });
+    });
+
+    it("clears a wrong or expired code message once a new code is sent", async () => {
+      vi.spyOn(api, "refresh").mockResolvedValue(unverified);
+      vi.spyOn(api, "verifyEmail").mockRejectedValue(
+        new ApiError(400, "That code has expired", {}, null, "code_expired"),
+      );
+      vi.spyOn(api, "resendVerificationCode").mockResolvedValue(undefined);
+      show();
+      await screen.findByRole("heading", { name: "Check your email" });
+      paste("111111");
+      await screen.findByRole("alert");
+
+      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    });
+
+    it("opens the app when the email turns out to be verified already", async () => {
+      const refresh = vi.spyOn(api, "refresh").mockResolvedValue(unverified);
+      vi.spyOn(api, "resendVerificationCode").mockRejectedValue(
+        new ApiError(409, "This email is already verified"),
+      );
+      show();
+      await screen.findByRole("heading", { name: "Check your email" });
+      refresh.mockResolvedValue(verified);
+
+      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+
+      await screen.findByText("The app");
+    });
+
+    it("drops a wrong-code message when sending is limited", async () => {
+      vi.spyOn(api, "refresh").mockResolvedValue(unverified);
+      vi.spyOn(api, "verifyEmail").mockRejectedValue(
+        new ApiError(400, "That code is wrong", {}, null, "invalid_code", 4),
+      );
+      vi.spyOn(api, "resendVerificationCode").mockRejectedValue(
+        new ApiError(429, "Too many emails", {}, 30),
+      );
+      show();
+      await screen.findByRole("heading", { name: "Check your email" });
+      paste("000000");
+      await screen.findByRole("alert");
+
+      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+
+      await screen.findByRole("button", { name: "Resend in 30s" });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("says so when the code couldn't be sent", async () => {
+      vi.spyOn(api, "refresh").mockResolvedValue(unverified);
+      vi.spyOn(api, "resendVerificationCode").mockRejectedValue(new ApiError(500, "Boom"));
+      show();
+      await screen.findByRole("heading", { name: "Check your email" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+
+      expect((await screen.findByRole("alert")).textContent).toContain("Something went wrong");
+      expect((screen.getByRole("button", { name: "Resend" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+    });
   });
 
   it("takes over the app when the server refuses a request because the email isn't verified", async () => {

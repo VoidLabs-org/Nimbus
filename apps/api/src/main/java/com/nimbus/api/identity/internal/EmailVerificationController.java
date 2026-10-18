@@ -4,9 +4,11 @@ import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -26,6 +28,13 @@ class EmailVerificationController {
 	@PostMapping
 	UserResponse verify(@Valid @RequestBody VerifyRequest request) {
 		return UserResponse.from(verification.verify(currentUser.id(), request.code()));
+	}
+
+	/** Mails a new code, which replaces the old one. {@code 429} with {@code Retry-After} when the address was mailed too recently or too often. */
+	@PostMapping("/resend")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	void resend() {
+		verification.resend(currentUser.id());
 	}
 
 	/** Spaces are dropped, so a code pasted with a space in it still works. */

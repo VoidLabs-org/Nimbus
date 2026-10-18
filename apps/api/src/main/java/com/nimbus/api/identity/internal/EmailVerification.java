@@ -56,8 +56,12 @@ class EmailVerification {
 
 	private final SecretKeySpec hashKey;
 
+	private final EmailSendBudget sendBudget;
+
 	EmailVerification(UserRepository users, VerificationCodeRepository codes, Mailer mailer, Clock clock,
-			ApplicationEventPublisher events, PlatformTransactionManager transactionManager, SecretKey jwtKey) {
+			ApplicationEventPublisher events, PlatformTransactionManager transactionManager, SecretKey jwtKey,
+			EmailSendBudget sendBudget) {
+		this.sendBudget = sendBudget;
 		this.users = users;
 		this.codes = codes;
 		this.mailer = mailer;
@@ -76,14 +80,45 @@ class EmailVerification {
 	 */
 	void issueAfterSignUp(User user) {
 		try {
-			issueAndSend(user);
+			// Over the budget (the address was mailed a moment ago): the code is still issued, so a Resend later
+			// works, but it is not mailed.
+			var mail = spendOrSkip(user.email());
+			issueAndSend(user, mail);
 		}
 		catch (RuntimeException e) {
 			log.warn("Could not send a Verification code to user {}", user.getId(), e);
 		}
 	}
 
-	private void issueAndSend(User user) {
+	private boolean spendOrSkip(String email) {
+		try {
+			sendBudget.spend(email);
+			return true;
+		}
+		catch (SlidingWindowLimiter.LimitExceededException e) {
+			log.info("Not mailing a Verification code: this address was mailed too recently or too often");
+			return false;
+		}
+	}
+
+	/**
+	 * Replaces the signed-in User's code with a new one and mails it. The old code stops working only once the
+	 * send is allowed: a refused resend leaves it alone.
+	 *
+	 * @throws AlreadyVerifiedException when the email is already verified
+	 * @throws SlidingWindowLimiter.LimitExceededException when the address was mailed too recently or too often
+	 */
+	void resend(UUID userId) {
+		var user = users.findById(userId).orElseThrow(
+				() -> new InvalidBearerTokenException("The User for this token no longer exists"));
+		if (user.emailVerified()) {
+			throw new AlreadyVerifiedException();
+		}
+		sendBudget.spend(user.email());
+		issueAndSend(user, true);
+	}
+
+	private void issueAndSend(User user, boolean mail) {
 		var code = newCode();
 		var now = clock.instant();
 		var hash = hash(user.getId(), code);
@@ -98,7 +133,15 @@ class EmailVerification {
 				codes.save(new VerificationCode(user.getId(), hash, now, now.plus(CODE_LIFETIME)));
 			}
 		});
-		mailer.send(VerificationMail.to(user.email(), code, CODE_LIFETIME));
+		if (mail) {
+			try {
+				mailer.send(VerificationMail.to(user.email(), code, CODE_LIFETIME));
+			}
+			catch (RuntimeException e) {
+				// Fire and forget, as the mail module promises: the User asks for another code when none arrives.
+				log.warn("Could not send a Verification code to user {}", user.getId(), e);
+			}
+		}
 	}
 
 	/**
@@ -169,6 +212,15 @@ class EmailVerification {
 		catch (GeneralSecurityException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	/** The email is already verified, so there is nothing to send a code for. */
+	static class AlreadyVerifiedException extends RuntimeException {
+
+		AlreadyVerifiedException() {
+			super("This email is already verified");
+		}
+
 	}
 
 	/** The code was wrong; the User may try again {@code triesLeft} more times. */

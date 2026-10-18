@@ -1,11 +1,25 @@
-import { Alert, Anchor, PinInput, Text } from "@mantine/core";
-import { useState } from "react";
-import { ApiError } from "../api/client";
+import { Alert, Anchor, Button, PinInput, Text } from "@mantine/core";
+import { useEffect, useState } from "react";
+import { api, ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
 import { AuthLayout } from "./AuthLayout";
 import { useSession } from "./useSession";
 
 const CODE_LENGTH = 6;
+
+/** How long Resend stays off after a send, matching the server's 60 seconds between emails to one address. */
+const RESEND_WAIT_SECONDS = 60;
+
+/** Counts {@code seconds} down to 0, one a second, once it is set above 0. */
+function useCountdown() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (seconds <= 0) return;
+    const timer = setTimeout(() => setSeconds(seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [seconds]);
+  return [seconds, setSeconds] as const;
+}
 
 /** What to tell the User when the server refused their code. */
 function verificationErrorMessage(error: unknown): string {
@@ -27,15 +41,39 @@ function verificationErrorMessage(error: unknown): string {
 /**
  * What a signed-in User sees, in place of the whole app, until they enter the Verification code emailed to
  * them. The code goes in six boxes that submit by themselves after the last digit (a pasted code fills them
- * all). A correct code opens the app at the address they were on. "Wrong email? Sign out" is the way out for a
+ * all). Resend mails a new code, then waits (60 seconds, or the server's Retry-After) before it works again. A correct code opens the app at the address they were on. "Wrong email? Sign out" is the way out for a
  * typo.
  */
 export function VerifyEmailScreen() {
-  const { user, verifyEmail, logout } = useSession();
+  const { user, verifyEmail, logout, retry } = useSession();
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [secondsToResend, setSecondsToResend] = useCountdown();
+
+  async function resend() {
+    setResending(true);
+    try {
+      await api.resendVerificationCode();
+      setError(null);
+      setCode("");
+      setSecondsToResend(RESEND_WAIT_SECONDS);
+    } catch (failure) {
+      if (failure instanceof ApiError && failure.status === 429 && failure.retryAfterSeconds) {
+        setError(null);
+        setSecondsToResend(failure.retryAfterSeconds);
+      } else if (failure instanceof ApiError && failure.status === 409) {
+        // Verified in another tab or device: look the User up again, which opens the app.
+        retry();
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function check(value: string) {
     setChecking(true);
@@ -89,6 +127,14 @@ export function VerifyEmailScreen() {
         error={error !== null}
         ariaLabel="Verification code digit"
       />
+      <Button
+        variant="default"
+        onClick={() => void resend()}
+        loading={resending}
+        disabled={secondsToResend > 0}
+      >
+        {secondsToResend > 0 ? `Resend in ${secondsToResend}s` : "Resend"}
+      </Button>
       <Text size="sm">
         Wrong email?{" "}
         <Anchor

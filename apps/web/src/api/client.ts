@@ -346,6 +346,14 @@ export function createApiClient(
     },
 
     /**
+     * Mails a new Verification code, which replaces the old one. A 429 means the address was mailed too recently
+     * or too often; `retryAfterSeconds` says how long to wait.
+     */
+    resendVerificationCode: async () => {
+      await request<void>("/api/auth/verify-email/resend", { method: "POST" });
+    },
+
+    /**
      * Ends this browser's session on the server and forgets the access token. If the server can't be
      * reached the User stays signed in, because the session would otherwise live on and a reload would
      * sign them straight back in. A sign-in or refresh under way finishes first, so it can't bring the

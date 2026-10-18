@@ -4,10 +4,11 @@ Sends email for the other modules. It knows nothing about Users or why a message
 
 ## Public interface
 
-| Type     | Use                                                                                                                                                                                      |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Mailer` | `send(Mail)`. A delivery failure is logged and never thrown, so a mail problem can't undo what the caller already did. Nothing is retried. Call it after your transaction has committed. |
-| `Mail`   | One email to one person: `to`, `subject`, `html` and `text` (the same message as plain text).                                                                                            |
+| Type         | Use                                                                                                                                                                                                                                                                                                                         |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Mailer`     | `send(Mail)`. A delivery failure is logged and never thrown, so a mail problem can't undo what the caller already did. Nothing is retried. Call it after your transaction has committed.                                                                                                                                    |
+| `Mail`       | One email to one person: `to`, `subject`, `html` and `text` (the same message as plain text).                                                                                                                                                                                                                               |
+| `MailAssets` | `url(file)`: the public address of an image used in an email (the Nimbus icon), or empty when `MAIL_ASSETS_URL` is blank or is not a public `https://` address (a startup WARN says so), in which case the email does without the image. `MailAssets.NIMBUS_ICON_DARK` names the icon file, so callers do not spell it out. |
 
 Everything under `mail.internal` is private to the module.
 
@@ -29,12 +30,17 @@ Everything under `mail.internal` is private to the module.
 
 Set in `apps/api/.env` (documented in `.env.example`); nothing is tracked.
 
-| Variable         | Setting                     | Meaning                                                                           |
-| ---------------- | --------------------------- | --------------------------------------------------------------------------------- |
-| `BREVO_API_KEY`  | `nimbus.mail.brevo-api-key` | Brevo API key (v3). Blank selects the logging implementation.                     |
-| `MAIL_FROM`      | `nimbus.mail.from`          | Sender address. Must be a verified sender in Brevo. Required when the key is set. |
-| `MAIL_FROM_NAME` | `nimbus.mail.from-name`     | Sender name recipients see. Defaults to `Nimbus`, also when left empty.           |
-| (none)           | `nimbus.mail.timeout`       | Connect and read timeout for Brevo. Defaults to `5s`.                             |
+| Variable          | Setting                     | Meaning                                                                                                                                                 |
+| ----------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BREVO_API_KEY`   | `nimbus.mail.brevo-api-key` | Brevo API key (v3). Blank selects the logging implementation.                                                                                           |
+| `MAIL_FROM`       | `nimbus.mail.from`          | Sender address. Must be a verified sender in Brevo. Required when the key is set.                                                                       |
+| `MAIL_FROM_NAME`  | `nimbus.mail.from-name`     | Sender name recipients see. Defaults to `Nimbus`, also when left empty.                                                                                 |
+| (none)            | `nimbus.mail.timeout`       | Connect and read timeout for Brevo. Defaults to `5s`.                                                                                                   |
+| `MAIL_ASSETS_URL` | `nimbus.mail.assets-url`    | Public https address that serves the images in emails, without a trailing slash, e.g. `https://nimbus-assets.pages.dev`. Blank: emails carry no images. |
+
+## Images in emails
+
+An email cannot carry its images, and a mail program cannot reach `localhost`, so images are linked from a public address (`MAIL_ASSETS_URL`). The Verification code email uses `nimbus-icon-dark.png`, the file in `apps/web/public`, uploaded to that address with the same name (for example to a Cloudflare Pages site). Without the setting the header shows an orange circle and the word "nimbus". Use PNG, not SVG: Gmail and Outlook do not show SVG in email. Mail already sent keeps pointing at the file, so do not change what it shows later without meaning to.
 
 ## Brevo limits
 

@@ -14,6 +14,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
 import com.nimbus.api.identity.EmailVerified;
+import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,10 +59,13 @@ class EmailVerification {
 
 	private final EmailSendBudget sendBudget;
 
+	private final MailAssets mailAssets;
+
 	EmailVerification(UserRepository users, VerificationCodeRepository codes, Mailer mailer, Clock clock,
 			ApplicationEventPublisher events, PlatformTransactionManager transactionManager, SecretKey jwtKey,
-			EmailSendBudget sendBudget) {
+			EmailSendBudget sendBudget, MailAssets mailAssets) {
 		this.sendBudget = sendBudget;
+		this.mailAssets = mailAssets;
 		this.users = users;
 		this.codes = codes;
 		this.mailer = mailer;
@@ -135,7 +139,8 @@ class EmailVerification {
 		});
 		if (mail) {
 			try {
-				mailer.send(VerificationMail.to(user.email(), code, CODE_LIFETIME));
+				mailer.send(VerificationMail.to(user.email(), code, CODE_LIFETIME,
+						mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
 			}
 			catch (RuntimeException e) {
 				// Fire and forget, as the mail module promises: the User asks for another code when none arrives.

@@ -266,6 +266,30 @@
   font-weight: 700;
 }
 
+/* After a new code is sent: a quiet confirmation in the same place as the error. */
+.codeNotice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.codeNoticeMark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--toast-success);
+  color: var(--toast-success-fg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 /* "Resend code" on the left, "Use a different email" on the right. */
 .codeLinks {
   display: flex;

@@ -41,7 +41,7 @@ class BrevoMailerTests {
 		var builder = RestClient.builder();
 		server = MockRestServiceServer.bindTo(builder).build();
 		mailer = new BrevoMailer(builder.build(), new MailProperties("secret-key", "hello@nimbus.dev", "Nimbus",
-				Duration.ofSeconds(5)));
+				Duration.ofSeconds(5), ""));
 	}
 
 	@Test

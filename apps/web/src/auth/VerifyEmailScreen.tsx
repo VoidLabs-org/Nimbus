@@ -1,4 +1,4 @@
-import { Anchor, PinInput } from "@mantine/core";
+import { Anchor, Loader, PinInput, VisuallyHidden } from "@mantine/core";
 import { useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
@@ -62,10 +62,14 @@ export function VerifyEmailScreen() {
   const [error, setError] = useState<string | null>(null);
   // The boxes go red only when the message is about the code itself.
   const [codeRejected, setCodeRejected] = useState(false);
+  // Said after a new code is sent, so the press is seen to have worked.
+  const [notice, setNotice] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [secondsToResend, setSecondsToResend] = useCountdown();
   const verified = user?.emailVerified === true;
   const waiting = secondsToResend > 0;
+  // The confirmation goes with the countdown: a minute on, it is no longer news.
+  const shownNotice = waiting ? notice : null;
 
   useEffect(() => {
     if (!verified) return;
@@ -75,10 +79,12 @@ export function VerifyEmailScreen() {
 
   async function resend() {
     setResending(true);
+    setNotice(null);
     try {
       await api.resendVerificationCode();
       setError(null);
       setCodeRejected(false);
+      setNotice("New code sent. Check your inbox.");
       setCode("");
       setSecondsToResend(RESEND_WAIT_SECONDS);
     } catch (failure) {
@@ -101,6 +107,7 @@ export function VerifyEmailScreen() {
   async function check(value: string) {
     setChecking(true);
     setError(null);
+    setNotice(null);
     setCodeRejected(false);
     try {
       await verifyEmail(value);
@@ -192,6 +199,14 @@ export function VerifyEmailScreen() {
             {error}
           </div>
         )}
+        {/* Always in the page, so a screen reader announces the text when it appears in it. */}
+        <VisuallyHidden role="status">{shownNotice}</VisuallyHidden>
+        {shownNotice && !error && (
+          <div className={classes.codeNotice} aria-hidden>
+            <span className={classes.codeNoticeMark}>✓</span>
+            {shownNotice}
+          </div>
+        )}
         <AuthSubmit loading={checking} disabled={code.length < CODE_LENGTH}>
           Verify
         </AuthSubmit>
@@ -206,7 +221,16 @@ export function VerifyEmailScreen() {
             aria-disabled={waiting || resending}
             c={waiting ? "dimmed" : undefined}
           >
-            {waiting ? `Resend code in ${clock(secondsToResend)}` : "Resend code"}
+            {resending ? (
+              <>
+                <Loader size={12} color="currentColor" mr={8} />
+                Sending…
+              </>
+            ) : waiting ? (
+              `Resend code in ${clock(secondsToResend)}`
+            ) : (
+              "Resend code"
+            )}
           </Anchor>
           <Anchor
             component="button"

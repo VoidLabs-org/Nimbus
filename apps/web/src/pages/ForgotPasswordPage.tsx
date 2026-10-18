@@ -1,9 +1,9 @@
 import { Anchor, Loader, PinInput, VisuallyHidden } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
-import { useState, type SyntheticEvent } from "react";
+import { useState, type ReactNode, type SyntheticEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { api, ApiError } from "../api/client";
-import { tooManyAttemptsMessage } from "../api/messages";
+import { tooManyAttemptsIn, tooManyAttemptsMessage } from "../api/messages";
 import {
   AuthForm,
   AuthLayout,
@@ -20,9 +20,18 @@ const CODE_LENGTH = 6;
 
 const GENERIC_ERROR = "Something went wrong. Please try again.";
 
-/** The wait the server asked for, counting down. */
-function tooManyAttemptsIn(seconds: number): string {
-  return `Too many attempts. Try again in ${clock(seconds)}.`;
+/** A red message under the form; step 2's carry the "!" mark. */
+function Alert({ marked, children }: { marked?: boolean; children: ReactNode }) {
+  return (
+    <div className={classes.codeError} role="alert">
+      {marked && (
+        <span className={classes.codeErrorMark} aria-hidden>
+          !
+        </span>
+      )}
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -58,7 +67,11 @@ export default function ForgotPasswordPage() {
   const waitingForTyped = waiting && countdownFor === email.trim().toLowerCase();
   // The server refused for now (a 429 with a wait): the form is off and the wait counts down until it ends.
   const [limited, setLimited] = useState(false);
-  const rateLimited = limited && waiting;
+  const sendLimited = limited && waiting;
+  // Reset attempts have their own limit, so their wait runs apart from the one Resend counts down.
+  const [lockSeconds, setLockSeconds] = useCountdown();
+  const rateLimited = sendLimited || lockSeconds > 0;
+  const limitSeconds = Math.max(sendLimited ? secondsToResend : 0, lockSeconds);
   // The confirmation goes with the countdown: a minute on, it is no longer news.
   const shownNotice = waiting ? notice : null;
 
@@ -85,10 +98,14 @@ export default function ForgotPasswordPage() {
   }
 
   /** A 429: with a wait the form is disabled and counts it down; without one the message is all there is. */
-  function showRateLimit(failure: ApiError, address: string) {
+  function showRateLimit(failure: ApiError, address: string, sending: boolean) {
     if (failure.retryAfterSeconds) {
-      startCountdown(address, failure.retryAfterSeconds);
-      setLimited(true);
+      if (sending) {
+        startCountdown(address, failure.retryAfterSeconds);
+        setLimited(true);
+      } else {
+        setLockSeconds(failure.retryAfterSeconds);
+      }
       setFormError(null);
     } else {
       setFormError(tooManyAttemptsMessage(null));
@@ -103,7 +120,7 @@ export default function ForgotPasswordPage() {
       return true;
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 429) {
-        showRateLimit(failure, address);
+        showRateLimit(failure, address, true);
       } else {
         setFormError(GENERIC_ERROR);
       }
@@ -156,7 +173,6 @@ export default function ForgotPasswordPage() {
     setPasswordMessage(tooShort);
     if (tooShort) return;
     setChecking(true);
-    setLimited(false);
     setFormError(null);
     setNotice(null);
     setCodeMessage(null);
@@ -187,7 +203,7 @@ export default function ForgotPasswordPage() {
       setCodeMessage("This code has expired.");
       setExpired(true);
     } else if (failure.status === 429) {
-      showRateLimit(failure, email);
+      showRateLimit(failure, email, false);
     } else if (failure.fieldErrors.newPassword) {
       // The code is kept: it was not looked at, so it costs no try.
       setPasswordMessage(failure.fieldErrors.newPassword);
@@ -221,16 +237,8 @@ export default function ForgotPasswordPage() {
           <AuthSubmit loading={sending} disabled={waitingForTyped}>
             {waitingForTyped ? `Send code in ${clock(secondsToResend)}` : "Send code"}
           </AuthSubmit>
-          {rateLimited && (
-            <div className={classes.codeError} role="alert">
-              {tooManyAttemptsIn(secondsToResend)}
-            </div>
-          )}
-          {formError && (
-            <div className={classes.codeError} role="alert">
-              {formError}
-            </div>
-          )}
+          {limited && waitingForTyped && <Alert>{tooManyAttemptsIn(secondsToResend)}</Alert>}
+          {formError && <Alert>{formError}</Alert>}
         </AuthForm>
         <Anchor component={Link} to="/login" size="sm">
           Back to sign in
@@ -272,22 +280,8 @@ export default function ForgotPasswordPage() {
           error={codeRejected}
           ariaLabel="Reset code digit"
         />
-        {codeMessage && (
-          <div className={classes.codeError} role="alert">
-            <span className={classes.codeErrorMark} aria-hidden>
-              !
-            </span>
-            {codeMessage}
-          </div>
-        )}
-        {rateLimited && (
-          <div className={classes.codeError} role="alert">
-            <span className={classes.codeErrorMark} aria-hidden>
-              !
-            </span>
-            {tooManyAttemptsIn(secondsToResend)}
-          </div>
-        )}
+        {codeMessage && <Alert marked>{codeMessage}</Alert>}
+        {rateLimited && <Alert marked>{tooManyAttemptsIn(limitSeconds)}</Alert>}
         {/* Always in the page, so a screen reader announces the text when it appears in it. */}
         <VisuallyHidden role="status">{shownNotice}</VisuallyHidden>
         {shownNotice && !codeMessage && (
@@ -323,11 +317,7 @@ export default function ForgotPasswordPage() {
             </div>
           </>
         )}
-        {formError && (
-          <div className={classes.codeError} role="alert">
-            {formError}
-          </div>
-        )}
+        {formError && <Alert>{formError}</Alert>}
         <div className={classes.codeLinks}>
           {/* Stays a button while it counts down, so keyboard focus isn't lost when it is pressed. */}
           <Anchor

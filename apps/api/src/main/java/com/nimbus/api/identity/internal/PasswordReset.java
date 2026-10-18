@@ -113,8 +113,16 @@ class PasswordReset {
 	 */
 	void request(String email, String fromAddress) {
 		var normalizedEmail = email.toLowerCase(Locale.ROOT);
-		requestsByAddress.acquire(fromAddress, "Too many password reset requests from this network. Try again later.");
-		sendBudget.spend(normalizedEmail);
+		var slot = requestsByAddress.acquire(fromAddress,
+				"Too many password reset requests from this network. Try again later.");
+		try {
+			sendBudget.spend(normalizedEmail);
+		}
+		catch (SlidingWindowLimiter.LimitExceededException e) {
+			// Nothing was sent, so it must not use up the network's allowance (an office shares one address).
+			requestsByAddress.release(fromAddress, slot);
+			throw e;
+		}
 		try {
 			background.execute(() -> issueAndSend(normalizedEmail));
 		}

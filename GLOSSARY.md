@@ -56,6 +56,10 @@ _Avoid_: Pending, inactive or unconfirmed user
 A short-lived code emailed to a User to prove they own the address.
 _Avoid_: OTP, token, PIN
 
+**Reset code**:
+A short-lived code emailed to a User who forgot their password, which lets them set a new one. Entering it also proves they own the address.
+_Avoid_: Recovery code, password token, OTP
+
 **Member**:
 A User who has been added to a project. Only ever means project membership.
 _Avoid_: User (when you mean project membership)

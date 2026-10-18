@@ -24,6 +24,7 @@ beforeEach(() => {
   restoreMatchMedia = stubMatchMedia();
 });
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   vi.restoreAllMocks();
   restoreMatchMedia();
@@ -102,7 +103,6 @@ describe("the verification screen", () => {
       await vi.advanceTimersByTimeAsync(1600);
     });
     expect(screen.getByText("The app")).toBeTruthy();
-    vi.useRealTimers();
   });
 
   it("says how many tries are left after a wrong code, and clears the boxes", async () => {
@@ -168,11 +168,13 @@ describe("the verification screen", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
-      await screen.findByText("Resend code in 1:00");
+      await screen.findByRole("button", { name: "Resend code in 1:00" });
       expect(resend).toHaveBeenCalledTimes(1);
-      expect(screen.queryByRole("button", { name: "Resend code" })).toBeNull();
+      // Pressing it again while it counts down does nothing.
+      fireEvent.click(screen.getByRole("button", { name: "Resend code in 1:00" }));
+      expect(resend).toHaveBeenCalledTimes(1);
       await wait(20);
-      expect(screen.getByText("Resend code in 0:40")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Resend code in 0:40" })).toBeTruthy();
       await wait(40);
       expect(screen.getByRole("button", { name: "Resend code" })).toBeTruthy();
     });
@@ -187,7 +189,7 @@ describe("the verification screen", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
-      await screen.findByText("Resend code in 0:42");
+      await screen.findByRole("button", { name: "Resend code in 0:42" });
     });
 
     it("clears a wrong or expired code message once a new code is sent", async () => {
@@ -235,7 +237,7 @@ describe("the verification screen", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
 
-      await screen.findByText("Resend code in 0:30");
+      await screen.findByRole("button", { name: "Resend code in 0:30" });
       expect(screen.queryByRole("alert")).toBeNull();
     });
 

@@ -7,7 +7,7 @@ import {
   type PasswordInputProps,
   type TextInputProps,
 } from "@mantine/core";
-import type { CSSProperties, FormEventHandler, ReactNode } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties, FormEventHandler, ReactNode } from "react";
 import { NimbusLogo } from "../shell/NimbusLogo";
 import classes from "./AuthLayout.module.css";
 
@@ -104,12 +104,13 @@ export function AuthPasswordInput(props: Omit<PasswordInputProps, FieldLook>) {
   return <PasswordInput classNames={fieldClassNames} inputWrapperOrder={fieldOrder} {...props} />;
 }
 
-/** The form's primary button: an orange pill with the label on the left and a round arrow on the right. */
+/** The form's primary button (a submit button, or `type="button"` with an `onClick`): an orange pill with the label on the left and a round arrow on the right. */
 export function AuthSubmit({
   className,
   children,
   ...props
-}: Omit<ButtonProps, "rightSection" | "justify" | "fullWidth"> & { children: ReactNode }) {
+}: Omit<ButtonProps, "rightSection" | "justify" | "fullWidth"> &
+  Omit<ComponentPropsWithoutRef<"button">, keyof ButtonProps> & { children: ReactNode }) {
   return (
     <ArrowButton
       type="submit"

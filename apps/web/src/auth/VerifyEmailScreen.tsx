@@ -1,5 +1,4 @@
 import { Anchor, PinInput } from "@mantine/core";
-import { ArrowButton } from "@repo/ui/arrow-button";
 import { useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
@@ -61,9 +60,12 @@ export function VerifyEmailScreen() {
   const [checking, setChecking] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The boxes go red only when the message is about the code itself.
+  const [codeRejected, setCodeRejected] = useState(false);
   const [resending, setResending] = useState(false);
   const [secondsToResend, setSecondsToResend] = useCountdown();
   const verified = user?.emailVerified === true;
+  const waiting = secondsToResend > 0;
 
   useEffect(() => {
     if (!verified) return;
@@ -76,16 +78,19 @@ export function VerifyEmailScreen() {
     try {
       await api.resendVerificationCode();
       setError(null);
+      setCodeRejected(false);
       setCode("");
       setSecondsToResend(RESEND_WAIT_SECONDS);
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 429 && failure.retryAfterSeconds) {
         setError(null);
+        setCodeRejected(false);
         setSecondsToResend(failure.retryAfterSeconds);
       } else if (failure instanceof ApiError && failure.status === 409) {
         // Verified in another tab or device: look the User up again, which opens the app.
         retry();
       } else {
+        setCodeRejected(false);
         setError("Something went wrong. Please try again.");
       }
     } finally {
@@ -96,10 +101,12 @@ export function VerifyEmailScreen() {
   async function check(value: string) {
     setChecking(true);
     setError(null);
+    setCodeRejected(false);
     try {
       await verifyEmail(value);
     } catch (failure) {
       setError(verificationErrorMessage(failure));
+      setCodeRejected(failure instanceof ApiError && failure.status === 400);
       setCode("");
     } finally {
       setChecking(false);
@@ -111,6 +118,7 @@ export function VerifyEmailScreen() {
     try {
       await logout();
     } catch {
+      setCodeRejected(false);
       setError("Couldn't sign out. Check your connection and try again.");
       setSigningOut(false);
     }
@@ -138,14 +146,9 @@ export function VerifyEmailScreen() {
             style={{ "--confirm-ms": `${CONFIRM_MS}ms` } as CSSProperties}
           />
         </div>
-        <ArrowButton
-          fullWidth
-          justify="space-between"
-          className={classes.submit}
-          onClick={finishVerifying}
-        >
+        <AuthSubmit type="button" onClick={finishVerifying}>
           Continue
-        </ArrowButton>
+        </AuthSubmit>
       </AuthLayout>
     );
   }
@@ -178,7 +181,7 @@ export function VerifyEmailScreen() {
           onChange={setCode}
           onComplete={(value) => void check(value)}
           disabled={checking}
-          error={error !== null}
+          error={codeRejected}
           ariaLabel="Verification code digit"
         />
         {error && (
@@ -193,18 +196,18 @@ export function VerifyEmailScreen() {
           Verify
         </AuthSubmit>
         <div className={classes.codeLinks}>
-          {secondsToResend > 0 ? (
-            <span>Resend code in {clock(secondsToResend)}</span>
-          ) : (
-            <Anchor
-              component="button"
-              type="button"
-              onClick={() => void resend()}
-              disabled={resending}
-            >
-              Resend code
-            </Anchor>
-          )}
+          {/* Stays a button while it counts down, so keyboard focus isn't lost when it is pressed. */}
+          <Anchor
+            component="button"
+            type="button"
+            onClick={() => {
+              if (!waiting && !resending) void resend();
+            }}
+            aria-disabled={waiting || resending}
+            c={waiting ? "dimmed" : undefined}
+          >
+            {waiting ? `Resend code in ${clock(secondsToResend)}` : "Resend code"}
+          </Anchor>
           <Anchor
             component="button"
             type="button"

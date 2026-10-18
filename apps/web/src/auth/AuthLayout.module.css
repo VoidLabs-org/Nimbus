@@ -177,6 +177,8 @@
    of the widened gap. */
 .pin {
   position: relative;
+  width: fit-content;
+  max-width: 100%;
   gap: 10px;
 }
 
@@ -197,10 +199,12 @@
   margin-right: 24px;
 }
 
-.pinInput {
+/* Two classes, so these win over Mantine's own size rules for the box and its digits. */
+.pin .pinInput {
   --input-height: 72px;
   --input-size: 72px;
   --input-radius: 20px;
+  --input-fz: 30px;
   width: 60px;
   height: 72px;
   font-size: 30px;
@@ -208,14 +212,35 @@
   text-align: center;
 }
 
-:root .pinInput[data-variant="default"] {
+:root .pin .pinInput[data-variant="default"] {
   --input-bg: var(--card);
 }
 
-/* A wrong code: red boxes and a red line under them. */
-.pinInput[data-error] {
+/* A wrong code: red boxes. */
+.pin .pinInput[data-error] {
   --input-bd: var(--toast-error);
+  --input-bd-error: var(--toast-error);
   box-shadow: inset 0 0 0 1px var(--toast-error);
+}
+
+/* Narrow phones: smaller boxes so the six and the dash fit between the page's padding. */
+@media (max-width: 480px) {
+  .pin {
+    gap: 6px;
+  }
+
+  .pin > :nth-child(3) {
+    margin-right: 14px;
+  }
+
+  .pin .pinInput {
+    --input-height: 56px;
+    --input-size: 56px;
+    --input-fz: 24px;
+    width: 44px;
+    height: 56px;
+    font-size: 24px;
+  }
 }
 
 .codeError {

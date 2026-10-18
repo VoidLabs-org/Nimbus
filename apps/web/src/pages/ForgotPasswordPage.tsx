@@ -1,5 +1,6 @@
 import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
+import { useMutation } from "@tanstack/react-query";
 import { useState, type ReactNode, type SyntheticEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { api, ApiError } from "../api/client";
@@ -47,7 +48,6 @@ export default function ForgotPasswordPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   // Under the button: a rate limit or a failure of the call itself.
   const [formError, setFormError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
@@ -56,9 +56,17 @@ export default function ForgotPasswordPage() {
   const [codeRejected, setCodeRejected] = useState(false);
   // The code is gone (expired, or cancelled after too many wrong tries): only a new one helps.
   const [expired, setExpired] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [resending, setResending] = useState(false);
+  const requestReset = useMutation({
+    mutationFn: (address: string) => api.requestPasswordReset(address),
+  });
+  const resetPassword = useMutation({
+    mutationFn: (input: Parameters<typeof api.resetPassword>[0]) => api.resetPassword(input),
+  });
+  // Asking for a code is one call from two buttons, one on each step.
+  const sending = requestReset.isPending && step === "email";
+  const resending = requestReset.isPending && step === "code";
+  const checking = resetPassword.isPending;
   const [secondsToResend, setSecondsToResend] = useCountdown();
   // The address the countdown is for: the server limits sends per address, so another one is not held up by it.
   const [countdownFor, setCountdownFor] = useState<string | null>(null);
@@ -115,7 +123,7 @@ export default function ForgotPasswordPage() {
   async function requestCode(address: string): Promise<boolean> {
     setLimited(false);
     try {
-      await api.requestPasswordReset(address);
+      await requestReset.mutateAsync(address);
       return true;
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 429) {
@@ -141,9 +149,7 @@ export default function ForgotPasswordPage() {
     }
     if (waitingForTyped) return;
     setEmailError(null);
-    setSending(true);
     const sent = await requestCode(address);
-    setSending(false);
     if (!sent) return;
     setEmail(address);
     clearCodeState();
@@ -153,11 +159,9 @@ export default function ForgotPasswordPage() {
   }
 
   async function sendNewCode() {
-    setResending(true);
     setNotice(null);
     setFormError(null);
     const sent = await requestCode(email);
-    setResending(false);
     if (!sent) return;
     clearCode();
     setNotice("New code sent. Check your inbox.");
@@ -171,19 +175,16 @@ export default function ForgotPasswordPage() {
     const tooShort = passwordError(password);
     setPasswordMessage(tooShort);
     if (tooShort) return;
-    setChecking(true);
     setFormError(null);
     setNotice(null);
     setCodeMessage(null);
     setCodeRejected(false);
     try {
-      await api.resetPassword({ email, code, newPassword: password });
+      await resetPassword.mutateAsync({ email, code, newPassword: password });
       toast.success("Password updated. You were signed out on other devices.");
       void navigate("/login", { replace: true, state: { email } });
     } catch (failure) {
       showResetFailure(failure);
-    } finally {
-      setChecking(false);
     }
   }
 

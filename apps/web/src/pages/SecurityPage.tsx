@@ -1,6 +1,6 @@
 import { IconDeviceDesktop, IconDeviceMobile } from "@tabler/icons-react";
 import { Button, Container, Stack, Title } from "@mantine/core";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { Glyph } from "@repo/ui/glyph";
@@ -22,60 +22,49 @@ import classes from "./SecurityPage.module.css";
 export default function SecurityPage() {
   const query = useSessions();
   const client = useQueryClient();
-  const [signingOut, setSigningOut] = useState<string | null>(null);
   // The devices the dialog was opened with: what the User agrees to is what they were shown, not a later refetch.
   const [confirmingOthers, setConfirmingOthers] = useState<SessionInfo[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [signingOutOthers, setSigningOutOthers] = useState(false);
-  const error = loadFailure(query);
-  if (error) return <FailedLoadPage failure={error} onRetry={() => void query.refetch()} />;
-
   // Only for the date of a sign-in (and whether it was this year); how long ago a session was active comes from the server.
   const now = new Date(query.dataUpdatedAt);
-  const sessions = query.data;
-  const others = sessions?.filter((session) => !session.current) ?? [];
-
-  async function signOut(session: SessionInfo) {
-    const name = sessionName(session, now);
-    setSigningOut(session.id);
-    try {
-      await api.endSession(session.id);
-      toast.success(`Signed out ${name}.`);
-    } catch (failure) {
+  const refreshList = () => client.invalidateQueries({ queryKey: queryKeys.sessions });
+  // Returning the refresh keeps the button busy until the list shows the change.
+  const signOut = useMutation({
+    mutationFn: (session: SessionInfo) => api.endSession(session.id),
+    onSuccess: (_, session) => {
+      toast.success(`Signed out ${sessionName(session, now)}.`);
+      return refreshList();
+    },
+    onError: (failure, session) => {
       // A 401 means this session ended too: the app is already sending the User to sign in again.
-      if (failure instanceof ApiError && failure.status === 401) {
-        setSigningOut(null);
-        return;
-      }
+      if (failure instanceof ApiError && failure.status === 401) return;
       if (failure instanceof ApiError && failure.status === 404) {
         // Already over (another tab, or it expired): nothing went wrong, and the list below is what's left.
-        toast.info(`${name} was already signed out.`);
-      } else {
-        toast.error("Couldn't sign out that device. Please try again.");
-        setSigningOut(null);
-        return;
+        toast.info(`${sessionName(session, now)} was already signed out.`);
+        return refreshList();
       }
-    }
-    await client.invalidateQueries({ queryKey: queryKeys.sessions });
-    setSigningOut(null);
-  }
-
-  async function signOutOthers() {
-    setSigningOutOthers(true);
-    try {
-      await api.endOtherSessions();
-    } catch (failure) {
-      setSigningOutOthers(false);
+      toast.error("Couldn't sign out that device. Please try again.");
+    },
+  });
+  const signOutOthers = useMutation({
+    mutationFn: () => api.endOtherSessions(),
+    onSuccess: () => {
+      toast.success("Signed out your other devices.");
+      setConfirmOpen(false);
+      return refreshList();
+    },
+    onError: (failure) => {
       // A 401 means this session ended too: the app is already sending the User to sign in again.
       if (!(failure instanceof ApiError && failure.status === 401))
         toast.error("Couldn't sign out your other devices. Please try again.");
-      return;
-    }
-    toast.success("Signed out your other devices.");
-    setConfirmOpen(false);
-    setSigningOutOthers(false);
-    await client.invalidateQueries({ queryKey: queryKeys.sessions });
-  }
+    },
+  });
+  const signingOut = signOut.isPending ? signOut.variables.id : null;
+  const error = loadFailure(query);
+  if (error) return <FailedLoadPage failure={error} onRetry={() => void query.refetch()} />;
+
+  const sessions = query.data;
+  const others = sessions?.filter((session) => !session.current) ?? [];
 
   return (
     <Container size="sm" px={0} py="xl">
@@ -96,7 +85,7 @@ export default function SecurityPage() {
               <Button
                 variant="default"
                 className={classes.signOutOthers}
-                disabled={signingOut !== null}
+                disabled={signOut.isPending}
                 onClick={() => {
                   setConfirmingOthers(others);
                   setConfirmOpen(true);
@@ -135,9 +124,9 @@ export default function SecurityPage() {
                         variant="default"
                         className={classes.signOut}
                         loading={signingOut === session.id}
-                        disabled={signingOut !== null || signingOutOthers}
+                        disabled={signOut.isPending || signOutOthers.isPending}
                         aria-label={`Sign out ${sessionName(session, now)}`}
-                        onClick={() => void signOut(session)}
+                        onClick={() => signOut.mutate(session)}
                       >
                         Sign out
                       </Button>
@@ -156,8 +145,8 @@ export default function SecurityPage() {
         opened={confirmOpen}
         others={confirmingOthers}
         now={now}
-        busy={signingOutOthers}
-        onConfirm={() => void signOutOthers()}
+        busy={signOutOthers.isPending}
+        onConfirm={() => signOutOthers.mutate()}
         onClose={() => setConfirmOpen(false)}
       />
     </Container>

@@ -1,4 +1,5 @@
 import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../api/client";
 import { tooManyAttemptsMessage } from "../api/messages";
@@ -45,7 +46,8 @@ export function VerifyEmailScreen() {
   const [codeRejected, setCodeRejected] = useState(false);
   // Said after a new code is sent, so the press is seen to have worked.
   const [notice, setNotice] = useState<string | null>(null);
-  const [resending, setResending] = useState(false);
+  const resendCode = useMutation({ mutationFn: () => api.resendVerificationCode() });
+  const resending = resendCode.isPending;
   const [secondsToResend, setSecondsToResend] = useCountdown();
   const verified = user?.emailVerified === true;
   const waiting = secondsToResend > 0;
@@ -59,10 +61,9 @@ export function VerifyEmailScreen() {
   }, [verified, finishVerifying]);
 
   async function resend() {
-    setResending(true);
     setNotice(null);
     try {
-      await api.resendVerificationCode();
+      await resendCode.mutateAsync();
       setError(null);
       setCodeRejected(false);
       setNotice("New code sent. Check your inbox.");
@@ -80,8 +81,6 @@ export function VerifyEmailScreen() {
         setCodeRejected(false);
         setError("Something went wrong. Please try again.");
       }
-    } finally {
-      setResending(false);
     }
   }
 

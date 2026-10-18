@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError, api, type CatalogPermission, type Role, type Scope } from "../api/client";
 import { changeCount, grantsSignature, scopesIn } from "./grants";
@@ -13,7 +14,10 @@ export function useGrantsDraft(role: Role, onSaved: (role: Role) => void) {
   const [draft, setDraft] = useState(saved);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const saveGrants = useMutation({
+    mutationFn: (input: Parameters<typeof api.saveGrants>[1]) => api.saveGrants(role.key, input),
+  });
+  const saving = saveGrants.isPending;
 
   // The stored Grants changed under the draft (saved, reset, or changed by someone else, which a refresh shows): start
   // from them, unless there are unsaved ticks, which a refresh must not throw away. Saving them is then refused if the
@@ -48,12 +52,11 @@ export function useGrantsDraft(role: Role, onSaved: (role: Role) => void) {
   }
 
   async function save() {
-    setSaving(true);
     setErrors({});
     setFailure(null);
     try {
       onSaved(
-        await api.saveGrants(role.key, {
+        await saveGrants.mutateAsync({
           grants: [...draft].map(([permission, scope]) => ({ permission, scope })),
           version: role.version,
         }),
@@ -67,8 +70,6 @@ export function useGrantsDraft(role: Role, onSaved: (role: Role) => void) {
       } else {
         setFailure("Couldn't save the Permissions. Please try again.");
       }
-    } finally {
-      setSaving(false);
     }
   }
 

@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
+import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import type { Role } from "../api/client";
+import { createQueryClient } from "../api/queryClient";
 import { useGrantsDraft } from "./useGrantsDraft";
+
+/** The hook saves through a mutation, which needs the app's query client. */
+function wrapper({ children }: { children: ReactNode }) {
+  return <QueryClientProvider client={createQueryClient()}>{children}</QueryClientProvider>;
+}
 
 function role(grants: string[]): Role {
   return {
@@ -24,6 +32,7 @@ describe("a Role's unsaved Grants", () => {
   it("follow the stored Grants when nothing was ticked", () => {
     const { result, rerender } = renderHook(({ stored }) => useGrantsDraft(stored, () => {}), {
       initialProps: { stored: role(["a:read"]) },
+      wrapper,
     });
 
     rerender({ stored: role(["a:read", "a:write"]) });
@@ -34,6 +43,7 @@ describe("a Role's unsaved Grants", () => {
   it("survive a refresh that shows someone else's change", () => {
     const { result, rerender } = renderHook(({ stored }) => useGrantsDraft(stored, () => {}), {
       initialProps: { stored: role(["a:read"]) },
+      wrapper,
     });
     act(() => result.current.changeScope("b:read", "project"));
 

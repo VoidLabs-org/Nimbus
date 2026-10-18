@@ -26,7 +26,7 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
-	ProblemDetail wrongCode(EmailVerification.WrongCodeException e) {
+	ProblemDetail wrongCode(EmailedCodes.WrongCodeException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", "invalid_code");
 		problem.setProperty("triesLeft", e.triesLeft());
@@ -34,7 +34,7 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
-	ProblemDetail codeExpired(EmailVerification.CodeExpiredException e) {
+	ProblemDetail codeExpired(EmailedCodes.CodeExpiredException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", "code_expired");
 		return problem;

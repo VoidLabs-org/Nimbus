@@ -26,6 +26,11 @@ interface UserRepository extends JpaRepository<User, UUID> {
 	@Query("select u from User u where u.id = :id")
 	Optional<User> findLockedById(@Param("id") UUID id);
 
+	/** The User with this (lower-cased) email, locked like {@link #findLockedById}. */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select u from User u where u.email = :email")
+	Optional<User> findLockedByEmail(@Param("email") String email);
+
 	boolean existsByEmail(String email);
 
 	Optional<User> findByEmail(String email);

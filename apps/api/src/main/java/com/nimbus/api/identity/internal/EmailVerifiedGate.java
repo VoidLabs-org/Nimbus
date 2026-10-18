@@ -31,7 +31,8 @@ class EmailVerifiedGate extends OncePerRequestFilter {
 	static final String ERROR_CODE = "email_unverified";
 
 	private static final Set<String> ALLOWED_POSTS = Set.of("/api/auth/verify-email", "/api/auth/verify-email/resend", "/api/auth/logout",
-			"/api/auth/refresh", "/api/auth/login", "/api/auth/register");
+			"/api/auth/refresh", "/api/auth/login", "/api/auth/register", "/api/auth/password-reset",
+			"/api/auth/password-reset/confirm");
 
 	private final UserRepository users;
 

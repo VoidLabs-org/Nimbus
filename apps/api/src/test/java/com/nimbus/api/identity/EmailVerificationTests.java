@@ -196,7 +196,7 @@ class EmailVerificationTests {
 		register("ev-ivy@example.com");
 		var code = RecordingMailer.lastCodeFor("ev-ivy@example.com");
 
-		var hash = jdbc.sql("SELECT code_hash FROM verification_codes WHERE user_id = "
+		var hash = jdbc.sql("SELECT code_hash FROM emailed_codes WHERE kind = 'VERIFICATION' AND user_id = "
 				+ "(SELECT id FROM users WHERE email = 'ev-ivy@example.com')").query(String.class).single();
 
 		assertThat(hash).doesNotContain(code).hasSize(64);
@@ -223,7 +223,7 @@ class EmailVerificationTests {
 	void aUserWhoWasUnverifiedBeforeThereWasAGateMeetsTheGate() {
 		// Registered before verification existed: unverified, with no code ever issued for them.
 		var token = accessToken(register("ev-kim@example.com"));
-		jdbc.sql("DELETE FROM verification_codes WHERE user_id = (SELECT id FROM users WHERE email = 'ev-kim@example.com')")
+		jdbc.sql("DELETE FROM emailed_codes WHERE kind = 'VERIFICATION' AND user_id = (SELECT id FROM users WHERE email = 'ev-kim@example.com')")
 			.update();
 
 		client.get().uri("/api/access/roles").header("Authorization", "Bearer " + token)
@@ -358,7 +358,7 @@ class EmailVerificationTests {
 	void aUserWithNoCodeYetCanAskForOne() {
 		var email = "ev-resend-j@example.com";
 		var token = accessToken(register(email));
-		jdbc.sql("DELETE FROM verification_codes WHERE user_id = (SELECT id FROM users WHERE email = 'ev-resend-j@example.com')")
+		jdbc.sql("DELETE FROM emailed_codes WHERE kind = 'VERIFICATION' AND user_id = (SELECT id FROM users WHERE email = 'ev-resend-j@example.com')")
 			.update();
 		clock.advance(Duration.ofHours(2));
 
@@ -384,7 +384,7 @@ class EmailVerificationTests {
 	}
 
 	private String storedHash(String email) {
-		return jdbc.sql("SELECT code_hash FROM verification_codes WHERE user_id = (SELECT id FROM users WHERE email = ?)")
+		return jdbc.sql("SELECT code_hash FROM emailed_codes WHERE kind = 'VERIFICATION' AND user_id = (SELECT id FROM users WHERE email = ?)")
 			.param(email).query(String.class).single();
 	}
 

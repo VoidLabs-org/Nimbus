@@ -60,6 +60,14 @@ class SignIn {
 		return user;
 	}
 
+	/**
+	 * Forgets the failed sign-ins for {@code email}, so a User who just reset their password isn't locked out of
+	 * signing in with it. The per-address count stays: it is about the client, not the account.
+	 */
+	void clearFailures(String email) {
+		failuresByEmail.clear(email.toLowerCase(Locale.ROOT));
+	}
+
 	static class InvalidCredentialsException extends RuntimeException {
 
 		InvalidCredentialsException() {

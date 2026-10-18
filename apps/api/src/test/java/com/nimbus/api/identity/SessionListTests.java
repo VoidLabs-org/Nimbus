@@ -1,7 +1,6 @@
 package com.nimbus.api.identity;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
@@ -49,7 +48,8 @@ class SessionListTests {
 		assertThat(JsonPath.<Boolean>read(body, "$[1].current")).isFalse();
 		assertThat(JsonPath.<String>read(body, "$[0].id")).isNotBlank().isNotEqualTo(JsonPath.read(body, "$[1].id"));
 		assertThat(JsonPath.<String>read(body, "$[0].startedAt")).isNotBlank();
-		assertThat(JsonPath.<String>read(body, "$[0].lastActiveAt")).isNotBlank();
+		assertThat(JsonPath.<Integer>read(body, "$[0].idleSeconds")).isZero();
+		assertThat(body).doesNotContain("lastActiveAt");
 		assertThat(body).doesNotContain("Mozilla");
 	}
 
@@ -67,22 +67,24 @@ class SessionListTests {
 
 		assertThat(JsonPath.<java.util.List<String>>read(body, "$[*].device"))
 			.containsExactly("Chrome on Windows", "Firefox on Linux", "Safari on iOS");
+		// How long ago each was last active, by the server's clock: now, 1 hour (the refresh), 3 hours (the sign-in).
+		assertThat(JsonPath.<java.util.List<Integer>>read(body, "$[*].idleSeconds")).containsExactly(0, 3600, 10800);
 	}
 
 	@Test
-	void aRefreshMovesLastActiveButNeverChangesTheDevice() {
+	void aRefreshStartsTheIdleTimeOverButNeverChangesTheDevice() {
 		register("Curie", "curie-list@example.com", SAFARI_ON_IPHONE);
 		var laptop = signIn("curie-list@example.com", CHROME_ON_WINDOWS);
-		var before = lastActiveAt(list(laptop.accessToken()));
-
 		clock.advance(Duration.ofHours(3));
+		var idleBefore = JsonPath.<Integer>read(bodyOf(list(laptop.accessToken())), "$[0].idleSeconds");
+
 		var refreshed = refresh(laptop.refreshToken(), FIREFOX_ON_LINUX);
 
-		var after = list(refreshed.accessToken()).expectStatus().isOk().expectBody(String.class).returnResult()
-			.getResponseBody();
+		var after = bodyOf(list(refreshed.accessToken()));
+		assertThat(idleBefore).isEqualTo(10800);
+		assertThat(JsonPath.<Integer>read(after, "$[0].idleSeconds")).isEqualTo(0);
 		assertThat(JsonPath.<String>read(after, "$[0].device")).isEqualTo("Chrome on Windows");
-		assertThat(Instant.parse(JsonPath.read(after, "$[0].lastActiveAt"))).isAfter(before);
-		assertThat(JsonPath.<String>read(after, "$[0].startedAt")).isEqualTo(startedAt(list(laptop.accessToken())));
+		assertThat(JsonPath.<String>read(after, "$[0].startedAt")).isEqualTo(startedAt(list(refreshed.accessToken())));
 	}
 
 	@Test
@@ -241,10 +243,8 @@ class SessionListTests {
 			.expectStatus().isNoContent();
 	}
 
-	private Instant lastActiveAt(RestTestClient.ResponseSpec response) {
-		return Instant.parse(JsonPath.read(
-				response.expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody(),
-				"$[0].lastActiveAt"));
+	private String bodyOf(RestTestClient.ResponseSpec response) {
+		return response.expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody();
 	}
 
 	private String startedAt(RestTestClient.ResponseSpec response) {

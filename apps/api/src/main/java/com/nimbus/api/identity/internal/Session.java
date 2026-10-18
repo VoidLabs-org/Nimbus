@@ -30,6 +30,9 @@ class Session {
 
 	private String userAgent;
 
+	/** When it last got a new refresh token: its start, then every refresh. */
+	private Instant lastActiveAt;
+
 	protected Session() {
 	}
 
@@ -38,6 +41,7 @@ class Session {
 		this.userId = userId;
 		this.userAgent = userAgent == null ? null : cut(userAgent);
 		this.startedAt = startedAt;
+		this.lastActiveAt = startedAt;
 		this.expiresAt = expiresAt;
 	}
 
@@ -67,6 +71,10 @@ class Session {
 	/** Not revoked and not past its absolute cap. */
 	boolean isActiveAt(Instant now) {
 		return revokedAt == null && now.isBefore(expiresAt);
+	}
+
+	void markActive(Instant now) {
+		lastActiveAt = now;
 	}
 
 	boolean isRevoked() {

@@ -19,7 +19,7 @@ export default function SecurityPage() {
   const error = loadFailure(query);
   if (error) return <FailedLoadPage failure={error} onRetry={() => void query.refetch()} />;
 
-  // "Ago" is measured from when the list was fetched, so what is on screen is consistent with itself.
+  // Only for the date of a sign-in (and whether it was this year); how long ago a session was active comes from the server.
   const now = new Date(query.dataUpdatedAt);
   const sessions = query.data;
 
@@ -58,7 +58,7 @@ export default function SecurityPage() {
                         {session.current && <span className={classes.badge}>This device</span>}
                       </div>
                       <div className={classes.detail}>
-                        {signedInText(session.startedAt, now)} · {activityText(session, now)}
+                        {signedInText(session.startedAt, now)} · {activityText(session)}
                       </div>
                     </div>
                   </li>

@@ -66,7 +66,7 @@ function sessionInfo(
     device,
     current,
     startedAt: new Date(Date.now() - startedAgo).toISOString(),
-    lastActiveAt: new Date(Date.now() - activeAgo).toISOString(),
+    idleSeconds: Math.round(activeAgo / 1000),
   };
 }
 

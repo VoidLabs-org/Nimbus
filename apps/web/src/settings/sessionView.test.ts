@@ -2,46 +2,30 @@ import { describe, expect, it } from "vitest";
 import { activityText, isPhone, signedInText } from "./sessionView";
 
 const now = new Date("2026-10-18T12:00:00Z");
-const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
-const MINUTE = 60_000;
+const MINUTE = 60;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
+/** A session the server says was last active this many seconds ago. */
+const idle = (idleSeconds: number, current = false) => ({ current, idleSeconds });
+
 describe("activityText", () => {
   it("says Active now within 15 minutes", () => {
-    expect(activityText({ current: false, lastActiveAt: ago(0) }, now)).toBe("Active now");
-    expect(activityText({ current: false, lastActiveAt: ago(14 * MINUTE) }, now)).toBe(
-      "Active now",
-    );
+    expect(activityText(idle(0))).toBe("Active now");
+    expect(activityText(idle(14 * MINUTE))).toBe("Active now");
   });
 
   it("says Active now for this device however old its last refresh", () => {
-    expect(activityText({ current: true, lastActiveAt: ago(2 * HOUR) }, now)).toBe("Active now");
+    expect(activityText(idle(2 * HOUR, true))).toBe("Active now");
   });
 
   it("counts whole minutes, hours and days, singular for one", () => {
-    expect(activityText({ current: false, lastActiveAt: ago(15 * MINUTE) }, now)).toBe(
-      "Active 15 minutes ago",
-    );
-    expect(activityText({ current: false, lastActiveAt: ago(59 * MINUTE) }, now)).toBe(
-      "Active 59 minutes ago",
-    );
-    expect(activityText({ current: false, lastActiveAt: ago(HOUR) }, now)).toBe(
-      "Active 1 hour ago",
-    );
-    expect(activityText({ current: false, lastActiveAt: ago(3 * HOUR + 40 * MINUTE) }, now)).toBe(
-      "Active 3 hours ago",
-    );
-    expect(activityText({ current: false, lastActiveAt: ago(DAY) }, now)).toBe("Active 1 day ago");
-    expect(activityText({ current: false, lastActiveAt: ago(5 * DAY + 3 * HOUR) }, now)).toBe(
-      "Active 5 days ago",
-    );
-  });
-
-  it("does not go negative when the clocks disagree a little", () => {
-    expect(activityText({ current: false, lastActiveAt: ago(-2 * MINUTE) }, now)).toBe(
-      "Active now",
-    );
+    expect(activityText(idle(15 * MINUTE))).toBe("Active 15 minutes ago");
+    expect(activityText(idle(59 * MINUTE))).toBe("Active 59 minutes ago");
+    expect(activityText(idle(HOUR))).toBe("Active 1 hour ago");
+    expect(activityText(idle(3 * HOUR + 40 * MINUTE))).toBe("Active 3 hours ago");
+    expect(activityText(idle(DAY))).toBe("Active 1 day ago");
+    expect(activityText(idle(5 * DAY + 3 * HOUR))).toBe("Active 5 days ago");
   });
 });
 

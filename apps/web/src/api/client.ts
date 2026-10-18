@@ -133,8 +133,8 @@ export type SessionInfo = {
   current: boolean;
   /** When it was signed in (ISO 8601). */
   startedAt: string;
-  /** When it last renewed its sign-in (ISO 8601), so accurate to about 15 minutes. */
-  lastActiveAt: string;
+  /** How many seconds ago it last renewed its sign-in, by the server's clock; accurate to about 15 minutes. */
+  idleSeconds: number;
 };
 
 /** The `code` the server puts on the 403 it answers an Unverified User with. */

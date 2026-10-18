@@ -9,10 +9,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,26 +36,34 @@ class Sessions {
 
 	private final AuthProperties properties;
 
+	private final DeviceLabels deviceLabels;
+
 	private final Clock clock;
 
 	private final SlidingWindowLimiter attemptsByAddress;
 
 	Sessions(SessionRepository sessions, RefreshTokenRepository tokens, UserRepository users,
-			AuthProperties properties, Clock clock) {
+			AuthProperties properties, DeviceLabels deviceLabels, Clock clock) {
 		this.sessions = sessions;
 		this.tokens = tokens;
 		this.users = users;
 		this.properties = properties;
+		this.deviceLabels = deviceLabels;
 		this.clock = clock;
 		this.attemptsByAddress = new SlidingWindowLimiter(properties.refreshesPerAddress(), properties.limitWindow(),
 				clock);
 	}
 
-	/** Starts a session for a User who just proved who they are, and returns its first refresh token. */
+	/**
+	 * Starts a session for a User who just proved who they are, and returns its first refresh token.
+	 *
+	 * @param userAgent the browser's {@code User-Agent} header, kept to tell the User's sessions apart; may be null
+	 */
 	@Transactional
-	IssuedToken start(User user) {
+	IssuedToken start(User user, String userAgent) {
 		var now = now();
-		var session = sessions.save(new Session(user.getId(), now, now.plus(properties.sessionMaxAge())));
+		var session = sessions
+			.save(new Session(user.getId(), now, now.plus(properties.sessionMaxAge()), userAgent));
 		return issue(session, now);
 	}
 
@@ -112,9 +123,46 @@ class Sessions {
 	/** Whether the session is the User's own and still running. */
 	@Transactional(readOnly = true)
 	boolean isActive(UUID sessionId, UUID userId) {
+		return isActiveAt(sessionId, userId, now());
+	}
+
+	private boolean isActiveAt(UUID sessionId, UUID userId, Instant now) {
 		return sessions.findById(sessionId)
-			.filter(session -> session.userId().equals(userId) && session.isActiveAt(now()))
+			.filter(session -> session.userId().equals(userId) && session.isActiveAt(now))
 			.isPresent();
+	}
+
+	/**
+	 * The User's running sessions, the one making the request first, then the rest by when they were last used.
+	 *
+	 * @param currentSessionId the session of the access token making the request
+	 * @throws InvalidBearerTokenException when that session has ended: a signed-out browser whose access token still
+	 * works must not see or change the User's other sessions
+	 */
+	@Transactional(readOnly = true)
+	List<SessionView> listFor(UUID userId, UUID currentSessionId) {
+		// One instant for both questions, so a session ending between them can't be running for one and over for the other.
+		var now = now();
+		if (!isActiveAt(currentSessionId, userId, now)) {
+			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
+		}
+		var views = sessions.findRunningOf(userId, now, now.minus(properties.sessionIdleTimeout()))
+			.stream()
+			.map(session -> new SessionView(session.getId(), deviceLabels.of(session.getUserAgent()),
+					session.getId().equals(currentSessionId), session.getStartedAt(),
+					idleSeconds(session.getLastActiveAt(), now)))
+			.sorted(Comparator.comparing(SessionView::current).reversed()
+				.thenComparing(SessionView::idleSeconds))
+			.toList();
+		// The caller's own session must be in its list; if it isn't, it ended in the meantime.
+		if (views.stream().noneMatch(SessionView::current)) {
+			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
+		}
+		return views;
+	}
+
+	private static long idleSeconds(Instant lastActiveAt, Instant now) {
+		return Math.max(0, Duration.between(lastActiveAt, now).getSeconds());
 	}
 
 	/** Ends every session of a User except one, on every other browser. */
@@ -130,6 +178,7 @@ class Sessions {
 		var idleExpiry = now.plus(properties.sessionIdleTimeout());
 		var expiresAt = idleExpiry.isBefore(session.expiresAt()) ? idleExpiry : session.expiresAt();
 		tokens.save(new RefreshToken(session, hash(value), now, expiresAt));
+		session.markActive(now);
 		return new IssuedToken(value, Duration.between(now, expiresAt), session.id());
 	}
 
@@ -148,6 +197,10 @@ class Sessions {
 		catch (NoSuchAlgorithmException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	/** One row of the User's list of sessions; {@code idleSeconds} is by this server's clock, never the browser's. */
+	record SessionView(UUID id, String device, boolean current, Instant startedAt, long idleSeconds) {
 	}
 
 	/** A refresh token to hand to the browser, how long it keeps working, and the session it belongs to. */

@@ -1,0 +1,84 @@
+/* Settings → Security, from the "Nimbus Themes" design (32a). Colours come only from the theme variables. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.description {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--line);
+}
+
+li:first-child.row {
+  border-top: 0;
+}
+
+.icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--seg);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
+}
+
+.detail {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--color-accent-2-700);
+}
+
+.alone {
+  margin: 0;
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}

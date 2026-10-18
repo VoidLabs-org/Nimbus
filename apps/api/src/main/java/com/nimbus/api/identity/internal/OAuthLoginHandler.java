@@ -53,7 +53,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			var login = (OAuth2AuthenticationToken) authentication;
 			provider = login.getAuthorizedClientRegistrationId();
 			var user = externalSignIn.signIn(profileOf(login));
-			var refreshToken = sessions.start(user);
+			var refreshToken = sessions.start(user, request.getHeader(HttpHeaders.USER_AGENT));
 			response.addHeader(HttpHeaders.SET_COOKIE,
 					AuthController.refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
 			redirect(response, "/auth/callback", returnTo);

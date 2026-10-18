@@ -56,6 +56,23 @@ class OAuthLoginHandlerTests {
 	}
 
 	@Test
+	void theSessionRemembersWhichBrowserSignedIn() throws Exception {
+		var request = new MockHttpServletRequest();
+		request.addHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+				+ "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationSuccess(request, response, google(recorded("verified-user")));
+
+		var setCookie = response.getHeader(HttpHeaders.SET_COOKIE);
+		var refreshed = sessions.refresh(setCookie.substring("refresh_token=".length(), setCookie.indexOf(';')),
+				"client-google-agent");
+		assertThat(sessions.listFor(refreshed.user().getId(), refreshed.token().sessionId()))
+			.extracting(Sessions.SessionView::device)
+			.contains("Chrome on Windows");
+	}
+
+	@Test
 	void anUnverifiedEmailRedirectsToLoginWithTheCodeAndSetsNoCookie() throws Exception {
 		var response = new MockHttpServletResponse();
 

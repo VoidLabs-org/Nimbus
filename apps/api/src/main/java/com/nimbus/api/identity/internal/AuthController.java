@@ -44,13 +44,13 @@ class AuthController {
 	ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
 		var user = registration.register(request.displayName(), request.email(), request.password(),
 				http.getRemoteAddr());
-		return signedIn(HttpStatus.CREATED, user);
+		return signedIn(HttpStatus.CREATED, user, http);
 	}
 
 	@PostMapping("/login")
 	ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
 		var user = signIn.signIn(request.email(), request.password(), http.getRemoteAddr());
-		return signedIn(HttpStatus.OK, user);
+		return signedIn(HttpStatus.OK, user, http);
 	}
 
 	/**
@@ -92,8 +92,8 @@ class AuthController {
 	}
 
 	/** Starts a session: the access token goes in the body, the refresh token only in the cookie. */
-	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user) {
-		return withSession(status, user, sessions.start(user));
+	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user, HttpServletRequest http) {
+		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT)));
 	}
 
 	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken) {

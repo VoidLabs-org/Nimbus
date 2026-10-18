@@ -93,6 +93,7 @@ In the web app, **Google** and **GitHub** (named "Continue with Google" / "Conti
 
 Registering with a password creates an Unverified User, signs them in, and, after the transaction has committed, emails them a **Verification code** through the `mail` module ([mail.md](mail.md)). A failed send is logged and never fails the registration.
 
+- The email follows the "Ink header band" design: HTML with a plain-text alternative, the code in large type, and "Enter this in Nimbus to verify your email. It expires in 15 minutes." The code is kept out of the subject, the title and the hidden preview line. The header logo comes from `MAIL_ASSETS_URL` (see [mail.md](mail.md)).
 - The code is 6 random digits, valid for 15 minutes. A User has at most one live code: a new one replaces the old.
 - 5 wrong tries cancel the code (it is deleted). Wrong tries are counted under a lock on the code's row, so parallel guesses can't race past the limit, and the count is committed even though the request fails.
 - Only a keyed hash is stored: HMAC-SHA256 over `<user id>:<code>`, with a key derived from `JWT_SECRET` (so rotating `JWT_SECRET` also cancels live codes). Codes are compared in constant time. The code never goes into an event: events are stored, so it would sit in the database in plain text.

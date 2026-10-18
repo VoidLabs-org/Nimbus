@@ -179,6 +179,25 @@ describe("the verification screen", () => {
       expect(screen.getByRole("button", { name: "Resend code" })).toBeTruthy();
     });
 
+    it("shows Sending… while the code is on its way, then says a new code was sent", async () => {
+      vi.spyOn(api, "refresh").mockResolvedValue(unverified);
+      let finish = () => {};
+      vi.spyOn(api, "resendVerificationCode").mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      );
+      show();
+      await screen.findByRole("heading", { name: "Verify your email" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
+
+      await screen.findByRole("button", { name: /Sending/ });
+      expect(screen.getByRole("status").textContent).toBe("");
+      await act(async () => finish());
+      expect((await screen.findByRole("status")).textContent).toContain("New code sent");
+    });
+
     it("counts down from the server's Retry-After when sending is limited", async () => {
       vi.spyOn(api, "refresh").mockResolvedValue(unverified);
       vi.spyOn(api, "resendVerificationCode").mockRejectedValue(

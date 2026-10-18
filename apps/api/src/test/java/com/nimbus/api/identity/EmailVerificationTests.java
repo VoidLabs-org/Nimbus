@@ -41,6 +41,8 @@ class EmailVerificationTests {
 		assertThat(mails).hasSize(1);
 		assertThat(mails.get(0).text()).containsPattern("\\b\\d{6}\\b").contains("expires in 15 minutes");
 		assertThat(mails.get(0).html()).contains(RecordingMailer.lastCodeFor("ev-ada@example.com"));
+		// The header logo is the dark Nimbus icon, from the module's image host.
+		assertThat(mails.get(0).html()).contains(RecordingMailer.IMAGE_HOST + "/nimbus-icon-dark.png");
 	}
 
 	@Test

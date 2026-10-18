@@ -170,6 +170,7 @@ class PasswordResetTests {
 		var old = awaitResetCode(email, 1);
 		var oldHash = storedResetHash(email);
 
+		clock.advance(Duration.ofSeconds(61));
 		request(email).expectStatus().isNoContent();
 		var fresh = awaitResetCode(email, 2);
 
@@ -286,11 +287,14 @@ class PasswordResetTests {
 		return registerResult(email).getResponseBody();
 	}
 
+	/** Registering mails a Verification code, which spends the address's send budget; wait it out. */
 	private EntityExchangeResult<String> registerResult(String email) {
-		return client.post().uri("/api/auth/register")
+		var result = client.post().uri("/api/auth/register")
 			.body(Map.of("displayName", "Pat", "email", email, "password", "correct horse"))
 			.exchange().expectStatus().isCreated()
 			.expectBody(String.class).returnResult();
+		clock.advance(Duration.ofSeconds(61));
+		return result;
 	}
 
 	private static String accessToken(String response) {

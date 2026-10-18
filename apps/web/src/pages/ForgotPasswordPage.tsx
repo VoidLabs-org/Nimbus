@@ -20,6 +20,11 @@ const CODE_LENGTH = 6;
 
 const GENERIC_ERROR = "Something went wrong. Please try again.";
 
+/** The wait the server asked for, counting down. */
+function tooManyAttemptsIn(seconds: number): string {
+  return `Too many attempts. Try again in ${clock(seconds)}.`;
+}
+
 /**
  * Forgot password, in two steps on one page. Step 1 asks for the email and has a Reset code emailed to it (the
  * server answers the same for every address, so this never says whether one is registered). Step 2 takes the
@@ -51,6 +56,9 @@ export default function ForgotPasswordPage() {
   const [countdownFor, setCountdownFor] = useState<string | null>(null);
   const waiting = secondsToResend > 0;
   const waitingForTyped = waiting && countdownFor === email.trim().toLowerCase();
+  // The server refused for now (a 429 with a wait): the form is off and the wait counts down until it ends.
+  const [limited, setLimited] = useState(false);
+  const rateLimited = limited && waiting;
   // The confirmation goes with the countdown: a minute on, it is no longer news.
   const shownNotice = waiting ? notice : null;
 
@@ -76,15 +84,26 @@ export default function ForgotPasswordPage() {
     setSecondsToResend(seconds);
   }
 
+  /** A 429: with a wait the form is disabled and counts it down; without one the message is all there is. */
+  function showRateLimit(failure: ApiError, address: string) {
+    if (failure.retryAfterSeconds) {
+      startCountdown(address, failure.retryAfterSeconds);
+      setLimited(true);
+      setFormError(null);
+    } else {
+      setFormError(tooManyAttemptsMessage(null));
+    }
+  }
+
   /** Asks for a code. Returns true when it is on its way. */
   async function requestCode(address: string): Promise<boolean> {
+    setLimited(false);
     try {
       await api.requestPasswordReset(address);
       return true;
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 429) {
-        if (failure.retryAfterSeconds) startCountdown(address, failure.retryAfterSeconds);
-        setFormError(tooManyAttemptsMessage(failure.retryAfterSeconds));
+        showRateLimit(failure, address);
       } else {
         setFormError(GENERIC_ERROR);
       }
@@ -137,6 +156,7 @@ export default function ForgotPasswordPage() {
     setPasswordMessage(tooShort);
     if (tooShort) return;
     setChecking(true);
+    setLimited(false);
     setFormError(null);
     setNotice(null);
     setCodeMessage(null);
@@ -167,7 +187,7 @@ export default function ForgotPasswordPage() {
       setCodeMessage("This code has expired.");
       setExpired(true);
     } else if (failure.status === 429) {
-      setFormError(tooManyAttemptsMessage(failure.retryAfterSeconds));
+      showRateLimit(failure, email);
     } else if (failure.fieldErrors.newPassword) {
       // The code is kept: it was not looked at, so it costs no try.
       setPasswordMessage(failure.fieldErrors.newPassword);
@@ -201,6 +221,11 @@ export default function ForgotPasswordPage() {
           <AuthSubmit loading={sending} disabled={waitingForTyped}>
             {waitingForTyped ? `Send code in ${clock(secondsToResend)}` : "Send code"}
           </AuthSubmit>
+          {rateLimited && (
+            <div className={classes.codeError} role="alert">
+              {tooManyAttemptsIn(secondsToResend)}
+            </div>
+          )}
           {formError && (
             <div className={classes.codeError} role="alert">
               {formError}
@@ -243,7 +268,7 @@ export default function ForgotPasswordPage() {
               setCodeMessage(null);
             }
           }}
-          disabled={checking || resending}
+          disabled={checking || resending || rateLimited}
           error={codeRejected}
           ariaLabel="Reset code digit"
         />
@@ -253,6 +278,14 @@ export default function ForgotPasswordPage() {
               !
             </span>
             {codeMessage}
+          </div>
+        )}
+        {rateLimited && (
+          <div className={classes.codeError} role="alert">
+            <span className={classes.codeErrorMark} aria-hidden>
+              !
+            </span>
+            {tooManyAttemptsIn(secondsToResend)}
           </div>
         )}
         {/* Always in the page, so a screen reader announces the text when it appears in it. */}
@@ -281,9 +314,10 @@ export default function ForgotPasswordPage() {
               onChange={(event) => setPassword(event.currentTarget.value)}
               description={passwordMessage ? undefined : "8 to 128 characters"}
               error={passwordMessage}
+              disabled={rateLimited}
             />
             <div className={classes.pinnedSubmit}>
-              <AuthSubmit loading={checking} disabled={code.length < CODE_LENGTH}>
+              <AuthSubmit loading={checking} disabled={code.length < CODE_LENGTH || rateLimited}>
                 Reset password
               </AuthSubmit>
             </div>
@@ -310,6 +344,8 @@ export default function ForgotPasswordPage() {
                 <Loader size={12} color="currentColor" mr={8} />
                 Sending…
               </>
+            ) : rateLimited ? (
+              "Resend paused"
             ) : waiting ? (
               `Resend code in ${clock(secondsToResend)}`
             ) : (

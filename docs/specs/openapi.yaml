@@ -365,6 +365,19 @@ paths:
           description: Accepted. A code is on its way if the email is registered
         "400":
           $ref: "#/components/responses/InvalidFields"
+        "429":
+          description: >-
+            This IP address asked too often, or the email was mailed too recently or too often (the shared send
+            budget, spent for any email typed, registered or not). Nothing is sent and a live code is unchanged.
+          headers:
+            Retry-After:
+              description: Seconds until another request may succeed
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /api/auth/password-reset/confirm:
     post:
@@ -419,6 +432,8 @@ paths:
                         type: object
                         additionalProperties:
                           type: string
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
 
   /api/auth/providers:
     get:
@@ -1387,7 +1402,7 @@ components:
                     additionalProperties:
                       type: string
     TooManyAttempts:
-      description: Rate limited (failed sign-ins per email or IP address, registrations or refreshes per IP address, or wrong current passwords per User)
+      description: Rate limited (failed sign-ins per email or IP address, registrations, refreshes, forgot-password requests or reset attempts per IP address, or wrong current passwords per User)
       headers:
         Retry-After:
           description: Seconds until another attempt may succeed

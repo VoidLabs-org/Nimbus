@@ -24,7 +24,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
  * {@code PublishedEvents} needs a module test, which runs without the security filters, so this signed-in flow
  * listens for the event itself.
  */
-@Import({ TestcontainersConfiguration.class, EmailVerifiedEventTests.Listener.class })
+@Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class, EmailVerifiedEventTests.Listener.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
 class EmailVerifiedEventTests {
@@ -34,6 +34,9 @@ class EmailVerifiedEventTests {
 
 	@Autowired
 	Listener listener;
+
+	@Autowired
+	MovableClock clock;
 
 	@Test
 	void enteringTheRightCodePublishesEmailVerifiedOnce() {
@@ -66,6 +69,8 @@ class EmailVerifiedEventTests {
 			.expectBody(String.class).returnResult();
 		String id = JsonPath.read(registered.getResponseBody(), "$.user.id");
 		var squatterCookie = RefreshCookies.valueOf(registered);
+		// Registering mailed a Verification code; the address may be mailed again a minute later.
+		clock.advance(Duration.ofSeconds(61));
 
 		client.post().uri("/api/auth/password-reset").body(Map.of("email", email))
 			.exchange().expectStatus().isNoContent();
@@ -94,6 +99,8 @@ class EmailVerifiedEventTests {
 			.exchange().expectStatus().isCreated()
 			.expectBody(String.class).returnResult().getResponseBody();
 		EmailCodes.verify(client, JsonPath.read(response, "$.accessToken"), email);
+		// Registering mailed a Verification code; the address may be mailed again a minute later.
+		clock.advance(Duration.ofSeconds(61));
 
 		client.post().uri("/api/auth/password-reset").body(Map.of("email", email))
 			.exchange().expectStatus().isNoContent();

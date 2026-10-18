@@ -89,8 +89,8 @@ One sign-in on one browser. It lasts while that browser keeps using Nimbus, up t
 _Avoid_: Login, device
 
 **Linked identity**:
-A Google or GitHub login attached to a User, letting them sign in without a password.
-_Avoid_: Social account, external account, provider user
+A Google or GitHub login attached to a User, letting them sign in without a password. A User links one by connecting it on the Security page and unlinks it by disconnecting it. A disconnected one is not linked again until the User connects it.
+_Avoid_: Social account, external account, provider user, connected account (UI copy only)
 
 ## Development workflow
 

@@ -5,6 +5,18 @@
   gap: 12px;
 }
 
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.signOutOthers {
+  flex: none;
+}
+
 .heading {
   margin: 0;
   font-size: 19px;
@@ -94,6 +106,13 @@ li:first-child.row {
   }
 
   .signOut {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 36em) {
+  .signOutOthers {
     flex: 1 1 100%;
     min-height: 44px;
   }

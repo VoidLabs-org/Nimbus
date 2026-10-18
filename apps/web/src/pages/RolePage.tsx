@@ -2,6 +2,7 @@ import { Alert, Box, Button, Container, Group, Modal, Stack, Text, Title } from 
 import { toast } from "@repo/ui/toast";
 import { PillTabs } from "@repo/ui/pill-tabs";
 import { Loading } from "@repo/ui/skeleton";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { readOpenedRole, showsPeopleTab } from "../access/openedRole";
@@ -251,20 +252,20 @@ function ConfirmModal({
 }) {
   const navigate = useNavigate();
   const roleDeleted = useRoleDeleted();
-  const [busy, setBusy] = useState(false);
+  const resetRole = useMutation({ mutationFn: () => api.resetRole(role.key, role.version) });
+  const deleteRole = useMutation({ mutationFn: () => api.deleteRole(role.key) });
   // The last action asked about, so the window's text doesn't change while it fades out.
   const [action, setAction] = useState(confirming);
   if (confirming && confirming !== action) setAction(confirming);
 
   async function confirm() {
-    setBusy(true);
     onFailure(null);
     try {
       if (confirming === "reset") {
-        onChanged(await api.resetRole(role.key, role.version));
+        onChanged(await resetRole.mutateAsync());
         toast.success(`${role.name} is back to its defaults.`);
       } else {
-        await api.deleteRole(role.key);
+        await deleteRole.mutateAsync();
         onDeleted();
         void roleDeleted(role.key);
         toast.success(`Deleted ${role.name}.`);
@@ -276,8 +277,6 @@ function ConfirmModal({
       onFailure(
         error instanceof ApiError ? error.message : "Something went wrong. Please try again.",
       );
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -296,7 +295,11 @@ function ConfirmModal({
         <Button variant="default" onClick={onClose}>
           Cancel
         </Button>
-        <Button color={action === "delete" ? "red" : undefined} loading={busy} onClick={confirm}>
+        <Button
+          color={action === "delete" ? "red" : undefined}
+          loading={resetRole.isPending || deleteRole.isPending}
+          onClick={confirm}
+        >
           {action === "reset" ? "Reset" : "Delete"}
         </Button>
       </Group>

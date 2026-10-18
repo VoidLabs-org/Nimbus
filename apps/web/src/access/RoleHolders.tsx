@@ -13,6 +13,7 @@ import {
 import { useForm } from "@mantine/form";
 import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError, api, type Role, type RoleHolder } from "../api/client";
 import { loadFailure, refreshFailed, useRoleHolders, useRolesChanged } from "../api/queries";
@@ -39,7 +40,9 @@ export function RoleHolders({ role }: { role: Role }) {
   const rolesChanged = useRolesChanged();
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<RoleHolder | null>(null);
-  const [busy, setBusy] = useState(false);
+  const takeRole = useMutation({
+    mutationFn: (holder: RoleHolder) => api.takeRole(role.key, holder.id),
+  });
   const form = useForm({
     initialValues: { email: "" },
     validate: {
@@ -77,10 +80,9 @@ export function RoleHolders({ role }: { role: Role }) {
 
   async function take() {
     if (!removing) return;
-    setBusy(true);
     setError(null);
     try {
-      await api.takeRole(role.key, removing.id);
+      await takeRole.mutateAsync(removing);
       toast.success(`Took ${role.name} from ${removing.email ?? "them"}.`);
       changed();
     } catch (failure) {
@@ -91,7 +93,6 @@ export function RoleHolders({ role }: { role: Role }) {
       if (failure instanceof ApiError && failure.status === 404) changed();
     } finally {
       setRemoving(null);
-      setBusy(false);
     }
   }
 
@@ -188,7 +189,7 @@ export function RoleHolders({ role }: { role: Role }) {
           <Button variant="default" onClick={() => setRemoving(null)}>
             Cancel
           </Button>
-          <Button color="red" loading={busy} onClick={take}>
+          <Button color="red" loading={takeRole.isPending} onClick={take}>
             Remove
           </Button>
         </Group>

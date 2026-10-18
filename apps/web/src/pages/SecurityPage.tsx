@@ -1,6 +1,6 @@
 import { IconDeviceDesktop, IconDeviceMobile } from "@tabler/icons-react";
 import { Button, Container, Stack, Title } from "@mantine/core";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { Glyph } from "@repo/ui/glyph";
@@ -9,6 +9,7 @@ import { Bone, Loading } from "@repo/ui/skeleton";
 import { ApiError, api, type SessionInfo } from "../api/client";
 import { loadFailure, queryKeys, useSessions } from "../api/queries";
 import { activityText, isPhone, sessionName, signedInText } from "../settings/sessionView";
+import { SignOutOthersDialog } from "./SignOutOthersDialog";
 import { settingsCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { FailedLoadPage } from "../shell/StatusPages";
@@ -21,38 +22,49 @@ import classes from "./SecurityPage.module.css";
 export default function SecurityPage() {
   const query = useSessions();
   const client = useQueryClient();
-  const [signingOut, setSigningOut] = useState<string | null>(null);
+  // The devices the dialog was opened with: what the User agrees to is what they were shown, not a later refetch.
+  const [confirmingOthers, setConfirmingOthers] = useState<SessionInfo[]>([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // Only for the date of a sign-in (and whether it was this year); how long ago a session was active comes from the server.
+  const now = new Date(query.dataUpdatedAt);
+  const refreshList = () => client.invalidateQueries({ queryKey: queryKeys.sessions });
+  // Returning the refresh keeps the button busy until the list shows the change.
+  const signOut = useMutation({
+    mutationFn: (session: SessionInfo) => api.endSession(session.id),
+    onSuccess: (_, session) => {
+      toast.success(`Signed out ${sessionName(session, now)}.`);
+      return refreshList();
+    },
+    onError: (failure, session) => {
+      // A 401 means this session ended too: the app is already sending the User to sign in again.
+      if (failure instanceof ApiError && failure.status === 401) return;
+      if (failure instanceof ApiError && failure.status === 404) {
+        // Already over (another tab, or it expired): nothing went wrong, and the list below is what's left.
+        toast.info(`${sessionName(session, now)} was already signed out.`);
+        return refreshList();
+      }
+      toast.error("Couldn't sign out that device. Please try again.");
+    },
+  });
+  const signOutOthers = useMutation({
+    mutationFn: () => api.endOtherSessions(),
+    onSuccess: () => {
+      toast.success("Signed out your other devices.");
+      setConfirmOpen(false);
+      return refreshList();
+    },
+    onError: (failure) => {
+      // A 401 means this session ended too: the app is already sending the User to sign in again.
+      if (!(failure instanceof ApiError && failure.status === 401))
+        toast.error("Couldn't sign out your other devices. Please try again.");
+    },
+  });
+  const signingOut = signOut.isPending ? signOut.variables.id : null;
   const error = loadFailure(query);
   if (error) return <FailedLoadPage failure={error} onRetry={() => void query.refetch()} />;
 
-  // Only for the date of a sign-in (and whether it was this year); how long ago a session was active comes from the server.
-  const now = new Date(query.dataUpdatedAt);
   const sessions = query.data;
-
-  async function signOut(session: SessionInfo) {
-    const name = sessionName(session, now);
-    setSigningOut(session.id);
-    try {
-      await api.endSession(session.id);
-      toast.success(`Signed out ${name}.`);
-    } catch (failure) {
-      // A 401 means this session ended too: the app is already sending the User to sign in again.
-      if (failure instanceof ApiError && failure.status === 401) {
-        setSigningOut(null);
-        return;
-      }
-      if (failure instanceof ApiError && failure.status === 404) {
-        // Already over (another tab, or it expired): nothing went wrong, and the list below is what's left.
-        toast.info(`${name} was already signed out.`);
-      } else {
-        toast.error("Couldn't sign out that device. Please try again.");
-        setSigningOut(null);
-        return;
-      }
-    }
-    await client.invalidateQueries({ queryKey: queryKeys.sessions });
-    setSigningOut(null);
-  }
+  const others = sessions?.filter((session) => !session.current) ?? [];
 
   return (
     <Container size="sm" px={0} py="xl">
@@ -62,11 +74,26 @@ export default function SecurityPage() {
           Security
         </Title>
         <section className={classes.section} aria-labelledby="signed-in-heading">
-          <div>
-            <h2 id="signed-in-heading" className={classes.heading}>
-              Where you’re signed in
-            </h2>
-            <div className={classes.description}>Sign out anything you don’t recognise.</div>
+          <div className={classes.sectionHead}>
+            <div>
+              <h2 id="signed-in-heading" className={classes.heading}>
+                Where you’re signed in
+              </h2>
+              <div className={classes.description}>Sign out anything you don’t recognise.</div>
+            </div>
+            {others.length > 0 && (
+              <Button
+                variant="default"
+                className={classes.signOutOthers}
+                disabled={signOut.isPending || signOutOthers.isPending}
+                onClick={() => {
+                  setConfirmingOthers(others);
+                  setConfirmOpen(true);
+                }}
+              >
+                Sign out all other devices
+              </Button>
+            )}
           </div>
           {!sessions && (
             <Loading>
@@ -97,9 +124,9 @@ export default function SecurityPage() {
                         variant="default"
                         className={classes.signOut}
                         loading={signingOut === session.id}
-                        disabled={signingOut !== null}
+                        disabled={signOut.isPending || signOutOthers.isPending}
                         aria-label={`Sign out ${sessionName(session, now)}`}
-                        onClick={() => void signOut(session)}
+                        onClick={() => signOut.mutate(session)}
                       >
                         Sign out
                       </Button>
@@ -114,6 +141,14 @@ export default function SecurityPage() {
           )}
         </section>
       </Stack>
+      <SignOutOthersDialog
+        opened={confirmOpen}
+        others={confirmingOthers}
+        now={now}
+        busy={signOutOthers.isPending}
+        onConfirm={() => signOutOthers.mutate()}
+        onClose={() => setConfirmOpen(false)}
+      />
     </Container>
   );
 }

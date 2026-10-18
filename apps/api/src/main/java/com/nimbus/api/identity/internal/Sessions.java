@@ -199,6 +199,19 @@ class Sessions {
 		}
 	}
 
+	/**
+	 * Ends every running session of the User except the one making the request. Does nothing when there are none.
+	 *
+	 * @param currentSessionId the session of the access token making the request
+	 * @throws InvalidBearerTokenException when that session has ended, so a signed-out browser whose access token
+	 * still works can't sign the User out elsewhere
+	 */
+	@Transactional
+	void endOthers(UUID userId, UUID currentSessionId) {
+		requireActive(currentSessionId, userId, now());
+		endAllExcept(userId, currentSessionId);
+	}
+
 	/** Ends every session of a User except one, on every other browser. */
 	@Transactional
 	void endAllExcept(UUID userId, UUID keepSessionId) {

@@ -57,15 +57,15 @@ export default function ForgotPasswordPage() {
   // The code is gone (expired, or cancelled after too many wrong tries): only a new one helps.
   const [expired, setExpired] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const requestReset = useMutation({
-    mutationFn: (address: string) => api.requestPasswordReset(address),
-  });
+  // One for each button, so a resend still under way doesn't show on the email step.
+  const askForCode = (address: string) => api.requestPasswordReset(address);
+  const sendCode = useMutation({ mutationFn: askForCode });
+  const resendCode = useMutation({ mutationFn: askForCode });
   const resetPassword = useMutation({
     mutationFn: (input: Parameters<typeof api.resetPassword>[0]) => api.resetPassword(input),
   });
-  // Asking for a code is one call from two buttons, one on each step.
-  const sending = requestReset.isPending && step === "email";
-  const resending = requestReset.isPending && step === "code";
+  const sending = sendCode.isPending;
+  const resending = resendCode.isPending;
   const checking = resetPassword.isPending;
   const [secondsToResend, setSecondsToResend] = useCountdown();
   // The address the countdown is for: the server limits sends per address, so another one is not held up by it.
@@ -120,10 +120,13 @@ export default function ForgotPasswordPage() {
   }
 
   /** Asks for a code. Returns true when it is on its way. */
-  async function requestCode(address: string): Promise<boolean> {
+  async function requestCode(
+    address: string,
+    request: typeof sendCode | typeof resendCode,
+  ): Promise<boolean> {
     setLimited(false);
     try {
-      await requestReset.mutateAsync(address);
+      await request.mutateAsync(address);
       return true;
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 429) {
@@ -149,7 +152,7 @@ export default function ForgotPasswordPage() {
     }
     if (waitingForTyped) return;
     setEmailError(null);
-    const sent = await requestCode(address);
+    const sent = await requestCode(address, sendCode);
     if (!sent) return;
     setEmail(address);
     clearCodeState();
@@ -161,7 +164,7 @@ export default function ForgotPasswordPage() {
   async function sendNewCode() {
     setNotice(null);
     setFormError(null);
-    const sent = await requestCode(email);
+    const sent = await requestCode(email, resendCode);
     if (!sent) return;
     clearCode();
     setNotice("New code sent. Check your inbox.");

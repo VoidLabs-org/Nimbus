@@ -8,8 +8,10 @@ import { createQueryClient } from "../api/queryClient";
 import { useGrantsDraft } from "./useGrantsDraft";
 
 /** The hook saves through a mutation, which needs the app's query client. */
+const client = createQueryClient();
+
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={createQueryClient()}>{children}</QueryClientProvider>;
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
 function role(grants: string[]): Role {

@@ -85,7 +85,7 @@ export default function SecurityPage() {
               <Button
                 variant="default"
                 className={classes.signOutOthers}
-                disabled={signOut.isPending}
+                disabled={signOut.isPending || signOutOthers.isPending}
                 onClick={() => {
                   setConfirmingOthers(others);
                   setConfirmOpen(true);

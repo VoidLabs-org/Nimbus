@@ -153,7 +153,7 @@ class SetPasswordAfterLinkingTests {
 	}
 
 	private static ExternalProfile profile(String provider, String id, String email) {
-		return new ExternalProfile(provider, id, email, true, "Someone", null);
+		return new ExternalProfile(provider, id, email, true, "Someone", null, email);
 	}
 
 }

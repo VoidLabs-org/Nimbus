@@ -159,6 +159,15 @@ class Sessions {
 		return views;
 	}
 
+	/**
+	 * @throws InvalidBearerTokenException when the session has ended: its access token may still work for a while,
+	 * but a signed-out browser must not see or change the User's account
+	 */
+	@Transactional(readOnly = true)
+	void requireActive(UUID sessionId, UUID userId) {
+		requireActive(sessionId, userId, now());
+	}
+
 	/** @throws InvalidBearerTokenException when the session has ended: its access token may still work for a while */
 	private void requireActive(UUID sessionId, UUID userId, Instant now) {
 		if (!isActiveAt(sessionId, userId, now)) {

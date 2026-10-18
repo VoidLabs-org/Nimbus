@@ -43,6 +43,7 @@ class ExternalSignIn {
 		var linked = identities.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId());
 		if (linked.isPresent()) {
 			var user = users.findById(linked.get().userId()).orElseThrow();
+			linked.get().refreshAccountName(profile.accountName());
 			return refreshAvatar(user, profile);
 		}
 		if (!profile.emailVerified() || profile.email() == null) {
@@ -59,14 +60,14 @@ class ExternalSignIn {
 		var user = users.saveAndFlush(User.fromProvider(profile.email(), displayNameOf(profile), profile.avatarUrl(),
 				clock.instant()));
 		identities.saveAndFlush(new LinkedIdentity(user.getId(), profile.provider(), profile.providerUserId(),
-				clock.instant()));
+				profile.accountName(), clock.instant()));
 		events.publishEvent(new UserRegistered(user.getId(), user.email(), user.displayName()));
 		return user;
 	}
 
 	private User link(User user, ExternalProfile profile) {
 		identities.saveAndFlush(new LinkedIdentity(user.getId(), profile.provider(), profile.providerUserId(),
-				clock.instant()));
+				profile.accountName(), clock.instant()));
 		refreshAvatar(user, profile);
 		if (!user.emailVerified()) {
 			// Someone registered this email with a password but never proved they own it. The person the

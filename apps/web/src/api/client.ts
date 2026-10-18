@@ -137,6 +137,16 @@ export type SessionInfo = {
   idleSeconds: number;
 };
 
+/** A Google or GitHub account that can sign in as the signed-in User, for the Connected accounts card. */
+export type LinkedIdentity = {
+  /** The provider's id, e.g. "google" or "github". */
+  provider: string;
+  /** The Google email or GitHub username; null for an account linked before names were kept. */
+  accountName: string | null;
+  /** When it was connected (ISO 8601). */
+  connectedAt: string;
+};
+
 /** The `code` the server puts on the 403 it answers an Unverified User with. */
 export const EMAIL_UNVERIFIED = "email_unverified";
 
@@ -490,6 +500,9 @@ export function createApiClient(
     /** Ends another of the User's sessions at once; no password needed. 404 when it is not theirs or never existed. */
     endSession: (id: string) =>
       request<void>(`/api/users/me/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+    /** The Google and GitHub accounts connected to the User, Google first. */
+    linkedIdentities: () => request<LinkedIdentity[]>("/api/users/me/linked-identities"),
 
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>

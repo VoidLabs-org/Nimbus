@@ -3,17 +3,11 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { api } from "../api/client";
 import classes from "./ProviderButtons.module.css";
-import { GitHubIcon, GoogleIcon } from "./ProviderIcons";
+import { PROVIDERS } from "./providers";
 import { safeReturnPath } from "./returnPath";
 
 // How long the buttons stay busy if the browser hasn't left by then.
 const GIVE_UP_AFTER_MS = 10_000;
-
-// What each provider id from the server looks like here. An id not listed is not shown.
-const PROVIDERS = [
-  { id: "google", name: "Google", icon: <GoogleIcon /> },
-  { id: "github", name: "GitHub", icon: <GitHubIcon /> },
-];
 
 /**
  * "Continue with ..." for each provider the server has switched on, for the sign-in and register pages: signing

@@ -18,7 +18,22 @@ class GithubProfilesTests {
 		var profile = GithubProfiles.from(attributes("user", "emails"));
 
 		assertThat(profile).isEqualTo(new ExternalProfile("github", "583231", "octo.cat@example.com", true,
-				"The Octocat", "https://avatars.githubusercontent.com/u/583231?v=4"));
+				"The Octocat", "https://avatars.githubusercontent.com/u/583231?v=4", "octocat"));
+	}
+
+	@Test
+	void theAccountNameIsTheUsernameEvenWhenTheProfileNameIsSomethingElse() throws IOException {
+		var profile = GithubProfiles.from(attributes("user", "emails"));
+
+		assertThat(profile.name()).isEqualTo("The Octocat");
+		assertThat(profile.accountName()).isEqualTo("octocat");
+	}
+
+	@Test
+	void theUsernameIsTheAccountNameWhenThereIsNoName() throws IOException {
+		var profile = GithubProfiles.from(attributes("user-without-name", "emails"));
+
+		assertThat(profile.accountName()).isEqualTo("ghost-writer");
 	}
 
 	@Test

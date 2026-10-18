@@ -33,11 +33,15 @@ class UsersController {
 
 	private final Sessions sessions;
 
-	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords, Sessions sessions) {
+	private final LinkedIdentities linkedIdentities;
+
+	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords, Sessions sessions,
+			LinkedIdentities linkedIdentities) {
 		this.users = users;
 		this.currentUser = currentUser;
 		this.passwords = passwords;
 		this.sessions = sessions;
+		this.linkedIdentities = linkedIdentities;
 	}
 
 	/** The signed-in User's profile; an invalid-token 401 if their token outlived the User. */
@@ -81,6 +85,13 @@ class UsersController {
 	ResponseEntity<Void> endSession(@AuthenticationPrincipal Jwt token, @PathVariable String id) {
 		sessions.endOne(currentUser.id(), sessionOf(token), id);
 		return ResponseEntity.noContent().build();
+	}
+
+	/** The Google and GitHub accounts that can sign in as the User, Google first; needs a session that is still running. */
+	@GetMapping("/me/linked-identities")
+	List<LinkedIdentities.LinkedIdentityView> linkedIdentities(@AuthenticationPrincipal Jwt token) {
+		sessions.requireActive(sessionOf(token), currentUser.id());
+		return linkedIdentities.listFor(currentUser.id());
 	}
 
 	private static UUID sessionOf(Jwt token) {

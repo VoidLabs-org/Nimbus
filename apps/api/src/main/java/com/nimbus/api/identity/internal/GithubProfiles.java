@@ -28,7 +28,7 @@ final class GithubProfiles {
 		var name = text(attributes.get("name"));
 		return new ExternalProfile(PROVIDER, String.valueOf(attributes.get("id")),
 				email == null ? null : email.toLowerCase(Locale.ROOT), verified, name != null ? name : login,
-				text(attributes.get("avatar_url")));
+				text(attributes.get("avatar_url")), login);
 	}
 
 	// Only the primary address counts: it is the one the person treats as theirs. Another verified address says

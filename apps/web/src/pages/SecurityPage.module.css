@@ -85,6 +85,20 @@ li:first-child.row {
   margin-top: 2px;
   font-size: 13px;
   color: var(--color-accent-2-700);
+  /* An email or a long username must wrap, not push the row wider than a phone. */
+  overflow-wrap: anywhere;
+}
+
+/* The connected accounts card when they can't be loaded. */
+.problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  font-size: 14px;
+  color: var(--color-accent-2-700);
 }
 
 .alone {
@@ -112,6 +126,11 @@ li:first-child.row {
 }
 
 @media (max-width: 36em) {
+  .problem button {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+
   .signOutOthers {
     flex: 1 1 100%;
     min-height: 44px;

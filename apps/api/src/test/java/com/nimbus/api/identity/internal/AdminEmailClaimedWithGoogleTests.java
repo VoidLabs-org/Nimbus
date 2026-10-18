@@ -34,7 +34,7 @@ class AdminEmailClaimedWithGoogleTests {
 		var squatted = registration.create("Mallory", "owner@example.com", "squatter pass");
 		assertThat(permissions.holds(squatted.getId(), "access:role:manage")).isFalse();
 
-		externalSignIn.signIn(new ExternalProfile("google", "g-owner", "owner@example.com", true, "Owner", null));
+		externalSignIn.signIn(new ExternalProfile("google", "g-owner", "owner@example.com", true, "Owner", null, "owner@example.com"));
 
 		assertThat(permissions.holds(squatted.getId(), "access:role:manage")).isTrue();
 	}

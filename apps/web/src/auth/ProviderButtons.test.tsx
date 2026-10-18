@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
+import { createQueryClient } from "../api/queryClient";
 import { ProviderButtons } from "./ProviderButtons";
 
 let restoreMatchMedia: () => void;
@@ -27,7 +29,9 @@ function show() {
   render(
     <NimbusThemeProvider>
       <MemoryRouter>
-        <ProviderButtons />
+        <QueryClientProvider client={createQueryClient()}>
+          <ProviderButtons />
+        </QueryClientProvider>
       </MemoryRouter>
     </NimbusThemeProvider>,
   );

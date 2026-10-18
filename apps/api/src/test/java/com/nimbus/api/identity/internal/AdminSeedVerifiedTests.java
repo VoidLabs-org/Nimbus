@@ -23,7 +23,7 @@ class AdminSeedVerifiedTests {
 
 	@Test
 	void continuingWithAProviderKeepsTheSeededAdminsPassword() {
-		var admin = externalSignIn.signIn(new ExternalProfile("google", "g-owner", "owner@example.com", true, "Owner", null));
+		var admin = externalSignIn.signIn(new ExternalProfile("google", "g-owner", "owner@example.com", true, "Owner", null, "owner@example.com"));
 
 		assertThat(admin.emailVerified()).isTrue();
 		assertThat(signIn.signIn("owner@example.com", "seeded password", "client-owner").getId())

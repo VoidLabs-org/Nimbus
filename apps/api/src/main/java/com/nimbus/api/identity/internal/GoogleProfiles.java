@@ -12,10 +12,12 @@ final class GoogleProfiles {
 	}
 
 	static ExternalProfile from(Map<String, Object> claims) {
-		var email = text(claims.get("email"));
-		return new ExternalProfile(PROVIDER, text(claims.get("sub")),
-				email == null ? null : email.toLowerCase(Locale.ROOT), isTrue(claims.get("email_verified")),
-				text(claims.get("name")), text(claims.get("picture")));
+		var claimedEmail = text(claims.get("email"));
+		var email = claimedEmail == null ? null : claimedEmail.toLowerCase(Locale.ROOT);
+		var verified = isTrue(claims.get("email_verified"));
+		// The card shows an address as "Connected as ...": never one Google has not vouched for.
+		return new ExternalProfile(PROVIDER, text(claims.get("sub")), email, verified, text(claims.get("name")),
+				text(claims.get("picture")), verified ? email : null);
 	}
 
 	private static String text(Object claim) {

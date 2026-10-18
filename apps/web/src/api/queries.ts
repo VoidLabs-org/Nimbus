@@ -13,6 +13,8 @@ import { failedLoad, type FailedLoad } from "./failure";
  */
 export const queryKeys = {
   sessions: ["sessions"] as const,
+  linkedIdentities: ["linkedIdentities"] as const,
+  providers: ["providers"] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -41,6 +43,16 @@ export function loadFailure(query: UseQueryResult): FailedLoad | null {
 /** The signed-in User's running sign-ins, for the Security page. */
 export function useSessions() {
   return useQuery({ queryKey: queryKeys.sessions, queryFn: () => api.sessions() });
+}
+
+/** The Google and GitHub accounts connected to the signed-in User, for the Security page. */
+export function useLinkedIdentities() {
+  return useQuery({ queryKey: queryKeys.linkedIdentities, queryFn: () => api.linkedIdentities() });
+}
+
+/** The ids of the sign-in providers the server has switched on, for the Security page. */
+export function useProviders() {
+  return useQuery({ queryKey: queryKeys.providers, queryFn: () => api.providers() });
 }
 
 /** Every Role, for the Roles list. */

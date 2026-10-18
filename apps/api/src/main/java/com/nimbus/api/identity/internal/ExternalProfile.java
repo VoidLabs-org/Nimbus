@@ -9,7 +9,9 @@ package com.nimbus.api.identity.internal;
  * @param emailVerified whether the provider says the person owns the email
  * @param name the person's name at the provider, or null
  * @param avatarUrl the person's picture at the provider, or null
+ * @param accountName what the person knows the account as, shown on the Security page: the Google email or the
+ * GitHub username, or null when the provider gave nothing to show
  */
 record ExternalProfile(String provider, String providerUserId, String email, boolean emailVerified, String name,
-		String avatarUrl) {
+		String avatarUrl, String accountName) {
 }

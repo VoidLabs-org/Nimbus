@@ -25,18 +25,41 @@ class LinkedIdentity {
 
 	private Instant createdAt;
 
+	/** The Google email or GitHub username to show the User; null for an identity linked before it was kept. */
+	private String accountName;
+
 	protected LinkedIdentity() {
 	}
 
-	LinkedIdentity(UUID userId, String provider, String providerUserId, Instant createdAt) {
+	LinkedIdentity(UUID userId, String provider, String providerUserId, String accountName, Instant createdAt) {
 		this.userId = userId;
 		this.provider = provider;
 		this.providerUserId = providerUserId;
+		this.accountName = accountName;
 		this.createdAt = createdAt;
 	}
 
 	UUID userId() {
 		return userId;
+	}
+
+	String provider() {
+		return provider;
+	}
+
+	String accountName() {
+		return accountName;
+	}
+
+	Instant createdAt() {
+		return createdAt;
+	}
+
+	/** Follows a rename at the provider; a sign-in that brings no name leaves the one we have. */
+	void refreshAccountName(String accountName) {
+		if (accountName != null) {
+			this.accountName = accountName;
+		}
 	}
 
 }

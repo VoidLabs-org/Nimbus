@@ -17,7 +17,31 @@ class GoogleProfilesTests {
 
 		assertThat(profile).isEqualTo(new ExternalProfile("google", "110169484474386276334",
 				"ada.lovelace@example.com", true, "Ada Lovelace",
-				"https://lh3.googleusercontent.com/a/ACg8ocKexample=s96-c"));
+				"https://lh3.googleusercontent.com/a/ACg8ocKexample=s96-c", "ada.lovelace@example.com"));
+	}
+
+	@Test
+	void theAccountNameIsTheEmailInLowerCase() throws IOException {
+		var claims = new java.util.HashMap<>(recorded("minimal-user"));
+		claims.put("email", "No.Name@Example.com");
+
+		assertThat(GoogleProfiles.from(claims).accountName()).isEqualTo("no.name@example.com");
+	}
+
+	@Test
+	void anEmailGoogleHasNotVerifiedIsNotAnAccountName() throws IOException {
+		var profile = GoogleProfiles.from(recorded("unverified-user"));
+
+		assertThat(profile.email()).isEqualTo("grace@example.com");
+		assertThat(profile.accountName()).isNull();
+	}
+
+	@Test
+	void withNoEmailThereIsNoAccountName() throws IOException {
+		var claims = new java.util.HashMap<>(recorded("minimal-user"));
+		claims.remove("email");
+
+		assertThat(GoogleProfiles.from(claims).accountName()).isNull();
 	}
 
 	@Test

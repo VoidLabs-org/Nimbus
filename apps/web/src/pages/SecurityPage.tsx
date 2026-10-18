@@ -9,6 +9,7 @@ import { Bone, Loading } from "@repo/ui/skeleton";
 import { ApiError, api, type SessionInfo } from "../api/client";
 import { loadFailure, queryKeys, useSessions } from "../api/queries";
 import { activityText, isPhone, sessionName, signedInText } from "../settings/sessionView";
+import { ConnectedAccountsCard } from "./ConnectedAccountsCard";
 import { SignOutOthersDialog } from "./SignOutOthersDialog";
 import { settingsCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
@@ -140,6 +141,7 @@ export default function SecurityPage() {
             </Panel>
           )}
         </section>
+        <ConnectedAccountsCard />
       </Stack>
       <SignOutOthersDialog
         opened={confirmOpen}

@@ -6,7 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, type SessionInfo, type User } from "../api/client";
+import { api, ApiError, type LinkedIdentity, type SessionInfo, type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import { SessionContext, type Session } from "../auth/useSession";
 import { AppRoutes } from "../App";
@@ -44,6 +44,9 @@ function session(user: User | null): Session {
 let restoreMatchMedia: () => void;
 beforeEach(() => {
   restoreMatchMedia = stubMatchMedia();
+  // The Connected accounts card asks for these on every visit; tests about it say otherwise.
+  vi.spyOn(api, "providers").mockResolvedValue([]);
+  vi.spyOn(api, "linkedIdentities").mockResolvedValue([]);
 });
 afterEach(() => {
   cleanup();
@@ -348,5 +351,152 @@ describe("signing out all other devices", () => {
 
     await waitFor(() => expect(error).toHaveBeenCalled());
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+});
+
+describe("the Connected accounts card", () => {
+  const identity = (
+    provider: string,
+    accountName: string | null,
+    connectedAgo = 3 * DAY,
+  ): LinkedIdentity => ({
+    provider,
+    accountName,
+    connectedAt: new Date(Date.now() - connectedAgo).toISOString(),
+  });
+  const card = () => screen.findByRole("region", { name: "Connected accounts" });
+  /** The card's rows once they have loaded: its heading is there from the start, over a skeleton. */
+  const accountRows = async () => within(await card()).findAllByRole("listitem");
+  const sessionsFor = () =>
+    vi
+      .spyOn(api, "sessions")
+      .mockResolvedValue([sessionInfo("s1", "Chrome on Windows", true, DAY, 0)]);
+
+  it("shows who each connected provider is, and Not connected for the others", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockResolvedValue(["google", "github"]);
+    vi.spyOn(api, "linkedIdentities").mockResolvedValue([identity("google", "udula@gmail.com")]);
+
+    show();
+
+    const rows = await accountRows();
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]!).getByText("Google")).toBeTruthy();
+    expect(rows[0]!.textContent).toContain("Connected as udula@gmail.com");
+    expect(within(rows[1]!).getByText("GitHub")).toBeTruthy();
+    expect(rows[1]!.textContent).toContain("Not connected");
+  });
+
+  it("names the GitHub username when that is what is connected", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockResolvedValue(["google", "github"]);
+    vi.spyOn(api, "linkedIdentities").mockResolvedValue([
+      identity("github", "udula-t"),
+      identity("google", "udula@gmail.com"),
+    ]);
+
+    show();
+
+    const rows = await accountRows();
+    // Google first whatever order the server sends them in.
+    expect(rows[0]!.textContent).toContain("Connected as udula@gmail.com");
+    expect(rows[1]!.textContent).toContain("Connected as udula-t");
+  });
+
+  it("says just Connected for an account linked before names were kept", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockResolvedValue(["google"]);
+    vi.spyOn(api, "linkedIdentities").mockResolvedValue([identity("google", null)]);
+
+    show();
+
+    const rows = await accountRows();
+    expect(rows[0]!.textContent).toContain("Connected");
+    expect(rows[0]!.textContent).not.toContain("Connected as");
+  });
+
+  it("lists only the providers the server has switched on", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockResolvedValue(["github"]);
+
+    show();
+
+    const rows = await accountRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.textContent).toContain("GitHub");
+    expect(within(await card()).queryByText("Google")).toBeNull();
+  });
+
+  it("still lists a connected provider that has since been switched off", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockResolvedValue(["github"]);
+    vi.spyOn(api, "linkedIdentities").mockResolvedValue([identity("google", "udula@gmail.com")]);
+
+    show();
+
+    const rows = await accountRows();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.textContent).toContain("Connected as udula@gmail.com");
+    expect(rows[1]!.textContent).toContain("Not connected");
+  });
+
+  it("is hidden when no provider is on and nothing is connected", async () => {
+    sessionsFor();
+
+    show();
+
+    await screen.findByText("Chrome on Windows");
+    await waitFor(() => expect(api.linkedIdentities).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Connected accounts" })).toBeNull(),
+    );
+  });
+
+  it("still lists what is connected when the providers can't be asked", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockRejectedValue(new ApiError(500, undefined));
+    vi.spyOn(api, "linkedIdentities").mockResolvedValue([identity("github", "udula-t")]);
+
+    show();
+
+    const rows = await accountRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.textContent).toContain("Connected as udula-t");
+  });
+
+  it("offers Try again when the connected accounts can't be loaded, and loads them then", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockResolvedValue(["google"]);
+    const identities = vi
+      .spyOn(api, "linkedIdentities")
+      .mockRejectedValueOnce(new ApiError(500, undefined))
+      .mockResolvedValue([identity("google", "udula@gmail.com")]);
+
+    show();
+
+    fireEvent.click(await within(await card()).findByRole("button", { name: "Try again" }));
+
+    await within(await card()).findByText("Connected as udula@gmail.com");
+    expect(identities).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows no Connect or Disconnect button yet", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockResolvedValue(["google", "github"]);
+    vi.spyOn(api, "linkedIdentities").mockResolvedValue([identity("google", "udula@gmail.com")]);
+
+    show();
+
+    await accountRows();
+    expect(screen.queryByRole("button", { name: /^(Connect|Disconnect)/ })).toBeNull();
+  });
+
+  it("does not hold up the sessions list while it loads", async () => {
+    sessionsFor();
+    vi.spyOn(api, "providers").mockReturnValue(new Promise(() => {}));
+
+    show();
+
+    expect(await screen.findByText("Chrome on Windows")).toBeTruthy();
   });
 });

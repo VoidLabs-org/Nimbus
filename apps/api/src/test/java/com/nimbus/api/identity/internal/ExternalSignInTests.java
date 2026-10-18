@@ -28,6 +28,9 @@ class ExternalSignInTests {
 	ExternalSignIn externalSignIn;
 
 	@Autowired
+	LinkedIdentities linkedIdentities;
+
+	@Autowired
 	Recorder recorder;
 
 	@Autowired
@@ -75,6 +78,51 @@ class ExternalSignInTests {
 		assertThat(again.avatarUrl()).isEqualTo("https://img/bea-2");
 		assertThat(again.email()).isEqualTo("bea@example.com");
 		assertThat(recorder.registered).filteredOn(event -> event.userId().equals(first.getId())).hasSize(1);
+	}
+
+	@Test
+	void aNewUsersLinkRemembersTheAccountNameTheProviderGave() {
+		var user = externalSignIn.signIn(google("g-nia", "nia@example.com", true, "Nia", null));
+
+		assertThat(linkedIdentities.listFor(user.getId())).singleElement().satisfies(identity -> {
+			assertThat(identity.provider()).isEqualTo("google");
+			assertThat(identity.accountName()).isEqualTo("nia@example.com");
+			assertThat(identity.connectedAt()).isNotNull();
+		});
+	}
+
+	@Test
+	void linkingAnExistingUserRemembersTheAccountNameToo() {
+		var existing = registration.create("Ola", "ola@example.com", "correct horse");
+		existing.verifyEmail();
+		users.save(existing);
+
+		var user = externalSignIn.signIn(new ExternalProfile("github", "gh-ola", "ola@example.com", true, "Ola", null,
+				"ola-codes"));
+
+		assertThat(linkedIdentities.listFor(user.getId())).extracting(LinkedIdentities.LinkedIdentityView::accountName)
+			.containsExactly("ola-codes");
+	}
+
+	@Test
+	void everyLaterSignInRefreshesTheAccountNameSoItFollowsARename() {
+		var user = externalSignIn.signIn(new ExternalProfile("github", "gh-pia", "pia@example.com", true, "Pia", null,
+				"pia-old"));
+
+		externalSignIn.signIn(new ExternalProfile("github", "gh-pia", "pia@example.com", true, "Pia", null, "pia-new"));
+
+		assertThat(linkedIdentities.listFor(user.getId())).extracting(LinkedIdentities.LinkedIdentityView::accountName)
+			.containsExactly("pia-new");
+	}
+
+	@Test
+	void aSignInThatCarriesNoAccountNameKeepsTheOneWeHave() {
+		var user = externalSignIn.signIn(google("g-quin", "quin@example.com", true, "Quin", null));
+
+		externalSignIn.signIn(new ExternalProfile("google", "g-quin", null, true, "Quin", null, null));
+
+		assertThat(linkedIdentities.listFor(user.getId())).extracting(LinkedIdentities.LinkedIdentityView::accountName)
+			.containsExactly("quin@example.com");
 	}
 
 	@Test
@@ -215,7 +263,7 @@ class ExternalSignInTests {
 	}
 
 	private static ExternalProfile google(String id, String email, boolean verified, String name, String avatar) {
-		return new ExternalProfile("google", id, email, verified, name, avatar);
+		return new ExternalProfile("google", id, email, verified, name, avatar, email);
 	}
 
 	@TestConfiguration

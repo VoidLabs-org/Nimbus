@@ -1,19 +1,13 @@
 import { Button, Group, Loader, VisuallyHidden } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { api } from "../api/client";
+import { useProviders } from "../api/queries";
 import classes from "./ProviderButtons.module.css";
-import { GitHubIcon, GoogleIcon } from "./ProviderIcons";
+import { PROVIDERS } from "./providers";
 import { safeReturnPath } from "./returnPath";
 
 // How long the buttons stay busy if the browser hasn't left by then.
 const GIVE_UP_AFTER_MS = 10_000;
-
-// What each provider id from the server looks like here. An id not listed is not shown.
-const PROVIDERS = [
-  { id: "google", name: "Google", icon: <GoogleIcon /> },
-  { id: "github", name: "GitHub", icon: <GitHubIcon /> },
-];
 
 /**
  * "Continue with ..." for each provider the server has switched on, for the sign-in and register pages: signing
@@ -29,8 +23,9 @@ const PROVIDERS = [
  * buttons start again.
  */
 export function ProviderButtons() {
-  // null until the server answers.
-  const [enabled, setEnabled] = useState<string[] | null>(null);
+  // Undefined until the server answers; a failure counts as none (the form below still works).
+  const providers = useProviders();
+  const enabled = providers.isPending ? null : (providers.data ?? []);
   // The provider the User chose, from the click until the browser leaves.
   const [going, setGoing] = useState<{ id: string; name: string } | null>(null);
   const [searchParams] = useSearchParams();
@@ -50,21 +45,6 @@ export function ProviderButtons() {
     const timer = setTimeout(() => setGoing(null), GIVE_UP_AFTER_MS);
     return () => clearTimeout(timer);
   }, [going]);
-
-  useEffect(() => {
-    let current = true;
-    api
-      .providers()
-      .then((ids) => {
-        if (current) setEnabled(ids);
-      })
-      .catch(() => {
-        if (current) setEnabled([]);
-      });
-    return () => {
-      current = false;
-    };
-  }, []);
 
   if (enabled === null) {
     return (

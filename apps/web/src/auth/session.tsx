@@ -13,6 +13,7 @@ import { failedLoad } from "../api/failure";
 import { SignInCheck } from "../shell/SignInCheck";
 import { OfflinePage, ServerErrorPage } from "../shell/StatusPages";
 import { loginPath } from "./returnPath";
+import { VerifyEmailScreen } from "./VerifyEmailScreen";
 import { SessionContext, useSession } from "./useSession";
 
 // Holds the signed-in User in memory. On load it renews the session from the refresh cookie, so reloads
@@ -48,6 +49,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(restore, []);
 
+  // The server refuses an Unverified User on every endpoint but a few. However that surfaces (a page load, a save),
+  // the verification screen takes over.
+  useEffect(
+    () =>
+      api.onEmailUnverified(() =>
+        setUser((current) =>
+          current?.emailVerified ? { ...current, emailVerified: false } : current,
+        ),
+      ),
+    [],
+  );
+
   async function register(input: RegisterInput) {
     const registered = await api.register(input);
     queryClient.clear();
@@ -77,6 +90,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  async function verifyEmail(code: string) {
+    const signedIn = user?.id;
+    const verified = await api.verifyEmail(code);
+    // Pages that failed while the User was unverified must load again, not show their cached failure.
+    queryClient.clear();
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower check.
+    setUser((current) => (current?.id === signedIn ? verified : current));
+  }
+
   async function logout() {
     await api.logout();
     queryClient.clear();
@@ -96,6 +118,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         login,
         updateDisplayName,
         changePassword,
+        verifyEmail,
         logout,
       }}
     >
@@ -123,6 +146,7 @@ export function RequireUser({ children }: { children: ReactNode }) {
       <ServerErrorPage onRetry={retry} standalone />
     );
   }
+  if (user && !user.emailVerified) return <VerifyEmailScreen />;
   if (user) return children;
   const to = signedOutOnPurpose ? "/login" : loginPath(location.pathname + location.search);
   return <Navigate to={to} replace />;

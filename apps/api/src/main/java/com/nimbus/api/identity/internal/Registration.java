@@ -26,14 +26,18 @@ class Registration {
 
 	private final TransactionTemplate transaction;
 
+	private final EmailVerification verification;
+
 	private final SlidingWindowLimiter attemptsByAddress;
 
 	Registration(UserRepository users, PasswordEncoder passwordEncoder, AuthProperties properties, Clock clock,
-			ApplicationEventPublisher events, PlatformTransactionManager transactionManager) {
+			ApplicationEventPublisher events, PlatformTransactionManager transactionManager,
+			EmailVerification verification) {
 		this.users = users;
 		this.passwordEncoder = passwordEncoder;
 		this.clock = clock;
 		this.events = events;
+		this.verification = verification;
 		this.transaction = new TransactionTemplate(transactionManager);
 		this.attemptsByAddress = new SlidingWindowLimiter(properties.registrationsPerAddress(),
 				properties.limitWindow(), clock);
@@ -72,11 +76,16 @@ class Registration {
 		var user = verified ? User.verifiedWithPassword(normalizedEmail, displayName, hash, now)
 				: User.withPassword(normalizedEmail, displayName, hash, now);
 		try {
-			return transaction.execute(status -> {
-				var saved = users.saveAndFlush(user);
-				events.publishEvent(new UserRegistered(saved.getId(), saved.email(), saved.displayName()));
-				return saved;
+			var saved = transaction.execute(status -> {
+				var created = users.saveAndFlush(user);
+				events.publishEvent(new UserRegistered(created.getId(), created.email(), created.displayName()));
+				return created;
 			});
+			if (!verified) {
+				// After the commit, and never able to undo the sign-up.
+				verification.issueAfterSignUp(saved);
+			}
+			return saved;
 		}
 		catch (DataIntegrityViolationException e) {
 			// Another request registered the same email between the check and the insert.

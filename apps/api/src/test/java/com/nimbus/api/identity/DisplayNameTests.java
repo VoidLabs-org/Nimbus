@@ -220,11 +220,14 @@ class DisplayNameTests {
 	}
 
 	private String registerAndGetAccessToken() {
-		var registration = register("Dana", "rename-" + EMAILS.incrementAndGet() + "@example.com")
+		var email = "rename-" + EMAILS.incrementAndGet() + "@example.com";
+		var registration = register("Dana", email)
 			.expectStatus().isCreated()
 			.expectBody(String.class).returnResult().getResponseBody();
 		assertThat(registration).isNotBlank();
-		return JsonPath.read(registration, "$.accessToken");
+		String token = JsonPath.read(registration, "$.accessToken");
+		EmailCodes.verify(client, token, email);
+		return token;
 	}
 
 }

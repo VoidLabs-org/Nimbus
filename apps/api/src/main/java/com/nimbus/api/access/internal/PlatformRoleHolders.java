@@ -93,7 +93,7 @@ class PlatformRoleHolders {
 		}
 		if (!user.emailVerified()) {
 			throw new RoleEditor.RoleConflictException(user.email() + " hasn't verified their email yet. They verify "
-					+ "it by signing in once with Google or GitHub on that address.");
+					+ "it by entering the code emailed to them, or by signing in once with Google or GitHub on that address.");
 		}
 		var since = Instant.now();
 		if (!assign(actor, role, key, user, since)) {

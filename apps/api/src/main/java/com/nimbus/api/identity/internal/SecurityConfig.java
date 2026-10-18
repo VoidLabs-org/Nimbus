@@ -28,6 +28,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -45,7 +46,7 @@ class SecurityConfig {
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectProvider<ClientRegistrationRepository> providers,
 			ObjectProvider<OAuth2AuthorizedClientRepository> authorizedClients, OAuthLoginHandler oauthLogin,
-			AuthProperties properties) {
+			AuthProperties properties, UserRepository users) {
 		http.csrf(csrf -> csrf.disable())
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(requests -> requests
@@ -55,7 +56,8 @@ class SecurityConfig {
 				.requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
 				.requestMatchers("/error").permitAll()
 				.anyRequest().authenticated())
-			.oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()));
+			.oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))
+			.addFilterAfter(new EmailVerifiedGate(users), BearerTokenAuthenticationFilter.class);
 		// A browser page load (a GET or HEAD that names text/html) of an API address without a token goes to the
 		// web app's sign-in page. "Accept: */*" (fetch, curl) is not a page load, and neither is a write: those get
 		// a 401. Registered before oauth2Login's own entry point, which would otherwise win for them.

@@ -7,6 +7,7 @@ import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.identity.EmailCodes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -337,7 +338,9 @@ class RoleEditingTests {
 			.exchange()
 			.expectStatus().isCreated()
 			.expectBody(String.class).returnResult().getResponseBody();
-		return JsonPath.read(response, "$.accessToken");
+		String token = JsonPath.read(response, "$.accessToken");
+		EmailCodes.verify(client, token, email);
+		return token;
 	}
 
 	private String signIn(String email, String password) {

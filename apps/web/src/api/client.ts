@@ -7,6 +7,8 @@ export type User = {
   avatarUrl: string | null;
   /** False for Users who only sign in with Google or GitHub; they set a password without giving a current one. */
   hasPassword: boolean;
+  /** False until the User enters the code emailed to them; until then the app shows only the verification screen. */
+  emailVerified: boolean;
 };
 
 export type RegisterInput = { displayName: string; email: string; password: string };
@@ -117,6 +119,9 @@ export type AuditPage = {
   asOf: number;
 };
 
+/** The `code` the server puts on the 403 it answers an Unverified User with. */
+export const EMAIL_UNVERIFIED = "email_unverified";
+
 type AuthResponse = { accessToken: string; user: User };
 
 /** A failed API call, carrying the server's problem details (RFC 9457). */
@@ -125,17 +130,25 @@ export class ApiError extends Error {
   readonly fieldErrors: Record<string, string>;
   /** From Retry-After on a 429: how long until another attempt may succeed. */
   readonly retryAfterSeconds: number | null;
+  /** The server's machine-readable reason, e.g. "email_unverified" or "invalid_code"; null when it sent none. */
+  readonly code: string | null;
+  /** On an "invalid_code": how many wrong tries the Verification code has left. */
+  readonly triesLeft: number | null;
 
   constructor(
     status: number,
     detail: string | undefined,
     fieldErrors: Record<string, string> = {},
     retryAfterSeconds: number | null = null,
+    code: string | null = null,
+    triesLeft: number | null = null,
   ) {
     super(detail ?? `Request failed with status ${status}`);
     this.status = status;
     this.fieldErrors = fieldErrors;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.code = code;
+    this.triesLeft = triesLeft;
   }
 }
 
@@ -177,6 +190,7 @@ export function createApiClient(
   // before the latest change is judged against that change, not by starting yet another refresh.
   let credentialChanges = 0;
   let lostReported = false;
+  const emailUnverifiedListeners = new Set<() => void>();
 
   async function send<T>(path: string, init: RequestInit, authenticated: boolean): Promise<T> {
     const headers = new Headers(init.headers);
@@ -192,12 +206,18 @@ export function createApiClient(
     const body = await response.json().catch(() => undefined);
     if (!response.ok) {
       const retryAfter = Number(response.headers.get("Retry-After"));
-      throw new ApiError(
+      const error = new ApiError(
         response.status,
         body?.detail,
         body?.errors,
         retryAfter > 0 ? retryAfter : null,
+        typeof body?.code === "string" ? body.code : null,
+        typeof body?.triesLeft === "number" ? body.triesLeft : null,
       );
+      if (error.status === 403 && error.code === EMAIL_UNVERIFIED) {
+        emailUnverifiedListeners.forEach((listener) => listener());
+      }
+      throw error;
     }
     return body as T;
   }
@@ -297,6 +317,33 @@ export function createApiClient(
   return {
     /** Renews the session from the refresh cookie, e.g. on app load. Rejects when there is none. */
     refresh,
+
+    /**
+     * Calls `listener` whenever the server refuses a request because the signed-in User hasn't verified their
+     * email, so the app can show the verification screen wherever it happens. Returns a function that stops it.
+     */
+    onEmailUnverified: (listener: () => void) => {
+      emailUnverifiedListeners.add(listener);
+      return () => {
+        emailUnverifiedListeners.delete(listener);
+      };
+    },
+
+    /**
+     * Checks the code the User typed and returns the User, now verified. A 400 says the code is wrong
+     * (`code` "invalid_code", with `triesLeft`) or that a new one is needed ("code_expired").
+     */
+    verifyEmail: async (code: string) => {
+      const user = await request<User>("/api/auth/verify-email", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+      // The access token in hand was issued before the User verified, so the server would keep looking the User up
+      // on every request until it expires. A renewed one says "verified". If renewing fails the User is verified
+      // all the same, and the next refresh fixes the token.
+      await refresh().catch(() => {});
+      return user;
+    },
 
     /**
      * Ends this browser's session on the server and forgets the access token. If the server can't be

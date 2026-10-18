@@ -92,6 +92,7 @@ class PasswordTests {
 			.expectStatus().isCreated()
 			.expectBody(String.class).returnResult();
 		var accessToken = JsonPath.<String>read(thisBrowser.getResponseBody(), "$.accessToken");
+		EmailCodes.verify(client, accessToken, "sessions@example.com");
 		var otherBrowser = login("sessions@example.com", "correct horse")
 			.expectStatus().isOk()
 			.expectBody(String.class).returnResult();
@@ -118,11 +119,13 @@ class PasswordTests {
 	}
 
 	private String register(String email) {
-		return client.post().uri("/api/auth/register")
+		var response = client.post().uri("/api/auth/register")
 			.body(Map.of("displayName", "Dana", "email", email, "password", "correct horse"))
 			.exchange()
 			.expectStatus().isCreated()
 			.expectBody(String.class).returnResult().getResponseBody();
+		EmailCodes.verify(client, JsonPath.read(response, "$.accessToken"), email);
+		return response;
 	}
 
 	private RestTestClient.ResponseSpec login(String email, String password) {

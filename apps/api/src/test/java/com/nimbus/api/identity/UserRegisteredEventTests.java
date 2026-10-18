@@ -6,6 +6,7 @@ import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.RecordingMailer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -14,7 +15,7 @@ import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.modulith.test.PublishedEvents;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
-@Import(TestcontainersConfiguration.class)
+@Import({ TestcontainersConfiguration.class, RecordingMailer.class })
 @ApplicationModuleTest
 @AutoConfigureRestTestClient
 class UserRegisteredEventTests {

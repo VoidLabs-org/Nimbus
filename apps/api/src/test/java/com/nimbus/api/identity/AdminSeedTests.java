@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.RecordingMailer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -18,7 +19,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 /** The seed runs at startup, before any test method, so a listener records what it publishes. */
-@Import({ TestcontainersConfiguration.class, AdminSeedTests.Recorder.class })
+@Import({ TestcontainersConfiguration.class, RecordingMailer.class, AdminSeedTests.Recorder.class })
 @ApplicationModuleTest
 @AutoConfigureRestTestClient
 @TestPropertySource(properties = { "nimbus.admin.email=Root@Example.com", "nimbus.admin.password=seeded password" })

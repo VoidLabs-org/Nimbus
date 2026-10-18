@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.RecordingMailer;
 import com.nimbus.api.identity.Users;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +32,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * their project role. The test declares its own project permissions, since {@code access} has none and loads no
  * other module here. Users are random ids: {@code access} stores ids and never looks Users up for these.
  */
-@Import({ TestcontainersConfiguration.class, ProjectChecksTests.WidgetPermissions.class })
+@Import({ TestcontainersConfiguration.class, RecordingMailer.class, ProjectChecksTests.WidgetPermissions.class })
 @ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.DIRECT_DEPENDENCIES,
 		webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient

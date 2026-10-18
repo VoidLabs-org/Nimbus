@@ -165,7 +165,9 @@ class SignedInUserTests {
 			.exchange()
 			.expectStatus().isCreated()
 			.expectBody(String.class).returnResult().getResponseBody();
-		return JsonPath.read(registration, "$.accessToken");
+		String token = JsonPath.read(registration, "$.accessToken");
+		EmailCodes.verify(client, token, email);
+		return token;
 	}
 
 	@Test

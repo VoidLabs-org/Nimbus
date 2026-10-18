@@ -14,8 +14,10 @@ final class GoogleProfiles {
 	static ExternalProfile from(Map<String, Object> claims) {
 		var claimedEmail = text(claims.get("email"));
 		var email = claimedEmail == null ? null : claimedEmail.toLowerCase(Locale.ROOT);
-		return new ExternalProfile(PROVIDER, text(claims.get("sub")), email, isTrue(claims.get("email_verified")),
-				text(claims.get("name")), text(claims.get("picture")), email);
+		var verified = isTrue(claims.get("email_verified"));
+		// The card shows an address as "Connected as ...": never one Google has not vouched for.
+		return new ExternalProfile(PROVIDER, text(claims.get("sub")), email, verified, text(claims.get("name")),
+				text(claims.get("picture")), verified ? email : null);
 	}
 
 	private static String text(Object claim) {

@@ -90,8 +90,7 @@ class UsersController {
 	/** The Google and GitHub accounts that can sign in as the User, Google first; needs a session that is still running. */
 	@GetMapping("/me/linked-identities")
 	List<LinkedIdentities.LinkedIdentityView> linkedIdentities(@AuthenticationPrincipal Jwt token) {
-		sessions.requireActive(sessionOf(token), currentUser.id());
-		return linkedIdentities.listFor(currentUser.id());
+		return linkedIdentities.listFor(currentUser.id(), sessionOf(token));
 	}
 
 	private static UUID sessionOf(Jwt token) {

@@ -17,8 +17,24 @@ class LinkedIdentities {
 
 	private final LinkedIdentityRepository identities;
 
-	LinkedIdentities(LinkedIdentityRepository identities) {
+	private final Sessions sessions;
+
+	LinkedIdentities(LinkedIdentityRepository identities, Sessions sessions) {
 		this.identities = identities;
+		this.sessions = sessions;
+	}
+
+	/**
+	 * What a browser may see of the User's Linked identities: the check that its session is still running and the
+	 * read are one operation, like the sessions list, so a signed-out browser whose access token still works gets
+	 * nothing.
+	 *
+	 * @throws org.springframework.security.oauth2.server.resource.InvalidBearerTokenException when the session has ended
+	 */
+	@Transactional(readOnly = true)
+	List<LinkedIdentityView> listFor(UUID userId, UUID currentSessionId) {
+		sessions.requireActive(currentSessionId, userId);
+		return listFor(userId);
 	}
 
 	/** The User's Linked identities, Google first. Never the provider's own id for the person. */

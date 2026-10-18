@@ -29,6 +29,14 @@ class GoogleProfilesTests {
 	}
 
 	@Test
+	void anEmailGoogleHasNotVerifiedIsNotAnAccountName() throws IOException {
+		var profile = GoogleProfiles.from(recorded("unverified-user"));
+
+		assertThat(profile.email()).isEqualTo("grace@example.com");
+		assertThat(profile.accountName()).isNull();
+	}
+
+	@Test
 	void withNoEmailThereIsNoAccountName() throws IOException {
 		var claims = new java.util.HashMap<>(recorded("minimal-user"));
 		claims.remove("email");

@@ -15,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.event.EventListener;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * The rules for who a provider's profile signs in as. Google itself is not faked over HTTP: the profile is what
@@ -44,6 +45,9 @@ class ExternalSignInTests {
 
 	@Autowired
 	UserRepository users;
+
+	@Autowired
+	JdbcTemplate jdbc;
 
 	@Test
 	void aFirstTimeVerifiedUserIsCreatedLinkedAndAnnounced() {
@@ -178,6 +182,35 @@ class ExternalSignInTests {
 		assertThat(recorder.verified).filteredOn(event -> event.userId().equals(squatted.getId()))
 			.singleElement()
 			.satisfies(event -> assertThat(event.email()).isEqualTo("eli@example.com"));
+	}
+
+	@Test
+	void aDisconnectedProviderIsRefusedOnTheUsersEmailAndLeavesPasswordAndSessionsAlone() {
+		var user = registration.create("Dis", "dis@example.com", "correct horse");
+		var session = sessions.start(user, null);
+		jdbc.update("INSERT INTO disconnected_providers (user_id, provider, disconnected_at) VALUES (?, 'google', now())",
+				user.getId());
+
+		assertThatThrownBy(() -> externalSignIn.signIn(google("g-dis", "dis@example.com", true, "Dis", null)))
+			.isInstanceOf(ExternalSignIn.ProviderDisconnectedException.class);
+
+		assertThat(users.findById(user.getId()).orElseThrow().passwordHash()).isNotNull();
+		assertThat(sessions.refresh(session.value(), "client-dis").user().getId()).isEqualTo(user.getId());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM linked_identities WHERE user_id = ?", Integer.class,
+				user.getId())).isZero();
+	}
+
+	@Test
+	void withTheMarkTheSameProviderAccountOnAnotherEmailFollowsTheNormalRules() {
+		var user = externalSignIn.signIn(google("g-mark", "mark@example.com", true, "Mark", null));
+		jdbc.update("DELETE FROM linked_identities WHERE user_id = ?", user.getId());
+		jdbc.update("INSERT INTO disconnected_providers (user_id, provider, disconnected_at) VALUES (?, 'google', now())",
+				user.getId());
+
+		var other = externalSignIn.signIn(google("g-mark", "mark.other@example.com", true, "Mark", null));
+
+		assertThat(other.getId()).isNotEqualTo(user.getId());
+		assertThat(other.email()).isEqualTo("mark.other@example.com");
 	}
 
 	@Test

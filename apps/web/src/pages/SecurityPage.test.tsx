@@ -480,7 +480,7 @@ describe("the Connected accounts card", () => {
     expect(identities).toHaveBeenCalledTimes(2);
   });
 
-  it("shows no Connect or Disconnect button yet", async () => {
+  it("offers Disconnect on a connected row only, and no Connect yet", async () => {
     sessionsFor();
     vi.spyOn(api, "providers").mockResolvedValue(["google", "github"]);
     vi.spyOn(api, "linkedIdentities").mockResolvedValue([identity("google", "udula@gmail.com")]);
@@ -488,7 +488,9 @@ describe("the Connected accounts card", () => {
     show();
 
     await accountRows();
-    expect(screen.queryByRole("button", { name: /^(Connect|Disconnect)/ })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Disconnect/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Disconnect Google" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Connect/ })).toBeNull();
   });
 
   it("does not hold up the sessions list while it loads", async () => {
@@ -498,5 +500,123 @@ describe("the Connected accounts card", () => {
     show();
 
     expect(await screen.findByText("Chrome on Windows")).toBeTruthy();
+  });
+});
+
+describe("disconnecting a provider", () => {
+  const identity = (provider: string, accountName: string): LinkedIdentity => ({
+    provider,
+    accountName,
+    connectedAt: new Date(Date.now() - 3 * DAY).toISOString(),
+  });
+  const both = [identity("google", "udula@gmail.com"), identity("github", "udula")];
+
+  function setUp(identities: LinkedIdentity[], user: User = alice, after = identities) {
+    vi.spyOn(api, "sessions").mockResolvedValue([
+      sessionInfo("s1", "Chrome on Windows", true, DAY, 0),
+    ]);
+    vi.spyOn(api, "providers").mockResolvedValue(["google", "github"]);
+    const linked = vi
+      .spyOn(api, "linkedIdentities")
+      .mockResolvedValueOnce(identities)
+      .mockResolvedValue(after);
+    render(
+      <NimbusThemeProvider>
+        <MemoryRouter initialEntries={["/settings/security"]}>
+          <QueryClientProvider client={createQueryClient()}>
+            <SessionContext value={session(user)}>
+              <AppRoutes />
+            </SessionContext>
+          </QueryClientProvider>
+        </MemoryRouter>
+      </NimbusThemeProvider>,
+    );
+    return linked;
+  }
+
+  it("asks first, and Cancel changes nothing", async () => {
+    const disconnect = vi.spyOn(api, "disconnectProvider").mockResolvedValue(undefined);
+    setUp(both);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Disconnect Google?")).toBeTruthy();
+    expect(
+      within(dialog).getByText(
+        /You won.t be able to sign in with Google\. You can connect it again any time\./,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it("disconnects on confirm, reloads the list and confirms with a toast", async () => {
+    const disconnect = vi.spyOn(api, "disconnectProvider").mockResolvedValue(undefined);
+    const success = vi.spyOn(toast, "success");
+    const linked = setUp(both, alice, [both[1]!]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+
+    await waitFor(() => expect(screen.queryByText("Connected as udula@gmail.com")).toBeNull());
+    expect(disconnect).toHaveBeenCalledWith("google");
+    expect(linked).toHaveBeenCalledTimes(2);
+    expect(success).toHaveBeenCalledWith("Disconnected Google.");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("asks for a password first when the provider is the only way to sign in", async () => {
+    const disconnect = vi.spyOn(api, "disconnectProvider").mockResolvedValue(undefined);
+    setUp([both[0]!], { ...alice, hasPassword: false });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Set a password first")).toBeTruthy();
+    expect(within(dialog).getByRole("link", { name: "Set a password" }).getAttribute("href")).toBe(
+      "/settings/password",
+    );
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it("does not ask for a password when there is another way in", async () => {
+    setUp(both, { ...alice, hasPassword: false });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
+
+    expect(within(await screen.findByRole("dialog")).getByText("Disconnect Google?")).toBeTruthy();
+  });
+
+  it("shows the password dialog when the server refuses with last_sign_in_method", async () => {
+    vi.spyOn(api, "disconnectProvider").mockRejectedValue(
+      new ApiError(409, "Set a password first.", {}, null, "last_sign_in_method"),
+    );
+    setUp(both);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Disconnect" }),
+    );
+
+    const dialog = await screen.findByText("Set a password first");
+    expect(dialog).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Set a password" })).toBeTruthy();
+  });
+
+  it("says so, and keeps the dialog, when disconnecting fails", async () => {
+    vi.spyOn(api, "disconnectProvider").mockRejectedValue(new ApiError(500, undefined));
+    const error = vi.spyOn(toast, "error");
+    setUp(both);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Disconnect" }),
+    );
+
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 });

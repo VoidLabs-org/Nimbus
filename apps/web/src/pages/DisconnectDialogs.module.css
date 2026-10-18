@@ -1,0 +1,17 @@
+/* The footers of the "Disconnect Google?" and "Set a password first" windows (designs 32g and 32h). */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* On a phone the buttons stack, the main one first, each a full-width tap target. */
+@media (max-width: 36em) {
+  .footer {
+    flex-direction: column-reverse;
+  }
+
+  .footer > * {
+    min-height: 44px;
+  }
+}

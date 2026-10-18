@@ -1,9 +1,14 @@
 import { Button } from "@mantine/core";
-import type { ReactNode } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
+import { toast } from "@repo/ui/toast";
+import { ApiError, api } from "../api/client";
 import { PROVIDERS } from "../auth/providers";
-import { useLinkedIdentities, useProviders } from "../api/queries";
+import { useSession } from "../auth/useSession";
+import { queryKeys, useLinkedIdentities, useProviders } from "../api/queries";
+import { DisconnectDialog, SetPasswordFirstDialog } from "./DisconnectDialogs";
 import classes from "./SecurityPage.module.css";
 
 /**
@@ -15,6 +20,27 @@ import classes from "./SecurityPage.module.css";
 export function ConnectedAccountsCard() {
   const providers = useProviders();
   const identities = useLinkedIdentities();
+  const { user } = useSession();
+  const client = useQueryClient();
+  // The provider the open dialog is about, and which one: the question, or the "set a password first" answer.
+  const [dialog, setDialog] = useState<{ id: string; step: "confirm" | "password" } | null>(null);
+  const disconnect = useMutation({
+    mutationFn: (id: string) => api.disconnectProvider(id),
+    onSuccess: (_, id) => {
+      toast.success(`Disconnected ${nameOf(id)}.`);
+      setDialog(null);
+      return client.invalidateQueries({ queryKey: queryKeys.linkedIdentities });
+    },
+    onError: (failure, id) => {
+      // A 401 means this session ended: the app is already sending the User to sign in again.
+      if (failure instanceof ApiError && failure.status === 401) return;
+      if (failure instanceof ApiError && failure.code === "last_sign_in_method") {
+        setDialog({ id, step: "password" });
+        return;
+      }
+      toast.error("Couldn’t disconnect. Please try again.");
+    },
+  });
 
   if (identities.isError && identities.data === undefined) {
     return (
@@ -82,13 +108,46 @@ export function ConnectedAccountsCard() {
                         : "Connected"}
                   </div>
                 </div>
+                {identity && (
+                  <Button
+                    variant="default"
+                    className={classes.signOut}
+                    aria-label={`Disconnect ${provider.name}`}
+                    onClick={() =>
+                      // Their only way in: say so up front, not after a click that cannot work.
+                      setDialog({
+                        id: provider.id,
+                        step:
+                          user?.hasPassword === false && identities.data.length === 1
+                            ? "password"
+                            : "confirm",
+                      })
+                    }
+                  >
+                    Disconnect
+                  </Button>
+                )}
               </li>
             );
           })}
         </ul>
       </Panel>
+      <DisconnectDialog
+        provider={dialog?.step === "confirm" ? nameOf(dialog.id) : null}
+        busy={disconnect.isPending}
+        onConfirm={() => dialog && disconnect.mutate(dialog.id)}
+        onClose={() => setDialog(null)}
+      />
+      <SetPasswordFirstDialog
+        provider={dialog?.step === "password" ? nameOf(dialog.id) : null}
+        onClose={() => setDialog(null)}
+      />
     </Card>
   );
+}
+
+function nameOf(id: string): string {
+  return PROVIDERS.find((provider) => provider.id === id)?.name ?? id;
 }
 
 function Card({ children }: { children: ReactNode }) {

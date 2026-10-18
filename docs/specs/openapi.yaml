@@ -108,7 +108,7 @@ paths:
         `POST /api/auth/refresh` for an access token; no token is ever in a URL. A `returnTo` kept when the sign-in
         started is added to either redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=google` on the public URL with `email_unverified` (Google did not verify the email),
-        `cancelled` (the person declined at Google) or `failed` (anything else).
+        `disconnected` (the User on that email disconnected Google), `cancelled` (the person declined at Google) or `failed` (anything else).
       security: []
       parameters:
         - name: code
@@ -157,7 +157,7 @@ paths:
         `POST /api/auth/refresh` for an access token; no token is ever in a URL. A `returnTo` kept when the sign-in
         started is added to either redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=github` on the public URL with `email_unverified` (the GitHub account has no verified primary email),
-        `cancelled` (the person declined at GitHub) or `failed` (anything else).
+        `disconnected` (the User on that email disconnected GitHub), `cancelled` (the person declined at GitHub) or `failed` (anything else).
       security: []
       parameters:
         - name: code
@@ -539,6 +539,43 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/users/me/linked-identities/{provider}:
+    delete:
+      tags: [users]
+      summary: Disconnect Google or GitHub from the signed-in User
+      description: >-
+        Deletes the User's Linked identity for the provider and marks the provider as disconnected, so a later
+        sign-in with it on the User's email is refused (`disconnected`) until it is connected again. Sessions are
+        kept. No password is needed. The User is told by email afterwards. A provider that isn't linked also gives
+        `204` and changes nothing. The request must come from a session that is still running.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, github]
+      responses:
+        "204":
+          description: The provider can no longer sign in as the User (or never could)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not a provider Nimbus knows
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: >-
+            The User has no password and this is their only Linked identity (`code: last_sign_in_method`). Set a
+            password first.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/users/me/sessions:
     get:
       tags: [users]
@@ -1510,7 +1547,7 @@ components:
           type: string
           description: >-
             A machine-readable reason where the status alone isn't enough, e.g. `email_unverified` (403),
-            `invalid_code` or `code_expired` (400)
+            `invalid_code` or `code_expired` (400), `last_sign_in_method` (409)
 
   responses:
     InvalidFields:

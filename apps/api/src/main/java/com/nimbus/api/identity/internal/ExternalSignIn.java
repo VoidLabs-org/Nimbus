@@ -20,16 +20,20 @@ class ExternalSignIn {
 
 	private final LinkedIdentityRepository identities;
 
+	private final DisconnectedProviders disconnectedProviders;
+
 	private final Sessions sessions;
 
 	private final Clock clock;
 
 	private final ApplicationEventPublisher events;
 
-	ExternalSignIn(UserRepository users, LinkedIdentityRepository identities, Sessions sessions, Clock clock,
+	ExternalSignIn(UserRepository users, LinkedIdentityRepository identities,
+			DisconnectedProviders disconnectedProviders, Sessions sessions, Clock clock,
 			ApplicationEventPublisher events) {
 		this.users = users;
 		this.identities = identities;
+		this.disconnectedProviders = disconnectedProviders;
 		this.sessions = sessions;
 		this.clock = clock;
 		this.events = events;
@@ -52,6 +56,9 @@ class ExternalSignIn {
 		var user = users.findByEmail(profile.email()).orElse(null);
 		if (user == null) {
 			return create(profile);
+		}
+		if (disconnectedProviders.isMarked(user.getId(), profile.provider())) {
+			throw new ProviderDisconnectedException();
 		}
 		return link(user, profile);
 	}
@@ -98,6 +105,15 @@ class ExternalSignIn {
 			name = DisplayName.clean(profile.email().substring(0, profile.email().indexOf('@')));
 		}
 		return name.isEmpty() ? "User" : name;
+	}
+
+	/** The User on this email disconnected this provider, so it can't sign in as them until they connect it again. */
+	static class ProviderDisconnectedException extends RuntimeException {
+
+		ProviderDisconnectedException() {
+			super("The User disconnected this provider");
+		}
+
 	}
 
 	/** The provider didn't confirm the person owns the email, so it can't be used to find or create a User. */

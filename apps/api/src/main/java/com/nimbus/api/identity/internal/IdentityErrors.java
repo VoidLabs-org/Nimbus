@@ -26,6 +26,18 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail unknownProvider(LinkedIdentities.UnknownProviderException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+	}
+
+	@ExceptionHandler
+	ProblemDetail lastSignInMethod(LinkedIdentities.LastSignInMethodException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		problem.setProperty("code", "last_sign_in_method");
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail alreadyVerified(EmailVerification.AlreadyVerifiedException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 	}

@@ -84,6 +84,10 @@ _Avoid_: Range, level, visibility
 A User holding a Role, either across all of Nimbus or in one project.
 _Avoid_: Group membership, role member
 
+**Session**:
+One sign-in on one browser. It lasts while that browser keeps using Nimbus, up to 90 days, and ends early when the User signs out of it. The Security page lists a User's Sessions, and its copy may say "device".
+_Avoid_: Login, device
+
 **Linked identity**:
 A Google or GitHub login attached to a User, letting them sign in without a password.
 _Avoid_: Social account, external account, provider user

@@ -121,6 +121,22 @@ export type AuditPage = {
   asOf: number;
 };
 
+/**
+ * One running sign-in of the signed-in User, for the Security page. Named apart from `Session`, which is this app's own
+ * signed-in state.
+ */
+export type SessionInfo = {
+  id: string;
+  /** Browser and system, e.g. "Chrome on Windows"; "Unknown browser" when the server can't tell. */
+  device: string;
+  /** True for the browser making the request. */
+  current: boolean;
+  /** When it was signed in (ISO 8601). */
+  startedAt: string;
+  /** When it last renewed its sign-in (ISO 8601), so accurate to about 15 minutes. */
+  lastActiveAt: string;
+};
+
 /** The `code` the server puts on the 403 it answers an Unverified User with. */
 export const EMAIL_UNVERIFIED = "email_unverified";
 
@@ -465,6 +481,9 @@ export function createApiClient(
         method: "POST",
         body: JSON.stringify({ version }),
       }),
+
+    /** The User's running sign-ins, this browser's first. */
+    sessions: () => request<SessionInfo[]>("/api/users/me/sessions"),
 
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>

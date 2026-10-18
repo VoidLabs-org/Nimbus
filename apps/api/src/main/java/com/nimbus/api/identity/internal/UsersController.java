@@ -1,5 +1,6 @@
 package com.nimbus.api.identity.internal;
 
+import java.util.List;
 import java.util.UUID;
 
 import com.nimbus.api.identity.CurrentUser;
@@ -27,10 +28,13 @@ class UsersController {
 
 	private final Passwords passwords;
 
-	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords) {
+	private final Sessions sessions;
+
+	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords, Sessions sessions) {
 		this.users = users;
 		this.currentUser = currentUser;
 		this.passwords = passwords;
+		this.sessions = sessions;
 	}
 
 	/** The signed-in User's profile; an invalid-token 401 if their token outlived the User. */
@@ -52,13 +56,22 @@ class UsersController {
 	@PutMapping("/me/password")
 	ResponseEntity<Void> changePassword(@AuthenticationPrincipal Jwt token,
 			@Valid @RequestBody ChangePasswordRequest request) {
+		passwords.change(currentUser.id(), sessionOf(token), request.currentPassword(), request.newPassword());
+		return ResponseEntity.noContent().build();
+	}
+
+	/** The User's running sessions, this browser's first. */
+	@GetMapping("/me/sessions")
+	List<Sessions.SessionView> sessions(@AuthenticationPrincipal Jwt token) {
+		return sessions.listFor(currentUser.id(), sessionOf(token));
+	}
+
+	private static UUID sessionOf(Jwt token) {
 		var sessionId = token.getClaimAsString(AccessTokens.SESSION_CLAIM);
 		if (sessionId == null) {
 			throw new InvalidBearerTokenException("This token belongs to no session. Sign in again.");
 		}
-		passwords.change(currentUser.id(), UUID.fromString(sessionId), request.currentPassword(),
-				request.newPassword());
-		return ResponseEntity.noContent().build();
+		return UUID.fromString(sessionId);
 	}
 
 	/** Same length rules as registration; passwords are kept exactly as typed. */

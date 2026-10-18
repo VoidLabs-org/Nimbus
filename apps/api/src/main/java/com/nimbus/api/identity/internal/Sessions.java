@@ -9,10 +9,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,26 +36,34 @@ class Sessions {
 
 	private final AuthProperties properties;
 
+	private final DeviceLabels deviceLabels;
+
 	private final Clock clock;
 
 	private final SlidingWindowLimiter attemptsByAddress;
 
 	Sessions(SessionRepository sessions, RefreshTokenRepository tokens, UserRepository users,
-			AuthProperties properties, Clock clock) {
+			AuthProperties properties, DeviceLabels deviceLabels, Clock clock) {
 		this.sessions = sessions;
 		this.tokens = tokens;
 		this.users = users;
 		this.properties = properties;
+		this.deviceLabels = deviceLabels;
 		this.clock = clock;
 		this.attemptsByAddress = new SlidingWindowLimiter(properties.refreshesPerAddress(), properties.limitWindow(),
 				clock);
 	}
 
-	/** Starts a session for a User who just proved who they are, and returns its first refresh token. */
+	/**
+	 * Starts a session for a User who just proved who they are, and returns its first refresh token.
+	 *
+	 * @param userAgent the browser's {@code User-Agent} header, kept to tell the User's sessions apart; may be null
+	 */
 	@Transactional
-	IssuedToken start(User user) {
+	IssuedToken start(User user, String userAgent) {
 		var now = now();
-		var session = sessions.save(new Session(user.getId(), now, now.plus(properties.sessionMaxAge())));
+		var session = sessions
+			.save(new Session(user.getId(), now, now.plus(properties.sessionMaxAge()), userAgent));
 		return issue(session, now);
 	}
 
@@ -117,6 +128,27 @@ class Sessions {
 			.isPresent();
 	}
 
+	/**
+	 * The User's running sessions, the one making the request first, then the rest by when they were last used.
+	 *
+	 * @param currentSessionId the session of the access token making the request
+	 * @throws InvalidBearerTokenException when that session has ended: a signed-out browser whose access token still
+	 * works must not see or change the User's other sessions
+	 */
+	@Transactional(readOnly = true)
+	List<SessionView> listFor(UUID userId, UUID currentSessionId) {
+		if (!isActive(currentSessionId, userId)) {
+			throw new InvalidBearerTokenException("Your session has ended. Sign in again.");
+		}
+		return sessions.findRunningOf(userId, now())
+			.stream()
+			.map(session -> new SessionView(session.getId(), deviceLabels.of(session.getUserAgent()),
+					session.getId().equals(currentSessionId), session.getStartedAt(), session.getLastActiveAt()))
+			.sorted(Comparator.comparing(SessionView::current).reversed()
+				.thenComparing(SessionView::lastActiveAt, Comparator.reverseOrder()))
+			.toList();
+	}
+
 	/** Ends every session of a User except one, on every other browser. */
 	@Transactional
 	void endAllExcept(UUID userId, UUID keepSessionId) {
@@ -148,6 +180,10 @@ class Sessions {
 		catch (NoSuchAlgorithmException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	/** One row of the User's list of sessions. */
+	record SessionView(UUID id, String device, boolean current, Instant startedAt, Instant lastActiveAt) {
 	}
 
 	/** A refresh token to hand to the browser, how long it keeps working, and the session it belongs to. */

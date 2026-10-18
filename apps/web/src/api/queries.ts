@@ -12,6 +12,7 @@ import { failedLoad, type FailedLoad } from "./failure";
  * all of them.
  */
 export const queryKeys = {
+  sessions: ["sessions"] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -35,6 +36,11 @@ export function loadFailure(query: UseQueryResult): FailedLoad | null {
   return query.isError && !query.isFetching && query.data === undefined
     ? failedLoad(query.error)
     : null;
+}
+
+/** The signed-in User's running sign-ins, for the Security page. */
+export function useSessions() {
+  return useQuery({ queryKey: queryKeys.sessions, queryFn: () => api.sessions() });
 }
 
 /** Every Role, for the Roles list. */

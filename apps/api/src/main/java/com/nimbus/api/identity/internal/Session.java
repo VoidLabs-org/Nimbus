@@ -13,6 +13,9 @@ import jakarta.persistence.Table;
 @Table(name = "sessions")
 class Session {
 
+	/** The column's width; a longer header is cut. */
+	static final int MAX_USER_AGENT = 512;
+
 	@Id
 	@GeneratedValue
 	private UUID id;
@@ -25,11 +28,15 @@ class Session {
 
 	private Instant revokedAt;
 
+	private String userAgent;
+
 	protected Session() {
 	}
 
-	Session(UUID userId, Instant startedAt, Instant expiresAt) {
+	/** @param userAgent the browser's {@code User-Agent} header, or null when it sent none */
+	Session(UUID userId, Instant startedAt, Instant expiresAt, String userAgent) {
 		this.userId = userId;
+		this.userAgent = userAgent == null ? null : userAgent.substring(0, Math.min(userAgent.length(), MAX_USER_AGENT));
 		this.startedAt = startedAt;
 		this.expiresAt = expiresAt;
 	}

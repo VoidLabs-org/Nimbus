@@ -90,7 +90,7 @@ class ExternalSignInTests {
 		var existing = registration.create("Dee", "dee@example.com", "correct horse");
 		existing.verifyEmail();
 		users.save(existing);
-		var token = sessions.start(existing);
+		var token = sessions.start(existing, null);
 
 		var signedIn = externalSignIn.signIn(google("g-dee", "dee@example.com", true, "Dee G", "https://img/dee"));
 
@@ -108,8 +108,8 @@ class ExternalSignInTests {
 	@Test
 	void anUnverifiedPasswordUserIsLinkedVerifiedAndLosesPasswordAndEverySession() {
 		var squatted = registration.create("Eli", "eli@example.com", "squatter pass");
-		var firstBrowser = sessions.start(squatted);
-		var secondBrowser = sessions.start(squatted);
+		var firstBrowser = sessions.start(squatted, null);
+		var secondBrowser = sessions.start(squatted, null);
 		assertThat(squatted.emailVerified()).isFalse();
 
 		var signedIn = externalSignIn.signIn(google("g-eli", "eli@example.com", true, "Eli Real", "https://img/eli"));

@@ -31,6 +31,7 @@ dependencies {
 	implementation("org.flywaydb:flyway-database-postgresql")
 	// Argon2id password hashing (Spring Security's Argon2PasswordEncoder needs it).
 	implementation("org.bouncycastle:bcprov-jdk18on:1.83")
+	implementation("com.github.ua-parser:uap-java:1.6.1")
 	implementation("org.springframework.modulith:spring-modulith-observability-api")
 	implementation("org.springframework.modulith:spring-modulith-starter-core")
 	implementation("org.springframework.modulith:spring-modulith-starter-jpa")

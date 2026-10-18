@@ -7,13 +7,19 @@ const names = (permissions: string[]) =>
 describe("settingsGroups", () => {
   it("gives every signed-in User the Account pages and nothing else", () => {
     expect(names([])).toEqual([
-      ["Account", ["/settings/profile", "/settings/password", "/settings/appearance"]],
+      [
+        "Account",
+        ["/settings/profile", "/settings/password", "/settings/security", "/settings/appearance"],
+      ],
     ]);
   });
 
   it("adds Roles & access for holders of access:role:manage", () => {
     expect(names(["access:role:manage"])).toEqual([
-      ["Account", ["/settings/profile", "/settings/password", "/settings/appearance"]],
+      [
+        "Account",
+        ["/settings/profile", "/settings/password", "/settings/security", "/settings/appearance"],
+      ],
       ["Workspace", ["/settings/roles"]],
     ]);
   });

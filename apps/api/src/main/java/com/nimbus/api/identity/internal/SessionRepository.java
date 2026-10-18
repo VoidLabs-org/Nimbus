@@ -1,6 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -35,5 +36,32 @@ interface SessionRepository extends JpaRepository<Session, UUID> {
 	@Modifying
 	@Query("update Session s set s.revokedAt = :now where s.userId = :userId and s.revokedAt is null")
 	void revokeAllOf(@Param("userId") UUID userId, @Param("now") Instant now);
+
+	/**
+	 * The User's sessions that can still be used: not revoked, before their cap, and with a refresh token not yet
+	 * expired. Tokens of a session expire in the order they were issued, so the newest one decides. A session idle
+	 * for 30 days is over in practice, although its row stays until the cap.
+	 */
+	@Query("""
+			select s.id as id, s.userAgent as userAgent, s.startedAt as startedAt, max(t.issuedAt) as lastActiveAt
+			from RefreshToken t join t.session s
+			where s.userId = :userId and s.revokedAt is null and s.expiresAt > :now
+			group by s.id, s.userAgent, s.startedAt
+			having max(t.expiresAt) > :now
+			""")
+	List<RunningSession> findRunningOf(@Param("userId") UUID userId, @Param("now") Instant now);
+
+	/** A running session with when it was last used: the newest refresh token's issue time. */
+	interface RunningSession {
+
+		UUID getId();
+
+		String getUserAgent();
+
+		Instant getStartedAt();
+
+		Instant getLastActiveAt();
+
+	}
 
 }

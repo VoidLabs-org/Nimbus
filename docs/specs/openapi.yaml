@@ -519,6 +519,28 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyAttempts"
+  /api/users/me/sessions:
+    get:
+      tags: [users]
+      summary: The signed-in User's running sessions
+      description: >-
+        Every session of the User that can still be used: not signed out, before its 90-day cap, and used within the
+        last 30 days. The session of this request comes first (`current`), the rest by `lastActiveAt`, newest first.
+        The request must come from a session that is still running. The device is a label built from the browser's
+        `User-Agent` ("Chrome on Windows", or "Unknown browser"); the header itself is never returned.
+      responses:
+        "200":
+          description: The sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SessionInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/access/permissions:
     get:
@@ -1114,6 +1136,28 @@ components:
             False until the User has entered the emailed code or signed in with Google or GitHub on the email.
             An Unverified User gets `403` with `code` `email_unverified` from every endpoint except
             `GET /api/users/me` and those under `/api/auth/`.
+
+    SessionInfo:
+      type: object
+      required: [id, device, current, startedAt, lastActiveAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        device:
+          type: string
+          description: Browser and system, e.g. "Chrome on Windows"; "Unknown browser" when the header was missing or not recognised
+          example: Chrome on Windows
+        current:
+          type: boolean
+          description: True for the session the request came from
+        startedAt:
+          type: string
+          format: date-time
+        lastActiveAt:
+          type: string
+          format: date-time
+          description: When this session last got a new refresh token, so accurate to about 15 minutes
 
     CatalogPermission:
       type: object

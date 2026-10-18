@@ -14,6 +14,7 @@ import RolePage from "./pages/RolePage";
 import PasswordPage from "./pages/PasswordPage";
 import ProfilePage from "./pages/ProfilePage";
 import RolesPage from "./pages/RolesPage";
+import SecurityPage from "./pages/SecurityPage";
 import SettingsOverview from "./settings/SettingsOverview";
 import { AppShell } from "./shell/AppShell";
 import { NotFoundPage, SessionExpiredPage } from "./shell/StatusPages";
@@ -49,6 +50,7 @@ export function AppRoutes() {
         <Route path="/settings" element={<SettingsOverview />} />
         <Route path="/settings/profile" element={<ProfilePage />} />
         <Route path="/settings/password" element={<PasswordPage />} />
+        <Route path="/settings/security" element={<SecurityPage />} />
         <Route path="/settings/appearance" element={<AppearancePage />} />
         <Route path="/settings/roles" element={<RolesPage />} />
         <Route path="/settings/roles/:key" element={<RolePage />} />

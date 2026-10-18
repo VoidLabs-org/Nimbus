@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -66,6 +67,13 @@ class UsersController {
 	@GetMapping("/me/sessions")
 	List<Sessions.SessionView> sessions(@AuthenticationPrincipal Jwt token) {
 		return sessions.listFor(currentUser.id(), sessionOf(token));
+	}
+
+	/** Ends every session of the User except this one, without asking for a password; 204 even when there are none. */
+	@PostMapping("/me/sessions/sign-out-others")
+	ResponseEntity<Void> endOtherSessions(@AuthenticationPrincipal Jwt token) {
+		sessions.endOthers(currentUser.id(), sessionOf(token));
+		return ResponseEntity.noContent().build();
 	}
 
 	/** Ends one of the User's sessions, without asking for a password; a session that is already over also gives 204. */

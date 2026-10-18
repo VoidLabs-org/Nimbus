@@ -9,6 +9,7 @@ import { Bone, Loading } from "@repo/ui/skeleton";
 import { ApiError, api, type SessionInfo } from "../api/client";
 import { loadFailure, queryKeys, useSessions } from "../api/queries";
 import { activityText, isPhone, sessionName, signedInText } from "../settings/sessionView";
+import { SignOutOthersDialog } from "./SignOutOthersDialog";
 import { settingsCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { FailedLoadPage } from "../shell/StatusPages";
@@ -22,12 +23,15 @@ export default function SecurityPage() {
   const query = useSessions();
   const client = useQueryClient();
   const [signingOut, setSigningOut] = useState<string | null>(null);
+  const [confirmingOthers, setConfirmingOthers] = useState(false);
+  const [signingOutOthers, setSigningOutOthers] = useState(false);
   const error = loadFailure(query);
   if (error) return <FailedLoadPage failure={error} onRetry={() => void query.refetch()} />;
 
   // Only for the date of a sign-in (and whether it was this year); how long ago a session was active comes from the server.
   const now = new Date(query.dataUpdatedAt);
   const sessions = query.data;
+  const others = sessions?.filter((session) => !session.current) ?? [];
 
   async function signOut(session: SessionInfo) {
     const name = sessionName(session, now);
@@ -54,6 +58,25 @@ export default function SecurityPage() {
     setSigningOut(null);
   }
 
+  async function signOutOthers() {
+    // The count the User agreed to, not whatever the list says by the time it answers.
+    const count = others.length;
+    setSigningOutOthers(true);
+    try {
+      await api.endOtherSessions();
+    } catch (failure) {
+      setSigningOutOthers(false);
+      // A 401 means this session ended too: the app is already sending the User to sign in again.
+      if (!(failure instanceof ApiError && failure.status === 401))
+        toast.error("Couldn't sign out your other devices. Please try again.");
+      return;
+    }
+    toast.success(`Signed out ${count} other ${count === 1 ? "device" : "devices"}.`);
+    setConfirmingOthers(false);
+    setSigningOutOthers(false);
+    await client.invalidateQueries({ queryKey: queryKeys.sessions });
+  }
+
   return (
     <Container size="sm" px={0} py="xl">
       <Stack gap="lg" maw={760}>
@@ -62,11 +85,22 @@ export default function SecurityPage() {
           Security
         </Title>
         <section className={classes.section} aria-labelledby="signed-in-heading">
-          <div>
-            <h2 id="signed-in-heading" className={classes.heading}>
-              Where you’re signed in
-            </h2>
-            <div className={classes.description}>Sign out anything you don’t recognise.</div>
+          <div className={classes.sectionHead}>
+            <div>
+              <h2 id="signed-in-heading" className={classes.heading}>
+                Where you’re signed in
+              </h2>
+              <div className={classes.description}>Sign out anything you don’t recognise.</div>
+            </div>
+            {others.length > 0 && (
+              <Button
+                variant="default"
+                className={classes.signOutOthers}
+                onClick={() => setConfirmingOthers(true)}
+              >
+                Sign out all other devices
+              </Button>
+            )}
           </div>
           {!sessions && (
             <Loading>
@@ -114,6 +148,14 @@ export default function SecurityPage() {
           )}
         </section>
       </Stack>
+      <SignOutOthersDialog
+        opened={confirmingOthers}
+        others={others}
+        now={now}
+        busy={signingOutOthers}
+        onConfirm={() => void signOutOthers()}
+        onClose={() => setConfirmingOthers(false)}
+      />
     </Container>
   );
 }

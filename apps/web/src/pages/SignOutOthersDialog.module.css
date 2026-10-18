@@ -1,0 +1,36 @@
+/* The confirm window for "Sign out all other devices", from the "Nimbus Themes" design (32f). */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.item {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* On a phone the buttons stack, the destructive one first, each a full-width tap target. */
+@media (max-width: 36em) {
+  .footer {
+    flex-direction: column-reverse;
+  }
+
+  .footer > * {
+    min-height: 44px;
+  }
+}

@@ -260,3 +260,93 @@ describe("signing out one device", () => {
     expect(screen.getByText("Safari on iOS")).toBeTruthy();
   });
 });
+
+describe("signing out all other devices", () => {
+  const three = () => [
+    sessionInfo("s1", "Chrome on Windows", true, 2 * DAY, 0),
+    sessionInfo("s2", "Safari on iOS", false, 9 * DAY, 2 * HOUR),
+    sessionInfo("s3", "Firefox on Linux", false, 40 * DAY, 3 * DAY),
+  ];
+  const openDialog = async () => {
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out all other devices" }));
+    return screen.findByRole("dialog");
+  };
+
+  it("hides the button when there is no other device", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue([
+      sessionInfo("s1", "Chrome on Windows", true, DAY, 0),
+    ]);
+
+    show();
+
+    await screen.findByText("You’re not signed in anywhere else.");
+    expect(screen.queryByRole("button", { name: "Sign out all other devices" })).toBeNull();
+  });
+
+  it("lists the devices in the dialog, with the count in its button", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue(three());
+
+    show();
+    const dialog = await openDialog();
+
+    expect(within(dialog).getByText(/^Safari on iOS \(signed in /)).toBeTruthy();
+    expect(within(dialog).getByText(/^Firefox on Linux \(signed in /)).toBeTruthy();
+    expect(within(dialog).queryByText(/^Chrome on Windows/)).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Sign out 2 devices" })).toBeTruthy();
+  });
+
+  it("says 1 device for a single other device", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue(three().slice(0, 2));
+
+    show();
+    const dialog = await openDialog();
+
+    expect(within(dialog).getByRole("button", { name: "Sign out 1 device" })).toBeTruthy();
+  });
+
+  it("changes nothing on Cancel", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue(three());
+    const endOthers = vi.spyOn(api, "endOtherSessions").mockResolvedValue(undefined);
+
+    show();
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(endOthers).not.toHaveBeenCalled();
+    expect(screen.getByText("Safari on iOS")).toBeTruthy();
+  });
+
+  it("signs the others out, leaves only this device and confirms with a toast", async () => {
+    const sessions = vi
+      .spyOn(api, "sessions")
+      .mockResolvedValueOnce(three())
+      .mockResolvedValue([three()[0]!]);
+    const endOthers = vi.spyOn(api, "endOtherSessions").mockResolvedValue(undefined);
+    const success = vi.spyOn(toast, "success");
+
+    show();
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sign out 2 devices" }));
+
+    await screen.findByText("You’re not signed in anywhere else.");
+    expect(endOthers).toHaveBeenCalledTimes(1);
+    expect(sessions).toHaveBeenCalledTimes(2);
+    expect(await rowsOfCard()).toHaveLength(1);
+    expect(success).toHaveBeenCalledWith("Signed out 2 other devices.");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("says so, and keeps the dialog, when it fails", async () => {
+    vi.spyOn(api, "sessions").mockResolvedValue(three());
+    vi.spyOn(api, "endOtherSessions").mockRejectedValue(new ApiError(500, undefined));
+    const error = vi.spyOn(toast, "error");
+
+    show();
+    const dialog = await openDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sign out 2 devices" }));
+
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+});

@@ -541,6 +541,21 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/users/me/sessions/sign-out-others:
+    post:
+      tags: [users]
+      summary: Sign out every other session of the signed-in User
+      description: >-
+        Ends every session of the User except the one of this request, without a password; their refresh tokens stop
+        working. Their access tokens keep working for up to 15 minutes. Also `204` when there are no other sessions.
+        The request must come from a session that is still running.
+      responses:
+        "204":
+          description: Every other session is over
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/users/me/sessions/{id}:
     delete:
       tags: [users]

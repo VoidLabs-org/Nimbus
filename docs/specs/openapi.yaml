@@ -585,7 +585,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
         "409":
-          description: The User has a Linked identity for the provider already (`code: already_connected`)
+          description: "The User has a Linked identity for the provider already (`code: already_connected`)"
           content:
             application/problem+json:
               schema:

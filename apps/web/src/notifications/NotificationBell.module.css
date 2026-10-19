@@ -1,0 +1,115 @@
+.bell {
+  position: relative;
+  color: var(--color-accent-2);
+}
+.badge {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  border-radius: 20px;
+  background: var(--color-accent);
+  color: var(--on-accent);
+  font-size: 10px;
+  line-height: 17px;
+  font-weight: 700;
+}
+.dropdown,
+.sheet {
+  background: var(--card);
+  color: var(--color-text);
+  border-color: var(--line);
+  backdrop-filter: var(--panel-blur);
+}
+.dropdown {
+  overflow: hidden;
+  border-radius: 18px;
+  max-width: calc(100vw - 24px);
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  max-height: min(600px, 75dvh);
+}
+.body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 180px;
+}
+.empty {
+  padding: 48px 30px;
+  text-align: center;
+  color: var(--color-accent-2);
+}
+.empty h3 {
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+.empty p {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.footer {
+  border-top: 1px solid var(--line);
+  color: var(--color-accent-2);
+}
+.footer a {
+  color: var(--color-text);
+  font-size: 12px;
+}
+.day {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-accent-2);
+  padding: 12px 18px 6px;
+  margin: 0;
+}
+.row {
+  display: flex;
+  gap: 12px;
+  padding: 16px 18px;
+  width: 100%;
+  border-bottom: 1px solid var(--line);
+  color: var(--color-text);
+}
+.row[data-unread] {
+  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+}
+.row:hover {
+  background: var(--row-hover);
+}
+.rowText {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.rowText strong {
+  font-weight: 600;
+}
+.rowText span,
+.rowText time {
+  color: var(--color-accent-2);
+}
+.securityIcon {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot {
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  background: var(--color-accent);
+  border-radius: 50%;
+}

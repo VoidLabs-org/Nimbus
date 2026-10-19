@@ -1,16 +1,20 @@
 package com.nimbus.api.identity.internal;
 
-import static com.nimbus.api.identity.internal.MailFrame.MUTED_STYLE;
-import static com.nimbus.api.identity.internal.MailFrame.escape;
+import static com.nimbus.api.mail.MailFrame.MUTED_STYLE;
+import static com.nimbus.api.mail.MailFrame.escape;
 
 import java.time.Duration;
 import java.util.Optional;
+
+import com.nimbus.api.mail.MailFrame;
 
 /**
  * The emails that carry a code (a Verification code, a Reset code): the shared {@link MailFrame} with the code in
  * large type. Each email supplies its own wording.
  */
 final class CodeMail {
+
+	private static final String MOBILE_STYLES = ".code{font-size:34px!important;letter-spacing:8px!important}";
 
 	private CodeMail() {
 	}
@@ -27,7 +31,7 @@ final class CodeMail {
 				<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%"><tr><td class="tile muted" bgcolor="#f4f2ef" style="padding:14px 20px;border-radius:16px;background:#f4f2ef;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#6b6763"><b class="ink" style="color:#201d1a">Nimbus will never ask for this code</b> by phone, chat or email.</td></tr></table>"""
 			.formatted(MUTED_STYLE, escape(line), escape(codeLabel), escape(code));
 		return MailFrame.html(title, title + ". It expires in " + lifetime.toMinutes() + " minutes.", heading, logoUrl,
-				card, footer);
+				card, footer, MOBILE_STYLES);
 	}
 
 }

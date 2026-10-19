@@ -1,6 +1,6 @@
 # mail
 
-Sends email for the other modules. It knows nothing about Users or why a message is sent: callers write the message and pass it in. Terms are defined in [GLOSSARY.md](../../GLOSSARY.md).
+Provides the shared email layout and sends email for the other modules. It knows nothing about Users or why a message is sent: callers own the wording and plain-text alternative, build the HTML with the shared layout, and pass the message in. Terms are defined in [GLOSSARY.md](../../GLOSSARY.md).
 
 ## Public interface
 
@@ -11,6 +11,18 @@ Sends email for the other modules. It knows nothing about Users or why a message
 | `MailAssets` | `url(file)`: the public address of an image used in an email (the Nimbus icon), or empty when `MAIL_ASSETS_URL` is blank or is not a public `https://` address (a startup WARN says so), in which case the email does without the image. `MailAssets.NIMBUS_ICON_DARK` names the icon file, so callers do not spell it out. |
 
 Everything under `mail.internal` is private to the module.
+
+### Shared layout
+
+`MailFrame` and `NoticeMail` are public utilities in `com.nimbus.api.mail`, available to any module without a Spring bean. They render HTML only; callers supply the recipient, subject and plain-text body when constructing a `Mail`.
+
+- `MailFrame.html(title, preview, heading, logoUrl, card, footer)` renders the "Ink header band" frame: a dark header with the Nimbus logo and heading, a light content card, and a footer. `logoUrl` is an `Optional<String>` from `MailAssets`; without it the header uses an orange circle. All text and the logo URL are HTML-escaped, except `card`, which is caller-supplied HTML and must already escape any dynamic content. `MailFrame.escape(value)` escapes text and double-quoted attribute values; `MailFrame.MUTED_STYLE` supplies the shared muted paragraph style for custom cards. Subjects, titles and preview lines must not contain secrets because inbox lists and lock screens can show them.
+- The `MailFrame.html` overload with a final `mobileStyles` argument appends caller-owned CSS inside the `max-width:620px` media query. Pass trusted application CSS only, never user content. Identity supplies its code-card rules here; the shared frame contains no code-card styling. Custom cards can use `class="muted"` for body text, `class="ink"` for emphasis, and `class="tile"` for inset backgrounds to receive the shared dark-mode colors. Put `MUTED_STYLE` in a `style` attribute and use `class="muted"` on the same element.
+- `NoticeMail.html(title, heading, line, tile, button, url, footer, logoUrl)` fills that frame with a line of text, an optional supporting tile and a button. `tile` is an `Optional<String>`; `Optional.empty()` omits its markup entirely, so ordinary Notifications need no security warning. All text is escaped, including the button URL. The line also supplies the hidden inbox preview by default; the overload with `preview` after `title` lets the caller supply a separate preview without secrets.
+- Button URLs must be absolute `http` or `https` URLs with a host; malformed URLs, relative paths and other schemes throw `IllegalArgumentException`. HTTP supports local development. Callers must still trust the destination host: scheme validation does not make arbitrary external destinations safe.
+- Layout arguments, optional containers, CSS and text passed to `escape` must be non-null. A missing argument throws `NullPointerException` naming that argument; an absent logo or tile uses `Optional.empty()`. Layout validation errors propagate to callers; `Mailer`'s delivery-failure policy does not apply to HTML construction.
+
+`identity` uses `MailFrame` for Verification and Reset code emails, keeping its code card and wording in `identity`, and `NoticeMail` for provider connection and disconnection emails. Other modules can use the same layouts with their own wording.
 
 ## Why not an event
 

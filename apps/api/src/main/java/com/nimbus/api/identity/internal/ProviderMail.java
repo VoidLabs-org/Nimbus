@@ -6,6 +6,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 import com.nimbus.api.mail.Mail;
+import com.nimbus.api.mail.MailFrame;
+import com.nimbus.api.mail.NoticeMail;
 
 /** The emails that tell a User a provider was disconnected from, or connected to, their account. identity owns the wording. */
 final class ProviderMail {
@@ -45,7 +47,7 @@ final class ProviderMail {
 			String securityUrl, Optional<String> logoUrl) {
 		var text = line + "\n\n" + ifNotYou + "\n" + securityUrl + "\n\n" + FOOTER;
 		return new Mail(email, subject,
-				NoticeMail.html(subject, heading, line, ifNotYou, BUTTON, securityUrl, FOOTER, logoUrl), text);
+				NoticeMail.html(subject, heading, line, Optional.of(ifNotYou), BUTTON, securityUrl, FOOTER, logoUrl), text);
 	}
 
 }

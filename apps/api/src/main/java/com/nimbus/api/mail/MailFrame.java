@@ -1,15 +1,18 @@
 package com.nimbus.api.mail;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /**
  * The shared email layout: the "Ink header band" design (30e), a dark band with the logo and
  * heading over a light card, and a small footer. Built from tables and inline styles, which is what mail programs
  * support. Callers supply their own card content, or use {@link NoticeMail} for a notice with a button.
+ * Cards can use {@code muted} for body text, {@code ink} for emphasis and {@code tile} for inset backgrounds;
+ * these classes apply the shared dark-mode colors.
  */
 public final class MailFrame {
 
-	/** The class names the dark-mode rules in the page style target; the cards below use them. */
+	/** Inline body-text style for a {@code style} attribute; also set {@code class="muted"} for dark mode. */
 	public static final String MUTED_STYLE = "font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:24px;"
 			+ "mso-line-height-rule:exactly;color:#6b6763";
 
@@ -27,6 +30,24 @@ public final class MailFrame {
 	 */
 	public static String html(String title, String preview, String heading, Optional<String> logoUrl, String card,
 			String footer) {
+		return html(title, preview, heading, logoUrl, card, footer, "");
+	}
+
+	/**
+	 * Renders a frame with caller-owned responsive CSS. Arguments must be non-null.
+	 * @param mobileStyles trusted CSS rules appended inside the {@code max-width:620px} media query;
+	 * never pass user-supplied CSS
+	 * @see #html(String, String, String, Optional, String, String)
+	 */
+	public static String html(String title, String preview, String heading, Optional<String> logoUrl, String card,
+			String footer, String mobileStyles) {
+		Objects.requireNonNull(title, "title");
+		Objects.requireNonNull(preview, "preview");
+		Objects.requireNonNull(heading, "heading");
+		Objects.requireNonNull(logoUrl, "logoUrl");
+		Objects.requireNonNull(card, "card");
+		Objects.requireNonNull(footer, "footer");
+		Objects.requireNonNull(mobileStyles, "mobileStyles");
 		var logo = logoUrl
 			.map(url -> "<img src=\"" + escape(url) + "\" width=\"28\" height=\"28\" alt=\"Nimbus\" "
 					+ "style=\"display:block;width:28px;height:28px;border:0\">")
@@ -44,7 +65,7 @@ public final class MailFrame {
 				<title>%1$s</title>
 				<!--[if mso]><style>table,td{font-family:Arial,sans-serif!important}</style><![endif]-->
 				<style>
-				@media (max-width:620px){.px{padding-left:24px!important;padding-right:24px!important}.code{font-size:34px!important;letter-spacing:8px!important}}
+				@media (max-width:620px){.px{padding-left:24px!important;padding-right:24px!important}%7$s}
 				@media (prefers-color-scheme:dark){.bg{background:#121110!important}.card{background:#1d1b19!important}.ink,h1{color:#f4f2ef!important}.muted{color:#c9c4bf!important}.tile{background:#2a2725!important}.foot{color:#a8a29d!important}}
 				</style>
 				</head>
@@ -60,11 +81,12 @@ public final class MailFrame {
 				<tr><td class="px foot" style="padding:24px 40px 0 40px;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#878381">%6$s</td></tr>
 				</table></td></tr></table>
 				</body></html>
-				""".formatted(escape(title), escape(preview), logo, escape(heading), card, escape(footer));
+				""".formatted(escape(title), escape(preview), logo, escape(heading), card, escape(footer), mobileStyles);
 	}
 
 	/** Escapes plain text for HTML content and double-quoted attributes. */
 	public static String escape(String value) {
+		Objects.requireNonNull(value, "value");
 		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
 	}
 

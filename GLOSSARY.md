@@ -92,6 +92,14 @@ _Avoid_: Login, device
 A Google or GitHub login attached to a User, letting them sign in without a password. A User links one by connecting it on the Security page and unlinks it by disconnecting it. A disconnected one is not linked again until the User connects it.
 _Avoid_: Social account, external account, provider user, connected account (UI copy only)
 
+**Notification**:
+A message to one User about something that happened to an Issue they're involved with or to their account, shown in Nimbus and sometimes emailed.
+_Avoid_: Alert (for Issue ones), message, activity
+
+**Security alert**:
+A Notification about a change to a User's sign-in or account security, which they can't turn off.
+_Avoid_: Warning, security notification
+
 ## Development workflow
 
 **Feature spec**:

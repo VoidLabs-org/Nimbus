@@ -5,7 +5,7 @@ import java.util.Optional;
 
 import com.nimbus.api.mail.Mail;
 
-/** The email that carries a Reset code (design 05). identity owns the wording; {@code mail} only delivers it. */
+/** The email that carries a Reset code (design 05). identity owns the wording; {@code mail} supplies the frame and delivery. */
 final class ResetMail {
 
 	private static final String SUBJECT = "Your Nimbus password reset code";

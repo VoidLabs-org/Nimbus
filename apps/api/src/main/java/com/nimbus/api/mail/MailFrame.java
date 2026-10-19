@@ -1,16 +1,16 @@
-package com.nimbus.api.identity.internal;
+package com.nimbus.api.mail;
 
 import java.util.Optional;
 
 /**
- * The layout every identity email shares: the "Ink header band" design (30e), a dark band with the logo and
+ * The shared email layout: the "Ink header band" design (30e), a dark band with the logo and
  * heading over a light card, and a small footer. Built from tables and inline styles, which is what mail programs
- * support. {@link CodeMail} and {@link NoticeMail} fill the card with their own content.
+ * support. Callers supply their own card content, or use {@link NoticeMail} for a notice with a button.
  */
-final class MailFrame {
+public final class MailFrame {
 
 	/** The class names the dark-mode rules in the page style target; the cards below use them. */
-	static final String MUTED_STYLE = "font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:24px;"
+	public static final String MUTED_STYLE = "font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:24px;"
 			+ "mso-line-height-rule:exactly;color:#6b6763";
 
 	private MailFrame() {
@@ -25,7 +25,7 @@ final class MailFrame {
 	 * @param card the HTML inside the light card, already escaped
 	 * @param footer the small print under the card
 	 */
-	static String html(String title, String preview, String heading, Optional<String> logoUrl, String card,
+	public static String html(String title, String preview, String heading, Optional<String> logoUrl, String card,
 			String footer) {
 		var logo = logoUrl
 			.map(url -> "<img src=\"" + escape(url) + "\" width=\"28\" height=\"28\" alt=\"Nimbus\" "
@@ -63,7 +63,8 @@ final class MailFrame {
 				""".formatted(escape(title), escape(preview), logo, escape(heading), card, escape(footer));
 	}
 
-	static String escape(String value) {
+	/** Escapes plain text for HTML content and double-quoted attributes. */
+	public static String escape(String value) {
 		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
 	}
 

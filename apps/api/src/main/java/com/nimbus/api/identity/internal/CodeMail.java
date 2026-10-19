@@ -1,10 +1,12 @@
 package com.nimbus.api.identity.internal;
 
-import static com.nimbus.api.identity.internal.MailFrame.MUTED_STYLE;
-import static com.nimbus.api.identity.internal.MailFrame.escape;
+import static com.nimbus.api.mail.MailFrame.MUTED_STYLE;
+import static com.nimbus.api.mail.MailFrame.escape;
 
 import java.time.Duration;
 import java.util.Optional;
+
+import com.nimbus.api.mail.MailFrame;
 
 /**
  * The emails that carry a code (a Verification code, a Reset code): the shared {@link MailFrame} with the code in

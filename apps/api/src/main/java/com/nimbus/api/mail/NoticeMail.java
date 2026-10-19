@@ -1,27 +1,30 @@
-package com.nimbus.api.identity.internal;
+package com.nimbus.api.mail;
 
-import static com.nimbus.api.identity.internal.MailFrame.MUTED_STYLE;
-import static com.nimbus.api.identity.internal.MailFrame.escape;
+import static com.nimbus.api.mail.MailFrame.MUTED_STYLE;
+import static com.nimbus.api.mail.MailFrame.escape;
 
 import java.util.Optional;
 
 /**
- * The emails that tell the User something happened to their account and point them at a page: the shared
+ * Emails that tell the recipient something happened and point them at a page: the shared
  * {@link MailFrame} with a line of text, a tile with what to do if it wasn't them, and a button.
  */
-final class NoticeMail {
+public final class NoticeMail {
 
 	private NoticeMail() {
 	}
 
 	/**
-	 * @param title the subject; it is also the title and the hidden preview line
-	 * @param line what happened
-	 * @param ifNotYou the tile under it: what to do if this wasn't the User
+	 * @param title the subject; it is also the HTML title
+	 * @param heading the large heading in the dark band
+	 * @param line what happened; also used as the hidden preview line
+	 * @param ifNotYou the tile under it: what to do if this wasn't the recipient
 	 * @param button the label of the button, which opens {@code url}
+	 * @param url the button's destination
+	 * @param footer the small print under the card
 	 * @param logoUrl see {@link MailFrame#html}
 	 */
-	static String html(String title, String heading, String line, String ifNotYou, String button, String url,
+	public static String html(String title, String heading, String line, String ifNotYou, String button, String url,
 			String footer, Optional<String> logoUrl) {
 		var card = """
 				<p class="muted" style="margin:0 0 20px 0;%1$s">%2$s</p>

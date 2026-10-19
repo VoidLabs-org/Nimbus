@@ -172,7 +172,8 @@ class DisconnectProviderTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		// Completes this fixture's provider sign-up, whose first Session sends no sign-in alert.
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec disconnect(String accessToken, String provider) {

@@ -12,6 +12,9 @@ import { failedLoad, type FailedLoad } from "./failure";
  * all of them.
  */
 export const queryKeys = {
+  notifications: ["notifications"] as const,
+  notificationList: ["notifications", "list"] as const,
+  notificationUnreadCount: ["notifications", "unread-count"] as const,
   sessions: ["sessions"] as const,
   linkedIdentities: ["linkedIdentities"] as const,
   providers: ["providers"] as const,

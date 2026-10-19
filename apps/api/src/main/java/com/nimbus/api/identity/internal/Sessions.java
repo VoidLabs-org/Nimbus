@@ -15,7 +15,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.nimbus.api.identity.SignedIn;
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,16 +43,19 @@ class Sessions {
 
 	private final Clock clock;
 
+	private final ApplicationEventPublisher events;
+
 	private final SlidingWindowLimiter attemptsByAddress;
 
 	Sessions(SessionRepository sessions, RefreshTokenRepository tokens, UserRepository users,
-			AuthProperties properties, DeviceLabels deviceLabels, Clock clock) {
+			AuthProperties properties, DeviceLabels deviceLabels, Clock clock, ApplicationEventPublisher events) {
 		this.sessions = sessions;
 		this.tokens = tokens;
 		this.users = users;
 		this.properties = properties;
 		this.deviceLabels = deviceLabels;
 		this.clock = clock;
+		this.events = events;
 		this.attemptsByAddress = new SlidingWindowLimiter(properties.refreshesPerAddress(), properties.limitWindow(),
 				clock);
 	}
@@ -62,9 +67,18 @@ class Sessions {
 	 */
 	@Transactional
 	IssuedToken start(User user, String userAgent) {
+		return start(user, userAgent, true);
+	}
+
+	/** The first Session of a new User deliberately sends no Security alert. */
+	@Transactional
+	IssuedToken start(User user, String userAgent, boolean announce) {
 		var now = now();
 		var session = sessions
 			.save(new Session(user.getId(), now, now.plus(properties.sessionMaxAge()), userAgent));
+		if (announce) {
+			events.publishEvent(new SignedIn(user.getId(), session.id(), deviceLabels.of(session.userAgent()), now));
+		}
 		return issue(session, now);
 	}
 

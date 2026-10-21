@@ -58,7 +58,19 @@ _Avoid_: OTP, token, PIN
 
 **Reset code**:
 A short-lived code emailed to a User who forgot their password, which lets them set a new one. Entering it also proves they own the address.
-_Avoid_: Recovery code, password token, OTP
+_Avoid_: Password token, OTP
+
+**Two-step verification**:
+A setting a User turns on for themselves so that signing in also needs a Sign-in code from an authenticator app on their phone, not only a password or a Linked identity.
+_Avoid_: MFA, 2FA, two-factor authentication
+
+**Sign-in code**:
+The short code an authenticator app shows, which a User with Two-step verification types as the second step of signing in.
+_Avoid_: OTP, TOTP code, token, Verification code
+
+**Recovery code**:
+One of a set of single-use codes a User saves when turning on Two-step verification. Each one stands in for a Sign-in code once, for when they've lost their phone. Not a Reset code.
+_Avoid_: Backup code, Reset code
 
 **Member**:
 A User who has been added to a project. Only ever means project membership.

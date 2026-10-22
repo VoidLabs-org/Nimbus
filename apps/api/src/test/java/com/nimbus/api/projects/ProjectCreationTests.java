@@ -146,6 +146,34 @@ class ProjectCreationTests {
 	}
 
 	@Test
+	void theCreatedAtInTheCreateResponseIsTheOneALaterOpenReturns() {
+		// The database keeps microseconds; the response must not carry more, or a refetch would change it.
+		var token = register(true);
+		String created = JsonPath.read(new String(client.post().uri("/api/projects")
+			.header("Authorization", "Bearer " + token).body(Map.of("key", "TIME", "name", "Timed"))
+			.exchange().expectStatus().isCreated().expectBody().returnResult().getResponseBody(),
+				java.nio.charset.StandardCharsets.UTF_8), "$.createdAt");
+
+		var instant = java.time.Instant.parse(created);
+		assertThat(instant).isEqualTo(instant.truncatedTo(java.time.temporal.ChronoUnit.MICROS));
+		client.get().uri("/api/projects/TIME").header("Authorization", "Bearer " + token)
+			.exchange().expectStatus().isOk().expectBody().jsonPath("$.createdAt").isEqualTo(created);
+	}
+
+	@Test
+	void aKeyWrittenWithLettersThatCapitaliseToAsciiOnesOpensNothing() {
+		var token = register(true);
+		for (var key : new String[] { "SAM", "NIM" }) {
+			client.post().uri("/api/projects").header("Authorization", "Bearer " + token)
+				.body(Map.of("key", key, "name", "Project " + key)).exchange().expectStatus().isCreated();
+		}
+		for (var key : new String[] { "ſam", "nım" }) {
+			client.get().uri("/api/projects/{key}", key).header("Authorization", "Bearer " + token)
+				.exchange().expectStatus().isNotFound();
+		}
+	}
+
+	@Test
 	void descriptionsKeepLineBreaksButNotOtherControlCharacters() {
 		var token = register(true);
 		client.post().uri("/api/projects").header("Authorization", "Bearer " + token)

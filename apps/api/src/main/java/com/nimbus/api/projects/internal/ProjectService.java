@@ -3,7 +3,9 @@ package com.nimbus.api.projects.internal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,17 +27,20 @@ class ProjectService implements Projects {
 
 	private final JdbcClient jdbc;
 	private final ApplicationEventPublisher events;
+	private final Clock clock;
 
-	ProjectService(JdbcClient jdbc, ApplicationEventPublisher events) {
+	ProjectService(JdbcClient jdbc, ApplicationEventPublisher events, Clock clock) {
 		this.jdbc = jdbc;
 		this.events = events;
+		this.clock = clock;
 	}
 
 	/** The controller has already checked the fields against the rules in {@code docs/specs/projects.md}. */
 	@Transactional
 	public ProjectView create(UUID actor, String key, String name, String description) {
-		var project = new ProjectView(UUID.randomUUID(), key.toUpperCase(Locale.ROOT), name.strip(), description,
-				false, Instant.now());
+		// Microseconds, as the database keeps them, so the time returned now is the time a later read returns.
+		var project = new ProjectView(UUID.randomUUID(), key.toUpperCase(Locale.ROOT), name, description, false,
+				clock.instant().truncatedTo(ChronoUnit.MICROS));
 		var inserted = jdbc.sql("""
 				INSERT INTO projects (id, key, name, description, created_at)
 				VALUES (:id, :key, :name, :description, :at) ON CONFLICT (key) DO NOTHING
@@ -52,11 +57,12 @@ class ProjectService implements Projects {
 
 	/** Unknown projects and projects the actor is not a Member of are both "not found". */
 	public ProjectView open(UUID actor, String key) {
+		var stored = ProjectKeys.normalize(key).orElseThrow(ProjectNotFound::new);
 		return jdbc.sql(SELECT + """
 				WHERE key = :key
 				AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
 				""")
-			.param("key", key.toUpperCase(Locale.ROOT)).param("user", actor)
+			.param("key", stored).param("user", actor)
 			.query(ProjectService::view).optional().orElseThrow(ProjectNotFound::new);
 	}
 
@@ -68,8 +74,8 @@ class ProjectService implements Projects {
 
 	@Override
 	public Optional<ProjectSummary> findByKey(String key) {
-		return jdbc.sql(SELECT + "WHERE key = :key").param("key", key.toUpperCase(Locale.ROOT))
-			.query(ProjectService::view).optional().map(ProjectView::summary);
+		return ProjectKeys.normalize(key).flatMap(stored -> jdbc.sql(SELECT + "WHERE key = :key").param("key", stored)
+			.query(ProjectService::view).optional()).map(ProjectView::summary);
 	}
 
 	@Override

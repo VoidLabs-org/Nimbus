@@ -32,8 +32,9 @@ export function useProject(key: string) {
 }
 
 /**
- * Keep the server's created project, so opening it right after needs no request. Creating one changes no other
- * project, so nothing else is invalidated (the projects list, #39, will be).
+ * Keep the server's created project, so opening it right after shows it at once, without a skeleton (it is then
+ * refreshed, as every cached page is: stale time 0). Creating one changes no other project, so nothing else is
+ * invalidated (the projects list, #39, will be).
  */
 export function useProjectCreated() {
   const client = useQueryClient();

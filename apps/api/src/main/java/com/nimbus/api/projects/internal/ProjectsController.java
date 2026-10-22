@@ -37,11 +37,13 @@ class ProjectsController {
 	}
 
 	/**
-	 * The name is stripped before it is checked, so pasted surrounding whitespace is not an error. Patterns count
-	 * Unicode code points; {@code \p{Cc}} is every control character. A description keeps line breaks and tabs.
+	 * The name is cleaned at both ends before it is checked, so pasted surrounding whitespace is not an error, and
+	 * neither are the invisible characters that look like it (non-breaking and other Unicode spaces, zero-width
+	 * characters). A name of only those is empty. Patterns count Unicode code points; {@code \p{Cc}} is every control
+	 * character. A description keeps line breaks and tabs.
 	 */
 	record CreateProject(
-			@NotNull(message = KEY_RULE) @Pattern(regexp = "[A-Za-z][A-Za-z0-9]{1,9}", message = KEY_RULE) String key,
+			@NotNull(message = KEY_RULE) @Pattern(regexp = ProjectKeys.PATTERN, message = KEY_RULE) String key,
 			@NotNull(message = NAME_RULE) @Pattern(regexp = "\\P{Cc}{1,100}", message = NAME_RULE) String name,
 			@Pattern(regexp = "(?:\\P{Cc}|[\\t\\n\\r]){0,1000}",
 					message = "Use at most 1000 characters without control characters") String description) {
@@ -49,8 +51,12 @@ class ProjectsController {
 		static final String KEY_RULE = "Use 2 to 10 letters or digits, starting with a letter";
 		static final String NAME_RULE = "Use 1 to 100 characters without control characters";
 
+		/** Whitespace, Unicode spaces and separators (Z) and invisible format characters (Cf) at either end. */
+		private static final java.util.regex.Pattern EDGES = java.util.regex.Pattern
+			.compile("\\A[\\s\\p{Z}\\p{Cf}]+|[\\s\\p{Z}\\p{Cf}]+\\z");
+
 		CreateProject {
-			name = name == null ? null : name.strip();
+			name = name == null ? null : EDGES.matcher(name).replaceAll("");
 		}
 	}
 }

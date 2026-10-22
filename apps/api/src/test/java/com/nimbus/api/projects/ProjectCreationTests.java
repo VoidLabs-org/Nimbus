@@ -163,11 +163,12 @@ class ProjectCreationTests {
 	@Test
 	void aKeyWrittenWithLettersThatCapitaliseToAsciiOnesOpensNothing() {
 		var token = register(true);
-		for (var key : new String[] { "SAM", "NIM" }) {
+		// Keys of their own: every test in the class shares one database, and NIM is taken by another test.
+		for (var key : new String[] { "SAMZ", "NIMZ" }) {
 			client.post().uri("/api/projects").header("Authorization", "Bearer " + token)
 				.body(Map.of("key", key, "name", "Project " + key)).exchange().expectStatus().isCreated();
 		}
-		for (var key : new String[] { "ſam", "nım" }) {
+		for (var key : new String[] { "ſamz", "nımz" }) {
 			client.get().uri("/api/projects/{key}", key).header("Authorization", "Bearer " + token)
 				.exchange().expectStatus().isNotFound();
 		}

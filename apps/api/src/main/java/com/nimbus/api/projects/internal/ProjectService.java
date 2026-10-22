@@ -5,9 +5,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
-import java.util.TreeMap;
 import java.util.UUID;
 
 import com.nimbus.api.projects.ProjectSummary;
@@ -33,9 +31,9 @@ class ProjectService implements Projects {
 		this.events = events;
 	}
 
+	/** The controller has already checked the fields against the rules in {@code docs/specs/projects.md}. */
 	@Transactional
 	public ProjectView create(UUID actor, String key, String name, String description) {
-		validate(key, name, description);
 		var project = new ProjectView(UUID.randomUUID(), key.toUpperCase(Locale.ROOT), name.strip(), description,
 				false, Instant.now());
 		var inserted = jdbc.sql("""
@@ -52,11 +50,14 @@ class ProjectService implements Projects {
 		return project;
 	}
 
+	/** Unknown projects and projects the actor is not a Member of are both "not found". */
 	public ProjectView open(UUID actor, String key) {
-		var project = jdbc.sql(SELECT + "WHERE key = :key").param("key", key.toUpperCase(Locale.ROOT))
+		return jdbc.sql(SELECT + """
+				WHERE key = :key
+				AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
+				""")
+			.param("key", key.toUpperCase(Locale.ROOT)).param("user", actor)
 			.query(ProjectService::view).optional().orElseThrow(ProjectNotFound::new);
-		requireMember(actor, project.id());
-		return project;
 	}
 
 	@Override
@@ -90,30 +91,6 @@ class ProjectService implements Projects {
 		return new ProjectView(row.getObject("id", UUID.class), row.getString("key"), row.getString("name"),
 				row.getString("description"), row.getTimestamp("archived_at") != null,
 				row.getTimestamp("created_at").toInstant());
-	}
-
-	private static void validate(String key, String name, String description) {
-		Map<String, String> errors = new TreeMap<>();
-		if (key == null || !key.matches("[A-Za-z][A-Za-z0-9]{1,9}")) {
-			errors.put("key", "Use 2 to 10 letters or digits, starting with a letter");
-		}
-		if (name == null || name.strip().isEmpty() || name.strip().codePointCount(0, name.strip().length()) > 100
-				|| name.codePoints().anyMatch(Character::isISOControl)) {
-			errors.put("name", "Use 1 to 100 characters without control characters");
-		}
-		if (description != null && description.codePointCount(0, description.length()) > 1000) {
-			errors.put("description", "Use at most 1000 characters");
-		}
-		if (!errors.isEmpty()) throw new InvalidProject(errors);
-	}
-
-	static class InvalidProject extends RuntimeException {
-		final Map<String, String> errors;
-
-		InvalidProject(Map<String, String> errors) {
-			super("Some fields are invalid");
-			this.errors = Map.copyOf(errors);
-		}
 	}
 
 	static class KeyTaken extends RuntimeException {

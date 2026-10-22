@@ -13,20 +13,29 @@ import { useForm } from "@mantine/form";
 import { ArrowButton } from "@repo/ui/arrow-button";
 import { Panel } from "@repo/ui/panel";
 import { toast } from "@repo/ui/toast";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { api, ApiError } from "../api/client";
 import { useProjectCreated } from "../api/queries";
-import { suggestKey } from "../projects/projectKey";
+import { keyForName } from "../projects/projectKey";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 
-/** The Projects entry point; the project list is added by ticket #39. */
+/**
+ * The Projects entry point; the project list is added by ticket #39. The key follows the name until the User types
+ * their own (see `keyForName`). A create that finishes after the User went to another page doesn't pull them back.
+ */
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const projectCreated = useProjectCreated();
-  const [keyEdited, setKeyEdited] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const form = useForm({ initialValues: { name: "", key: "", description: "" } });
+  const left = useRef(false);
+  useEffect(() => {
+    left.current = false;
+    return () => {
+      left.current = true;
+    };
+  }, []);
 
   async function submit(values: typeof form.values) {
     setFailure(null);
@@ -37,8 +46,9 @@ export default function ProjectsPage() {
       });
       await projectCreated(project);
       toast.success("Project created.");
-      navigate(`/projects/${encodeURIComponent(project.key)}`);
+      if (!left.current) navigate(`/projects/${encodeURIComponent(project.key)}`);
     } catch (error) {
+      if (left.current) return;
       if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {
         form.setErrors(error.fieldErrors);
       } else {
@@ -64,7 +74,7 @@ export default function ProjectsPage() {
           </Text>
         </div>
         <Panel p="xl">
-          <form onSubmit={form.onSubmit(submit)}>
+          <form onSubmit={(event) => form.onSubmit(submit)(event)}>
             <Stack gap="lg">
               <div>
                 <Title order={2} fz={24}>
@@ -88,8 +98,8 @@ export default function ProjectsPage() {
                 {...form.getInputProps("name")}
                 onChange={(event) => {
                   const name = event.currentTarget.value;
+                  form.setFieldValue("key", keyForName(form.values.name, name, form.values.key));
                   form.setFieldValue("name", name);
-                  if (!keyEdited) form.setFieldValue("key", suggestKey(name));
                 }}
               />
               <TextInput
@@ -100,10 +110,9 @@ export default function ProjectsPage() {
                 description="2–10 letters or digits, starting with a letter. This can't be changed later."
                 disabled={form.submitting}
                 {...form.getInputProps("key")}
-                onChange={(event) => {
-                  setKeyEdited(true);
-                  form.setFieldValue("key", event.currentTarget.value.toUpperCase());
-                }}
+                onChange={(event) =>
+                  form.setFieldValue("key", event.currentTarget.value.toUpperCase())
+                }
               />
               <Textarea
                 label="Description"
@@ -120,7 +129,6 @@ export default function ProjectsPage() {
                   disabled={form.submitting}
                   onClick={() => {
                     form.reset();
-                    setKeyEdited(false);
                     setFailure(null);
                   }}
                 >

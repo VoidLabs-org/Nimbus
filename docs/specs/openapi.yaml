@@ -1291,7 +1291,7 @@ components:
         description:
           type: [string, "null"]
           maxLength: 1000
-          description: Optional plain text
+          description: Optional plain text; line breaks and tabs allowed, other control characters rejected
     Project:
       type: object
       required: [id, key, name, description, archived, createdAt]

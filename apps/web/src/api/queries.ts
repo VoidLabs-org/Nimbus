@@ -15,7 +15,6 @@ export const queryKeys = {
   sessions: ["sessions"] as const,
   linkedIdentities: ["linkedIdentities"] as const,
   providers: ["providers"] as const,
-  projects: ["projects"] as const,
   project: (key: string) => ["projects", key.toUpperCase()] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
@@ -32,16 +31,15 @@ export function useProject(key: string) {
   return useQuery({ queryKey: queryKeys.project(key), queryFn: () => api.project(key) });
 }
 
-/** Keep the server's created project and invalidate any other project views. */
+/**
+ * Keep the server's created project, so opening it right after needs no request. Creating one changes no other
+ * project, so nothing else is invalidated (the projects list, #39, will be).
+ */
 export function useProjectCreated() {
   const client = useQueryClient();
   return async (project: Project) => {
     await client.cancelQueries({ queryKey: queryKeys.project(project.key), exact: true });
     client.setQueryData(queryKeys.project(project.key), project);
-    await client.invalidateQueries({
-      queryKey: queryKeys.projects,
-      predicate: ({ queryKey }) => queryKey[1] !== project.key,
-    });
   };
 }
 

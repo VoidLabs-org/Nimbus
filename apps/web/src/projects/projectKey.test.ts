@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { suggestKey } from "./projectKey";
+import { keyForName, suggestKey } from "./projectKey";
 
 describe("suggestKey", () => {
   it("uses the initials of several words", () => {
@@ -22,7 +22,31 @@ describe("suggestKey", () => {
     expect(suggestKey("a b c d e f g h i j k l")).toBe("ABCDEFGHIJ");
   });
 
+  it("suggests nothing rather than a key too short to be accepted", () => {
+    expect(suggestKey("X")).toBe("");
+    expect(suggestKey("Q!")).toBe("");
+    expect(suggestKey("1 a")).toBe("");
+  });
+
   it("is empty for an empty name", () => {
     expect(suggestKey("")).toBe("");
+  });
+});
+
+describe("keyForName", () => {
+  it("fills an empty key from the name", () => {
+    expect(keyForName("", "Nimbus web", "")).toBe("NW");
+  });
+
+  it("keeps following the name while the key is still the suggestion", () => {
+    expect(keyForName("Nimbus web", "Nimbus web app", "NW")).toBe("NWA");
+  });
+
+  it("leaves a key the User chose alone", () => {
+    expect(keyForName("Nimbus web", "Nimbus web app", "WEB")).toBe("WEB");
+  });
+
+  it("follows the name again once the User clears the key", () => {
+    expect(keyForName("Nimbus web", "Nimbus web app", "")).toBe("NWA");
   });
 });

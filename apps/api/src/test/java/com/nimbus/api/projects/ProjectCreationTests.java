@@ -138,6 +138,26 @@ class ProjectCreationTests {
 	}
 
 	@Test
+	void surroundingWhitespaceIsStrippedBeforeTheNameIsChecked() {
+		var token = register(true);
+		client.post().uri("/api/projects").header("Authorization", "Bearer " + token)
+			.body(Map.of("key", "PASTE", "name", "\tPasted name\n"))
+			.exchange().expectStatus().isCreated().expectBody().jsonPath("$.name").isEqualTo("Pasted name");
+	}
+
+	@Test
+	void descriptionsKeepLineBreaksButNotOtherControlCharacters() {
+		var token = register(true);
+		client.post().uri("/api/projects").header("Authorization", "Bearer " + token)
+			.body(Map.of("key", "NUL", "name", "Valid name", "description", "Before\u0000after"))
+			.exchange().expectStatus().isBadRequest().expectBody().jsonPath("$.errors.description").exists();
+		client.post().uri("/api/projects").header("Authorization", "Bearer " + token)
+			.body(Map.of("key", "LINES", "name", "Valid name", "description", "First line\r\nSecond\tline"))
+			.exchange().expectStatus().isCreated()
+			.expectBody().jsonPath("$.description").isEqualTo("First line\r\nSecond\tline");
+	}
+
+	@Test
 	void invalidFieldsHaveFieldErrorsAndDoNotReserveTheKey() {
 		var token = register(true);
 		for (var key : new String[] { "", "A", "1AB", "A-B", "ABCDEFGHIJK", "İA", "ßa", " AB" }) {

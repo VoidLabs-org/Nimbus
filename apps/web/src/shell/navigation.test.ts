@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DESTINATIONS, OTHER_FOCUS_KEYS } from "./navigation";
 
 describe("DESTINATIONS", () => {
-  it("lists Home, then Settings", () => {
+  it("lists Home, Projects, then Settings", () => {
     expect(DESTINATIONS.map((d) => [d.id, d.to, d.label])).toEqual([
       ["home", "/", "Home"],
+      ["projects", "/projects", "Projects"],
       ["settings", "/settings", "Settings"],
     ]);
   });

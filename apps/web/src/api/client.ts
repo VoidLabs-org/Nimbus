@@ -13,6 +13,17 @@ export type User = {
 
 export type RegisterInput = { displayName: string; email: string; password: string };
 
+export type Project = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  archived: boolean;
+  createdAt: string;
+};
+
+export type CreateProjectInput = { key: string; name: string; description?: string | null };
+
 export type ChangePasswordInput = {
   /** Required when the User has a password. */
   currentPassword?: string;
@@ -433,6 +444,13 @@ export function createApiClient(
     login: (input: LoginInput) => startSession("/api/auth/login", input),
 
     me: () => request<User>("/api/users/me"),
+
+    /** Creates a project and adds the signed-in User as its first Member. */
+    createProject: (input: CreateProjectInput) =>
+      request<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
+
+    /** Opens a project by key. Unknown and non-Member projects both return 404. */
+    project: (key: string) => request<Project>(`/api/projects/${encodeURIComponent(key)}`),
 
     /**
      * The ids of the "Continue with ..." providers the server has switched on, in the order to show them

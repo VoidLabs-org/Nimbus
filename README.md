@@ -26,7 +26,7 @@ A project management app where teams create projects, issues, boards and sprints
 2. **Database:** copy `apps/api/.env.example` to `apps/api/.env` and fill in the shared dev database values (ask the team). Never commit `.env`.
    To use a local database instead, skip the `.env` and run `docker compose up -d`.
 3. `pnpm dev` to start the API and website.
-   To have the API restart by itself when you change Java code, also run `pnpm --filter api dev:watch` in a second terminal (see below).
+   It also restarts the API by itself when you change Java code (see below).
 
 | What       | Where                                 |
 | ---------- | ------------------------------------- |
@@ -38,23 +38,23 @@ Backend tests (`pnpm test`) start their own throwaway database with Docker, so D
 
 The website forwards `/api/*` calls to the API, so the browser only talks to port 3000.
 
-**API auto-restart.** `pnpm dev` starts the API once and does not watch your Java files. `pnpm --filter api dev:watch` runs Gradle's `compileJava --continuous`: it recompiles whenever you save a `.java` file, and Spring DevTools (development only, not in the deployed jar) sees the new classes and restarts the API, which is much faster than stopping and starting `pnpm dev`. Leave it running in a second terminal. Changes to `apps/api/.env` are not picked up this way; restart `pnpm dev` for those. Each restart resets in-memory state such as rate-limit counters.
+**API auto-restart.** `pnpm dev` also runs `pnpm --filter api dev:watch` (set up in `apps/api/turbo.json`), which is Gradle's `classes --continuous`: it recompiles whenever you save a `.java` file and copies changed resources such as new migrations, and Spring DevTools (development only, not in the deployed jar) sees the change and restarts the API, which is much faster than stopping and starting `pnpm dev`. Changes to `apps/api/.env` are not picked up this way; restart `pnpm dev` for those. Each restart resets in-memory state such as rate-limit counters.
 
 ## Commands
 
 Run from the repo root.
 
-| Command                       | Does                                                                    |
-| ----------------------------- | ----------------------------------------------------------------------- |
-| `pnpm dev`                    | Start the API and website                                               |
-| `pnpm dev:desktop`            | Same, plus the Electron desktop window                                  |
-| `pnpm --filter api dev:watch` | Recompile the API on every save so it restarts (run next to `pnpm dev`) |
-| `pnpm build`                  | Build everything                                                        |
-| `pnpm test`                   | Run backend tests (needs Docker)                                        |
-| `pnpm lint`                   | Lint with oxlint                                                        |
-| `pnpm check-types`            | Type-check the TypeScript code                                          |
-| `pnpm format`                 | Format with oxfmt (`pnpm format:check` to only check)                   |
-| `docker compose down`         | Stop the database (data is kept in a Docker volume)                     |
+| Command                       | Does                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| `pnpm dev`                    | Start the API and website                                                   |
+| `pnpm dev:desktop`            | Same, plus the Electron desktop window                                      |
+| `pnpm --filter api dev:watch` | Recompile the API on every save so it restarts (`pnpm dev` already runs it) |
+| `pnpm build`                  | Build everything                                                            |
+| `pnpm test`                   | Run backend tests (needs Docker)                                            |
+| `pnpm lint`                   | Lint with oxlint                                                            |
+| `pnpm check-types`            | Type-check the TypeScript code                                              |
+| `pnpm format`                 | Format with oxfmt (`pnpm format:check` to only check)                       |
+| `docker compose down`         | Stop the database (data is kept in a Docker volume)                         |
 
 ## Repository layout
 

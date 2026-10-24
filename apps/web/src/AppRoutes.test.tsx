@@ -28,6 +28,7 @@ function session(user: User | null): Session {
     restoring: false,
     unavailable: null,
     signedOutOnPurpose: false,
+    returnAfterSignOut: null,
     retry: () => {},
     register: unused,
     login: unused,

@@ -84,7 +84,8 @@ export function ConnectedAccountsCard() {
   });
   const signInAgain = useMutation({
     mutationFn: async () => {
-      await logout();
+      // Signing out sends the app to the sign-in page by itself; passing the page makes that one come back here.
+      await logout("/settings/security");
       void navigate(loginPath("/settings/security"));
     },
   });
@@ -229,7 +230,8 @@ export function ConnectedAccountsCard() {
       />
       <ReauthDialog
         opened={reauth?.open === true}
-        provider={nameOf(reauth?.id ?? "")}
+        title={`Sign in again to connect ${nameOf(reauth?.id ?? "")}`}
+        subtitle="For your security, connecting an account needs a recent sign-in. You’ll come back to this page afterwards."
         busy={signInAgain.isPending}
         onConfirm={() => signInAgain.mutate()}
         onClose={closeReauth}

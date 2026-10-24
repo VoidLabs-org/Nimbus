@@ -17,9 +17,13 @@ type CodeLook =
 
 /**
  * The six boxes for an emailed code (digits only, paste fills all, one-time-code autofill), as on the Verify and
- * Reset password pages. On a phone they get the 48 x 60 size of designs 31k and 31l.
+ * Reset password pages. On a phone they get the 48 x 60 size of designs 31k and 31l. `inWindow` gives the smaller,
+ * empty boxes of a dialog (design 32c) instead.
  */
-export function CodePinInput(props: Omit<PinInputProps, CodeLook>) {
+export function CodePinInput({
+  inWindow = false,
+  ...props
+}: Omit<PinInputProps, CodeLook> & { inWindow?: boolean }) {
   return (
     <PinInput
       length={CODE_LENGTH}
@@ -28,7 +32,11 @@ export function CodePinInput(props: Omit<PinInputProps, CodeLook>) {
       oneTimeCode
       autoFocus
       size="lg"
-      classNames={{ root: `${classes.pin} ${classes.phonePin}`, pinInput: classes.pinInput }}
+      classNames={{
+        root: `${classes.pin} ${inWindow ? classes.windowPin : classes.phonePin}`,
+        pinInput: classes.pinInput,
+      }}
+      {...(inWindow ? { placeholder: "" } : {})}
       {...props}
     />
   );

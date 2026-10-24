@@ -14,6 +14,7 @@ import { failedLoad, type FailedLoad } from "./failure";
 export const queryKeys = {
   sessions: ["sessions"] as const,
   linkedIdentities: ["linkedIdentities"] as const,
+  twoStep: ["twoStep"] as const,
   providers: ["providers"] as const,
   project: (key: string) => ["projects", key.toUpperCase()] as const,
   roles: ["roles"] as const,
@@ -67,6 +68,11 @@ export function useSessions() {
 /** The Google and GitHub accounts connected to the signed-in User, for the Security page. */
 export function useLinkedIdentities() {
   return useQuery({ queryKey: queryKeys.linkedIdentities, queryFn: () => api.linkedIdentities() });
+}
+
+/** Whether the User has Two-step verification, for its card on the Security page. */
+export function useTwoStep() {
+  return useQuery({ queryKey: queryKeys.twoStep, queryFn: () => api.twoStep() });
 }
 
 /** The ids of the sign-in providers the server has switched on, for the Security page. */

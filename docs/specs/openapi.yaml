@@ -761,6 +761,135 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/users/me/two-step:
+    get:
+      tags: [users]
+      summary: Whether the signed-in User has Two-step verification
+      description: The request must come from a session that is still running.
+      responses:
+        "200":
+          description: Its state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TwoStepStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [users]
+      summary: Turn on Two-step verification
+      description: >-
+        Stores the setup the User just proved with `POST /api/users/me/two-step/setup/verify`: the authenticator key
+        and the Recovery codes they were shown. Publishes `TwoStepEnabled`. Ends no session. The request must come from
+        a session that is still running.
+      responses:
+        "204":
+          description: Two-step verification is on
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >-
+            No proved setup in progress (`code: setup_expired`: never verified, closed, expired after 10 minutes, or
+            restarted), or Two-step verification is on already (`code: already_on`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/me/two-step/setup:
+    post:
+      tags: [users]
+      summary: Start setting up Two-step verification
+      description: >-
+        Makes a new authenticator key, replacing any setup in progress. Nothing is stored until the User turns it on;
+        the setup lasts 10 minutes, in memory. The session must have started within `nimbus.auth.link-recent-sign-in`
+        (default 10 minutes) and be still running.
+      responses:
+        "200":
+          description: The key, for typing, and the address the QR code holds
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key, otpauthUri]
+                properties:
+                  key:
+                    type: string
+                    description: Base32, 32 characters; the web app shows it in groups of four
+                    example: JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP
+                  otpauthUri:
+                    type: string
+                    example: otpauth://totp/Nimbus:alice%40example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Nimbus
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >-
+            Not allowed: the sign-in is too old (`code: reauth_required`), or the User is Unverified
+            (`code: email_unverified`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "Two-step verification is on already (`code: already_on`), checked before the recent sign-in"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/me/two-step/setup/verify:
+    post:
+      tags: [users]
+      summary: Prove the authenticator app has the key
+      description: >-
+        Checks a Sign-in code against the key being set up (one 30-second step either side of now is accepted) and
+        answers with the 10 Recovery codes the User must save. Turns nothing on. The request must come from a session
+        that is still running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: The Recovery codes, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recoveryCodes]
+                properties:
+                  recoveryCodes:
+                    type: array
+                    minItems: 10
+                    maxItems: 10
+                    items:
+                      type: string
+                      pattern: "^[a-z0-9]{4}-[a-z0-9]{4}$"
+                      example: k7qx-2m9d
+        "400":
+          description: "The code doesn't fit the key, or isn't 6 digits (`code: invalid_code`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "No setup in progress (`code: setup_expired`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/access/permissions:
     get:
       tags: [access]
@@ -1441,6 +1570,21 @@ components:
         connectedAt:
           type: string
           format: date-time
+
+    TwoStepStatus:
+      type: object
+      required: [enabled, enabledAt, recoveryCodesLeft]
+      properties:
+        enabled:
+          type: boolean
+        enabledAt:
+          type: [string, "null"]
+          format: date-time
+          description: When it was turned on; null when off
+        recoveryCodesLeft:
+          type: [integer, "null"]
+          description: Recovery codes not used yet; null when off
+          example: 10
 
     CatalogPermission:
       type: object

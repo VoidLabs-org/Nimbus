@@ -29,4 +29,12 @@ public class TestcontainersConfiguration {
 		return registry -> registry.add("nimbus.auth.jwt-secret", () -> secret);
 	}
 
+	@Bean
+	DynamicPropertyRegistrar twoStepSecret() {
+		var key = new byte[32];
+		new SecureRandom().nextBytes(key);
+		var secret = Base64.getEncoder().encodeToString(key);
+		return registry -> registry.add("nimbus.auth.two-step-secret", () -> secret);
+	}
+
 }

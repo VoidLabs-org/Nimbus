@@ -158,6 +158,18 @@ export type LinkedIdentity = {
   connectedAt: string;
 };
 
+/** Whether the signed-in User has Two-step verification, for its card on the Security page. */
+export type TwoStepStatus = {
+  enabled: boolean;
+  /** When it was turned on (ISO 8601); null when off. */
+  enabledAt: string | null;
+  /** Recovery codes not used yet; null when off. */
+  recoveryCodesLeft: number | null;
+};
+
+/** A setup in progress: the key for the authenticator app, as text and as what the QR code holds. */
+export type TwoStepSetup = { key: string; otpauthUri: string };
+
 /** The `code` the server puts on the 403 it answers an Unverified User with. */
 export const EMAIL_UNVERIFIED = "email_unverified";
 
@@ -537,6 +549,26 @@ export function createApiClient(
         `/api/users/me/linked-identities/${encodeURIComponent(provider)}/link-ticket`,
         { method: "POST" },
       ),
+
+    /** Whether the User has Two-step verification, since when, and how many Recovery codes are left. */
+    twoStep: () => request<TwoStepStatus>("/api/users/me/two-step"),
+
+    /**
+     * Starts setting up Two-step verification with a new key, replacing any setup in progress. 403
+     * `reauth_required` when this sign-in is too old; 409 `already_on`.
+     */
+    startTwoStepSetup: () =>
+      request<TwoStepSetup>("/api/users/me/two-step/setup", { method: "POST" }),
+
+    /** Proves the app has the key with a Sign-in code; answers with the Recovery codes to save. 400 `invalid_code`, 409 `setup_expired`. */
+    verifyTwoStepSetup: (code: string) =>
+      request<{ recoveryCodes: string[] }>("/api/users/me/two-step/setup/verify", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+
+    /** Turns Two-step verification on with the setup just proved. 409 `setup_expired` or `already_on`. */
+    turnOnTwoStep: () => request<void>("/api/users/me/two-step", { method: "POST" }),
 
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>

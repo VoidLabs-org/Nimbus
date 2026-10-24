@@ -109,9 +109,7 @@ class TwoStepProviderSignInTests {
 		handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, google("g-tsp-4", "tsp4@example.com"));
 		var pending = pendingIn(response);
 
-		var signedIn = client.post().uri("/api/auth/two-step").header("X-Requested-With", "nimbus")
-			.cookie("two_step_pending", pending).body(Map.of("code", SignInCodes.codeFor(key, clock.instant())))
-			.exchange().expectStatus().isOk().expectBody(String.class).returnResult();
+		var signedIn = finish(pending, key).expectStatus().isOk().expectBody(String.class).returnResult();
 
 		assertThat(JsonPath.<String>read(signedIn.getResponseBody(), "$.user.email")).isEqualTo("tsp4@example.com");
 		assertThat(signedIn.getResponseHeaders().getOrEmpty(HttpHeaders.SET_COOKIE))
@@ -145,6 +143,44 @@ class TwoStepProviderSignInTests {
 		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/auth/callback");
 		assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).singleElement()
 			.satisfies(cookie -> assertThat(cookie).startsWith("refresh_token="));
+	}
+
+	// A provider account Nimbus doesn't know yet, with the User's verified email, would be linked to them. That is a
+	// lasting change, so it waits for the code like the Session does.
+	@Test
+	void aFirstProviderSignInThatLinksByEmailStoresNothingUntilTheCodeIsRight() throws Exception {
+		var user = googleUser("tsp8@example.com", "g-tsp-8");
+		var key = turnOn(user);
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, github("4848", "tsp8@example.com"));
+
+		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/login/two-step");
+		assertThat(linkedIdentities.listFor(user.getId())).extracting(LinkedIdentities.LinkedIdentityView::provider)
+			.containsExactly("google");
+
+		finish(pendingIn(response), key).expectStatus().isOk();
+
+		assertThat(linkedIdentities.listFor(user.getId())).extracting(LinkedIdentities.LinkedIdentityView::provider)
+			.containsExactlyInAnyOrder("google", "github");
+	}
+
+	@Test
+	void disconnectingTheProviderWhileTheCodePageIsOpenEndsThePendingSignIn() throws Exception {
+		var user = googleUser("tsp9@example.com", "g-tsp-9");
+		var session = sessions.start(user, null);
+		externalSignIn.connect(user.getId(), session.sessionId(),
+				new ExternalProfile("github", "4949", "tsp9@example.com", true, "Octo", null, "octo-4949"));
+		var key = turnOn(user);
+		var response = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), response, github("4949", "tsp9@example.com"));
+
+		client.delete().uri("/api/users/me/linked-identities/github")
+			.header("Authorization", "Bearer " + accessTokens.issueFor(user, session.sessionId())).exchange()
+			.expectStatus().isNoContent();
+
+		finish(pendingIn(response), key).expectStatus().isUnauthorized().expectBody().jsonPath("$.code")
+			.isEqualTo("sign_in_expired");
 	}
 
 	// Connecting from the Security page is not a sign-in: the User is signed in already.
@@ -186,6 +222,12 @@ class TwoStepProviderSignInTests {
 		// The code that proved the key counts as used, so the sign-in needs the next one.
 		clock.advance(Duration.ofSeconds(30));
 		return key;
+	}
+
+	private RestTestClient.ResponseSpec finish(String pending, String key) {
+		return client.post().uri("/api/auth/two-step").header("X-Requested-With", "nimbus")
+			.cookie("two_step_pending", pending).body(Map.of("code", SignInCodes.codeFor(key, clock.instant())))
+			.exchange();
 	}
 
 	private static String pendingIn(MockHttpServletResponse response) {

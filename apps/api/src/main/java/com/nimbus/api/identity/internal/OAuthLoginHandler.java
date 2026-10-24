@@ -69,14 +69,16 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		try {
 			var login = (OAuth2AuthenticationToken) authentication;
 			provider = login.getAuthorizedClientRegistrationId();
-			var user = externalSignIn.signIn(profileOf(login));
-			// The provider's consent alone is not enough for a User with Two-step verification (ADR 0005): no
-			// Session yet, and the code page finishes the sign-in.
-			if (twoStepSignIn.isRequired(user)) {
-				response.addHeader(HttpHeaders.SET_COOKIE, PendingSignIns.cookie(twoStepSignIn.start(user)).toString());
+			var profile = profileOf(login);
+			// The provider's consent alone is not enough for a User with Two-step verification (ADR 0005): nothing is
+			// stored (no link, no Session), and the code page finishes the sign-in.
+			var pending = externalSignIn.whoSignsIn(profile).flatMap(existing -> twoStepSignIn.begin(existing, profile));
+			if (pending.isPresent()) {
+				response.addHeader(HttpHeaders.SET_COOKIE, pending.get().toString());
 				redirect(response, "/login/two-step", returnTo);
 				return;
 			}
+			var user = externalSignIn.signIn(profile);
 			var refreshToken = sessions.start(user, request.getHeader(HttpHeaders.USER_AGENT));
 			response.addHeader(HttpHeaders.SET_COOKIE,
 					AuthController.refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());

@@ -16,7 +16,8 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
 /**
- * Sign-ins waiting for their second step: the User proved their password, and a Sign-in code still has to follow. Each
+ * Sign-ins waiting for their second step: the User proved their password, or a provider vouched for them, and a
+ * Sign-in code still has to follow. Each
  * has a random single-use id, which the browser holds in a cookie ({@link #COOKIE}) sent only to the code check; it
  * lasts {@link #LIFETIME} and allows {@link #MAX_WRONG_CODES} wrong codes. A User holds at most {@link #MAX_PER_USER}:
  * a new one drops their oldest, so signing in again and again can't fill the memory. Kept in memory only, like
@@ -58,10 +59,12 @@ class PendingSignIns {
 	/**
 	 * A new pending sign-in for the User; returns its id, for the cookie.
 	 *
-	 * @param passwordHash the hash the password was checked against: once it changes, the pending sign-in no longer
-	 * counts
+	 * @param passwordHash for a password sign-in, the hash the password was checked against: once it changes, the
+	 * pending sign-in no longer counts
+	 * @param profile for a Google or GitHub sign-in, what the provider sent, stored only once the code is right;
+	 * null for a password sign-in
 	 */
-	String start(UUID userId, String passwordHash) {
+	String start(UUID userId, String passwordHash, ExternalProfile profile) {
 		var now = clock.instant();
 		sweepIfDue(now);
 		var bytes = new byte[BYTES];
@@ -70,7 +73,7 @@ class PendingSignIns {
 		byUser.compute(userId, (key, ids) -> {
 			var updated = ids == null ? new ArrayDeque<String>() : ids;
 			updated.removeIf(old -> !pending.containsKey(old));
-			pending.put(id, new Pending(userId, passwordHash, 0, now.plus(LIFETIME)));
+			pending.put(id, new Pending(userId, passwordHash, profile, 0, now.plus(LIFETIME)));
 			updated.addLast(id);
 			while (updated.size() > MAX_PER_USER) {
 				pending.remove(updated.removeFirst());
@@ -110,7 +113,8 @@ class PendingSignIns {
 		var after = pending.computeIfPresent(id, (key, current) -> {
 			var wrong = current.wrongCodes() + 1;
 			return wrong >= MAX_WRONG_CODES ? null
-					: new Pending(current.userId(), current.passwordHash(), wrong, current.expiresAt());
+					: new Pending(current.userId(), current.passwordHash(), current.profile(), wrong,
+							current.expiresAt());
 		});
 		return after == null ? 0 : MAX_WRONG_CODES - after.wrongCodes();
 	}
@@ -154,10 +158,11 @@ class PendingSignIns {
 	}
 
 	/**
-	 * @param passwordHash the hash the password was checked against when it started
+	 * @param passwordHash for a password sign-in, the hash the password was checked against when it started
+	 * @param profile for a provider sign-in, what the provider sent; null for a password sign-in
 	 * @param wrongCodes wrong codes so far
 	 */
-	record Pending(UUID userId, String passwordHash, int wrongCodes, Instant expiresAt) {
+	record Pending(UUID userId, String passwordHash, ExternalProfile profile, int wrongCodes, Instant expiresAt) {
 	}
 
 }

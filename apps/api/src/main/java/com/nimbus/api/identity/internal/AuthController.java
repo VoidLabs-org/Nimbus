@@ -57,9 +57,10 @@ class AuthController {
 	@PostMapping("/login")
 	ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
 		var user = signIn.signIn(request.email(), request.password(), http.getRemoteAddr());
-		if (twoStepSignIn.isRequired(user)) {
+		var pending = twoStepSignIn.begin(user);
+		if (pending.isPresent()) {
 			return ResponseEntity.ok()
-				.header(HttpHeaders.SET_COOKIE, PendingSignIns.cookie(twoStepSignIn.start(user)).toString())
+				.header(HttpHeaders.SET_COOKIE, pending.get().toString())
 				.body(new TwoStepRequiredResponse(true));
 		}
 		return signedIn(HttpStatus.OK, user, http);

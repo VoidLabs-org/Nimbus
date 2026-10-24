@@ -127,12 +127,12 @@ class EmailChange {
 						() -> new InvalidBearerTokenException("The User for this token no longer exists"));
 				var check = codes.check(userId, code);
 				if (!(check instanceof EmailedCodes.Check.Right right)) {
-					return new Outcome(user, check, false, null, null);
+					return new Outcome(user, check, false, null);
 				}
 				if (users.existsByEmail(right.newEmail())) {
 					// Keep the code: nothing about it was wrong.
 					status.setRollbackOnly();
-					return new Outcome(user, check, true, null, null);
+					return new Outcome(user, check, true, null);
 				}
 				var oldEmail = user.email();
 				var at = clock.instant();
@@ -144,7 +144,7 @@ class EmailChange {
 				// Flushed here, so a User who took the address a moment ago fails this transaction, not the next.
 				users.saveAndFlush(user);
 				events.publishEvent(new EmailChanged(userId, right.newEmail(), at));
-				return new Outcome(user, check, false, oldEmail, at);
+				return new Outcome(user, check, false, new Changed(oldEmail, at));
 			});
 		}
 		catch (DataIntegrityViolationException e) {
@@ -161,7 +161,7 @@ class EmailChange {
 			throw outcome.check().failure();
 		}
 		try {
-			mailer.send(EmailChangedMail.to(outcome.oldEmail(), outcome.user().email(), outcome.changedAt(),
+			mailer.send(EmailChangedMail.to(outcome.changed().oldEmail(), outcome.user().email(), outcome.changed().at(),
 					mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
 		}
 		catch (RuntimeException e) {
@@ -171,8 +171,11 @@ class EmailChange {
 		return outcome.user();
 	}
 
-	/** @param oldEmail and {@code changedAt} are set only when the email changed */
-	private record Outcome(User user, EmailedCodes.Check check, boolean taken, String oldEmail, Instant changedAt) {
+	/** @param changed set only when the email changed */
+	private record Outcome(User user, EmailedCodes.Check check, boolean taken, Changed changed) {
+	}
+
+	private record Changed(String oldEmail, Instant at) {
 	}
 
 	static class SameEmailException extends RuntimeException {

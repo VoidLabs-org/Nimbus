@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -80,6 +82,18 @@ class NoticeMailTests {
 			.isThrownBy(() -> NoticeMail.html("Title", "Heading", "Line", List.of(), Optional.empty(), "Footer",
 					Optional.empty()))
 			.withMessageContaining("details");
+	}
+
+	@Test
+	void theTimeIsInEnglishAndUtcWhateverTheServersLocale() {
+		var before = Locale.getDefault();
+		Locale.setDefault(Locale.GERMANY);
+		try {
+			assertThat(NoticeMail.time(Instant.parse("2026-10-24T09:05:00Z"))).isEqualTo("24 Oct 2026, 09:05 UTC");
+		}
+		finally {
+			Locale.setDefault(before);
+		}
 	}
 
 	private static String notice(String url) {

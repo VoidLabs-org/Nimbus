@@ -1,8 +1,6 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 import com.nimbus.api.mail.Mail;
@@ -11,9 +9,6 @@ import com.nimbus.api.mail.NoticeMail;
 
 /** The emails that tell a User a provider was disconnected from, or connected to, their account. identity owns the wording. */
 final class ProviderMail {
-
-	private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm 'UTC'")
-		.withZone(ZoneOffset.UTC);
 
 	private static final String FOOTER = "You get this email whenever a way to sign in is added to or removed from your Nimbus account.";
 
@@ -30,7 +25,7 @@ final class ProviderMail {
 	static Mail disconnected(String email, String provider, Instant at, String securityUrl,
 			Optional<String> logoUrl) {
 		return build(email, provider + " was disconnected from your Nimbus account", provider + " disconnected",
-				"On " + WHEN.format(at) + ", " + provider + " was disconnected from your Nimbus account, so it can "
+				"On " + NoticeMail.time(at) + ", " + provider + " was disconnected from your Nimbus account, so it can "
 						+ "no longer be used to sign in.",
 				"Not you, or want it back? Review your sign-in methods on the Security page.", securityUrl, logoUrl);
 	}
@@ -38,7 +33,7 @@ final class ProviderMail {
 	/** @see #disconnected */
 	static Mail connected(String email, String provider, Instant at, String securityUrl, Optional<String> logoUrl) {
 		return build(email, provider + " was connected to your Nimbus account", provider + " connected",
-				"On " + WHEN.format(at) + ", " + provider + " was connected to your Nimbus account, so it can now be "
+				"On " + NoticeMail.time(at) + ", " + provider + " was connected to your Nimbus account, so it can now be "
 						+ "used to sign in.",
 				"Not you? Review your sign-in methods on the Security page.", securityUrl, logoUrl);
 	}

@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 import com.nimbus.api.mail.Mail;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -54,6 +55,16 @@ class IdentityMailLayoutTests {
 	void emailChangedEmailMatchesTheSavedLayout(String variant) throws IOException {
 		assertUnchanged("email-changed-" + variant, EmailChangedMail.to("ada@example.com", "nadia@gmail.com",
 				Instant.parse("2026-10-24T09:05:00Z"), logo(variant)));
+	}
+
+	@Test
+	void aNewAddressWithoutAnAtSignIsHiddenEntirelyAndTheNoticeStillGoes() {
+		var dots = String.valueOf((char) 0x2022).repeat(3);
+
+		var mail = EmailChangedMail.to("ada@example.com", "nadia", Instant.parse("2026-10-24T09:05:00Z"),
+				Optional.empty());
+
+		assertThat(mail.text()).contains("The email on your account is now " + dots + ".").doesNotContain("nadia");
 	}
 
 	private static Optional<String> logo(String variant) {

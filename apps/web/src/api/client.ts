@@ -484,11 +484,15 @@ export function createApiClient(
      * Finishes a pending sign-in with a Sign-in code from the User's authenticator app, or a Recovery code. Rejects
      * with an ApiError: "invalid_code" with `triesLeft` (a used Recovery code too), 401 "sign_in_expired" when the
      * pending sign-in is over, or 429 with `retryAfterSeconds` while the User is locked out of code checks.
+     * `rememberBrowser` is "Don't ask again on this device for 30 days": the server then sets a cookie that lets
+     * this browser's next sign-ins skip the code.
      */
-    signInWithCode: (answer: TwoStepAnswer) =>
-      startSession("/api/auth/two-step", answer, { "X-Requested-With": "nimbus" }).then(
-        sessionStarted,
-      ),
+    signInWithCode: (answer: TwoStepAnswer, rememberBrowser = false) =>
+      startSession(
+        "/api/auth/two-step",
+        { ...answer, rememberBrowser },
+        { "X-Requested-With": "nimbus" },
+      ).then(sessionStarted),
 
     me: () => request<User>("/api/users/me"),
 

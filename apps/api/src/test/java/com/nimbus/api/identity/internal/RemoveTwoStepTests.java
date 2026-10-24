@@ -165,7 +165,7 @@ class RemoveTwoStepTests {
 	@Test
 	void aSignInWaitingForItsCodeEndsAndDoesNotTakeTheNextSetupsCode() {
 		var user = twoStepUser("rts11@example.com");
-		var waiting = twoStepSignIn.begin(user.user()).orElseThrow();
+		var waiting = twoStepSignIn.begin(user.user(), null, null).orElseThrow();
 		remove(user.token(), Map.of("code", SignInCodes.codeFor(user.key(), clock.instant()))).expectStatus()
 			.isNoContent();
 		var again = turnOn(user.token());

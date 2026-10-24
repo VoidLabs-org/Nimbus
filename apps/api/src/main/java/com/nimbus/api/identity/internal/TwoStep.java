@@ -59,10 +59,14 @@ class TwoStep {
 
 	private final PendingSignIns pending;
 
+	private final RememberedBrowsers rememberedBrowsers;
+
 	TwoStep(TwoStepStore store, TwoStepSetups setups, TwoStepSecrets secrets, UserRepository users, Sessions sessions,
 			ApplicationEventPublisher events, Clock clock, AuthProperties properties,
 			PlatformTransactionManager transactionManager, SignInCodeLock lock, SignInCodeCheck codeCheck,
-			PendingSignIns pending) {
+			PendingSignIns pending,
+			RememberedBrowsers rememberedBrowsers) {
+		this.rememberedBrowsers = rememberedBrowsers;
 		this.store = store;
 		this.setups = setups;
 		this.secrets = secrets;
@@ -222,6 +226,7 @@ class TwoStep {
 				throw new WrongSignInCodeException();
 			}
 			store.remove(userId);
+			rememberedBrowsers.forgetAll(userId);
 			events.publishEvent(new TwoStepDisabled(userId, now));
 		});
 		// Sign-ins started while it was on can't finish without a code any more, nor with the next setup's.

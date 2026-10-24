@@ -33,10 +33,10 @@ export type Session = {
    */
   login: (input: LoginInput) => Promise<"signed-in" | "two-step">;
   /**
-   * Finishes a password sign-in with a Sign-in code or a Recovery code. Rejects with an ApiError if refused (see
-   * `api.signInWithCode`).
+   * Finishes a password sign-in with a Sign-in code or a Recovery code, remembering this browser for 30 days when
+   * `rememberBrowser`. Rejects with an ApiError if refused (see `api.signInWithCode`).
    */
-  signInWithCode: (answer: TwoStepAnswer) => Promise<void>;
+  signInWithCode: (answer: TwoStepAnswer, rememberBrowser?: boolean) => Promise<void>;
   /** Changes the signed-in User's display name. Rejects with an ApiError (field errors for 400) if refused. */
   updateDisplayName: (displayName: string) => Promise<void>;
   /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */

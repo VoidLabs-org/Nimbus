@@ -40,8 +40,8 @@ function FakeSession({ fakes, children }: { fakes: Fakes; children: ReactNode })
       if (outcome === "signed-in") setUser(alice);
       return outcome;
     },
-    signInWithCode: async (answer) => {
-      await fakes.signInWithCode(answer);
+    signInWithCode: async (answer, rememberBrowser) => {
+      await fakes.signInWithCode(answer, rememberBrowser);
       setUser(alice);
     },
     updateDisplayName: unused,
@@ -165,7 +165,40 @@ describe("the two-step sign-in page", () => {
     verify();
 
     await waitFor(() => expect(address()).toBe("/nowhere"));
-    expect(signInWithCode).toHaveBeenCalledWith({ code: "123456" });
+    expect(signInWithCode).toHaveBeenCalledWith({ code: "123456" }, false);
+  });
+
+  it("sends “Don’t ask again on this device for 30 days” when it is ticked", async () => {
+    const signInWithCode = vi.fn(unused);
+    show("/login/two-step", { signInWithCode });
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Don’t ask again on this device for 30 days" }),
+    );
+    paste("123456");
+    verify();
+
+    await waitFor(() => expect(signInWithCode).toHaveBeenCalledWith({ code: "123456" }, true));
+  });
+
+  it("offers and sends the tick with a Recovery code too, kept when switching", async () => {
+    const signInWithCode = vi.fn(unused);
+    show("/login/two-step", { signInWithCode });
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Don’t ask again on this device for 30 days" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Lost your phone? Use a recovery code" }));
+    const tick = screen.getByRole("checkbox", {
+      name: "Don’t ask again on this device for 30 days",
+    }) as HTMLInputElement;
+    expect(tick.checked).toBe(true);
+    fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "abcd-efgh" } });
+    verify();
+
+    await waitFor(() =>
+      expect(signInWithCode).toHaveBeenCalledWith({ recoveryCode: "abcd-efgh" }, true),
+    );
   });
 
   it("keeps Verify off until all six digits are there", () => {
@@ -264,7 +297,7 @@ describe("the recovery code version of the two-step sign-in page", () => {
     verify();
 
     await waitFor(() => expect(address()).toBe("/nowhere"));
-    expect(signInWithCode).toHaveBeenCalledWith({ recoveryCode: "K7QX 2M9D" });
+    expect(signInWithCode).toHaveBeenCalledWith({ recoveryCode: "K7QX 2M9D" }, false);
   });
 
   it("keeps the kind of code while one is checked, so its answer shows under the right box", async () => {

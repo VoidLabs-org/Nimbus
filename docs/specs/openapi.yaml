@@ -126,7 +126,8 @@ paths:
       description: >-
         For a User with Two-step verification a right password starts no session: the answer is
         `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that
-        `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code.
+        `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code. A `two_step_remembered` cookie that
+        remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code.
       security: []
       requestBody:
         required: true
@@ -175,7 +176,10 @@ paths:
         sign-in in the `two_step_pending` cookie. One 30-second step either side of now is accepted, but never the step
         that last signed the User in or an older one. A Recovery code is compared with capitals, spaces and the dash
         ignored, works once, and publishes `RecoveryCodeUsed` when used. A right code starts the session as `POST /api/auth/login` does and ends the pending sign-in. A
-        pending sign-in lasts 5 minutes and allows 5 wrong codes. A refresh never comes here.
+        pending sign-in lasts 5 minutes and allows 5 wrong codes. A refresh never comes here. With
+        `rememberBrowser: true` a right code also sets `two_step_remembered` (HttpOnly; Secure; SameSite=Lax;
+        Path=/api; Max-Age 30 days): password and Google/GitHub sign-ins of this User on this browser skip the code for
+        a fixed 30 days, until a password change or reset, Remove, or "Sign out all other devices" elsewhere.
       security:
         - twoStepPendingCookie: []
       parameters:
@@ -202,9 +206,15 @@ paths:
                   type: string
                   maxLength: 64
                   example: k7qx-2m9d
+                rememberBrowser:
+                  type: boolean
+                  default: false
+                  description: Don't ask again on this device for 30 days.
       responses:
         "200":
-          description: Signed in; the pending cookie is cleared
+          description: >-
+            Signed in; the pending cookie is cleared, and with `rememberBrowser` the `two_step_remembered` cookie is
+            set too
           headers:
             Set-Cookie:
               $ref: "#/components/headers/RefreshCookie"
@@ -857,7 +867,9 @@ paths:
       description: >-
         Ends every session of the User except the one of this request, without a password; their refresh tokens stop
         working. Their access tokens keep working for up to 15 minutes. Also `204` when there are no other sessions.
-        The request must come from a session that is still running.
+        Every remembered browser of the User asks for the Sign-in code again, except the one whose
+        `two_step_remembered` cookie comes with this request. The request must come from a session that is still
+        running.
       responses:
         "204":
           description: Every other session is over

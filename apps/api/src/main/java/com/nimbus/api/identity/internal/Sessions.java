@@ -271,7 +271,7 @@ class Sessions {
 	}
 
 	// A plain SHA-256 is enough: the token is 256 random bits, so there is nothing to brute-force.
-	private static String hash(String token) {
+	static String hash(String token) {
 		try {
 			var digest = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.US_ASCII));
 			return HexFormat.of().formatHex(digest);

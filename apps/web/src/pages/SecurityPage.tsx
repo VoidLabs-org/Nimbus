@@ -11,14 +11,15 @@ import { loadFailure, queryKeys, useSessions } from "../api/queries";
 import { activityText, isPhone, sessionName, signedInText } from "../settings/sessionView";
 import { ConnectedAccountsCard } from "./ConnectedAccountsCard";
 import { SignOutOthersDialog } from "./SignOutOthersDialog";
+import { TwoStepCard } from "./TwoStepCard";
 import { settingsCrumbs } from "../settings/crumbs";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./SecurityPage.module.css";
 
 /**
- * Settings → Security: where the User is signed in, this browser first. The place for the rest of the account's
- * security (connected accounts, two-step sign-in) as those arrive.
+ * Settings → Security: two-step verification, where the User is signed in (this browser first) and their connected
+ * accounts.
  */
 export default function SecurityPage() {
   const query = useSessions();
@@ -74,6 +75,7 @@ export default function SecurityPage() {
         <Title order={1} fz={32} lh={1.1}>
           Security
         </Title>
+        <TwoStepCard />
         <section className={classes.section} aria-labelledby="signed-in-heading">
           <div className={classes.sectionHead}>
             <div>

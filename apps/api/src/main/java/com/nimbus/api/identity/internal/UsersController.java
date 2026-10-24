@@ -114,7 +114,7 @@ class UsersController {
 	record LinkTicketResponse(String ticket) {
 	}
 
-	private static UUID sessionOf(Jwt token) {
+	static UUID sessionOf(Jwt token) {
 		var sessionId = token.getClaimAsString(AccessTokens.SESSION_CLAIM);
 		if (sessionId == null) {
 			throw new InvalidBearerTokenException("This token belongs to no session. Sign in again.");

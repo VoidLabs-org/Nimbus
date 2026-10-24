@@ -3,20 +3,23 @@ import { WindowFrame } from "../access/WindowFrame";
 import classes from "./DisconnectDialogs.module.css";
 
 /**
- * Asks the User to sign in again before connecting a provider, because their sign-in is too old. Connecting adds
- * a way into the account that outlives the browser, so a stolen access token alone must not be enough. Confirming
- * signs out and goes to the sign-in page, which brings the User back to the Security page.
+ * Asks the User to sign in again before something that needs a recent sign-in (connecting a provider, setting up
+ * two-step verification), because theirs is too old. Both add a way into the account, or change how it is guarded,
+ * so a stolen access token alone must not be enough. Confirming signs out and goes to the sign-in page, which
+ * brings the User back to the Security page.
  */
 export function ReauthDialog({
   opened,
-  provider,
+  title,
+  subtitle,
   busy,
   onConfirm,
   onClose,
 }: {
   opened: boolean;
-  /** The provider's display name, e.g. "Google"; kept while the window fades out. */
-  provider: string;
+  /** E.g. "Sign in again to connect Google"; kept while the window fades out. */
+  title: string;
+  subtitle: string;
   busy: boolean;
   onConfirm: () => void;
   onClose: () => void;
@@ -25,8 +28,8 @@ export function ReauthDialog({
     <WindowFrame
       opened={opened}
       onClose={busy ? () => {} : onClose}
-      title={`Sign in again to connect ${provider}`}
-      subtitle="For your security, connecting an account needs a recent sign-in. You’ll come back to this page afterwards."
+      title={title}
+      subtitle={subtitle}
     >
       <div className={classes.footer}>
         <Button variant="default" onClick={onClose} disabled={busy}>

@@ -13,6 +13,11 @@ export type Session = {
   unavailable: "offline" | "server" | null;
   /** True after the User chose to sign out, so they go to a plain sign-in page, not one that returns here. */
   signedOutOnPurpose: boolean;
+  /**
+   * Where the sign-in page brings the User back to after a sign-out that was a step on the way back ("Sign in
+   * again"); null after a plain sign-out.
+   */
+  returnAfterSignOut: string | null;
   /** Checks the session again after it was unavailable. */
   retry: () => void;
   register: (input: RegisterInput) => Promise<void>;
@@ -30,8 +35,11 @@ export type Session = {
   confirmingEmail: boolean;
   /** Closes the confirmation, which opens the app. */
   finishVerifying: () => void;
-  /** Ends this browser's session. Rejects, leaving the User signed in, if the server can't be reached. */
-  logout: () => Promise<void>;
+  /**
+   * Ends this browser's session. Rejects, leaving the User signed in, if the server can't be reached. With
+   * `returnTo`, the sign-in page it leads to brings the User back there.
+   */
+  logout: (returnTo?: string) => Promise<void>;
 };
 
 export const SessionContext = createContext<Session | null>(null);

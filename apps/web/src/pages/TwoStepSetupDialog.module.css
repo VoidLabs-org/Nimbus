@@ -1,0 +1,185 @@
+/* The two-step verification setup window, from the "Nimbus Themes" design (32c and 32d). Colours come only from the
+   theme variables, except the QR code, which stays black on white so every app can read it. */
+
+/* The header: step, title and the line under it, all inside the window's title. */
+.step {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-700);
+}
+
+.titleText {
+  display: block;
+  line-height: 1.1;
+}
+
+.subtitle {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: normal;
+  color: var(--color-accent-2-700);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 20px;
+}
+
+/* 32c: the QR code on the left, the key for typing on the right. */
+.scan {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.qr {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 168px;
+  height: 168px;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.qr img {
+  display: block;
+}
+
+.keyBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.keyLabel {
+  font-size: 13px;
+  color: var(--color-accent-2-700);
+}
+
+/* The 32-character key wraps onto two lines, so the pill's ends are rounded rather than fully round. */
+.keyPill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 20px;
+  background: var(--seg);
+}
+
+.key {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+  background: none;
+  color: var(--color-text);
+}
+
+.copy {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.error {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--toast-error);
+}
+
+/* 32d: the codes in two columns, in the code font. */
+.codes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 24px;
+  margin: 0;
+  padding: 20px 24px;
+  border-radius: 22px;
+  list-style: none;
+  background: var(--color-surface);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 15px;
+}
+
+.codes code {
+  padding: 0;
+  font: inherit;
+  background: none;
+  color: var(--color-text);
+}
+
+.codeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pillButton {
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--seg);
+}
+
+.expired {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}
+
+/* On a phone the key goes under the QR code, and the buttons are full-width tap targets. */
+@media (max-width: 36em) {
+  .scan {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .qr {
+    align-self: center;
+  }
+
+  .codeActions > * {
+    flex: 1 1 0;
+    min-height: 44px;
+  }
+}
+
+/* The QR code couldn't be drawn: the key beside it still works. */
+.qrFailed {
+  margin: 0;
+  padding: 16px;
+  font-size: 13px;
+  text-align: center;
+  color: #4a4643;
+}

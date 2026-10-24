@@ -223,6 +223,25 @@
   box-shadow: inset 0 0 0 1px var(--toast-error);
 }
 
+/* In a dialog (design 32c): smaller boxes, 52 x 62. */
+.pin.windowPin {
+  gap: 8px;
+}
+
+.pin.windowPin > :nth-child(3) {
+  margin-right: 18px;
+}
+
+.pin.windowPin .pinInput {
+  --input-height: 62px;
+  --input-size: 62px;
+  --input-radius: 18px;
+  --input-fz: 26px;
+  width: 52px;
+  height: 62px;
+  font-size: 26px;
+}
+
 /* Narrow phones: smaller boxes so the six and the dash fit between the page's padding. */
 @media (max-width: 480px) {
   .pin {
@@ -398,4 +417,25 @@
   top: 0;
   right: 0;
   font-weight: 500;
+}
+
+/* A dialog on a narrow phone: the window's own padding leaves less room than a page. */
+@media (max-width: 480px) {
+  .pin.windowPin {
+    gap: 6px;
+  }
+
+  .pin.windowPin > :nth-child(3) {
+    margin-right: 12px;
+  }
+
+  .pin.windowPin .pinInput {
+    --input-height: 52px;
+    --input-size: 52px;
+    --input-radius: 14px;
+    --input-fz: 22px;
+    width: 40px;
+    height: 52px;
+    font-size: 22px;
+  }
 }

@@ -52,6 +52,27 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail twoStepAlreadyOn(TwoStep.AlreadyOnException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		problem.setProperty("code", "already_on");
+		return problem;
+	}
+
+	@ExceptionHandler
+	ProblemDetail twoStepSetupExpired(TwoStep.SetupExpiredException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		problem.setProperty("code", "setup_expired");
+		return problem;
+	}
+
+	@ExceptionHandler
+	ProblemDetail wrongSignInCode(TwoStep.WrongSignInCodeException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "invalid_code");
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail alreadyVerified(EmailVerification.AlreadyVerifiedException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 	}

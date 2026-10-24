@@ -167,6 +167,9 @@ export type TwoStepStatus = {
   recoveryCodesLeft: number | null;
 };
 
+/** What finishes a pending sign-in: a Sign-in code, or one of the User's Recovery codes when they lost their phone. */
+export type TwoStepAnswer = { code: string } | { recoveryCode: string };
+
 /** A setup in progress: the key for the authenticator app, as text and as what the QR code holds. */
 export type TwoStepSetup = { key: string; otpauthUri: string };
 
@@ -471,12 +474,12 @@ export function createApiClient(
     login: (input: LoginInput) => startSession("/api/auth/login", input),
 
     /**
-     * Finishes a pending sign-in with a Sign-in code from the User's authenticator app. Rejects with an ApiError:
-     * "invalid_code" with `triesLeft`, 401 "sign_in_expired" when the pending sign-in is over, or 429 with
-     * `retryAfterSeconds` while the User is locked out of code checks.
+     * Finishes a pending sign-in with a Sign-in code from the User's authenticator app, or a Recovery code. Rejects
+     * with an ApiError: "invalid_code" with `triesLeft` (a used Recovery code too), 401 "sign_in_expired" when the
+     * pending sign-in is over, or 429 with `retryAfterSeconds` while the User is locked out of code checks.
      */
-    signInWithCode: (code: string) =>
-      startSession("/api/auth/two-step", { code }, { "X-Requested-With": "nimbus" }).then(
+    signInWithCode: (answer: TwoStepAnswer) =>
+      startSession("/api/auth/two-step", answer, { "X-Requested-With": "nimbus" }).then(
         sessionStarted,
       ),
 

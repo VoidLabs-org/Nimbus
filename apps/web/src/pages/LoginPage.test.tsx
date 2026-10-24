@@ -40,8 +40,8 @@ function FakeSession({ fakes, children }: { fakes: Fakes; children: ReactNode })
       if (outcome === "signed-in") setUser(alice);
       return outcome;
     },
-    signInWithCode: async (code) => {
-      await fakes.signInWithCode(code);
+    signInWithCode: async (answer) => {
+      await fakes.signInWithCode(answer);
       setUser(alice);
     },
     updateDisplayName: unused,
@@ -165,7 +165,7 @@ describe("the two-step sign-in page", () => {
     verify();
 
     await waitFor(() => expect(address()).toBe("/nowhere"));
-    expect(signInWithCode).toHaveBeenCalledWith("123456");
+    expect(signInWithCode).toHaveBeenCalledWith({ code: "123456" });
   });
 
   it("keeps Verify off until all six digits are there", () => {
@@ -231,5 +231,99 @@ describe("the two-step sign-in page", () => {
     expect(screen.getByRole("link", { name: "Back to sign in" }).getAttribute("href")).toBe(
       "/login?returnTo=%2Fsettings",
     );
+  });
+});
+
+describe("the recovery code version of the two-step sign-in page", () => {
+  const useRecoveryCode = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Lost your phone? Use a recovery code" }));
+
+  it("swaps the code boxes for one box and back", () => {
+    show("/login/two-step");
+
+    useRecoveryCode();
+
+    expect(screen.getByRole("heading", { name: "Use a recovery code" })).toBeTruthy();
+    expect(screen.getByLabelText("Recovery code")).toBeTruthy();
+    expect(screen.queryByLabelText(/Sign-in code digit/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use your authenticator app" }));
+
+    expect(screen.getByRole("heading", { name: "Two-step verification" })).toBeTruthy();
+    expect(screen.queryByLabelText("Recovery code")).toBeNull();
+    expect(codeBoxes()).toHaveLength(6);
+  });
+
+  it("signs in with a Recovery code and continues to returnTo", async () => {
+    const signInWithCode = vi.fn(unused);
+    show("/login/two-step?returnTo=%2Fnowhere", { signInWithCode });
+
+    useRecoveryCode();
+    expect(screen.getByRole("button", { name: "Verify" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "K7QX 2M9D" } });
+    verify();
+
+    await waitFor(() => expect(address()).toBe("/nowhere"));
+    expect(signInWithCode).toHaveBeenCalledWith({ recoveryCode: "K7QX 2M9D" });
+  });
+
+  it("keeps the kind of code while one is checked, so its answer shows under the right box", async () => {
+    let refuse: (failure: unknown) => void = () => {};
+    show("/login/two-step", {
+      signInWithCode: () => new Promise((_, reject) => (refuse = reject)),
+    });
+
+    useRecoveryCode();
+    fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "k7qx-2m9d" } });
+    verify();
+    fireEvent.click(screen.getByRole("button", { name: "Use your authenticator app" }));
+
+    expect(screen.getByRole("heading", { name: "Use a recovery code" })).toBeTruthy();
+    await act(async () => refuse(new ApiError(400, "Wrong", {}, null, "invalid_code", 4)));
+    expect(screen.getByLabelText("Recovery code")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("That recovery code isn’t right");
+  });
+
+  it("says a wrong or used code isn't right, with the tries left", async () => {
+    show("/login/two-step", {
+      signInWithCode: () => Promise.reject(new ApiError(400, "Wrong", {}, null, "invalid_code", 1)),
+    });
+
+    useRecoveryCode();
+    fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "k7qx-2m9d" } });
+    verify();
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "That recovery code isn’t right, or it was used already. 1 try left.",
+    );
+  });
+
+  it("sends the User back to sign in when the sign-in timed out", async () => {
+    show("/login/two-step?returnTo=%2Fsettings", {
+      signInWithCode: () =>
+        Promise.reject(new ApiError(401, "Expired", {}, null, "sign_in_expired")),
+    });
+
+    useRecoveryCode();
+    fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "k7qx-2m9d" } });
+    verify();
+
+    expect(await screen.findByText("Your sign-in timed out. Sign in again.")).toBeTruthy();
+    expect(address()).toBe("/login?returnTo=%2Fsettings");
+  });
+
+  it("shows the wait as m:ss while the User is locked out, also after switching back", async () => {
+    show("/login/two-step", {
+      signInWithCode: () => Promise.reject(new ApiError(429, "Too many", {}, 65)),
+    });
+
+    useRecoveryCode();
+    fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "k7qx-2m9d" } });
+    verify();
+
+    expect(await screen.findByText("Too many attempts. Try again in 1:05.")).toBeTruthy();
+    expect((screen.getByLabelText("Recovery code") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Use your authenticator app" }));
+    expect(screen.getByText(/Too many attempts. Try again in 1:0\d\./)).toBeTruthy();
   });
 });

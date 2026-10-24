@@ -167,7 +167,7 @@ describe("api client", () => {
     const api = createApiClient(server.fetchFn);
 
     expect(await api.login({ email: "alice@example.com", password: "correct horse" })).toBeNull();
-    expect(await api.signInWithCode("123456")).toEqual(alice);
+    expect(await api.signInWithCode({ code: "123456" })).toEqual(alice);
     await api.me();
 
     expect(server.calls[1].url).toBe("/api/auth/two-step");

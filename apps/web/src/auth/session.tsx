@@ -7,6 +7,7 @@ import {
   type ChangePasswordInput,
   type LoginInput,
   type RegisterInput,
+  type TwoStepAnswer,
   type User,
 } from "../api/client";
 import { failedLoad } from "../api/failure";
@@ -82,8 +83,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return "signed-in" as const;
   }
 
-  async function signInWithCode(code: string) {
-    signedInAs(await api.signInWithCode(code));
+  async function signInWithCode(answer: TwoStepAnswer) {
+    signedInAs(await api.signInWithCode(answer));
   }
 
   async function updateDisplayName(displayName: string) {

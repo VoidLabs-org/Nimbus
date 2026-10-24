@@ -1,5 +1,11 @@
 import { createContext, use } from "react";
-import type { ChangePasswordInput, LoginInput, RegisterInput, User } from "../api/client";
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  RegisterInput,
+  TwoStepAnswer,
+  User,
+} from "../api/client";
 
 export type Session = {
   /** The signed-in User, or null when nobody is signed in. */
@@ -26,8 +32,11 @@ export type Session = {
    * enter a Sign-in code with {@link signInWithCode}; nobody is signed in until then.
    */
   login: (input: LoginInput) => Promise<"signed-in" | "two-step">;
-  /** Finishes a password sign-in with a Sign-in code. Rejects with an ApiError if refused (see `api.signInWithCode`). */
-  signInWithCode: (code: string) => Promise<void>;
+  /**
+   * Finishes a password sign-in with a Sign-in code or a Recovery code. Rejects with an ApiError if refused (see
+   * `api.signInWithCode`).
+   */
+  signInWithCode: (answer: TwoStepAnswer) => Promise<void>;
   /** Changes the signed-in User's display name. Rejects with an ApiError (field errors for 400) if refused. */
   updateDisplayName: (displayName: string) => Promise<void>;
   /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */

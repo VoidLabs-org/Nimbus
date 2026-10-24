@@ -33,8 +33,6 @@ class TwoStepSignIn {
 
 	private final TwoStepStore store;
 
-	private final TwoStepSecrets secrets;
-
 	private final UserRepository users;
 
 	private final Clock clock;
@@ -49,14 +47,12 @@ class TwoStepSignIn {
 
 	private final SignInCodeCheck codeCheck;
 
-	TwoStepSignIn(PendingSignIns pending, SignInCodeLock lock, TwoStepStore store, TwoStepSecrets secrets,
-			UserRepository users, Clock clock, PlatformTransactionManager transactionManager,
-			ApplicationEventPublisher events, Sessions sessions, ExternalSignIn externalSignIn,
-			SignInCodeCheck codeCheck) {
+	TwoStepSignIn(PendingSignIns pending, SignInCodeLock lock, TwoStepStore store, UserRepository users,
+			Clock clock, PlatformTransactionManager transactionManager, ApplicationEventPublisher events,
+			Sessions sessions, ExternalSignIn externalSignIn, SignInCodeCheck codeCheck) {
 		this.pending = pending;
 		this.lock = lock;
 		this.store = store;
-		this.secrets = secrets;
 		this.users = users;
 		this.clock = clock;
 		this.transaction = new TransactionTemplate(transactionManager);
@@ -126,14 +122,8 @@ class TwoStepSignIn {
 			var codesLeft = OptionalInt.empty();
 			boolean right;
 			if (usesRecoveryCode) {
-				// Needs no key, so a Recovery code still works when the key can't be read.
-				var check = lock.check(userId);
-				codesLeft = store.useRecoveryCode(userId,
-						secrets.hashRecoveryCode(userId, TwoStep.normalise(recoveryCode)), now);
+				codesLeft = codeCheck.useRecoveryCode(userId, recoveryCode, now);
 				right = codesLeft.isPresent();
-				if (right) {
-					lock.right(userId, check);
-				}
 			}
 			else {
 				right = codeCheck.use(userId, authenticator, code, now);

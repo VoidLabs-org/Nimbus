@@ -32,6 +32,12 @@ class TwoStepStore {
 				userId, encryptedKey, Timestamp.from(enabledAt), lastUsedStep);
 	}
 
+	/** Deletes the User's authenticator and all their Recovery codes. */
+	void remove(UUID userId) {
+		jdbc.update("DELETE FROM recovery_codes WHERE user_id = ?", userId);
+		jdbc.update("DELETE FROM two_step_authenticators WHERE user_id = ?", userId);
+	}
+
 	/** Keeps {@code step} as the newest that signed the User in, so its code and older ones are refused from now on. */
 	void useStep(UUID userId, long step) {
 		jdbc.update("UPDATE two_step_authenticators SET last_used_step = ? WHERE user_id = ?", step, userId);

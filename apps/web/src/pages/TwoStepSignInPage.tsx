@@ -2,16 +2,24 @@ import { Anchor } from "@mantine/core";
 import { useState, type SyntheticEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "../api/client";
-import { GENERIC_ERROR, SIGN_IN_TIMED_OUT, tooManyAttemptsIn } from "../api/messages";
+import {
+  GENERIC_ERROR,
+  SIGN_IN_TIMED_OUT,
+  tooManyAttemptsIn,
+  WRONG_RECOVERY_CODE,
+} from "../api/messages";
 import { AuthForm, AuthLayout, AuthSubmit, AuthTextInput } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
-import { CodeAlert, CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
+import {
+  CodeAlert,
+  CODE_LENGTH,
+  CodePinInput,
+  PinnedSubmit,
+  RECOVERY_CODE_MAX,
+} from "../auth/CodeEntry";
 import { useCountdown } from "../auth/countdown";
 import { returnToSearch, safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
-
-/** A Recovery code as the server takes it at most; anything longer is never one. */
-const RECOVERY_CODE_MAX = 64;
 
 /**
  * The second step of signing in for a User with Two-step verification (design 32e), after their password or after
@@ -66,9 +74,7 @@ export default function TwoStepSignInPage() {
       setFormError(GENERIC_ERROR);
     } else if (failure.code === "invalid_code") {
       const left = failure.triesLeft;
-      const wrong = useRecoveryCode
-        ? "That recovery code isn’t right, or it was used already."
-        : "That code isn’t right.";
+      const wrong = useRecoveryCode ? WRONG_RECOVERY_CODE : "That code isn’t right.";
       setCodeMessage(
         left === null ? wrong : `${wrong} ${left} ${left === 1 ? "try" : "tries"} left.`,
       );

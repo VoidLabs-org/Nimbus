@@ -12,6 +12,7 @@ import { queryKeys, useTwoStep } from "../api/queries";
 import { useSignInAgain } from "../auth/useSignInAgain";
 import { NewRecoveryCodesDialog } from "./NewRecoveryCodesDialog";
 import { ReauthDialog } from "./ReauthDialog";
+import { RemoveTwoStepDialog } from "./RemoveTwoStepDialog";
 import { TwoStepSetupDialog } from "./TwoStepSetupDialog";
 import classes from "./SecurityPage.module.css";
 
@@ -23,7 +24,7 @@ const SETUP_PARAM = "setup";
 
 /**
  * Security → Two-step verification (designs 32a and 32b): whether signing in also asks for a code from an
- * authenticator app, setting that up, and new Recovery codes. Its own card, so a failure here leaves the rest of the page alone.
+ * authenticator app, setting that up, removing it, and new Recovery codes. Its own card, so a failure here leaves the rest of the page alone.
  */
 export function TwoStepCard() {
   const query = useTwoStep();
@@ -32,6 +33,7 @@ export function TwoStepCard() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [reauthOpen, setReauthOpen] = useState(false);
   const [newCodesOpen, setNewCodesOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
 
   const start = useMutation({
     mutationFn: () => api.startTwoStepSetup(),
@@ -139,7 +141,15 @@ export function TwoStepCard() {
                   : "Use Google Authenticator, 1Password, Authy or similar."}
               </div>
             </div>
-            {!status.enabled && (
+            {status.enabled ? (
+              <Button
+                variant="default"
+                className={classes.rowAction}
+                onClick={() => setRemoveOpen(true)}
+              >
+                Remove
+              </Button>
+            ) : (
               <Button
                 className={classes.setUp}
                 loading={start.isPending && !setupOpen}
@@ -180,6 +190,7 @@ export function TwoStepCard() {
         onClose={() => setSetupOpen(false)}
       />
       <NewRecoveryCodesDialog opened={newCodesOpen} onClose={() => setNewCodesOpen(false)} />
+      <RemoveTwoStepDialog opened={removeOpen} onClose={() => setRemoveOpen(false)} />
       <ReauthDialog
         opened={reauthOpen}
         title="Sign in again to set up two-step verification"

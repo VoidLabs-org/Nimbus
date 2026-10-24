@@ -118,6 +118,13 @@
   color: var(--toast-error);
 }
 
+/* Remove: "Use a recovery code" under the code boxes, and back. */
+.switchCode {
+  display: block;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
 /* 32d: the codes in two columns, in the code font. */
 .codes {
   display: grid;

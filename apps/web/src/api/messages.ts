@@ -7,6 +7,9 @@ export const GENERIC_ERROR = "Something went wrong. Please try again.";
 export const WRONG_SIGN_IN_CODE =
   "That code didn’t work. Check your authenticator app and try again.";
 
+/** A Recovery code the server refused (`invalid_code`): wrong, or used already. */
+export const WRONG_RECOVERY_CODE = "That recovery code isn’t right, or it was used already.";
+
 /** On the sign-in page, after a Two-step verification sign-in ended (`sign_in_expired`). */
 export const SIGN_IN_TIMED_OUT = "Your sign-in timed out. Sign in again.";
 

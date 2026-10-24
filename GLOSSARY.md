@@ -53,7 +53,7 @@ A User who hasn't yet proved they own their email address. They can sign in but 
 _Avoid_: Pending, inactive or unconfirmed user
 
 **Verification code**:
-A short-lived code emailed to a User to prove they own the address.
+A short-lived code emailed to a User to prove they own an address: the one they signed up with, or a new one they're changing their email to.
 _Avoid_: OTP, token, PIN
 
 **Reset code**:

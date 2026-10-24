@@ -93,12 +93,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser((current) => (current?.id === updated.id ? updated : current));
   }
 
+  async function changeEmail(code: string) {
+    const updated = await api.confirmEmailChange(code);
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower check.
+    setUser((current) => (current?.id === updated.id ? updated : current));
+  }
+
   async function changePassword(input: ChangePasswordInput) {
     const signedIn = user?.id;
     await api.changePassword(input);
     // A sign-out, or another User signing in, meanwhile must not be marked by the slower request.
     setUser((current) =>
-      current && current.id === signedIn ? { ...current, hasPassword: true } : current,
+      current && current.id === signedIn
+        ? { ...current, hasPassword: true, passwordChangedAt: new Date().toISOString() }
+        : current,
     );
   }
 
@@ -139,6 +147,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         login,
         signInWithCode,
         updateDisplayName,
+        changeEmail,
         changePassword,
         verifyEmail,
         confirmingEmail,

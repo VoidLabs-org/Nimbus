@@ -22,6 +22,7 @@ const alice: User = {
   avatarUrl: null,
   hasPassword: true,
   emailVerified: true,
+  passwordChangedAt: null,
 };
 
 const unused = () => Promise.resolve();
@@ -39,6 +40,7 @@ function session(user: User | null, logout: () => Promise<void> = unused): Sessi
     login: () => Promise.resolve("signed-in"),
     signInWithCode: unused,
     updateDisplayName: unused,
+    changeEmail: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,
@@ -174,15 +176,13 @@ describe("the Security page", () => {
     expect(sessions).toHaveBeenCalledTimes(2);
   });
 
-  it("is listed on the Settings overview after Password", async () => {
+  it("is listed on the Settings overview after Profile", async () => {
     show("/settings");
 
     const links = (await screen.findAllByRole("link")).map((link) => link.getAttribute("href"));
 
     expect(links).toContain("/settings/security");
-    expect(links.indexOf("/settings/security")).toBeGreaterThan(
-      links.indexOf("/settings/password"),
-    );
+    expect(links.indexOf("/settings/security")).toBeGreaterThan(links.indexOf("/settings/profile"));
   });
 });
 
@@ -590,7 +590,7 @@ describe("disconnecting a provider", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Set a password first")).toBeTruthy();
     expect(within(dialog).getByRole("link", { name: "Set a password" }).getAttribute("href")).toBe(
-      "/settings/password",
+      "/settings/profile?password",
     );
     expect(disconnect).not.toHaveBeenCalled();
   });

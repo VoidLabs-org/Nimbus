@@ -64,7 +64,7 @@ export function SetPasswordFirstDialog({
         <Button variant="default" onClick={onClose}>
           Not now
         </Button>
-        <Button component={Link} to="/settings/password">
+        <Button component={Link} to="/settings/profile?password">
           Set a password
         </Button>
       </div>

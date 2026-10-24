@@ -9,6 +9,8 @@ export type User = {
   hasPassword: boolean;
   /** False until the User enters the code emailed to them; until then the app shows only the verification screen. */
   emailVerified: boolean;
+  /** When the password was last set; null without one, or when it was set before Nimbus kept the time. */
+  passwordChangedAt: string | null;
 };
 
 export type RegisterInput = { displayName: string; email: string; password: string };
@@ -515,6 +517,28 @@ export function createApiClient(
     /** Changes the display name and returns the updated User. */
     updateProfile: (input: { displayName: string }) =>
       request<User>("/api/users/me", { method: "PATCH", body: JSON.stringify(input) }),
+
+    /**
+     * Mails a Verification code to the new address, replacing any pending change; Resend is the same call. Rejects
+     * with an ApiError: 400 "same_email" or `fieldErrors.email`, 409 "email_taken", 403 "reauth_required" when the
+     * sign-in is too old, or 429 with `retryAfterSeconds` when the address was sent codes too fast.
+     */
+    requestEmailChange: async (email: string) => {
+      await request<void>("/api/users/me/email-change", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+    },
+
+    /**
+     * Changes the email to the pending address and returns the updated User. Rejects with an ApiError:
+     * "invalid_code" with `triesLeft`, "code_expired", or 409 "email_taken" when someone took the address meanwhile.
+     */
+    confirmEmailChange: (code: string) =>
+      request<User>("/api/users/me/email-change/confirm", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
 
     /**
      * Sets the signed-in User's first password, or changes it (the current one is then required). The

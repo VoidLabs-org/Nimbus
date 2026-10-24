@@ -6,8 +6,7 @@ export type SettingsItem = { to: string; label: string; description: string };
 export type SettingsGroup = { label: "Account" | "Workspace"; items: SettingsItem[] };
 
 const ACCOUNT: SettingsItem[] = [
-  { to: "/settings/profile", label: "Profile", description: "How you appear to your team" },
-  { to: "/settings/password", label: "Password", description: "Set or change your password" },
+  { to: "/settings/profile", label: "Profile", description: "Your name, email and password" },
   { to: "/settings/security", label: "Security", description: "Where you're signed in" },
   {
     to: "/settings/appearance",

@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 
 import javax.crypto.Mac;
@@ -29,7 +30,10 @@ final class EmailedCodes {
 
 	enum Kind {
 
-		VERIFICATION("nimbus:verification-code"), RESET("nimbus:reset-code");
+		VERIFICATION("nimbus:verification-code"), RESET("nimbus:reset-code"),
+
+		/** A Verification code mailed to a new address, which becomes the User's email once it is entered. */
+		EMAIL_CHANGE("nimbus:email-change-code");
 
 		private final String hashPurpose;
 
@@ -67,6 +71,14 @@ final class EmailedCodes {
 
 	/** Stores a new code for the User, replacing any live one, and returns it, to be mailed after the commit. */
 	String issue(UUID userId) {
+		return issue(userId, null);
+	}
+
+	/**
+	 * Like {@link #issue(UUID)}, for an email change: the code is kept with the address it was mailed to, which
+	 * {@link #newEmail} reads back.
+	 */
+	String issue(UUID userId, String newEmail) {
 		var code = String.format("%06d", RANDOM.nextInt(1_000_000));
 		var hash = hash(userId, code);
 		// Postgres keeps microseconds and rounds anything finer, which could push a stored expiry past the instant
@@ -74,12 +86,19 @@ final class EmailedCodes {
 		var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 		var existing = codes.findLocked(userId, kind);
 		if (existing.isPresent()) {
-			existing.get().replaceWith(hash, now, now.plus(LIFETIME));
+			existing.get().replaceWith(hash, now, now.plus(LIFETIME), newEmail);
 		}
 		else {
-			codes.save(new EmailedCode(userId, kind, hash, now, now.plus(LIFETIME)));
+			codes.save(new EmailedCode(userId, kind, hash, now, now.plus(LIFETIME), newEmail));
 		}
 		return code;
+	}
+
+	/** The address the User's live email-change code was mailed to, if they have one. */
+	Optional<String> newEmail(UUID userId) {
+		return codes.findLocked(userId, kind)
+			.filter(stored -> !stored.isExpiredAt(clock.instant()))
+			.map(EmailedCode::newEmail);
 	}
 
 	/**

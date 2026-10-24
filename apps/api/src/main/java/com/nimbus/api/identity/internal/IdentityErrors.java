@@ -21,6 +21,20 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail sameEmail(EmailChange.SameEmailException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "same_email");
+		return problem;
+	}
+
+	@ExceptionHandler
+	ProblemDetail emailTaken(EmailChange.EmailTakenException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		problem.setProperty("code", "email_taken");
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail sessionNotFound(Sessions.SessionNotFoundException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
 	}

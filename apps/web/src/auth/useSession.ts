@@ -39,6 +39,11 @@ export type Session = {
   signInWithCode: (answer: TwoStepAnswer, rememberBrowser?: boolean) => Promise<void>;
   /** Changes the signed-in User's display name. Rejects with an ApiError (field errors for 400) if refused. */
   updateDisplayName: (displayName: string) => Promise<void>;
+  /**
+   * Changes the signed-in User's email to the address the code was sent to. Rejects with an ApiError (see
+   * `api.confirmEmailChange`) if refused.
+   */
+  changeEmail: (code: string) => Promise<void>;
   /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */
   changePassword: (input: ChangePasswordInput) => Promise<void>;
   /**

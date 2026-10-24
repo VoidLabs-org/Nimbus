@@ -1,6 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import jakarta.persistence.Entity;
@@ -33,6 +34,9 @@ class User implements Persistable<UUID> {
 
 	private boolean emailVerified;
 
+	// When the password was last set; null without one, and for passwords set before this was kept.
+	private Instant passwordChangedAt;
+
 	private Instant createdAt;
 
 	protected User() {
@@ -45,6 +49,7 @@ class User implements Persistable<UUID> {
 		user.email = email;
 		user.displayName = displayName;
 		user.passwordHash = passwordHash;
+		user.passwordChangedAt = micros(now);
 		user.createdAt = now;
 		user.isNew = true;
 		return user;
@@ -94,19 +99,27 @@ class User implements Persistable<UUID> {
 		this.avatarUrl = avatarUrl;
 	}
 
+	/** The User proved they own {@code email} (lower-cased) with the code mailed there, so it stays verified. */
+	void changeEmail(String email) {
+		this.email = email;
+		this.emailVerified = true;
+	}
+
 	/** A provider proved the User owns the email. */
 	void verifyEmail() {
 		this.emailVerified = true;
 	}
 
 	/** @param passwordHash an already hashed password */
-	void changePassword(String passwordHash) {
+	void changePassword(String passwordHash, Instant now) {
 		this.passwordHash = passwordHash;
+		this.passwordChangedAt = micros(now);
 	}
 
 	/** After this the User can only sign in with a Linked identity, until a password is set again. */
 	void removePassword() {
 		this.passwordHash = null;
+		this.passwordChangedAt = null;
 	}
 
 	String email() {
@@ -123,6 +136,16 @@ class User implements Persistable<UUID> {
 
 	boolean emailVerified() {
 		return emailVerified;
+	}
+
+	/** Null without a password, and for one set before Nimbus kept the time. */
+	Instant passwordChangedAt() {
+		return passwordChangedAt;
+	}
+
+	// Postgres keeps microseconds and rounds anything finer, so what is read back equals what was set.
+	private static Instant micros(Instant instant) {
+		return instant.truncatedTo(ChronoUnit.MICROS);
 	}
 
 	/** Null for Users who only sign in with a Linked identity. */

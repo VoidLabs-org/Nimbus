@@ -213,7 +213,7 @@ class PasswordReset {
 				status.setRollbackOnly();
 				return secondCodeFailure;
 			}
-			user.changePassword(passwordHash);
+			user.changePassword(passwordHash, clock.instant());
 			if (!user.emailVerified()) {
 				user.verifyEmail();
 				// As entering it would: a pending Verification code has nothing left to prove.

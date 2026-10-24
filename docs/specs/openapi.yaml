@@ -732,6 +732,130 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyAttempts"
+  /api/users/me/email-change:
+    post:
+      tags: [users]
+      summary: Email a Verification code to the address the signed-in User wants as their email
+      description: >-
+        Starts an email change, or replaces the pending one and its code: a 6-digit code goes to the new address after
+        commit, and the email changes only once it is entered (`/api/users/me/email-change/confirm`). Resend is the same
+        call. The session must have started within `nimbus.auth.link-recent-sign-in` (default 10 minutes) and be still
+        running. Sends spend the new address's send budget (60 seconds apart, 5 an hour). A pending change doesn't hold
+        the address. Unverified Users get `403 email_unverified`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                  description: Surrounding whitespace is ignored; compared and stored lower-cased.
+      responses:
+        "204":
+          description: A code was issued and emailed to the new address
+        "400":
+          description: >-
+            The email is invalid (`errors.email`), or it is already the User's email (`code: same_email`)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >-
+            Not allowed: the sign-in is too old (`code: reauth_required`), or the User is Unverified
+            (`code: email_unverified`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "Another User has this email (`code: email_taken`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many emails to this address; nothing is issued and a pending change is unchanged
+          headers:
+            Retry-After:
+              description: Seconds until a send is allowed
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/me/email-change/confirm:
+    post:
+      tags: [users]
+      summary: Change the signed-in User's email with the code emailed to the new address
+      description: >-
+        A right code changes the email to the pending address (it stays verified) and uses the code up. Sessions, the
+        password, Two-step verification and Linked identities don't change. A wrong try is counted; the fifth cancels
+        the change. The recent sign-in is not checked again. The session must be still running. Unverified Users get
+        `403 email_unverified`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                  description: The 6 digits from the email. Spaces are ignored.
+      responses:
+        "200":
+          description: The User, with the new email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: >-
+            The code is missing or malformed (`errors.code`), wrong (`code` is `invalid_code`, with `triesLeft`), or no
+            change is pending (`code` is `code_expired`: expired, cancelled after 5 wrong tries, or never asked for)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      triesLeft:
+                        type: integer
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >-
+            Another User took the address since the code was sent (`code: email_taken`); the email is unchanged and the
+            code is not used up
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/users/me/linked-identities:
     get:
       tags: [users]
@@ -1786,7 +1910,7 @@ components:
 
     User:
       type: object
-      required: [id, email, displayName, avatarUrl, hasPassword, emailVerified]
+      required: [id, email, displayName, avatarUrl, hasPassword, emailVerified, passwordChangedAt]
       properties:
         id:
           type: string
@@ -1808,6 +1932,13 @@ components:
             False until the User has entered the emailed code or signed in with Google or GitHub on the email.
             An Unverified User gets `403` with `code` `email_unverified` from every endpoint except
             `GET /api/users/me` and those under `/api/auth/`.
+        passwordChangedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            When the password was last set (sign-up, change, first password, forgot password). Null without a password,
+            and for passwords set before Nimbus kept the time.
 
     SessionInfo:
       type: object

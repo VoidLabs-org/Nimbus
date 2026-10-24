@@ -61,14 +61,8 @@ class Passwords {
 		var user = users.require(userId);
 		// Fails fast, before a guess is counted or a hash is computed; the check that protects is the one below.
 		requireActive(sessionId, userId);
-		if (user.passwordHash() != null) {
-			// Counted before the slow check, so parallel guesses can't race past the limit; a success takes it back.
-			var key = userId.toString();
-			var attempt = failuresByUser.acquire(key, "Too many wrong passwords. Try again later.");
-			if (currentPassword == null || !passwordEncoder.matches(currentPassword, user.passwordHash())) {
-				throw new WrongPasswordException();
-			}
-			failuresByUser.release(key, attempt);
+		if (user.passwordHash() != null && !isCurrent(user, currentPassword)) {
+			throw new WrongPasswordException();
 		}
 		var hash = passwordEncoder.encode(newPassword);
 		transaction.executeWithoutResult(status -> {
@@ -85,6 +79,23 @@ class Passwords {
 				rememberedBrowsers.forgetAll(userId);
 			}
 		});
+	}
+
+	/**
+	 * Whether {@code password} is the User's password, for changing it and for "Confirm it's you". Wrong ones are
+	 * counted per User, the same count for both; slow, so it must not run inside a transaction.
+	 *
+	 * @throws SlidingWindowLimiter.LimitExceededException after too many wrong ones, even for the right one
+	 */
+	boolean isCurrent(User user, String password) {
+		// Counted before the slow check, so parallel guesses can't race past the limit; a success takes it back.
+		var key = user.getId().toString();
+		var attempt = failuresByUser.acquire(key, "Too many wrong passwords. Try again later.");
+		if (password == null || !passwordEncoder.matches(password, user.passwordHash())) {
+			return false;
+		}
+		failuresByUser.release(key, attempt);
+		return true;
 	}
 
 	private void requireActive(UUID sessionId, UUID userId) {

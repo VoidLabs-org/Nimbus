@@ -39,10 +39,12 @@ class UsersController {
 
 	private final RememberedBrowsers rememberedBrowsers;
 
+	private final ConfirmItsYou confirmItsYou;
+
 	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords, Sessions sessions,
-			LinkedIdentities linkedIdentities,
-			RememberedBrowsers rememberedBrowsers) {
+			LinkedIdentities linkedIdentities, RememberedBrowsers rememberedBrowsers, ConfirmItsYou confirmItsYou) {
 		this.rememberedBrowsers = rememberedBrowsers;
+		this.confirmItsYou = confirmItsYou;
 		this.users = users;
 		this.currentUser = currentUser;
 		this.passwords = passwords;
@@ -70,6 +72,14 @@ class UsersController {
 	ResponseEntity<Void> changePassword(@AuthenticationPrincipal Jwt token,
 			@Valid @RequestBody ChangePasswordRequest request) {
 		passwords.change(currentUser.id(), sessionOf(token), request.currentPassword(), request.newPassword());
+		return ResponseEntity.noContent().build();
+	}
+
+	/** "Confirm it's you": the password, and the second code with Two-step verification, renew this Session's proof. */
+	@PostMapping("/me/confirm")
+	ResponseEntity<Void> confirm(@AuthenticationPrincipal Jwt token, @Valid @RequestBody ConfirmRequest request) {
+		confirmItsYou.confirm(currentUser.id(), sessionOf(token), request.password(), request.twoStepCode(),
+				request.recoveryCode());
 		return ResponseEntity.noContent().build();
 	}
 
@@ -139,6 +149,11 @@ class UsersController {
 	record ChangePasswordRequest(
 			@Size(max = ValidPassword.MAX_LENGTH) String currentPassword,
 			@ValidPassword String newPassword) {
+	}
+
+	/** A password kept exactly as typed; at most one of the two codes is needed, and only with Two-step verification. */
+	record ConfirmRequest(@Size(max = ValidPassword.MAX_LENGTH) String password,
+			@Size(max = 64) String twoStepCode, @Size(max = 64) String recoveryCode) {
 	}
 
 	/** The same display name rule as at registration. */

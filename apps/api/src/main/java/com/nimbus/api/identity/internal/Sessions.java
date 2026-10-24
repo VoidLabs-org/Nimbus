@@ -186,6 +186,37 @@ class Sessions {
 		}
 	}
 
+	/**
+	 * Like {@link #requireStartedWithin}, but a "Confirm it's you" in this Session counts as much as the sign-in did.
+	 *
+	 * @throws InvalidBearerTokenException when the session has ended
+	 * @throws ReauthRequiredException when neither was within {@code maxAge}
+	 */
+	@Transactional(readOnly = true)
+	void requireProvedWithin(UUID sessionId, UUID userId, Duration maxAge) {
+		var now = now();
+		var session = activeSession(sessionId, userId, now)
+			.orElseThrow(() -> new InvalidBearerTokenException("Your session has ended. Sign in again."));
+		if (session.provedAt().isBefore(now.minus(maxAge))) {
+			throw new ReauthRequiredException();
+		}
+	}
+
+	/**
+	 * Records that the User just confirmed it was them in this Session, in the caller's transaction. A sign-out that
+	 * commits meanwhile isn't ordered against it (the sign-outs don't take the User's row lock), and needn't be: the
+	 * stamp only writes {@code confirmed_at} ({@code @DynamicUpdate}), so an ended Session stays ended, and every use
+	 * of the stamp checks that the Session is still running.
+	 *
+	 * @throws InvalidBearerTokenException when the session has ended
+	 */
+	void markConfirmed(UUID sessionId, UUID userId) {
+		var now = now();
+		var session = activeSession(sessionId, userId, now)
+			.orElseThrow(() -> new InvalidBearerTokenException("Your session has ended. Sign in again."));
+		session.markConfirmed(now);
+	}
+
 	static class ReauthRequiredException extends RuntimeException {
 
 		ReauthRequiredException() {

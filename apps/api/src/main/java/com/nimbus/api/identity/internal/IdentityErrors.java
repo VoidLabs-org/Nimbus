@@ -35,6 +35,21 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail noPassword(ConfirmItsYou.NoPasswordException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		problem.setProperty("code", "no_password");
+		return problem;
+	}
+
+	/** Reported under {@code errors.password}, like a field that failed validation, so the form can show it. */
+	@ExceptionHandler
+	ProblemDetail wrongConfirmPassword(ConfirmItsYou.WrongPasswordException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Some fields are invalid");
+		problem.setProperty("errors", Map.of("password", e.getMessage()));
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail sessionNotFound(Sessions.SessionNotFoundException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
 	}
@@ -119,14 +134,14 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
-	ProblemDetail twoStepRequired(PasswordReset.TwoStepRequiredException e) {
+	ProblemDetail twoStepRequired(SecondCodes.TwoStepRequiredException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", "two_step_required");
 		return problem;
 	}
 
 	@ExceptionHandler
-	ProblemDetail wrongTwoStepCode(PasswordReset.WrongTwoStepCodeException e) {
+	ProblemDetail wrongTwoStepCode(SecondCodes.WrongTwoStepCodeException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", "invalid_two_step_code");
 		return problem;

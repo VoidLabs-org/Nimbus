@@ -62,10 +62,10 @@ class EmailChange {
 
 	/**
 	 * Mails a code to {@code newEmail}, replacing any pending change. Needs a Session that started recently, as
-	 * connecting a provider does: a stolen access token alone must not move the account to another inbox. A pending
-	 * change doesn't hold the address; {@link #confirm} checks it again.
+	 * connecting a provider does, or a "Confirm it's you" since: a stolen access token alone must not move the account
+	 * to another inbox. A pending change doesn't hold the address; {@link #confirm} checks it again.
 	 *
-	 * @throws Sessions.ReauthRequiredException when the Session started too long ago
+	 * @throws Sessions.ReauthRequiredException when the User neither signed in nor confirmed it was them recently
 	 * @throws SameEmailException when it is already the User's email
 	 * @throws EmailTakenException when another User has it
 	 * @throws SlidingWindowLimiter.LimitExceededException when the new address was mailed too recently or too often;
@@ -73,7 +73,7 @@ class EmailChange {
 	 */
 	void request(UUID userId, UUID sessionId, String newEmail) {
 		var email = newEmail.toLowerCase(Locale.ROOT);
-		sessions.requireStartedWithin(sessionId, userId, recentSignIn);
+		sessions.requireProvedWithin(sessionId, userId, recentSignIn);
 		var user = users.require(userId);
 		if (user.email().equals(email)) {
 			throw new SameEmailException();

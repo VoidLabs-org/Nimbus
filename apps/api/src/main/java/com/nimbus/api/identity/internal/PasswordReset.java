@@ -1,14 +1,12 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
-import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.nimbus.api.identity.EmailVerified;
-import com.nimbus.api.identity.RecoveryCodeUsed;
 import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
@@ -74,19 +72,16 @@ class PasswordReset {
 
 	private final SlidingWindowLimiter resetsByAddress;
 
-	private final TwoStepStore twoStep;
-
-	private final SignInCodeCheck secondCodes;
+	private final SecondCodes secondCodes;
 
 	private final RememberedBrowsers rememberedBrowsers;
 
 	PasswordReset(UserRepository users, EmailedCodeKinds codeKinds, PasswordEncoder passwordEncoder, Sessions sessions,
 			SignIn signIn, Mailer mailer, MailAssets mailAssets, Clock clock, ApplicationEventPublisher events,
 			PlatformTransactionManager transactionManager, AuthProperties properties, EmailSendBudget sendBudget,
-			TwoStepStore twoStep, SignInCodeCheck secondCodes,
+			SecondCodes secondCodes,
 			RememberedBrowsers rememberedBrowsers) {
 		this.rememberedBrowsers = rememberedBrowsers;
-		this.twoStep = twoStep;
 		this.secondCodes = secondCodes;
 		this.sendBudget = sendBudget;
 		this.requestsByAddress = new SlidingWindowLimiter(properties.passwordResetRequestsPerAddress(),
@@ -206,7 +201,7 @@ class PasswordReset {
 			if (!checked.isRight()) {
 				return checked.failure();
 			}
-			var secondCodeFailure = checkSecondCode(user, twoStepCode, recoveryCode);
+			var secondCodeFailure = secondCodes.check(user.getId(), twoStepCode, recoveryCode);
 			if (secondCodeFailure != null) {
 				// Rolled back, so the Reset code is not used up and keeps its tries. A wrong second code still counts
 				// toward the User's hourly lock, which is kept outside the database.
@@ -229,53 +224,6 @@ class PasswordReset {
 			throw failure;
 		}
 		signIn.clearFailures(normalizedEmail);
-	}
-
-	/**
-	 * The second code a User with Two-step verification needs; nothing for a User without it. A right Recovery code
-	 * is used up and publishes {@link RecoveryCodeUsed}.
-	 *
-	 * @return why the reset can't go ahead; null when it can
-	 * @throws SlidingWindowLimiter.LimitExceededException when the User got too many codes wrong in the last hour
-	 */
-	private RuntimeException checkSecondCode(User user, String twoStepCode, String recoveryCode) {
-		var authenticator = twoStep.find(user.getId()).orElse(null);
-		if (authenticator == null) {
-			return null;
-		}
-		if (!SignInCodeCheck.isRecoveryCode(recoveryCode) && (twoStepCode == null || twoStepCode.isBlank())) {
-			return new TwoStepRequiredException();
-		}
-		// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
-		var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-		var answer = secondCodes.useEither(user.getId(), authenticator, twoStepCode, recoveryCode, now);
-		if (!answer.right()) {
-			return new WrongTwoStepCodeException(answer.recoveryCode());
-		}
-		if (answer.usedRecoveryCode()) {
-			events.publishEvent(new RecoveryCodeUsed(user.getId(), now, answer.recoveryCodesLeft()));
-		}
-		return null;
-	}
-
-	/** Becomes a 400 with {@code code: two_step_required}: the Reset code was right, and a second code must follow. */
-	static class TwoStepRequiredException extends RuntimeException {
-
-		TwoStepRequiredException() {
-			super("Enter the code from your authenticator app, or a recovery code.");
-		}
-
-	}
-
-	/** Becomes a 400 with {@code code: invalid_two_step_code}; the Reset code is left as it was. */
-	static class WrongTwoStepCodeException extends RuntimeException {
-
-		/** @param recoveryCode whether the wrong code was a Recovery code, which the message names */
-		WrongTwoStepCodeException(boolean recoveryCode) {
-			super(recoveryCode ? "That recovery code isn't right, or it was used already."
-					: "That code didn't work. Check your authenticator app and try again.");
-		}
-
 	}
 
 }

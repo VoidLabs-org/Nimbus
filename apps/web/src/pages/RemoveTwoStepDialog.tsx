@@ -1,4 +1,4 @@
-import { Anchor, Button, TextInput } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "@repo/ui/toast";
@@ -6,11 +6,11 @@ import { WindowFrame } from "../access/WindowFrame";
 import { api, type TwoStepAnswer } from "../api/client";
 import { tooManyAttemptsIn, WRONG_RECOVERY_CODE, WRONG_SIGN_IN_CODE } from "../api/messages";
 import { queryKeys } from "../api/queries";
-import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
-import { recoveryCodeInputProps } from "../auth/recoveryCode";
+import { CODE_LENGTH } from "../auth/CodeEntry";
 import { useCountdown } from "../auth/countdown";
 import { showCodeCheckFailure } from "./codeCheckFailure";
 import dialogs from "./DisconnectDialogs.module.css";
+import { SecondCodeEntry } from "./SecondCodeEntry";
 import classes from "./TwoStepSetupDialog.module.css";
 
 /**
@@ -91,54 +91,25 @@ export function RemoveTwoStepDialog({ opened, onClose }: { opened: boolean; onCl
         }}
       >
         <div className={classes.codeBlock}>
-          {useRecoveryCode ? (
-            <TextInput
-              {...recoveryCodeInputProps}
-              data-autofocus
-              value={recoveryCode}
-              onChange={(event) => {
-                setRecoveryCode(event.currentTarget.value);
-                setError(null);
-              }}
-              disabled={remove.isPending || locked}
-              error={error !== null}
-            />
-          ) : (
-            <>
-              <span className={classes.label} id="remove-two-step-label">
-                Enter the 6-digit code from the app
-              </span>
-              <CodePinInput
-                value={code}
-                onChange={(value) => {
-                  setCode(value);
-                  setError(null);
-                }}
-                disabled={remove.isPending || locked}
-                error={error !== null}
-                inWindow
-                aria-labelledby="remove-two-step-label"
-              />
-            </>
-          )}
-          {(error || locked) && (
-            <div className={classes.error} role="alert">
-              {locked ? tooManyAttemptsIn(lockSeconds) : error}
-            </div>
-          )}
-          {/* Off while a code is checked, so its answer can't land under the other kind of box. */}
-          <Anchor
-            component="button"
-            type="button"
-            className={classes.switchCode}
-            onClick={() => {
-              if (!remove.isPending) switchTo(!useRecoveryCode);
+          <SecondCodeEntry
+            recovery={useRecoveryCode}
+            code={code}
+            recoveryCode={recoveryCode}
+            onCode={(value) => {
+              setCode(value);
+              setError(null);
             }}
-            aria-disabled={remove.isPending}
-            c={remove.isPending ? "dimmed" : undefined}
-          >
-            {useRecoveryCode ? "Use your authenticator app" : "Use a recovery code"}
-          </Anchor>
+            onRecoveryCode={(value) => {
+              setRecoveryCode(value);
+              setError(null);
+            }}
+            onSwitch={() => switchTo(!useRecoveryCode)}
+            message={locked ? tooManyAttemptsIn(lockSeconds) : error}
+            wrong={error !== null}
+            disabled={remove.isPending || locked}
+            busy={remove.isPending}
+            labelId="remove-two-step-label"
+          />
         </div>
         <div className={dialogs.footer}>
           <Button variant="default" onClick={onClose} disabled={remove.isPending}>

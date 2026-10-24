@@ -133,6 +133,10 @@ li:first-child.row {
   flex: none;
 }
 
+.newCodes {
+  flex: none;
+}
+
 /* On a phone the button drops under the text, full width and tall enough to tap. */
 @media (max-width: 36em) {
   .row {
@@ -141,6 +145,7 @@ li:first-child.row {
 
   .signOut,
   .disconnect,
+  .newCodes,
   .setUp {
     flex: 1 1 100%;
     min-height: 44px;

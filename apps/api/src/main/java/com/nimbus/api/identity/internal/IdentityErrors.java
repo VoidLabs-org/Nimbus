@@ -59,6 +59,13 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail twoStepNotOn(TwoStep.NotOnException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		problem.setProperty("code", "not_on");
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail twoStepSetupExpired(TwoStep.SetupExpiredException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 		problem.setProperty("code", "setup_expired");

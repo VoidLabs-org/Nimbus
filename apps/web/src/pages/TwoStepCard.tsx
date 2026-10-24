@@ -10,6 +10,7 @@ import { toast } from "@repo/ui/toast";
 import { ApiError, api, type TwoStepSetup } from "../api/client";
 import { queryKeys, useTwoStep } from "../api/queries";
 import { useSignInAgain } from "../auth/useSignInAgain";
+import { NewRecoveryCodesDialog } from "./NewRecoveryCodesDialog";
 import { ReauthDialog } from "./ReauthDialog";
 import { TwoStepSetupDialog } from "./TwoStepSetupDialog";
 import classes from "./SecurityPage.module.css";
@@ -22,7 +23,7 @@ const SETUP_PARAM = "setup";
 
 /**
  * Security → Two-step verification (designs 32a and 32b): whether signing in also asks for a code from an
- * authenticator app, and setting that up. Its own card, so a failure here leaves the rest of the page alone.
+ * authenticator app, setting that up, and new Recovery codes. Its own card, so a failure here leaves the rest of the page alone.
  */
 export function TwoStepCard() {
   const query = useTwoStep();
@@ -30,6 +31,7 @@ export function TwoStepCard() {
   const [setup, setSetup] = useState<TwoStepSetup | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [reauthOpen, setReauthOpen] = useState(false);
+  const [newCodesOpen, setNewCodesOpen] = useState(false);
 
   const start = useMutation({
     mutationFn: () => api.startTwoStepSetup(),
@@ -159,6 +161,13 @@ export function TwoStepCard() {
                   {status.recoveryCodesLeft ?? 0} of {RECOVERY_CODES} left
                 </div>
               </div>
+              <Button
+                variant="default"
+                className={classes.newCodes}
+                onClick={() => setNewCodesOpen(true)}
+              >
+                View new codes
+              </Button>
             </li>
           )}
         </ul>
@@ -170,6 +179,7 @@ export function TwoStepCard() {
         onRestart={() => start.mutate()}
         onClose={() => setSetupOpen(false)}
       />
+      <NewRecoveryCodesDialog opened={newCodesOpen} onClose={() => setNewCodesOpen(false)} />
       <ReauthDialog
         opened={reauthOpen}
         title="Sign in again to set up two-step verification"

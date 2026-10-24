@@ -601,6 +601,16 @@ export function createApiClient(
     /** Turns Two-step verification on with the setup just proved. 409 `setup_expired` or `already_on`. */
     turnOnTwoStep: () => request<void>("/api/users/me/two-step", { method: "POST" }),
 
+    /**
+     * View new codes: a Sign-in code from the app replaces the Recovery codes, and the old set stops working. 400
+     * `invalid_code`, 409 `not_on`, 429 with `retryAfterSeconds` while the User is locked out of code checks.
+     */
+    newRecoveryCodes: (code: string) =>
+      request<{ recoveryCodes: string[] }>("/api/users/me/two-step/recovery-codes", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>
       request<AuditPage>(

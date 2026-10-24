@@ -1024,6 +1024,63 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "429":
           $ref: "#/components/responses/TooManyAttempts"
+  /api/users/me/two-step/recovery-codes:
+    post:
+      tags: [users]
+      summary: View new codes
+      description: >-
+        Replaces the User's Recovery codes with a new set of 10, after a Sign-in code from their authenticator app (one
+        30-second step either side of now, never a step already used; a Recovery code is not accepted). The old set
+        stops working at once and the new codes are shown only in this answer. Publishes `RecoveryCodesRegenerated`.
+        The request must come from a session that is still running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  maxLength: 64
+                  example: "123456"
+      responses:
+        "200":
+          description: The new Recovery codes, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recoveryCodes]
+                properties:
+                  recoveryCodes:
+                    type: array
+                    minItems: 10
+                    maxItems: 10
+                    items:
+                      type: string
+                      pattern: "^[a-z0-9]{4}-[a-z0-9]{4}$"
+                      example: k7qx-2m9d
+        "400":
+          description: >-
+            The code is wrong, used already or isn't 6 digits (`code: invalid_code`, which counts toward the hourly
+            lock), or it is over 64 characters (`errors.code`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "Two-step verification is not on (`code: not_on`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
   /api/access/permissions:
     get:
       tags: [access]

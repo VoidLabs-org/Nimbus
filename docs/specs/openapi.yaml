@@ -169,11 +169,12 @@ paths:
   /api/auth/two-step:
     post:
       tags: [auth]
-      summary: Finish a password sign-in with a Sign-in code
+      summary: Finish a password sign-in with a Sign-in code or a Recovery code
       description: >-
-        Checks a Sign-in code from the User's authenticator app for the pending sign-in in the `two_step_pending`
-        cookie. One 30-second step either side of now is accepted, but never the step that last signed the User in or
-        an older one. A right code starts the session as `POST /api/auth/login` does and ends the pending sign-in. A
+        Checks a Sign-in code from the User's authenticator app, or one of their Recovery codes, for the pending
+        sign-in in the `two_step_pending` cookie. One 30-second step either side of now is accepted, but never the step
+        that last signed the User in or an older one. A Recovery code is compared with capitals, spaces and the dash
+        ignored, works once, and publishes `RecoveryCodeUsed` when used. A right code starts the session as `POST /api/auth/login` does and ends the pending sign-in. A
         pending sign-in lasts 5 minutes and allows 5 wrong codes. A refresh never comes here.
       security:
         - twoStepPendingCookie: []
@@ -191,10 +192,16 @@ paths:
           application/json:
             schema:
               type: object
+              description: Either `code` or `recoveryCode`; with `recoveryCode`, `code` is ignored.
               properties:
                 code:
                   type: string
+                  maxLength: 64
                   example: "123456"
+                recoveryCode:
+                  type: string
+                  maxLength: 64
+                  example: k7qx-2m9d
       responses:
         "200":
           description: Signed in; the pending cookie is cleared
@@ -207,8 +214,8 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
         "400":
           description: >-
-            The code is wrong or isn't 6 digits (`code: invalid_code`, with `triesLeft`), or it is over 64 characters
-            (`errors.code`)
+            The code is wrong or isn't 6 digits, or the Recovery code is wrong or used already (`code: invalid_code`,
+            with `triesLeft`), or either is over 64 characters (`errors.code`, `errors.recoveryCode`)
           content:
             application/problem+json:
               schema:

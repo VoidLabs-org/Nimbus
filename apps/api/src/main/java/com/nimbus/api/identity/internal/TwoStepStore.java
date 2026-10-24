@@ -47,6 +47,12 @@ class TwoStepStore {
 				});
 	}
 
+	/** Marks the User's unused Recovery code with this hash used. @return false when there is none */
+	boolean useRecoveryCode(UUID userId, String hash, Instant usedAt) {
+		return jdbc.update("UPDATE recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
+				Timestamp.from(usedAt), userId, hash) == 1;
+	}
+
 	int recoveryCodesLeft(UUID userId) {
 		var left = jdbc.queryForObject("SELECT count(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL",
 				Integer.class, userId);

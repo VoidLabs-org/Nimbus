@@ -66,13 +66,13 @@ class AuthController {
 	}
 
 	/**
-	 * The second step of a sign-in: a right Sign-in code starts the Session as {@code /login} does and ends the
+	 * The second step of a sign-in: a right Sign-in code or Recovery code starts the Session as {@code /login} does and ends the
 	 * pending sign-in. The pending cookie is the only credential, so {@link NimbusHeaderGate} checks its header.
 	 */
 	@PostMapping("/two-step")
 	ResponseEntity<AuthResponse> twoStep(@CookieValue(name = PendingSignIns.COOKIE, required = false) String pendingId,
 			@Valid @RequestBody TwoStepRequest request, HttpServletRequest http) {
-		var user = twoStepSignIn.finish(pendingId, request.code());
+		var user = twoStepSignIn.finish(pendingId, request.code(), request.recoveryCode());
 		return signedIn(HttpStatus.OK, user, http, PendingSignIns.clearedCookie());
 	}
 
@@ -160,8 +160,11 @@ class AuthController {
 	record TwoStepRequiredResponse(boolean twoStepRequired) {
 	}
 
-	/** Anything that isn't 6 digits is simply a wrong code. */
-	record TwoStepRequest(@Size(max = 64) String code) {
+	/**
+	 * A Sign-in code, or a Recovery code instead when the User lost their phone. Anything that isn't 6 digits is simply
+	 * a wrong Sign-in code.
+	 */
+	record TwoStepRequest(@Size(max = 64) String code, @Size(max = 64) String recoveryCode) {
 	}
 
 }

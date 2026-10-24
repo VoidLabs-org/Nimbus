@@ -3,10 +3,13 @@ package com.nimbus.api.identity.internal;
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 import com.nimbus.api.identity.RecoveryCodeUsed;
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -14,8 +17,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * The second step of signing in for a User with Two-step verification: after the password, a pending sign-in waits
- * for a Sign-in code from the User's app, and only a right one lets a Session start. A code is accepted once: the step
+ * The second step of signing in for a User with Two-step verification: after the password, or after Google or
+ * GitHub, a pending sign-in waits for a Sign-in code from the User's app, and only a right one lets a Session start.
+ * A provider sign-in stores nothing (no link, no avatar) until then. A code is accepted once: the step
  * that last signed the User in, and every older one, is refused. A User who lost their phone gives one of their
  * Recovery codes instead, which then is used up. A refresh never comes here.
  */
@@ -40,9 +44,11 @@ class TwoStepSignIn {
 
 	private final Sessions sessions;
 
+	private final ExternalSignIn externalSignIn;
+
 	TwoStepSignIn(PendingSignIns pending, SignInCodeLock lock, TwoStepStore store, TwoStepSecrets secrets,
 			UserRepository users, Clock clock, PlatformTransactionManager transactionManager,
-			ApplicationEventPublisher events, Sessions sessions) {
+			ApplicationEventPublisher events, Sessions sessions, ExternalSignIn externalSignIn) {
 		this.pending = pending;
 		this.lock = lock;
 		this.store = store;
@@ -52,16 +58,29 @@ class TwoStepSignIn {
 		this.transaction = new TransactionTemplate(transactionManager);
 		this.events = events;
 		this.sessions = sessions;
+		this.externalSignIn = externalSignIn;
 	}
 
-	/** Whether {@code user}, who just proved their password, also needs a Sign-in code. */
-	boolean isRequired(User user) {
-		return store.find(user.getId()).isPresent();
+	/**
+	 * Starts the second step when {@code user}, who just proved their password, has Two-step verification.
+	 *
+	 * @return the pending sign-in's cookie; empty when no code is needed and the Session can start now
+	 */
+	Optional<ResponseCookie> begin(User user) {
+		return begin(user, null);
 	}
 
-	/** A pending sign-in for the User; returns its id, for {@link PendingSignIns#cookie}. */
-	String start(User user) {
-		return pending.start(user.getId(), user.passwordHash());
+	/**
+	 * Starts the second step when {@code user}, whom a provider's {@code profile} signs in as, has Two-step
+	 * verification. Nothing of the profile is stored until the code is right.
+	 *
+	 * @return the pending sign-in's cookie; empty when no code is needed and the sign-in can go ahead now
+	 */
+	Optional<ResponseCookie> begin(User user, ExternalProfile profile) {
+		if (store.find(user.getId()).isEmpty()) {
+			return Optional.empty();
+		}
+		return Optional.of(PendingSignIns.cookie(pending.start(user.getId(), user.passwordHash(), profile)));
 	}
 
 	/**
@@ -75,7 +94,8 @@ class TwoStepSignIn {
 	 * Sign-in code
 	 * @param userAgent the browser's {@code User-Agent}, kept with the Session as at sign-in; may be null
 	 * @throws SignInExpiredException when the pending sign-in is missing, unknown, used or expired, the User's
-	 * password changed since it started, or this was its last wrong code allowed
+	 * password changed since a password sign-in started, the provider of a provider sign-in no longer signs in as the
+	 * User (disconnected, or the account is someone else's now), or this was its last wrong code allowed
 	 * @throws TwoStep.WrongSignInCodeException when the code is wrong (a Recovery code also when it was used), with
 	 * the tries left
 	 * @throws LimitExceededException when the User got too many codes wrong in the last hour
@@ -87,8 +107,9 @@ class TwoStepSignIn {
 		return transaction.execute(status -> {
 			// Locked, so two requests can't both sign in with one code.
 			var user = users.findLockedById(userId).orElseThrow(SignInExpiredException::new);
-			// A password change or reset ends what the old password started.
-			if (!Objects.equals(user.passwordHash(), found.passwordHash())) {
+			// A password change or reset ends what the old password started; a provider must still sign in as the User.
+			if (found.profile() == null ? !Objects.equals(user.passwordHash(), found.passwordHash())
+					: !providerStillSignsIn(found.profile(), userId)) {
 				pending.end(pendingId);
 				throw new SignInExpiredException();
 			}
@@ -130,9 +151,22 @@ class TwoStepSignIn {
 			else {
 				store.useStep(userId, step.getAsLong());
 			}
+			// Only now is the provider sign-in stored (the link, the avatar): it waited for the code.
+			if (found.profile() != null && !externalSignIn.signIn(found.profile()).getId().equals(userId)) {
+				throw new SignInExpiredException();
+			}
 			// Joins this transaction, so it is stored with the used code or not at all.
 			return new SignedIn(user, sessions.start(user, userAgent));
 		});
+	}
+
+	private boolean providerStillSignsIn(ExternalProfile profile, UUID userId) {
+		try {
+			return externalSignIn.whoSignsIn(profile).map(User::getId).filter(userId::equals).isPresent();
+		}
+		catch (ExternalSignIn.ProviderDisconnectedException | ExternalSignIn.EmailUnverifiedException e) {
+			return false;
+		}
 	}
 
 	/** @param token the new Session's first refresh token */

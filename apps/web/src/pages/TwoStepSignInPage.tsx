@@ -14,10 +14,11 @@ import { useSession } from "../auth/useSession";
 const RECOVERY_CODE_MAX = 64;
 
 /**
- * The second step of a password sign-in for a User with Two-step verification (design 32e): the 6-digit Sign-in
+ * The second step of signing in for a User with Two-step verification (design 32e), after their password or after
+ * Google or GitHub (the server's callback sends the browser here): the 6-digit Sign-in
  * code from their authenticator app, or, for a User who lost their phone, one of their Recovery codes. The server
  * holds the pending sign-in (5 minutes, 5 wrong codes of either kind); once it is over the User goes back to the
- * sign-in page. A right code continues to `returnTo`, like the sign-in page.
+ * sign-in page, which has the provider buttons as well as the password form. A right code continues to `returnTo`, like the sign-in page.
  */
 export default function TwoStepSignInPage() {
   const { signInWithCode } = useSession();

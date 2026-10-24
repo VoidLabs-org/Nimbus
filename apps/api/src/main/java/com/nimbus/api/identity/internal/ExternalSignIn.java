@@ -1,6 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.nimbus.api.identity.EmailVerified;
@@ -41,7 +42,33 @@ class ExternalSignIn {
 	}
 
 	/**
+	 * The existing User {@link #signIn} would sign the profile in as, found by the same rules but changing nothing:
+	 * no link, no avatar, no new User. Lets a sign-in that needs Two-step verification wait for the code before
+	 * anything is stored.
+	 *
+	 * @return empty when signing in would create a new User
+	 * @throws EmailUnverifiedException as {@link #signIn} does
+	 * @throws ProviderDisconnectedException as {@link #signIn} does
+	 */
+	@Transactional(readOnly = true)
+	Optional<User> whoSignsIn(ExternalProfile profile) {
+		var linked = identities.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId());
+		if (linked.isPresent()) {
+			return users.findById(linked.get().userId());
+		}
+		if (!profile.emailVerified() || profile.email() == null) {
+			throw new EmailUnverifiedException();
+		}
+		var user = users.findByEmail(profile.email());
+		if (user.isPresent() && disconnectedProviders.isMarked(user.get().getId(), profile.provider())) {
+			throw new ProviderDisconnectedException();
+		}
+		return user;
+	}
+
+	/**
 	 * @throws EmailUnverifiedException when the provider doesn't vouch for the email and this login isn't linked yet
+	 * @throws ProviderDisconnectedException when the User on this email disconnected this provider
 	 */
 	@Transactional
 	User signIn(ExternalProfile profile) {

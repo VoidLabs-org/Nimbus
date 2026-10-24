@@ -12,12 +12,15 @@ export function WindowFrame({
   onClose,
   title,
   subtitle,
+  withCloseButton = true,
   children,
 }: {
   opened: boolean;
   onClose: () => void;
   title: ReactNode;
   subtitle?: string;
+  /** False hides the ✕, for a window the User must finish before it can close. */
+  withCloseButton?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -27,6 +30,7 @@ export function WindowFrame({
       size={560}
       yOffset={24}
       title={title}
+      withCloseButton={withCloseButton}
       classNames={{
         overlay: classes.overlay,
         content: classes.content,

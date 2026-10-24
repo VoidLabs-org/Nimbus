@@ -125,11 +125,8 @@ li:first-child.row {
   color: var(--color-accent-2-700);
 }
 
-.signOut {
-  flex: none;
-}
-
-.disconnect {
+/* A row's own button: Sign out, Disconnect, View new codes. */
+.rowAction {
   flex: none;
 }
 
@@ -139,8 +136,7 @@ li:first-child.row {
     flex-wrap: wrap;
   }
 
-  .signOut,
-  .disconnect,
+  .rowAction,
   .setUp {
     flex: 1 1 100%;
     min-height: 44px;

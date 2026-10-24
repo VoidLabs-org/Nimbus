@@ -177,7 +177,7 @@ export function ConnectedAccountsCard() {
                 {!identity && (
                   <Button
                     variant="default"
-                    className={classes.disconnect}
+                    className={classes.rowAction}
                     aria-label={`Connect ${provider.name}`}
                     loading={
                       (connect.isPending || connect.isSuccess) && connect.variables === provider.id
@@ -192,7 +192,7 @@ export function ConnectedAccountsCard() {
                 {identity && (
                   <Button
                     variant="default"
-                    className={classes.disconnect}
+                    className={classes.rowAction}
                     aria-label={`Disconnect ${provider.name}`}
                     onClick={() =>
                       // Their only way in: say so up front, not after a click that cannot work.

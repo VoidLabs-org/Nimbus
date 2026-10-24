@@ -1,16 +1,17 @@
-import { Button, Checkbox } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
 import { ApiError, api, type TwoStepSetup } from "../api/client";
+import { WRONG_SIGN_IN_CODE } from "../api/messages";
 import { queryKeys } from "../api/queries";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
+import { copy } from "./copy";
+import { SaveRecoveryCodes } from "./SaveRecoveryCodes";
 import dialogs from "./DisconnectDialogs.module.css";
 import classes from "./TwoStepSetupDialog.module.css";
-
-const WRONG_CODE = "That code didn’t work. Check your authenticator app and try again.";
 
 /**
  * Setting up two-step verification (designs 32c and 32d), in two steps: scan the key into an authenticator app and
@@ -59,7 +60,7 @@ export function TwoStepSetupDialog({
     onError: (failure) => {
       if (failure instanceof ApiError && failure.status === 401) return;
       if (failure instanceof ApiError && failure.code === "invalid_code") {
-        setError(WRONG_CODE);
+        setError(WRONG_SIGN_IN_CODE);
         setCode("");
         return;
       }
@@ -181,35 +182,7 @@ export function TwoStepSetupDialog({
       )}
       {step === "save" && (
         <div className={classes.body}>
-          <ul className={classes.codes} aria-label="Recovery codes">
-            {codes.map((recoveryCode) => (
-              <li key={recoveryCode}>
-                <code>{recoveryCode}</code>
-              </li>
-            ))}
-          </ul>
-          <div className={classes.codeActions}>
-            <Button
-              variant="default"
-              className={classes.pillButton}
-              onClick={() => void copy(codes.join("\n"), "Recovery codes copied.")}
-            >
-              Copy
-            </Button>
-            <Button
-              variant="default"
-              className={classes.pillButton}
-              onClick={() => download(codes)}
-            >
-              Download .txt
-            </Button>
-          </div>
-          <Checkbox
-            label="I’ve saved these codes"
-            radius="xl"
-            checked={saved}
-            onChange={(event) => setSaved(event.currentTarget.checked)}
-          />
+          <SaveRecoveryCodes codes={codes} saved={saved} onSavedChange={setSaved} />
           {/* Only the main button here, as in 32d: ✕ (or Escape) closes without turning anything on. */}
           <div className={dialogs.footer}>
             <Button loading={turnOn.isPending} disabled={!saved} onClick={() => turnOn.mutate()}>
@@ -278,24 +251,4 @@ function QrCode({ value }: { value: string }) {
 /** "JBSW Y3DP EHPK 3PXP", easier to read and type than one long run of letters. */
 function grouped(key: string): string {
   return key.match(/.{1,4}/g)?.join(" ") ?? key;
-}
-
-async function copy(text: string, done: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast.success(done);
-  } catch {
-    toast.error("Couldn’t copy. Select the text and copy it yourself.");
-  }
-}
-
-function download(codes: string[]) {
-  const text = `Nimbus recovery codes\nEach code signs you in once if you lose your phone.\n\n${codes.join("\n")}\n`;
-  const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "nimbus-recovery-codes.txt";
-  link.click();
-  // Some browsers start the download after click() returns, so the address must outlive it for a while.
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

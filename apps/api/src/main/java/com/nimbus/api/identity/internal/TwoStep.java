@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import com.nimbus.api.identity.RecoveryCodesRegenerated;
 import com.nimbus.api.identity.TwoStepEnabled;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -19,7 +20,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Two-step verification on the Security page: what the card shows, and turning it on. Setup is three calls: start
+ * Two-step verification on the Security page: what the card shows, turning it on, and new Recovery codes. Setup is three calls: start
  * (a new key for the User's app), verify (a Sign-in code from the app proves it has the key, and the Recovery codes
  * are made) and turn on (both are stored). Starting needs a Session that began recently, so a stolen access token
  * alone can't put Two-step verification on someone else's phone and lock the User out.
@@ -53,9 +54,11 @@ class TwoStep {
 
 	private final SignInCodeLock lock;
 
+	private final SignInCodeCheck codeCheck;
+
 	TwoStep(TwoStepStore store, TwoStepSetups setups, TwoStepSecrets secrets, UserRepository users, Sessions sessions,
 			ApplicationEventPublisher events, Clock clock, AuthProperties properties,
-			PlatformTransactionManager transactionManager, SignInCodeLock lock) {
+			PlatformTransactionManager transactionManager, SignInCodeLock lock, SignInCodeCheck codeCheck) {
 		this.store = store;
 		this.setups = setups;
 		this.secrets = secrets;
@@ -66,6 +69,7 @@ class TwoStep {
 		this.recentSignIn = properties.linkRecentSignIn();
 		this.transaction = new TransactionTemplate(transactionManager);
 		this.lock = lock;
+		this.codeCheck = codeCheck;
 	}
 
 	Status status(UUID userId, UUID sessionId) {
@@ -122,7 +126,7 @@ class TwoStep {
 		if (setup.isVerified()) {
 			return setup.recoveryCodes();
 		}
-		var proved = setups.verified(userId, setup, step.getAsLong(), newRecoveryCodes());
+		var proved = setups.verified(userId, setup, step.getAsLong(), freshRecoveryCodes());
 		if (proved == null || !proved.isVerified()) {
 			// Thrown away or replaced while this code was checked.
 			throw new SetupExpiredException();
@@ -153,11 +157,46 @@ class TwoStep {
 			// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
 			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 			store.add(userId, secrets.encrypt(userId, setup.key()), now, setup.verifiedStep());
-			store.replaceRecoveryCodes(userId, setup.recoveryCodes().stream()
-				.map(code -> secrets.hashRecoveryCode(userId, normalise(code)))
-				.toList());
+			storeRecoveryCodes(userId, setup.recoveryCodes());
 			events.publishEvent(new TwoStepEnabled(userId, now));
 		});
+	}
+
+	/**
+	 * View new codes: a Sign-in code from the User's app (one step of drift, never one already used) replaces their
+	 * Recovery codes with a new set, and the old ones stop working at once. A Recovery code is not accepted here, so
+	 * a lost list can't be used to make a new one.
+	 *
+	 * @return the new codes, shown once; only their hashes are kept
+	 * @throws NotOnException when the User doesn't have Two-step verification
+	 * @throws WrongSignInCodeException when the code is wrong
+	 * @throws SlidingWindowLimiter.LimitExceededException when the User got too many codes wrong in the last hour
+	 */
+	List<String> newRecoveryCodes(UUID userId, UUID sessionId, String code) {
+		sessions.requireActive(sessionId, userId);
+		// A User over the lock is refused before their row is locked.
+		lock.requireUnder(userId);
+		return transaction.execute(status -> {
+			// Locked, so one code can't make two sets, and a sign-in can't use a code from the set being replaced.
+			users.findLockedById(userId).orElseThrow();
+			var authenticator = store.find(userId).orElseThrow(NotOnException::new);
+			// Postgres keeps microseconds, so the time is cut to them before it is announced.
+			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+			if (!codeCheck.use(userId, authenticator, code, now)) {
+				throw new WrongSignInCodeException();
+			}
+			var codes = freshRecoveryCodes();
+			storeRecoveryCodes(userId, codes);
+			events.publishEvent(new RecoveryCodesRegenerated(userId, now));
+			return codes;
+		});
+	}
+
+	/** Replaces the User's Recovery codes with these, kept only as hashes of the normalised code. */
+	private void storeRecoveryCodes(UUID userId, List<String> codes) {
+		store.replaceRecoveryCodes(userId, codes.stream()
+			.map(recoveryCode -> secrets.hashRecoveryCode(userId, normalise(recoveryCode)))
+			.toList());
 	}
 
 	/**
@@ -168,7 +207,7 @@ class TwoStep {
 		return recoveryCode.toLowerCase(Locale.ROOT).replaceAll("[\\s\\p{Z}\\p{Pd}\\x{2212}]", "");
 	}
 
-	private static List<String> newRecoveryCodes() {
+	private static List<String> freshRecoveryCodes() {
 		var codes = new LinkedHashSet<String>();
 		while (codes.size() < RECOVERY_CODES) {
 			var code = new StringBuilder(9);
@@ -201,6 +240,14 @@ class TwoStep {
 
 		AlreadyOnException() {
 			super("Two-step verification is already on");
+		}
+
+	}
+
+	static class NotOnException extends RuntimeException {
+
+		NotOnException() {
+			super("Two-step verification is not on");
 		}
 
 	}

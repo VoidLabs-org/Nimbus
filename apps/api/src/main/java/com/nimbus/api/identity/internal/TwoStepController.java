@@ -61,6 +61,13 @@ class TwoStepController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/** View new codes: a Sign-in code from the app replaces the Recovery codes; answers with the new ones. */
+	@PostMapping("/recovery-codes")
+	RecoveryCodesResponse newRecoveryCodes(@AuthenticationPrincipal Jwt token, @Valid @RequestBody CodeRequest request) {
+		return new RecoveryCodesResponse(
+				twoStep.newRecoveryCodes(currentUser.id(), UsersController.sessionOf(token), request.code()));
+	}
+
 	/** Anything that isn't 6 digits is simply a wrong code. */
 	record CodeRequest(@Size(max = 64) String code) {
 	}

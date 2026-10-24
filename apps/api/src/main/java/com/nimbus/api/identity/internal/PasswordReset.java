@@ -188,8 +188,8 @@ class PasswordReset {
 	void reset(String email, String code, String newPassword, String twoStepCode, String recoveryCode,
 			String fromAddress) {
 		var normalizedEmail = email.toLowerCase(Locale.ROOT);
-		var attempt = resetsByAddress.acquire(fromAddress,
-				"Too many password reset attempts from this network. Try again later.");
+		// Counted for every request, two_step_required too: each one costs a password hash and the User's row lock.
+		resetsByAddress.acquire(fromAddress, "Too many password reset attempts from this network. Try again later.");
 		// Slow, so outside any transaction, and done for every request, so an unknown email takes as long as a
 		// known one.
 		var passwordHash = passwordEncoder.encode(newPassword);
@@ -219,10 +219,6 @@ class PasswordReset {
 			sessions.endAll(user);
 			return null;
 		});
-		if (failure instanceof TwoStepRequiredException) {
-			// Not an attempt yet: the form only learned what else to send.
-			resetsByAddress.release(fromAddress, attempt);
-		}
 		// Thrown only now: throwing inside the transaction would roll back the count of a wrong try.
 		if (failure != null) {
 			throw failure;
@@ -242,21 +238,18 @@ class PasswordReset {
 		if (authenticator == null) {
 			return null;
 		}
-		var usesRecoveryCode = recoveryCode != null && !recoveryCode.isBlank();
-		if (!usesRecoveryCode && (twoStepCode == null || twoStepCode.isBlank())) {
+		if (!SignInCodeCheck.isRecoveryCode(recoveryCode) && (twoStepCode == null || twoStepCode.isBlank())) {
 			return new TwoStepRequiredException();
 		}
 		// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
 		var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-		if (!usesRecoveryCode) {
-			return secondCodes.use(user.getId(), authenticator, twoStepCode, now) ? null
-					: new WrongTwoStepCodeException();
+		var answer = secondCodes.useEither(user.getId(), authenticator, twoStepCode, recoveryCode, now);
+		if (!answer.right()) {
+			return new WrongTwoStepCodeException(answer.recoveryCode());
 		}
-		var left = secondCodes.useRecoveryCode(user.getId(), recoveryCode, now);
-		if (left.isEmpty()) {
-			return new WrongTwoStepCodeException();
+		if (answer.usedRecoveryCode()) {
+			events.publishEvent(new RecoveryCodeUsed(user.getId(), now, answer.recoveryCodesLeft()));
 		}
-		events.publishEvent(new RecoveryCodeUsed(user.getId(), now, left.getAsInt()));
 		return null;
 	}
 
@@ -272,8 +265,10 @@ class PasswordReset {
 	/** Becomes a 400 with {@code code: invalid_two_step_code}; the Reset code is left as it was. */
 	static class WrongTwoStepCodeException extends RuntimeException {
 
-		WrongTwoStepCodeException() {
-			super("That code didn't work. Check your authenticator app and try again.");
+		/** @param recoveryCode whether the wrong code was a Recovery code, which the message names */
+		WrongTwoStepCodeException(boolean recoveryCode) {
+			super(recoveryCode ? "That recovery code isn't right, or it was used already."
+					: "That code didn't work. Check your authenticator app and try again.");
 		}
 
 	}

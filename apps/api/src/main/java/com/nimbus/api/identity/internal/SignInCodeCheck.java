@@ -46,6 +46,42 @@ class SignInCodeCheck {
 	}
 
 	/**
+	 * Checks the answer to "Sign-in code or Recovery code" (signing in, Remove, forgot password): the Recovery code
+	 * when one is given, the Sign-in code otherwise.
+	 *
+	 * @param code the Sign-in code; ignored when {@code recoveryCode} is given
+	 * @param recoveryCode null or blank for a Sign-in code
+	 * @throws LimitExceededException when the User got too many codes wrong in the last hour
+	 */
+	Answer useEither(UUID userId, TwoStepStore.Authenticator authenticator, String code, String recoveryCode,
+			Instant at) {
+		if (!isRecoveryCode(recoveryCode)) {
+			return new Answer(use(userId, authenticator, code, at), false, null);
+		}
+		var left = useRecoveryCode(userId, recoveryCode, at);
+		return new Answer(left.isPresent(), true, left.isPresent() ? left.getAsInt() : null);
+	}
+
+	/** Whether a request answers with a Recovery code: one that is given and not blank. */
+	static boolean isRecoveryCode(String recoveryCode) {
+		return recoveryCode != null && !recoveryCode.isBlank();
+	}
+
+	/**
+	 * @param right whether the code was right; a right one is used up
+	 * @param recoveryCode whether it was a Recovery code
+	 * @param recoveryCodesLeft after a right Recovery code, the User's unused ones left, for {@code RecoveryCodeUsed};
+	 * null otherwise
+	 */
+	record Answer(boolean right, boolean recoveryCode, Integer recoveryCodesLeft) {
+
+		boolean usedRecoveryCode() {
+			return right && recoveryCode;
+		}
+
+	}
+
+	/**
 	 * Checks a Recovery code the same way: it counts toward the hourly lock, and a right one is marked used and takes
 	 * its check back. Needs no key, so a Recovery code still works when the key can't be read.
 	 *

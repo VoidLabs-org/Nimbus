@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.UUID;
 
 import com.nimbus.api.identity.RecoveryCodeUsed;
@@ -102,7 +101,6 @@ class TwoStepSignIn {
 	 * @throws LimitExceededException when the User got too many codes wrong in the last hour
 	 */
 	SignedIn finish(String pendingId, String code, String recoveryCode, String userAgent) {
-		var usesRecoveryCode = recoveryCode != null && !recoveryCode.isBlank();
 		var found = pending.find(pendingId).orElseThrow(SignInExpiredException::new);
 		var userId = found.userId();
 		// A User over the lock is refused before their row is locked.
@@ -119,16 +117,8 @@ class TwoStepSignIn {
 			var authenticator = store.find(userId).orElseThrow(SignInExpiredException::new);
 			// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
 			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-			var codesLeft = OptionalInt.empty();
-			boolean right;
-			if (usesRecoveryCode) {
-				codesLeft = codeCheck.useRecoveryCode(userId, recoveryCode, now);
-				right = codesLeft.isPresent();
-			}
-			else {
-				right = codeCheck.use(userId, authenticator, code, now);
-			}
-			if (!right) {
+			var answer = codeCheck.useEither(userId, authenticator, code, recoveryCode, now);
+			if (!answer.right()) {
 				var triesLeft = pending.wrongCode(pendingId);
 				if (triesLeft == 0) {
 					throw new SignInExpiredException();
@@ -145,8 +135,8 @@ class TwoStepSignIn {
 					}
 				}
 			});
-			if (usesRecoveryCode) {
-				events.publishEvent(new RecoveryCodeUsed(userId, now, codesLeft.getAsInt()));
+			if (answer.usedRecoveryCode()) {
+				events.publishEvent(new RecoveryCodeUsed(userId, now, answer.recoveryCodesLeft()));
 			}
 			// Only now is the provider sign-in stored (the link, the avatar): it waited for the code.
 			if (found.profile() != null && !externalSignIn.signIn(found.profile()).getId().equals(userId)) {

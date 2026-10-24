@@ -582,6 +582,11 @@ describe("the forgot-password page, with two-step verification", () => {
     );
     const button = screen.getByRole("button", { name: /Reset password/ }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
+    // The new boxes take the focus, and a screen reader hears why.
+    expect(document.activeElement).toBe(screen.getAllByLabelText("Sign-in code digit")[0]);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Two-step verification is on. Enter the code from your authenticator app, or a recovery code.",
+    );
 
     pasteSignInCode("654321");
     fireEvent.click(button);
@@ -640,6 +645,14 @@ describe("the forgot-password page, with two-step verification", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Reset password/ }));
     await screen.findByText("That recovery code isn’t right, or it was used already.");
+    // Kept to be fixed, but not sent again as it is.
+    const resetButton = () =>
+      screen.getByRole("button", { name: /Reset password/ }) as HTMLButtonElement;
+    expect(resetButton().disabled).toBe(true);
+    fireEvent.change(screen.getByRole("textbox", { name: "Recovery code" }), {
+      target: { value: "abcd-efgx" },
+    });
+    expect(resetButton().disabled).toBe(false);
   });
 
   it("counts the wait down while the User is locked out of code checks", async () => {

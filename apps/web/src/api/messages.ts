@@ -3,11 +3,17 @@ import { clock } from "../auth/countdown";
 /** For a failure the page has nothing more specific to say about. */
 export const GENERIC_ERROR = "Something went wrong. Please try again.";
 
-/** A Sign-in code the server refused (`invalid_code`) in a Security page window. */
+/**
+ * A Sign-in code the server refused: `invalid_code` in a Security page window, `invalid_two_step_code` on the
+ * forgot-password page (where `invalid_code` is about the Reset code).
+ */
 export const WRONG_SIGN_IN_CODE =
   "That code didn’t work. Check your authenticator app and try again.";
 
-/** A Recovery code the server refused (`invalid_code`): wrong, or used already. */
+/**
+ * A Recovery code the server refused, wrong or used already: `invalid_code` when signing in or removing Two-step
+ * verification, `invalid_two_step_code` on the forgot-password page (where `invalid_code` is about the Reset code).
+ */
 export const WRONG_RECOVERY_CODE = "That recovery code isn’t right, or it was used already.";
 
 /** On the sign-in page, after a Two-step verification sign-in ended (`sign_in_expired`). */

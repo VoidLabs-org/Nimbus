@@ -56,11 +56,11 @@ export default function ForgotPasswordPage() {
   const [twoStepCode, setTwoStepCode] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [twoStepMessage, setTwoStepMessage] = useState<string | null>(null);
+  // A refused second code can't be sent again as it is: the message goes when it is changed.
   const twoStepReady = !twoStep
     ? true
-    : useRecoveryCode
-      ? recoveryCode.trim() !== ""
-      : twoStepCode.length === CODE_LENGTH;
+    : twoStepMessage === null &&
+      (useRecoveryCode ? recoveryCode.trim() !== "" : twoStepCode.length === CODE_LENGTH);
   // One for each button, so a resend still under way doesn't show on the email step.
   const askForCode = (address: string) => api.requestPasswordReset(address);
   const sendCode = useMutation({ mutationFn: askForCode });
@@ -300,8 +300,14 @@ export default function ForgotPasswordPage() {
         />
         {codeMessage && <Alert marked>{codeMessage}</Alert>}
         {rateLimited && <Alert marked>{tooManyAttemptsIn(limitSeconds)}</Alert>}
-        {/* Always in the page, so a screen reader announces the text when it appears in it. */}
-        <VisuallyHidden role="status">{shownNotice}</VisuallyHidden>
+        {/* Always in the page, so a screen reader announces the text when it appears in it. The second code appears
+            under the password, maybe off a phone's screen: its boxes take the focus, and this says why. */}
+        <VisuallyHidden role="status">
+          {shownNotice ??
+            (twoStep
+              ? "Two-step verification is on. Enter the code from your authenticator app, or a recovery code."
+              : null)}
+        </VisuallyHidden>
         {shownNotice && !codeMessage && (
           <div className={classes.codeNotice} aria-hidden>
             <span className={classes.codeNoticeMark}>✓</span>

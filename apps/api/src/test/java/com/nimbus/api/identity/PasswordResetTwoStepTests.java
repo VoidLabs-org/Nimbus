@@ -70,7 +70,9 @@ class PasswordResetTwoStepTests {
 			var wrong = attempt % 2 == 0 ? Map.of("twoStepCode", wrongCode(user.key()))
 					: Map.of("recoveryCode", "aaaa-aaaa");
 			reset(user.email(), resetCode, wrong).expectStatus().isBadRequest().expectBody().jsonPath("$.code")
-				.isEqualTo("invalid_two_step_code").jsonPath("$.triesLeft").doesNotExist();
+				.isEqualTo("invalid_two_step_code").jsonPath("$.triesLeft").doesNotExist().jsonPath("$.detail")
+				.isEqualTo(attempt % 2 == 0 ? "That code didn't work. Check your authenticator app and try again."
+						: "That recovery code isn't right, or it was used already.");
 		}
 		login(user.email(), PASSWORD).expectStatus().isOk();
 		sessionStillRuns(user.token());

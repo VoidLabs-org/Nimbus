@@ -2,18 +2,13 @@ import { Anchor } from "@mantine/core";
 import { useState, type SyntheticEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "../api/client";
-import { tooManyAttemptsIn } from "../api/messages";
+import { GENERIC_ERROR, SIGN_IN_TIMED_OUT, tooManyAttemptsIn } from "../api/messages";
 import { AuthForm, AuthLayout, AuthSubmit } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
 import { CodeAlert, CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
 import { useCountdown } from "../auth/countdown";
-import { safeReturnPath } from "../auth/returnPath";
+import { returnToSearch, safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
-
-const GENERIC_ERROR = "Something went wrong. Please try again.";
-
-/** What the sign-in page shows when the User comes back from a pending sign-in that is over. */
-export const SIGN_IN_TIMED_OUT = "Your sign-in timed out. Sign in again.";
 
 /**
  * The second step of a password sign-in for a User with Two-step verification (design 32e): the 6-digit Sign-in
@@ -24,6 +19,7 @@ export default function TwoStepSignInPage() {
   const { signInWithCode } = useSession();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const backToLogin = { pathname: "/login", search: returnToSearch(searchParams.get("returnTo")) };
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
   const [codeMessage, setCodeMessage] = useState<string | null>(null);
@@ -58,10 +54,7 @@ export default function TwoStepSignInPage() {
           : `That code isn’t right. ${left} ${left === 1 ? "try" : "tries"} left.`,
       );
     } else if (failure.code === "sign_in_expired") {
-      void navigate(
-        { pathname: "/login", search: searchParams.toString() },
-        { replace: true, state: { notice: SIGN_IN_TIMED_OUT } },
-      );
+      void navigate(backToLogin, { replace: true, state: { notice: SIGN_IN_TIMED_OUT } });
     } else if (failure.status === 429 && failure.retryAfterSeconds) {
       setLockSeconds(failure.retryAfterSeconds);
     } else if (failure.status === 429) {
@@ -99,7 +92,7 @@ export default function TwoStepSignInPage() {
           </AuthSubmit>
         </PinnedSubmit>
         <div className={classes.codeLinks}>
-          <Anchor component={Link} to={{ pathname: "/login", search: searchParams.toString() }}>
+          <Anchor component={Link} to={backToLogin}>
             Back to sign in
           </Anchor>
         </div>

@@ -57,7 +57,12 @@ function FakeSession({ fakes, children }: { fakes: Fakes; children: ReactNode })
 /** Where the app is now, so a test can see what a navigation kept. */
 function Address() {
   const location = useLocation();
-  return <output data-testid="address">{location.pathname + location.search}</output>;
+  const notice = (location.state as { notice?: string } | null)?.notice;
+  return (
+    <output data-testid="address" data-notice={notice}>
+      {location.pathname + location.search}
+    </output>
+  );
 }
 
 let restoreMatchMedia: () => void;
@@ -127,6 +132,19 @@ describe("the sign-in page", () => {
     expect(address()).toBe("/login/two-step?returnTo=%2Fsettings%2Fsecurity");
   });
 
+  it("leaves an earlier Google or GitHub error behind on the way to the code page and back", async () => {
+    show("/login?error=disconnected&provider=google&returnTo=%2Fsettings");
+
+    await signInWithPassword();
+
+    await screen.findByRole("heading", { name: "Two-step verification" });
+    expect(address()).toBe("/login/two-step?returnTo=%2Fsettings");
+    fireEvent.click(screen.getByRole("link", { name: "Back to sign in" }));
+    await screen.findByRole("heading", { name: "Welcome back" });
+    expect(address()).toBe("/login?returnTo=%2Fsettings");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("signs a User without Two-step verification straight in", async () => {
     show("/login?returnTo=%2Fnowhere", { login: () => Promise.resolve("signed-in") });
 
@@ -183,6 +201,11 @@ describe("the two-step sign-in page", () => {
     expect(await screen.findByText("Your sign-in timed out. Sign in again.")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeTruthy();
     expect(address()).toBe("/login?returnTo=%2Fsettings");
+    // Shown once: a reload of this history entry doesn't say it again.
+    await waitFor(() =>
+      expect(screen.getByTestId("address").getAttribute("data-notice")).toBeNull(),
+    );
+    expect(screen.getByText("Your sign-in timed out. Sign in again.")).toBeTruthy();
   });
 
   it("shows the wait as m:ss while the User is locked out of code checks", async () => {

@@ -1,10 +1,13 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
+import java.util.Objects;
 
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -47,7 +50,7 @@ class TwoStepSignIn {
 
 	/** A pending sign-in for the User; returns its id, for {@link PendingSignIns#cookie}. */
 	String start(User user) {
-		return pending.start(user.getId());
+		return pending.start(user.getId(), user.passwordHash());
 	}
 
 	/**
@@ -55,21 +58,27 @@ class TwoStepSignIn {
 	 * User, for a Session to start.
 	 *
 	 * @param pendingId from the cookie, or null when there was none
-	 * @throws SignInExpiredException when the pending sign-in is missing, unknown, used or expired, or this was its
-	 * last wrong code allowed
+	 * @throws SignInExpiredException when the pending sign-in is missing, unknown, used or expired, the User's
+	 * password changed since it started, or this was its last wrong code allowed
 	 * @throws TwoStep.WrongSignInCodeException when the code is wrong, with the tries left
 	 * @throws LimitExceededException when the User got too many codes wrong in the last hour
 	 */
 	User finish(String pendingId, String code) {
 		var found = pending.find(pendingId).orElseThrow(SignInExpiredException::new);
 		var userId = found.userId();
-		var check = lock.check(userId);
 		return transaction.execute(status -> {
 			// Locked, so two requests can't both sign in with one code.
 			var user = users.findLockedById(userId).orElseThrow(SignInExpiredException::new);
+			// A password change or reset ends what the old password started.
+			if (!Objects.equals(user.passwordHash(), found.passwordHash())) {
+				pending.end(pendingId);
+				throw new SignInExpiredException();
+			}
 			var authenticator = store.find(userId).orElseThrow(SignInExpiredException::new);
-			var step = SignInCodeMath.matchingStep(secrets.decrypt(userId, authenticator.encryptedKey()), code,
-					clock.instant(), authenticator.lastUsedStep());
+			var key = secrets.decrypt(userId, authenticator.encryptedKey());
+			// Counted only now, so failures that are not about the code never use up the User's hour.
+			var check = lock.check(userId);
+			var step = SignInCodeMath.matchingStep(key, code, clock.instant(), authenticator.lastUsedStep());
 			if (step.isEmpty()) {
 				var triesLeft = pending.wrongCode(pendingId);
 				if (triesLeft == 0) {
@@ -78,9 +87,16 @@ class TwoStepSignIn {
 				throw new TwoStep.WrongSignInCodeException(triesLeft);
 			}
 			lock.right(userId, check);
-			if (!pending.take(pendingId)) {
-				throw new SignInExpiredException();
-			}
+			var taken = pending.take(pendingId).orElseThrow(SignInExpiredException::new);
+			// Taken now, under the lock, so no other request can use it; given back if the sign-in isn't stored.
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCompletion(int outcome) {
+					if (outcome != STATUS_COMMITTED) {
+						pending.putBack(pendingId, taken);
+					}
+				}
+			});
 			store.useStep(userId, step.getAsLong());
 			return user;
 		});

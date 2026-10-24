@@ -178,6 +178,12 @@ type AuthResponse = { accessToken: string; user: User };
 /** The answer to a right password when the User has Two-step verification: no Session yet. */
 type TwoStepRequired = { twoStepRequired: true };
 
+/** For the calls that always start a session: an answer without one is a server bug, not a signed-in User. */
+function sessionStarted(user: User | null): User {
+  if (!user) throw new Error("The server started no session");
+  return user;
+}
+
 /** A failed API call, carrying the server's problem details (RFC 9457). */
 export class ApiError extends Error {
   readonly status: number;
@@ -455,7 +461,8 @@ export function createApiClient(
       ),
 
     /** Creates a User and signs them in. Whoever was signed in stays so if it fails. */
-    register: (input: RegisterInput) => startSession("/api/auth/register", input) as Promise<User>,
+    register: (input: RegisterInput) =>
+      startSession("/api/auth/register", input).then(sessionStarted),
 
     /**
      * Signs in with email and password. Whoever was signed in stays so if it fails. Resolves to null for a User with
@@ -469,11 +476,9 @@ export function createApiClient(
      * `retryAfterSeconds` while the User is locked out of code checks.
      */
     signInWithCode: (code: string) =>
-      startSession(
-        "/api/auth/two-step",
-        { code },
-        { "X-Requested-With": "nimbus" },
-      ) as Promise<User>,
+      startSession("/api/auth/two-step", { code }, { "X-Requested-With": "nimbus" }).then(
+        sessionStarted,
+      ),
 
     me: () => request<User>("/api/users/me"),
 

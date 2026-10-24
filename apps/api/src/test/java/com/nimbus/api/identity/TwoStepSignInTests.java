@@ -227,6 +227,34 @@ class TwoStepSignInTests {
 		assertThat(cookieNames(result)).doesNotContain("two_step_pending");
 	}
 
+	@Test
+	void aPasswordChangeEndsSignInsTheOldPasswordStarted() {
+		var key = twoStepUser("tsi14@example.com");
+		var startedWithOld = pendingSignIn("tsi14@example.com");
+		String token = JsonPath.read(twoStep(pendingSignIn("tsi14@example.com"), SignInCodes.codeFor(key, clock.instant()))
+			.expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody(), "$.accessToken");
+
+		client.put().uri("/api/users/me/password").header("Authorization", "Bearer " + token)
+			.body(Map.of("currentPassword", PASSWORD, "newPassword", "battery staple")).exchange()
+			.expectStatus().isNoContent();
+
+		clock.advance(Duration.ofSeconds(30));
+		twoStep(startedWithOld, SignInCodes.codeFor(key, clock.instant())).expectStatus().isUnauthorized()
+			.expectBody().jsonPath("$.code").isEqualTo("sign_in_expired");
+	}
+
+	@Test
+	void aUserHoldsAtMostThreePendingSignIns() {
+		var key = twoStepUser("tsi15@example.com");
+		var oldest = pendingSignIn("tsi15@example.com");
+		var kept = pendingSignIn("tsi15@example.com");
+		pendingSignIn("tsi15@example.com");
+		pendingSignIn("tsi15@example.com");
+
+		twoStep(oldest, SignInCodes.codeFor(key, clock.instant())).expectStatus().isUnauthorized();
+		twoStep(kept, SignInCodes.codeFor(key, clock.instant())).expectStatus().isOk();
+	}
+
 	/** Registers a verified User with Two-step verification on, and returns their authenticator key. */
 	private String twoStepUser(String email) {
 		var token = register(email);

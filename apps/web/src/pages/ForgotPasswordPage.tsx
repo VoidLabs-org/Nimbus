@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState, type SyntheticEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { api, ApiError } from "../api/client";
-import { tooManyAttemptsIn, tooManyAttemptsMessage } from "../api/messages";
+import { GENERIC_ERROR, tooManyAttemptsIn, tooManyAttemptsMessage } from "../api/messages";
 import {
   AuthForm,
   AuthLayout,
@@ -17,8 +17,6 @@ import { CodeAlert as Alert, CODE_LENGTH, CodePinInput, PinnedSubmit } from "../
 import { clock, RESEND_WAIT_SECONDS, useCountdown } from "../auth/countdown";
 import { passwordError } from "../auth/password";
 import { useSession } from "../auth/useSession";
-
-const GENERIC_ERROR = "Something went wrong. Please try again.";
 
 /**
  * Forgot password, in two steps on one page. Step 1 asks for the email and has a Reset code emailed to it (the

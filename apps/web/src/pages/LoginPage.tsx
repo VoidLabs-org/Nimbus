@@ -1,9 +1,9 @@
 import { Alert, Anchor, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
-import { providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
+import { GENERIC_ERROR, providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
 import {
   AuthForm,
   AuthLayout,
@@ -13,7 +13,7 @@ import {
 } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
 import { ProviderButtons } from "../auth/ProviderButtons";
-import { safeReturnPath } from "../auth/returnPath";
+import { returnToSearch, safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
 
 export default function LoginPage() {
@@ -25,9 +25,14 @@ export default function LoginPage() {
   const location = useLocation();
   const state = location.state as { email?: unknown; notice?: unknown } | null;
   const resetEmail = typeof state?.email === "string" ? state.email : "";
-  const [formError, setFormError] = useState<string | null>(
-    typeof state?.notice === "string" ? state.notice : null,
-  );
+  const notice = typeof state?.notice === "string" ? state.notice : null;
+  const [formError, setFormError] = useState<string | null>(notice);
+  // Shown once: the notice leaves the history entry, so a reload or coming back here doesn't repeat it.
+  useEffect(() => {
+    if (notice === null) return;
+    // Once replaced, there is no notice left, so this runs once.
+    void navigate(location, { replace: true, state: { ...state, notice: undefined } });
+  }, [notice, location, navigate, state]);
   // Set by the server when a provider sign-in ended back here with a reason. It describes the last provider
   // attempt only, so it goes away once the User tries the form instead.
   const [providerErrorShown, setProviderErrorShown] = useState(true);
@@ -56,8 +61,11 @@ export default function LoginPage() {
     try {
       const outcome = await login({ ...values, email: values.email.trim() });
       if (outcome === "two-step") {
-        // The code page keeps returnTo, and goes back here with it.
-        navigate({ pathname: "/login/two-step", search: searchParams.toString() });
+        // The code page keeps returnTo, and goes back here with it; a provider's error stays behind.
+        navigate({
+          pathname: "/login/two-step",
+          search: returnToSearch(searchParams.get("returnTo")),
+        });
         return;
       }
       navigate(safeReturnPath(searchParams.get("returnTo")), { replace: true });
@@ -71,7 +79,7 @@ export default function LoginPage() {
       } else if (error instanceof ApiError && error.status === 400) {
         setFormError(error.message);
       } else {
-        setFormError("Something went wrong. Please try again.");
+        setFormError(GENERIC_ERROR);
       }
     }
   }

@@ -126,11 +126,6 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
-	ProblemDetail notFromApp(AuthController.NotFromAppException e) {
-		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
-	}
-
-	@ExceptionHandler
 	ResponseEntity<ProblemDetail> invalidRefreshToken(Sessions.InvalidRefreshTokenException e) {
 		return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
 			.header(HttpHeaders.SET_COOKIE, AuthController.clearedRefreshCookie().toString())

@@ -58,6 +58,7 @@ class SecurityConfig {
 				.requestMatchers("/error").permitAll()
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))
+			.addFilterBefore(new NimbusHeaderGate(), BearerTokenAuthenticationFilter.class)
 			.addFilterAfter(new EmailVerifiedGate(users), BearerTokenAuthenticationFilter.class);
 		// A browser page load (a GET or HEAD that names text/html) of an API address without a token goes to the
 		// web app's sign-in page. "Accept: */*" (fetch, curl) is not a page load, and neither is a write: those get

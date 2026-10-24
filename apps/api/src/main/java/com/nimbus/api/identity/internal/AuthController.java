@@ -14,7 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -68,26 +67,22 @@ class AuthController {
 
 	/**
 	 * The second step of a sign-in: a right Sign-in code starts the Session as {@code /login} does and ends the
-	 * pending sign-in. The pending cookie is the only credential, so it needs the same header as {@code /refresh}.
+	 * pending sign-in. The pending cookie is the only credential, so {@link NimbusHeaderGate} checks its header.
 	 */
 	@PostMapping("/two-step")
 	ResponseEntity<AuthResponse> twoStep(@CookieValue(name = PendingSignIns.COOKIE, required = false) String pendingId,
-			@RequestHeader(name = "X-Requested-With", required = false) String requestedWith,
 			@Valid @RequestBody TwoStepRequest request, HttpServletRequest http) {
-		requireNimbusHeader(requestedWith);
 		var user = twoStepSignIn.finish(pendingId, request.code());
 		return signedIn(HttpStatus.OK, user, http, PendingSignIns.clearedCookie());
 	}
 
 	/**
 	 * Exchanges the refresh cookie for a new one and a fresh access token. The cookie is the only credential, so
-	 * the request must also carry a header that cross-site forms can't set.
+	 * the request must also carry a header that cross-site forms can't set ({@link NimbusHeaderGate}).
 	 */
 	@PostMapping("/refresh")
 	ResponseEntity<AuthResponse> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
-			@RequestHeader(name = "X-Requested-With", required = false) String requestedWith,
 			HttpServletRequest http) {
-		requireNimbusHeader(requestedWith);
 		var refreshed = sessions.refresh(refreshToken, http.getRemoteAddr());
 		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token());
 	}
@@ -97,23 +92,11 @@ class AuthController {
 	 * credential, so it needs the same header. Succeeds even if there was no session left to end.
 	 */
 	@PostMapping("/logout")
-	ResponseEntity<Void> logout(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
-			@RequestHeader(name = "X-Requested-With", required = false) String requestedWith) {
-		requireNimbusHeader(requestedWith);
+	ResponseEntity<Void> logout(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
 		sessions.end(refreshToken);
 		return ResponseEntity.noContent()
 			.header(HttpHeaders.SET_COOKIE, clearedRefreshCookie().toString())
 			.build();
-	}
-
-	/**
-	 * Endpoints that a cookie alone authenticates must come from the Nimbus app: cross-site forms can't set this
-	 * header. Call it first in every such endpoint.
-	 */
-	private static void requireNimbusHeader(String requestedWith) {
-		if (!"nimbus".equals(requestedWith)) {
-			throw new NotFromAppException();
-		}
 	}
 
 	/** Starts a session: the access token goes in the body, the refresh token only in the cookie. */
@@ -179,15 +162,6 @@ class AuthController {
 
 	/** Anything that isn't 6 digits is simply a wrong code. */
 	record TwoStepRequest(@Size(max = 64) String code) {
-	}
-
-	/** Thrown when a cookie-authenticated request lacks {@code X-Requested-With: nimbus}; becomes a 403. */
-	static class NotFromAppException extends RuntimeException {
-
-		NotFromAppException() {
-			super("This request must come from the Nimbus app");
-		}
-
 	}
 
 }

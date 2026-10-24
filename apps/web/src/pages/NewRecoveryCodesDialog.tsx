@@ -4,15 +4,13 @@ import { useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
 import { ApiError, api } from "../api/client";
-import { GENERIC_ERROR, tooManyAttemptsIn } from "../api/messages";
+import { GENERIC_ERROR, tooManyAttemptsIn, WRONG_SIGN_IN_CODE } from "../api/messages";
 import { queryKeys } from "../api/queries";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
 import { useCountdown } from "../auth/countdown";
 import dialogs from "./DisconnectDialogs.module.css";
 import { SaveRecoveryCodes } from "./SaveRecoveryCodes";
 import classes from "./TwoStepSetupDialog.module.css";
-
-const WRONG_CODE = "That code didn’t work. Check your authenticator app and try again.";
 
 /**
  * View new codes on the Security page: a Sign-in code from the User's app, then a new set of 10 Recovery codes to
@@ -34,6 +32,7 @@ export function NewRecoveryCodesDialog({
   // Too many wrong codes for this User in the last hour: the boxes are off and the wait counts down.
   const [lockSeconds, setLockSeconds] = useCountdown();
   const locked = lockSeconds > 0;
+  const unsaved = codes !== null && !saved;
 
   // Each time the window opens it starts at the code, with nothing typed and no codes from before.
   const [shownOpen, setShownOpen] = useState(opened);
@@ -57,7 +56,7 @@ export function NewRecoveryCodesDialog({
     onError: (failure) => {
       if (failure instanceof ApiError && failure.status === 401) return;
       if (failure instanceof ApiError && failure.code === "invalid_code") {
-        setError(WRONG_CODE);
+        setError(WRONG_SIGN_IN_CODE);
         setCode("");
         return;
       }
@@ -80,7 +79,10 @@ export function NewRecoveryCodesDialog({
   return (
     <WindowFrame
       opened={opened}
-      onClose={make.isPending ? () => {} : onClose}
+      // Once the new codes are shown the old ones are gone, and these are never shown again: the window stays until
+      // the User says they saved them, so a stray Escape or click outside can't lose them.
+      onClose={make.isPending || unsaved ? () => {} : onClose}
+      withCloseButton={!unsaved}
       title={
         <>
           <span className={classes.titleText}>

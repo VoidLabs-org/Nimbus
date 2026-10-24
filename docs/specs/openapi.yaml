@@ -242,7 +242,7 @@ paths:
         "429":
           description: >-
             The User got `nimbus.auth.wrong-sign-in-codes-per-hour` (default 10) codes wrong in the last hour, across
-            sign-ins and setup; every code check is refused until `Retry-After` seconds have passed
+            sign-ins, setup and View new codes; every code check is refused until `Retry-After` seconds have passed
           headers:
             Retry-After:
               schema:

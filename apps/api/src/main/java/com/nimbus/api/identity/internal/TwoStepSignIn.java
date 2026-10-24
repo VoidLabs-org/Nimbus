@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 import com.nimbus.api.identity.RecoveryCodeUsed;
@@ -46,9 +47,12 @@ class TwoStepSignIn {
 
 	private final ExternalSignIn externalSignIn;
 
+	private final SignInCodeCheck codeCheck;
+
 	TwoStepSignIn(PendingSignIns pending, SignInCodeLock lock, TwoStepStore store, TwoStepSecrets secrets,
 			UserRepository users, Clock clock, PlatformTransactionManager transactionManager,
-			ApplicationEventPublisher events, Sessions sessions, ExternalSignIn externalSignIn) {
+			ApplicationEventPublisher events, Sessions sessions, ExternalSignIn externalSignIn,
+			SignInCodeCheck codeCheck) {
 		this.pending = pending;
 		this.lock = lock;
 		this.store = store;
@@ -59,6 +63,7 @@ class TwoStepSignIn {
 		this.events = events;
 		this.sessions = sessions;
 		this.externalSignIn = externalSignIn;
+		this.codeCheck = codeCheck;
 	}
 
 	/**
@@ -104,6 +109,8 @@ class TwoStepSignIn {
 		var usesRecoveryCode = recoveryCode != null && !recoveryCode.isBlank();
 		var found = pending.find(pendingId).orElseThrow(SignInExpiredException::new);
 		var userId = found.userId();
+		// A User over the lock is refused before their row is locked.
+		lock.requireUnder(userId);
 		return transaction.execute(status -> {
 			// Locked, so two requests can't both sign in with one code.
 			var user = users.findLockedById(userId).orElseThrow(SignInExpiredException::new);
@@ -114,19 +121,23 @@ class TwoStepSignIn {
 				throw new SignInExpiredException();
 			}
 			var authenticator = store.find(userId).orElseThrow(SignInExpiredException::new);
-			// Only a Sign-in code needs the key: a Recovery code still works when the key can't be read.
-			var key = usesRecoveryCode ? null : secrets.decrypt(userId, authenticator.encryptedKey());
-			// Counted only now, so failures that are not about the code never use up the User's hour.
-			var check = lock.check(userId);
 			// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
 			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-			var step = usesRecoveryCode ? null
-					: SignInCodeMath.matchingStep(key, code, now, authenticator.lastUsedStep());
-			var codesLeft = usesRecoveryCode
-					? store.useRecoveryCode(userId, secrets.hashRecoveryCode(userId, TwoStep.normalise(recoveryCode)),
-							now)
-					: null;
-			var right = usesRecoveryCode ? codesLeft.isPresent() : step.isPresent();
+			var codesLeft = OptionalInt.empty();
+			boolean right;
+			if (usesRecoveryCode) {
+				// Needs no key, so a Recovery code still works when the key can't be read.
+				var check = lock.check(userId);
+				codesLeft = store.useRecoveryCode(userId,
+						secrets.hashRecoveryCode(userId, TwoStep.normalise(recoveryCode)), now);
+				right = codesLeft.isPresent();
+				if (right) {
+					lock.right(userId, check);
+				}
+			}
+			else {
+				right = codeCheck.use(userId, authenticator, code, now);
+			}
 			if (!right) {
 				var triesLeft = pending.wrongCode(pendingId);
 				if (triesLeft == 0) {
@@ -134,7 +145,6 @@ class TwoStepSignIn {
 				}
 				throw new TwoStep.WrongSignInCodeException(triesLeft);
 			}
-			lock.right(userId, check);
 			var taken = pending.take(pendingId).orElseThrow(SignInExpiredException::new);
 			// Taken now, under the lock, so no other request can use it; given back if the Session doesn't start.
 			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -147,9 +157,6 @@ class TwoStepSignIn {
 			});
 			if (usesRecoveryCode) {
 				events.publishEvent(new RecoveryCodeUsed(userId, now, codesLeft.getAsInt()));
-			}
-			else {
-				store.useStep(userId, step.getAsLong());
 			}
 			// Only now is the provider sign-in stored (the link, the avatar): it waited for the code.
 			if (found.profile() != null && !externalSignIn.signIn(found.profile()).getId().equals(userId)) {

@@ -54,9 +54,11 @@ class TwoStep {
 
 	private final SignInCodeLock lock;
 
+	private final SignInCodeCheck codeCheck;
+
 	TwoStep(TwoStepStore store, TwoStepSetups setups, TwoStepSecrets secrets, UserRepository users, Sessions sessions,
 			ApplicationEventPublisher events, Clock clock, AuthProperties properties,
-			PlatformTransactionManager transactionManager, SignInCodeLock lock) {
+			PlatformTransactionManager transactionManager, SignInCodeLock lock, SignInCodeCheck codeCheck) {
 		this.store = store;
 		this.setups = setups;
 		this.secrets = secrets;
@@ -67,6 +69,7 @@ class TwoStep {
 		this.recentSignIn = properties.linkRecentSignIn();
 		this.transaction = new TransactionTemplate(transactionManager);
 		this.lock = lock;
+		this.codeCheck = codeCheck;
 	}
 
 	Status status(UUID userId, UUID sessionId) {
@@ -154,9 +157,7 @@ class TwoStep {
 			// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
 			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 			store.add(userId, secrets.encrypt(userId, setup.key()), now, setup.verifiedStep());
-			store.replaceRecoveryCodes(userId, setup.recoveryCodes().stream()
-				.map(code -> secrets.hashRecoveryCode(userId, normalise(code)))
-				.toList());
+			storeRecoveryCodes(userId, setup.recoveryCodes());
 			events.publishEvent(new TwoStepEnabled(userId, now));
 		});
 	}
@@ -173,27 +174,29 @@ class TwoStep {
 	 */
 	List<String> newRecoveryCodes(UUID userId, UUID sessionId, String code) {
 		sessions.requireActive(sessionId, userId);
+		// A User over the lock is refused before their row is locked.
+		lock.requireUnder(userId);
 		return transaction.execute(status -> {
 			// Locked, so one code can't make two sets, and a sign-in can't use a code from the set being replaced.
 			users.findLockedById(userId).orElseThrow();
 			var authenticator = store.find(userId).orElseThrow(NotOnException::new);
-			var key = secrets.decrypt(userId, authenticator.encryptedKey());
-			var check = lock.check(userId);
 			// Postgres keeps microseconds, so the time is cut to them before it is announced.
 			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-			var step = SignInCodeMath.matchingStep(key, code, now, authenticator.lastUsedStep());
-			if (step.isEmpty()) {
+			if (!codeCheck.use(userId, authenticator, code, now)) {
 				throw new WrongSignInCodeException();
 			}
-			lock.right(userId, check);
-			store.useStep(userId, step.getAsLong());
 			var codes = freshRecoveryCodes();
-			store.replaceRecoveryCodes(userId, codes.stream()
-				.map(recoveryCode -> secrets.hashRecoveryCode(userId, normalise(recoveryCode)))
-				.toList());
+			storeRecoveryCodes(userId, codes);
 			events.publishEvent(new RecoveryCodesRegenerated(userId, now));
 			return codes;
 		});
+	}
+
+	/** Replaces the User's Recovery codes with these, kept only as hashes of the normalised code. */
+	private void storeRecoveryCodes(UUID userId, List<String> codes) {
+		store.replaceRecoveryCodes(userId, codes.stream()
+			.map(recoveryCode -> secrets.hashRecoveryCode(userId, normalise(recoveryCode)))
+			.toList());
 	}
 
 	/**

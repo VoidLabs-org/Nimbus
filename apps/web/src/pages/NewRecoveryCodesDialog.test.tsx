@@ -129,6 +129,27 @@ describe("View new codes", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  it("can't be closed while the new codes are unsaved, since they are never shown again", async () => {
+    vi.spyOn(api, "twoStep").mockResolvedValue(on(8));
+    vi.spyOn(api, "newRecoveryCodes").mockResolvedValue({ recoveryCodes: CODES });
+    show();
+    const dialog = await openWindow();
+    const closeButtons = () => dialog.querySelectorAll("button.mantine-Modal-close");
+    expect(closeButtons()).toHaveLength(1);
+
+    paste(dialog, "123456");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+    await within(dialog).findByText("Save your new recovery codes");
+
+    expect(closeButtons()).toHaveLength(0);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "I’ve saved these codes" }));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("says a wrong code didn't work and clears the boxes", async () => {
     vi.spyOn(api, "twoStep").mockResolvedValue(on(8));
     vi.spyOn(api, "newRecoveryCodes").mockRejectedValue(

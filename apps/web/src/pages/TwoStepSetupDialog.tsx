@@ -5,14 +5,13 @@ import { useEffect, useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
 import { ApiError, api, type TwoStepSetup } from "../api/client";
+import { WRONG_SIGN_IN_CODE } from "../api/messages";
 import { queryKeys } from "../api/queries";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
 import { copy } from "./copy";
 import { SaveRecoveryCodes } from "./SaveRecoveryCodes";
 import dialogs from "./DisconnectDialogs.module.css";
 import classes from "./TwoStepSetupDialog.module.css";
-
-const WRONG_CODE = "That code didn’t work. Check your authenticator app and try again.";
 
 /**
  * Setting up two-step verification (designs 32c and 32d), in two steps: scan the key into an authenticator app and
@@ -61,7 +60,7 @@ export function TwoStepSetupDialog({
     onError: (failure) => {
       if (failure instanceof ApiError && failure.status === 401) return;
       if (failure instanceof ApiError && failure.code === "invalid_code") {
-        setError(WRONG_CODE);
+        setError(WRONG_SIGN_IN_CODE);
         setCode("");
         return;
       }

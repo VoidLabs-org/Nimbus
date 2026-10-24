@@ -125,7 +125,7 @@ export default function SecurityPage() {
                     {!session.current && (
                       <Button
                         variant="default"
-                        className={classes.signOut}
+                        className={classes.rowAction}
                         loading={signingOut === session.id}
                         disabled={signOut.isPending || signOutOthers.isPending}
                         aria-label={`Sign out ${sessionName(session, now)}`}

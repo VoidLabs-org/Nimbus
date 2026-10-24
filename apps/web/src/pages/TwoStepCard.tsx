@@ -163,7 +163,7 @@ export function TwoStepCard() {
               </div>
               <Button
                 variant="default"
-                className={classes.newCodes}
+                className={classes.rowAction}
                 onClick={() => setNewCodesOpen(true)}
               >
                 View new codes

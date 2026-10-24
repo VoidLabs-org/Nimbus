@@ -18,6 +18,7 @@ const alice: User = {
   avatarUrl: null,
   hasPassword: true,
   emailVerified: true,
+  passwordChangedAt: null,
 };
 
 const unused = () => Promise.resolve();
@@ -35,6 +36,7 @@ function session(user: User | null): Session {
     login: () => Promise.resolve("signed-in"),
     signInWithCode: unused,
     updateDisplayName: unused,
+    changeEmail: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,

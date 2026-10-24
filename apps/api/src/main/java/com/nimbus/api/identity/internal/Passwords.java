@@ -31,10 +31,13 @@ class Passwords {
 
 	private final RememberedBrowsers rememberedBrowsers;
 
+	private final Clock clock;
+
 	Passwords(UserRepository users, PasswordEncoder passwordEncoder, Sessions sessions, AuthProperties properties,
 			Clock clock, PlatformTransactionManager transactionManager,
 			RememberedBrowsers rememberedBrowsers) {
 		this.rememberedBrowsers = rememberedBrowsers;
+		this.clock = clock;
 		this.users = users;
 		this.passwordEncoder = passwordEncoder;
 		this.sessions = sessions;
@@ -75,7 +78,7 @@ class Passwords {
 					"The User for this token no longer exists"));
 			requireActive(sessionId, userId);
 			var changing = locked.passwordHash() != null;
-			locked.changePassword(hash);
+			locked.changePassword(hash, clock.instant());
 			if (changing) {
 				sessions.endAllExcept(userId, sessionId);
 				// This browser too: a security change starts from a clean slate.

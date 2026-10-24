@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { createQueryClient } from "./api/queryClient";
 import { RequireUser, SessionProvider } from "./auth/session";
 import AppearancePage from "./pages/AppearancePage";
@@ -11,7 +11,6 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import RolePage from "./pages/RolePage";
-import PasswordPage from "./pages/PasswordPage";
 import ProfilePage from "./pages/ProfilePage";
 import ProjectPage from "./pages/ProjectPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -19,6 +18,7 @@ import RolesPage from "./pages/RolesPage";
 import SecurityPage from "./pages/SecurityPage";
 import TwoStepSignInPage from "./pages/TwoStepSignInPage";
 import SettingsOverview from "./settings/SettingsOverview";
+import { PASSWORD_WINDOW_PATH } from "./settings/sections";
 import { AppShell } from "./shell/AppShell";
 import { NotFoundPage, SessionExpiredPage } from "./shell/StatusPages";
 
@@ -54,7 +54,8 @@ export function AppRoutes() {
         {/* Settings: the overview list, and the pages it opens. */}
         <Route path="/settings" element={<SettingsOverview />} />
         <Route path="/settings/profile" element={<ProfilePage />} />
-        <Route path="/settings/password" element={<PasswordPage />} />
+        {/* The password moved onto Profile; old links open its window there. */}
+        <Route path="/settings/password" element={<Navigate to={PASSWORD_WINDOW_PATH} replace />} />
         <Route path="/settings/security" element={<SecurityPage />} />
         <Route path="/settings/appearance" element={<AppearancePage />} />
         <Route path="/settings/roles" element={<RolesPage />} />

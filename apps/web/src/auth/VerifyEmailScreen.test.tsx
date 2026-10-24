@@ -16,6 +16,7 @@ const unverified: User = {
   avatarUrl: null,
   hasPassword: true,
   emailVerified: false,
+  passwordChangedAt: null,
 };
 const verified: User = { ...unverified, emailVerified: true };
 

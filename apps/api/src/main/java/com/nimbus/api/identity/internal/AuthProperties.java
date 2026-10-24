@@ -31,7 +31,8 @@ import org.springframework.validation.annotation.Validated;
  * @param emailSendInterval the least time between two emails to one address (a Verification code or a Reset code)
  * @param emailSendsPerHour emails allowed to one address within an hour
  * @param limitWindow the sliding window the other limits count over
- * @param linkRecentSignIn how recently the Session must have started for the User to connect a provider
+ * @param linkRecentSignIn how recently the Session must have started for the User to connect a provider, set up
+ * Two-step verification or change their email
  * @param wrongSignInCodesPerHour wrong Sign-in codes allowed for one User within an hour, across pending sign-ins and
  * setup; past it every code check for that User is refused until the hour clears
  * @param twoStepSecret base64 of at least 32 bytes (TWO_STEP_SECRET in .env); encrypts authenticator keys and keys

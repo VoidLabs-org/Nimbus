@@ -105,6 +105,20 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail twoStepRequired(PasswordReset.TwoStepRequiredException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "two_step_required");
+		return problem;
+	}
+
+	@ExceptionHandler
+	ProblemDetail wrongTwoStepCode(PasswordReset.WrongTwoStepCodeException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "invalid_two_step_code");
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail codeExpired(EmailedCodes.CodeExpiredException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", "code_expired");

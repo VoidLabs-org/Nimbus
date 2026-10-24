@@ -1,12 +1,14 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.nimbus.api.identity.EmailVerified;
+import com.nimbus.api.identity.RecoveryCodeUsed;
 import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
@@ -72,9 +74,16 @@ class PasswordReset {
 
 	private final SlidingWindowLimiter resetsByAddress;
 
+	private final TwoStepStore twoStep;
+
+	private final SignInCodeCheck secondCodes;
+
 	PasswordReset(UserRepository users, EmailedCodeKinds codeKinds, PasswordEncoder passwordEncoder, Sessions sessions,
 			SignIn signIn, Mailer mailer, MailAssets mailAssets, Clock clock, ApplicationEventPublisher events,
-			PlatformTransactionManager transactionManager, AuthProperties properties, EmailSendBudget sendBudget) {
+			PlatformTransactionManager transactionManager, AuthProperties properties, EmailSendBudget sendBudget,
+			TwoStepStore twoStep, SignInCodeCheck secondCodes) {
+		this.twoStep = twoStep;
+		this.secondCodes = secondCodes;
 		this.sendBudget = sendBudget;
 		this.requestsByAddress = new SlidingWindowLimiter(properties.passwordResetRequestsPerAddress(),
 				properties.limitWindow(), clock);
@@ -157,42 +166,116 @@ class PasswordReset {
 	 * User ends and their failed sign-ins are forgotten. The User is not signed in. A wrong try is counted even
 	 * though it fails, so the counting is committed before the failure is reported.
 	 *
+	 * <p>
+	 * A User with Two-step verification also needs a Sign-in code or a Recovery code (ADR 0005), so someone with only
+	 * their inbox can't change the password or end their Sessions. It is asked for only once the Reset code is right,
+	 * so nothing says whether a User has it before then, and a missing or wrong second code changes nothing. Two-step
+	 * verification stays on.
+	 *
 	 * @param newPassword already checked against the password rule
+	 * @param twoStepCode a Sign-in code; ignored when {@code recoveryCode} is given
+	 * @param recoveryCode a Recovery code, compared with capitals, spaces and dashes ignored; null or blank for a
+	 * Sign-in code
 	 * @param fromAddress the caller's IP address; each address gets a limited number of attempts
-	 * @throws SlidingWindowLimiter.LimitExceededException when this IP address tried too often
+	 * @throws SlidingWindowLimiter.LimitExceededException when this IP address tried too often, or the User got too
+	 * many second codes wrong in the last hour
 	 * @throws EmailedCodes.WrongCodeException when the code is wrong and tries are left
 	 * @throws EmailedCodes.CodeExpiredException when there is no live code (expired, never issued, or cancelled,
 	 * which the fifth wrong try itself does) or no User has this email
+	 * @throws TwoStepRequiredException when the User has Two-step verification and no second code came
+	 * @throws WrongTwoStepCodeException when the second code is wrong (a Recovery code also when it was used)
 	 */
-	void reset(String email, String code, String newPassword, String fromAddress) {
+	void reset(String email, String code, String newPassword, String twoStepCode, String recoveryCode,
+			String fromAddress) {
 		var normalizedEmail = email.toLowerCase(Locale.ROOT);
-		resetsByAddress.acquire(fromAddress, "Too many password reset attempts from this network. Try again later.");
+		var attempt = resetsByAddress.acquire(fromAddress,
+				"Too many password reset attempts from this network. Try again later.");
 		// Slow, so outside any transaction, and done for every request, so an unknown email takes as long as a
 		// known one.
 		var passwordHash = passwordEncoder.encode(newPassword);
-		var check = transaction.execute(status -> {
+		var failure = transaction.execute(status -> {
 			var user = users.findLockedByEmail(normalizedEmail).orElse(null);
 			if (user == null) {
-				return EmailedCodes.Check.NONE;
+				return EmailedCodes.Check.NONE.failure();
 			}
 			var checked = codes.check(user.getId(), code);
-			if (checked.isRight()) {
-				user.changePassword(passwordHash);
-				if (!user.emailVerified()) {
-					user.verifyEmail();
-					// As entering it would: a pending Verification code has nothing left to prove.
-					verificationCodes.discard(user.getId());
-					events.publishEvent(new EmailVerified(user.getId(), user.email()));
-				}
-				sessions.endAll(user);
+			if (!checked.isRight()) {
+				return checked.failure();
 			}
-			return checked;
+			var secondCodeFailure = checkSecondCode(user, twoStepCode, recoveryCode);
+			if (secondCodeFailure != null) {
+				// Rolled back, so the Reset code is not used up and keeps its tries. A wrong second code still counts
+				// toward the User's hourly lock, which is kept outside the database.
+				status.setRollbackOnly();
+				return secondCodeFailure;
+			}
+			user.changePassword(passwordHash);
+			if (!user.emailVerified()) {
+				user.verifyEmail();
+				// As entering it would: a pending Verification code has nothing left to prove.
+				verificationCodes.discard(user.getId());
+				events.publishEvent(new EmailVerified(user.getId(), user.email()));
+			}
+			sessions.endAll(user);
+			return null;
 		});
+		if (failure instanceof TwoStepRequiredException) {
+			// Not an attempt yet: the form only learned what else to send.
+			resetsByAddress.release(fromAddress, attempt);
+		}
 		// Thrown only now: throwing inside the transaction would roll back the count of a wrong try.
-		if (!check.isRight()) {
-			throw check.failure();
+		if (failure != null) {
+			throw failure;
 		}
 		signIn.clearFailures(normalizedEmail);
+	}
+
+	/**
+	 * The second code a User with Two-step verification needs; nothing for a User without it. A right Recovery code
+	 * is used up and publishes {@link RecoveryCodeUsed}.
+	 *
+	 * @return why the reset can't go ahead; null when it can
+	 * @throws SlidingWindowLimiter.LimitExceededException when the User got too many codes wrong in the last hour
+	 */
+	private RuntimeException checkSecondCode(User user, String twoStepCode, String recoveryCode) {
+		var authenticator = twoStep.find(user.getId()).orElse(null);
+		if (authenticator == null) {
+			return null;
+		}
+		var usesRecoveryCode = recoveryCode != null && !recoveryCode.isBlank();
+		if (!usesRecoveryCode && (twoStepCode == null || twoStepCode.isBlank())) {
+			return new TwoStepRequiredException();
+		}
+		// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
+		var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+		if (!usesRecoveryCode) {
+			return secondCodes.use(user.getId(), authenticator, twoStepCode, now) ? null
+					: new WrongTwoStepCodeException();
+		}
+		var left = secondCodes.useRecoveryCode(user.getId(), recoveryCode, now);
+		if (left.isEmpty()) {
+			return new WrongTwoStepCodeException();
+		}
+		events.publishEvent(new RecoveryCodeUsed(user.getId(), now, left.getAsInt()));
+		return null;
+	}
+
+	/** Becomes a 400 with {@code code: two_step_required}: the Reset code was right, and a second code must follow. */
+	static class TwoStepRequiredException extends RuntimeException {
+
+		TwoStepRequiredException() {
+			super("Enter the code from your authenticator app, or a recovery code.");
+		}
+
+	}
+
+	/** Becomes a 400 with {@code code: invalid_two_step_code}; the Reset code is left as it was. */
+	static class WrongTwoStepCodeException extends RuntimeException {
+
+		WrongTwoStepCodeException() {
+			super("That code didn't work. Check your authenticator app and try again.");
+		}
+
 	}
 
 }

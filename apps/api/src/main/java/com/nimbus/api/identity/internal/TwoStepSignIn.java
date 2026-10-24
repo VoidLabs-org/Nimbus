@@ -67,16 +67,6 @@ class TwoStepSignIn {
 	}
 
 	/**
-	 * Starts the second step when {@code user}, who just proved their password, has Two-step verification, on a
-	 * browser that isn't remembered.
-	 *
-	 * @return the pending sign-in's cookie; empty when no code is needed and the Session can start now
-	 */
-	Optional<ResponseCookie> begin(User user) {
-		return begin(user, null, null);
-	}
-
-	/**
 	 * Starts the second step when {@code user}, whom a provider's {@code profile} signs in as (null for a password
 	 * sign-in), has Two-step verification. Nothing of the profile is stored until the code is right.
 	 *

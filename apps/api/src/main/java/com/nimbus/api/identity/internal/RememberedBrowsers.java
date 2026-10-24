@@ -54,10 +54,9 @@ class RememberedBrowsers {
 		if (token == null || token.isBlank()) {
 			return false;
 		}
-		var found = jdbc.queryForObject(
-				"SELECT count(*) FROM remembered_browsers WHERE user_id = ? AND token_hash = ? AND expires_at > ?",
-				Integer.class, userId, Sessions.hash(token), Timestamp.from(now()));
-		return found != null && found > 0;
+		return Boolean.TRUE.equals(jdbc.queryForObject(
+				"SELECT EXISTS (SELECT 1 FROM remembered_browsers WHERE user_id = ? AND token_hash = ? AND expires_at > ?)",
+				Boolean.class, userId, Sessions.hash(token), Timestamp.from(now())));
 	}
 
 	/** Every browser of the User asks for the code again. */

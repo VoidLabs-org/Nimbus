@@ -76,11 +76,10 @@ class AuthController {
 			@Valid @RequestBody TwoStepRequest request, HttpServletRequest http) {
 		var signedIn = twoStepSignIn.finish(pendingId, request.code(), request.recoveryCode(),
 				Boolean.TRUE.equals(request.rememberBrowser()), http.getHeader(HttpHeaders.USER_AGENT));
-		if (signedIn.rememberedToken() != null) {
-			return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), PendingSignIns.clearedCookie(),
-					RememberedBrowsers.cookie(signedIn.rememberedToken()));
-		}
-		return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), PendingSignIns.clearedCookie());
+		var cookies = signedIn.rememberedToken() == null ? new ResponseCookie[] { PendingSignIns.clearedCookie() }
+				: new ResponseCookie[] { PendingSignIns.clearedCookie(),
+						RememberedBrowsers.cookie(signedIn.rememberedToken()) };
+		return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), cookies);
 	}
 
 	/**
@@ -170,8 +169,9 @@ class AuthController {
 	/**
 	 * A Sign-in code, or a Recovery code instead when the User lost their phone. Anything that isn't 6 digits is simply
 	 * a wrong Sign-in code.
+	 *
+	 * @param rememberBrowser "Don't ask again on this device for 30 days"; null counts as not ticked
 	 */
-	/** @param rememberBrowser "Don't ask again on this device for 30 days"; null counts as not ticked */
 	record TwoStepRequest(@Size(max = 64) String code, @Size(max = 64) String recoveryCode, Boolean rememberBrowser) {
 	}
 

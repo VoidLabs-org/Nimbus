@@ -179,6 +179,12 @@ export type TwoStepStatus = {
 /** What finishes a pending sign-in: a Sign-in code, or one of the User's Recovery codes when they lost their phone. */
 export type TwoStepAnswer = { code: string } | { recoveryCode: string };
 
+/** "Confirm it's you": the password, and with Two-step verification a Sign-in code or a Recovery code. */
+export type ConfirmAnswer =
+  | { password: string }
+  | { password: string; twoStepCode: string }
+  | { password: string; recoveryCode: string };
+
 /** A setup in progress: the key for the authenticator app, as text and as what the QR code holds. */
 export type TwoStepSetup = { key: string; otpauthUri: string };
 
@@ -527,6 +533,18 @@ export function createApiClient(
       await request<void>("/api/users/me/email-change", {
         method: "POST",
         body: JSON.stringify({ email }),
+      });
+    },
+
+    /**
+     * "Confirm it's you" for a sign-in too old to change the email: the password, and with Two-step verification a
+     * Sign-in code or a Recovery code. Rejects with an ApiError: `fieldErrors.password`, "two_step_required",
+     * "invalid_two_step_code", 409 "no_password" (sign in again instead), or 429 with `retryAfterSeconds`.
+     */
+    confirmItsYou: async (answer: ConfirmAnswer) => {
+      await request<void>("/api/users/me/confirm", {
+        method: "POST",
+        body: JSON.stringify(answer),
       });
     },
 

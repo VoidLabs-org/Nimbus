@@ -9,6 +9,8 @@ import { GENERIC_ERROR } from "../api/messages";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
 import { clock, RESEND_WAIT_SECONDS, useCountdown } from "../auth/countdown";
 import { useSession } from "../auth/useSession";
+import { confirmHeading, type ConfirmPhase } from "../settings/profileView";
+import { ConfirmItsYouStep } from "./ConfirmItsYouStep";
 import dialogs from "./DisconnectDialogs.module.css";
 import setup from "./TwoStepSetupDialog.module.css";
 import classes from "./ChangeEmailDialog.module.css";
@@ -16,13 +18,17 @@ import classes from "./ChangeEmailDialog.module.css";
 const SAME_EMAIL = "That’s already your email.";
 const EMAIL_TAKEN = "That email is already used by another Nimbus account.";
 
-/** Step 2 asks for the new address, step 3 for the code sent there; "expired" is 39j, when that code is gone. */
-type Step = "email" | "code" | "expired";
+/**
+ * Step 1 ("confirm") renews an old sign-in, step 2 asks for the new address, step 3 for the code sent there;
+ * "expired" is 39j, when that code is gone.
+ */
+type Step = "confirm" | "email" | "code" | "expired";
 
 /**
  * Change email on Profile (designs 39d–39k): a Verification code goes to the new address, and the email changes only
  * once it is entered, so a typo can't lock the User out. Closing the window leaves the email as it was; the pending
- * change just expires. A sign-in too old for this asks the User to sign in again (`onReauthRequired`) instead.
+ * change just expires. A sign-in too old for this asks for the password first ("Confirm it's you", 39b/39c), and a
+ * User without one to sign in again (`onReauthRequired`) instead.
  */
 export function ChangeEmailDialog({
   opened,
@@ -35,8 +41,10 @@ export function ChangeEmailDialog({
   onClose: () => void;
   onReauthRequired: () => void;
 }) {
-  const { changeEmail } = useSession();
+  const { user, changeEmail } = useSession();
   const [step, setStep] = useState<Step>("email");
+  const [confirmPhase, setConfirmPhase] = useState<ConfirmPhase>("password");
+  const [confirmRecovery, setConfirmRecovery] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   // The address the code went to, as sent (trimmed), so the copy names exactly where to look.
   const [sentTo, setSentTo] = useState("");
@@ -75,13 +83,22 @@ export function ChangeEmailDialog({
       setStep("code");
     },
     onError: (failure, email) => {
+      // A send from the address step, or the one that follows Confirm it's you, is about the address typed.
+      const fromAddress = step === "email" || step === "confirm";
       if (failure instanceof ApiError && failure.code === "reauth_required") {
-        onReauthRequired();
+        if (user?.hasPassword) {
+          setConfirmPhase("password");
+          setConfirmRecovery(false);
+          setStep("confirm");
+        } else {
+          onReauthRequired();
+        }
       } else if (failure instanceof ApiError && failure.status === 429) {
         const seconds = failure.retryAfterSeconds ?? RESEND_WAIT_SECONDS;
-        if (step === "email") {
+        if (fromAddress) {
           setWaitFor(email);
           setWaitSeconds(seconds);
+          setStep("email");
         } else {
           setResendSeconds(seconds);
         }
@@ -92,13 +109,15 @@ export function ChangeEmailDialog({
       } else if (failure instanceof ApiError && failure.code === "email_taken") {
         setEmailError(EMAIL_TAKEN);
         setStep("email");
-      } else if (step !== "email") {
+      } else if (!fromAddress) {
         // A toast, not the code's error: the code typed may still be right.
         toast.error("Couldn’t send a new code. Please try again.");
       } else if (failure instanceof ApiError && failure.fieldErrors.email) {
         setEmailError(failure.fieldErrors.email);
+        setStep("email");
       } else {
         setEmailError(GENERIC_ERROR);
+        setStep("email");
       }
     },
   });
@@ -141,12 +160,15 @@ export function ChangeEmailDialog({
     setStep("email");
   }
 
+  const confirming = confirmHeading(confirmPhase, confirmRecovery);
   const title =
-    step === "email"
-      ? "Change your email"
-      : step === "code"
-        ? "Check your new inbox"
-        : "This code has expired";
+    step === "confirm"
+      ? confirming.title
+      : step === "email"
+        ? "Change your email"
+        : step === "code"
+          ? "Check your new inbox"
+          : "This code has expired";
 
   return (
     <WindowFrame
@@ -154,10 +176,12 @@ export function ChangeEmailDialog({
       onClose={busy ? () => {} : onClose}
       title={
         <>
-          <Stepper step={step === "email" ? 2 : 3} />
+          <Stepper step={step === "confirm" ? 1 : step === "email" ? 2 : 3} />
           <span className={setup.titleText}>{title}</span>
           <span className={setup.subtitle}>
-            {step === "email" ? (
+            {step === "confirm" ? (
+              confirming.subtitle
+            ) : step === "email" ? (
               "We’ll send a code to the new address. Your email only changes once you enter it."
             ) : step === "code" ? (
               <>
@@ -174,7 +198,19 @@ export function ChangeEmailDialog({
         </>
       }
     >
-      {step === "email" ? (
+      {step === "confirm" ? (
+        <ConfirmItsYouStep
+          phase={confirmPhase}
+          onPhase={setConfirmPhase}
+          recovery={confirmRecovery}
+          onRecovery={setConfirmRecovery}
+          sending={send.isPending}
+          // Renewed: send the code to the address the User typed before they were asked.
+          onConfirmed={() => send.mutate(newEmail.trim())}
+          onSignInAgain={onReauthRequired}
+          onCancel={onClose}
+        />
+      ) : step === "email" ? (
         <form
           className={`${setup.body} ${classes.body}`}
           onSubmit={(event) => {

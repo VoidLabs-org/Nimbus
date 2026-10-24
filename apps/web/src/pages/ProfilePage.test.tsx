@@ -282,11 +282,11 @@ describe("Change email", () => {
     );
   });
 
-  it("asks a User whose sign-in is too old to sign in again", async () => {
+  it("asks a User without a password whose sign-in is too old to sign in again", async () => {
     vi.spyOn(api, "requestEmailChange").mockRejectedValue(
       new ApiError(403, "Sign in again", {}, null, "reauth_required"),
     );
-    show();
+    show(session({ ...alice, hasPassword: false }));
 
     const dialog = await openChangeEmail();
     sendCodeTo(dialog, "new@example.com");
@@ -420,5 +420,120 @@ describe("Change email", () => {
       await within(dialog).findByText("That email is already used by another Nimbus account."),
     ).toBeTruthy();
     expect(within(dialog).getByRole("textbox", { name: "New email" })).toBeTruthy();
+  });
+});
+
+describe("Confirm it’s you", () => {
+  const reauth = () => new ApiError(403, "Sign in again", {}, null, "reauth_required");
+
+  async function reachConfirm() {
+    const dialog = await openChangeEmail();
+    sendCodeTo(dialog, "new@example.com");
+    await within(dialog).findByText("Confirm it’s you");
+    return dialog;
+  }
+
+  function enterPassword(dialog: HTMLElement, password: string) {
+    fireEvent.change(within(dialog).getByLabelText("Password"), { target: { value: password } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+  }
+
+  it("takes the password of an old sign-in, then sends the code", async () => {
+    const request = vi
+      .spyOn(api, "requestEmailChange")
+      .mockRejectedValueOnce(reauth())
+      .mockResolvedValue();
+    const confirm = vi.spyOn(api, "confirmItsYou").mockResolvedValue();
+    show();
+
+    const dialog = await reachConfirm();
+    expect(dialog.textContent).toContain(
+      "You signed in a while ago. Enter your password to keep going.",
+    );
+    enterPassword(dialog, "my password");
+
+    await within(dialog).findByText("Check your new inbox");
+    expect(confirm).toHaveBeenCalledWith({ password: "my password" });
+    expect(request).toHaveBeenLastCalledWith("new@example.com");
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("says a wrong password isn't right", async () => {
+    vi.spyOn(api, "requestEmailChange").mockRejectedValue(reauth());
+    vi.spyOn(api, "confirmItsYou").mockRejectedValue(
+      new ApiError(400, "Invalid", { password: "That password isn't right." }),
+    );
+    show();
+
+    const dialog = await reachConfirm();
+    enterPassword(dialog, "wrong");
+
+    expect(await within(dialog).findByText("That password isn’t right.")).toBeTruthy();
+  });
+
+  it("asks for the Sign-in code after the password with Two-step verification", async () => {
+    vi.spyOn(api, "requestEmailChange").mockRejectedValueOnce(reauth()).mockResolvedValue();
+    const confirm = vi
+      .spyOn(api, "confirmItsYou")
+      .mockRejectedValueOnce(new ApiError(400, "Code", {}, null, "two_step_required"))
+      .mockRejectedValueOnce(new ApiError(400, "Wrong", {}, null, "invalid_two_step_code"))
+      .mockResolvedValue();
+    show();
+
+    const dialog = await reachConfirm();
+    enterPassword(dialog, "my password");
+    await within(dialog).findByText("Enter your Sign-in code");
+    paste(dialog, "111111");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe(
+      "That code didn’t work. Check your authenticator app and try again.",
+    );
+
+    paste(dialog, "222222");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+    await within(dialog).findByText("Check your new inbox");
+    expect(confirm).toHaveBeenLastCalledWith({ password: "my password", twoStepCode: "222222" });
+  });
+
+  it("takes a Recovery code instead of the Sign-in code", async () => {
+    vi.spyOn(api, "requestEmailChange").mockRejectedValueOnce(reauth()).mockResolvedValue();
+    const confirm = vi
+      .spyOn(api, "confirmItsYou")
+      .mockRejectedValueOnce(new ApiError(400, "Code", {}, null, "two_step_required"))
+      .mockResolvedValue();
+    show();
+
+    const dialog = await reachConfirm();
+    enterPassword(dialog, "my password");
+    await within(dialog).findByText("Enter your Sign-in code");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use a recovery code" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Recovery code" }), {
+      target: { value: "abcd-efgh" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+    await within(dialog).findByText("Check your new inbox");
+    expect(confirm).toHaveBeenLastCalledWith({
+      password: "my password",
+      recoveryCode: "abcd-efgh",
+    });
+  });
+
+  it("goes back to the password from the code step, keeping it", async () => {
+    vi.spyOn(api, "requestEmailChange").mockRejectedValue(reauth());
+    vi.spyOn(api, "confirmItsYou").mockRejectedValue(
+      new ApiError(400, "Code", {}, null, "two_step_required"),
+    );
+    show();
+
+    const dialog = await reachConfirm();
+    enterPassword(dialog, "my password");
+    await within(dialog).findByText("Enter your Sign-in code");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+
+    expect((within(dialog).getByLabelText("Password") as HTMLInputElement).value).toBe(
+      "my password",
+    );
   });
 });

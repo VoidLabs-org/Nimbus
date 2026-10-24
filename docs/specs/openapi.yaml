@@ -732,6 +732,62 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyAttempts"
+  /api/users/me/confirm:
+    post:
+      tags: [users]
+      summary: Confirm it's you, so an old sign-in can change the email
+      description: >-
+        The password and, for a User with Two-step verification, a Sign-in code or an unused Recovery code. A right
+        answer lets this session change the email (`/api/users/me/email-change`) for the next
+        `nimbus.auth.link-recent-sign-in` (default 10 minutes), as a fresh sign-in would. Connecting a provider and
+        setting up Two-step verification still need a recent sign-in. The password is checked first, so a wrong one
+        never says whether the User has Two-step verification. The session must be still running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  maxLength: 128
+                twoStepCode:
+                  type: string
+                  description: The 6 digits from the authenticator app; only with Two-step verification.
+                recoveryCode:
+                  type: string
+                  description: One of the User's Recovery codes, instead of `twoStepCode`.
+      responses:
+        "204":
+          description: Confirmed
+        "400":
+          description: >-
+            The password is wrong or missing (`errors.password`), or with Two-step verification the second code is
+            missing (`code: two_step_required`) or wrong or used (`code: invalid_two_step_code`)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "The User has no password (`code: no_password`): they sign in again instead"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
   /api/users/me/email-change:
     post:
       tags: [users]
@@ -739,8 +795,8 @@ paths:
       description: >-
         Starts an email change, or replaces the pending one and its code: a 6-digit code goes to the new address after
         commit, and the email changes only once it is entered (`/api/users/me/email-change/confirm`). Resend is the same
-        call. The session must have started within `nimbus.auth.link-recent-sign-in` (default 10 minutes) and be still
-        running. Sends spend the new address's send budget (60 seconds apart, 5 an hour). A pending change doesn't hold
+        call. The session must have started, or been confirmed (`/api/users/me/confirm`), within
+        `nimbus.auth.link-recent-sign-in` (default 10 minutes) and be still running. Sends spend the new address's send budget (60 seconds apart, 5 an hour). A pending change doesn't hold
         the address. Unverified Users get `403 email_unverified`.
       requestBody:
         required: true

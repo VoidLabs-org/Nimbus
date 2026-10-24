@@ -22,3 +22,21 @@ export function passwordChangedText(changedAt: string, now: Date): string {
   if (seconds < YEAR) return ago(Math.floor(seconds / MONTH), "month");
   return ago(Math.floor(seconds / YEAR), "year");
 }
+
+/** Step 1 asks for the password (39b), then, with Two-step verification, a Sign-in code or a Recovery code (39c). */
+export type ConfirmPhase = "password" | "secondCode";
+
+/** The window's title and the line under it for each phase. */
+export function confirmHeading(phase: ConfirmPhase, recovery: boolean) {
+  return phase === "password"
+    ? {
+        title: "Confirm it’s you",
+        subtitle: "You signed in a while ago. Enter your password to keep going.",
+      }
+    : {
+        title: "Enter your Sign-in code",
+        subtitle: recovery
+          ? "Two-step verification is on. Enter one of the recovery codes you saved."
+          : "Two-step verification is on. Enter the 6-digit code from your authenticator app.",
+      };
+}

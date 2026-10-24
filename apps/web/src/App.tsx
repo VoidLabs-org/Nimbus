@@ -18,6 +18,7 @@ import RolesPage from "./pages/RolesPage";
 import SecurityPage from "./pages/SecurityPage";
 import TwoStepSignInPage from "./pages/TwoStepSignInPage";
 import SettingsOverview from "./settings/SettingsOverview";
+import { PASSWORD_WINDOW_PATH } from "./settings/sections";
 import { AppShell } from "./shell/AppShell";
 import { NotFoundPage, SessionExpiredPage } from "./shell/StatusPages";
 
@@ -54,10 +55,7 @@ export function AppRoutes() {
         <Route path="/settings" element={<SettingsOverview />} />
         <Route path="/settings/profile" element={<ProfilePage />} />
         {/* The password moved onto Profile; old links open its window there. */}
-        <Route
-          path="/settings/password"
-          element={<Navigate to="/settings/profile?password" replace />}
-        />
+        <Route path="/settings/password" element={<Navigate to={PASSWORD_WINDOW_PATH} replace />} />
         <Route path="/settings/security" element={<SecurityPage />} />
         <Route path="/settings/appearance" element={<AppearancePage />} />
         <Route path="/settings/roles" element={<RolesPage />} />

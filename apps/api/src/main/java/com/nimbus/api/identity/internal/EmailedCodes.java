@@ -8,7 +8,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
-import java.util.Optional;
 import java.util.UUID;
 
 import javax.crypto.Mac;
@@ -75,8 +74,8 @@ final class EmailedCodes {
 	}
 
 	/**
-	 * Like {@link #issue(UUID)}, for an email change: the code is kept with the address it was mailed to, which
-	 * {@link #newEmail} reads back.
+	 * Like {@link #issue(UUID)}, for an email change: the code is kept with the address it was mailed to, which a
+	 * right {@link #check} returns.
 	 */
 	String issue(UUID userId, String newEmail) {
 		var code = String.format("%06d", RANDOM.nextInt(1_000_000));
@@ -94,13 +93,6 @@ final class EmailedCodes {
 		return code;
 	}
 
-	/** The address the User's live email-change code was mailed to, if they have one. */
-	Optional<String> newEmail(UUID userId) {
-		return codes.findLocked(userId, kind)
-			.filter(stored -> !stored.isExpiredAt(clock.instant()))
-			.map(EmailedCode::newEmail);
-	}
-
 	/**
 	 * Checks {@code code} against the User's live code. A right code is used up. A wrong one is counted, and the
 	 * fifth cancels the code. The count is part of the caller's transaction, so the caller must commit it before
@@ -113,7 +105,7 @@ final class EmailedCodes {
 		}
 		if (matches(stored.codeHash(), hash(userId, code))) {
 			codes.delete(stored);
-			return Check.RIGHT;
+			return new Check.Right(stored.newEmail());
 		}
 		stored.countWrongTry();
 		var left = MAX_WRONG_TRIES - stored.wrongTries();
@@ -132,7 +124,8 @@ final class EmailedCodes {
 	/** What {@link #check} found: a right code, no live code, or a wrong one with some tries left. */
 	sealed interface Check {
 
-		Check RIGHT = new Right();
+		/** A right code of a kind that carries no address. */
+		Check RIGHT = new Right(null);
 
 		/** Expired, never issued, or cancelled, which the fifth wrong try itself does. */
 		Check NONE = new None();
@@ -150,7 +143,8 @@ final class EmailedCodes {
 			};
 		}
 
-		record Right() implements Check {
+		/** @param newEmail for an email change, the address the code was mailed to; null for the other kinds */
+		record Right(String newEmail) implements Check {
 		}
 
 		record None() implements Check {

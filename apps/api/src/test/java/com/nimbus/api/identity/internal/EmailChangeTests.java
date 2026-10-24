@@ -1,6 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import java.time.Duration;
 import java.util.Map;
@@ -179,6 +180,25 @@ class EmailChangeTests {
 			.signIn(new ExternalProfile("google", "g-ec9", "ec9-old@example.com", true, "Someone", null, "ec9-old@example.com"));
 		assertThat(again.getId()).isEqualTo(google.getId());
 		assertThat(again.email()).isEqualTo("ec9-new@example.com");
+	}
+
+	@Test
+	void aResetCodeMailedToTheOldAddressStopsWorkingOnceTheEmailChanges() {
+		var token = verifiedUser("ec12-old@example.com");
+		// Registration spent the old address's send budget.
+		clock.advance(Duration.ofSeconds(61));
+		client.post().uri("/api/auth/password-reset").body(Map.of("email", "ec12-old@example.com"))
+			.exchange().expectStatus().isNoContent();
+		await().atMost(Duration.ofSeconds(10)).until(() -> RecordingMailer.sentTo("ec12-old@example.com").size() >= 2);
+		var resetCode = RecordingMailer.lastCodeFor("ec12-old@example.com");
+
+		request(token, "ec12-new@example.com").expectStatus().isNoContent();
+		confirm(token, RecordingMailer.lastCodeFor("ec12-new@example.com")).expectStatus().isOk();
+
+		client.post().uri("/api/auth/password-reset/confirm")
+			.body(Map.of("email", "ec12-new@example.com", "code", resetCode, "newPassword", "taken over"))
+			.exchange().expectStatus().isBadRequest().expectBody().jsonPath("$.code").isEqualTo("code_expired");
+		signIn("ec12-new@example.com").expectStatus().isOk();
 	}
 
 	@Test

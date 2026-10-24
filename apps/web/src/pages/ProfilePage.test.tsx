@@ -3,7 +3,7 @@ import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { toast } from "@repo/ui/toast";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError, type User } from "../api/client";
@@ -50,6 +50,7 @@ beforeEach(() => {
   restoreMatchMedia = stubMatchMedia();
 });
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   vi.restoreAllMocks();
   restoreMatchMedia();
@@ -80,6 +81,13 @@ function sendCodeTo(dialog: HTMLElement, email: string) {
     target: { value: email },
   });
   fireEvent.click(within(dialog).getByRole("button", { name: "Send code" }));
+}
+
+/** Lets the 60 seconds before Resend works go by; needs fake timers. */
+async function waitOutResend() {
+  for (let second = 0; second < 60; second++) {
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+  }
 }
 
 function paste(dialog: HTMLElement, code: string) {
@@ -305,6 +313,7 @@ describe("Change email", () => {
   });
 
   it("offers a new code when the code expired, and a different email", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const request = vi.spyOn(api, "requestEmailChange").mockResolvedValue();
     const changeEmail = vi.fn(() =>
       Promise.reject(new ApiError(400, "Expired", {}, null, "code_expired")),
@@ -318,6 +327,7 @@ describe("Change email", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Change email" }));
 
     await within(dialog).findByText("This code has expired");
+    await waitOutResend();
     fireEvent.click(within(dialog).getByRole("button", { name: "Send a new code" }));
     await within(dialog).findByText("Check your new inbox");
     expect(request).toHaveBeenCalledTimes(2);
@@ -342,5 +352,73 @@ describe("Change email", () => {
     expect(
       await within(dialog).findByText("That email is already used by another Nimbus account."),
     ).toBeTruthy();
+  });
+
+  it("keeps the wait to the address that was refused", async () => {
+    vi.spyOn(api, "requestEmailChange")
+      .mockRejectedValueOnce(new ApiError(429, "Too many", {}, 48))
+      .mockResolvedValue();
+    show();
+
+    const dialog = await openChangeEmail();
+    sendCodeTo(dialog, "typo@example.com");
+    await within(dialog).findByRole("alert");
+
+    sendCodeTo(dialog, "right@example.com");
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+    expect(await within(dialog).findByText("Check your new inbox")).toBeTruthy();
+  });
+
+  it("shows the wait on the expired screen, so Send a new code never seems to do nothing", async () => {
+    vi.spyOn(api, "requestEmailChange").mockResolvedValue();
+    const changeEmail = vi.fn(() =>
+      Promise.reject(new ApiError(400, "Expired", {}, null, "code_expired")),
+    );
+    show(session(alice, { changeEmail }));
+
+    const dialog = await openChangeEmail();
+    sendCodeTo(dialog, "new@example.com");
+    await within(dialog).findByText("Check your new inbox");
+    paste(dialog, "123456");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change email" }));
+
+    await within(dialog).findByText("This code has expired");
+    const resend = within(dialog).getByRole("button", { name: "Send a new code in 1:00" });
+    expect(resend.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("keeps Use a different email off while the code is checked", async () => {
+    vi.spyOn(api, "requestEmailChange").mockResolvedValue();
+    show(session(alice, { changeEmail: () => new Promise(() => {}) }));
+
+    const dialog = await openChangeEmail();
+    sendCodeTo(dialog, "new@example.com");
+    await within(dialog).findByText("Check your new inbox");
+    paste(dialog, "123456");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change email" }));
+
+    const link = await within(dialog).findByRole("button", { name: "Use a different email" });
+    await waitFor(() => expect(link.getAttribute("aria-disabled")).toBe("true"));
+    fireEvent.click(link);
+    expect(within(dialog).getByText("Check your new inbox")).toBeTruthy();
+  });
+
+  it("goes back to the address when a resend finds it taken", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(api, "requestEmailChange")
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce(new ApiError(409, "Taken", {}, null, "email_taken"));
+    show();
+
+    const dialog = await openChangeEmail();
+    sendCodeTo(dialog, "new@example.com");
+    await within(dialog).findByText("Check your new inbox");
+    await waitOutResend();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Resend code" }));
+
+    expect(
+      await within(dialog).findByText("That email is already used by another Nimbus account."),
+    ).toBeTruthy();
+    expect(within(dialog).getByRole("textbox", { name: "New email" })).toBeTruthy();
   });
 });

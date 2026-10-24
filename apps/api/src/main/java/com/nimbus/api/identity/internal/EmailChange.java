@@ -18,7 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Changes a verified User's email. A Verification code is mailed to the new address, and the email changes only
  * when it is entered, so a typo can't lock anyone out. One pending change per User: asking again replaces it and
  * its code. Nothing but the email changes: Sessions, the password, Two-step verification and Linked identities
- * stay as they are.
+ * stay as they are. Any Reset or Verification code mailed to the old address is cancelled.
  */
 @Service
 class EmailChange {
@@ -30,6 +30,10 @@ class EmailChange {
 	private final Sessions sessions;
 
 	private final EmailedCodes codes;
+
+	private final EmailedCodes resetCodes;
+
+	private final EmailedCodes verificationCodes;
 
 	private final EmailSendBudget sendBudget;
 
@@ -47,6 +51,8 @@ class EmailChange {
 		this.users = users;
 		this.sessions = sessions;
 		this.codes = codeKinds.emailChange();
+		this.resetCodes = codeKinds.reset();
+		this.verificationCodes = codeKinds.verification();
 		this.sendBudget = sendBudget;
 		this.mailer = mailer;
 		this.mailAssets = mailAssets;
@@ -107,17 +113,20 @@ class EmailChange {
 			outcome = transaction.execute(status -> {
 				var user = users.findLockedById(userId).orElseThrow(
 						() -> new InvalidBearerTokenException("The User for this token no longer exists"));
-				var newEmail = codes.newEmail(userId);
 				var check = codes.check(userId, code);
-				if (!check.isRight()) {
+				if (!(check instanceof EmailedCodes.Check.Right right)) {
 					return new Outcome(user, check, false);
 				}
-				if (users.existsByEmail(newEmail.orElseThrow())) {
+				if (users.existsByEmail(right.newEmail())) {
 					// Keep the code: nothing about it was wrong.
 					status.setRollbackOnly();
 					return new Outcome(user, check, true);
 				}
-				user.changeEmail(newEmail.get());
+				user.changeEmail(right.newEmail());
+				// Codes mailed to the old address prove nothing about the new one: a Reset code there would let
+				// whoever reads the old inbox set the password.
+				resetCodes.discard(userId);
+				verificationCodes.discard(userId);
 				// Flushed here, so a User who took the address a moment ago fails this transaction, not the next.
 				users.saveAndFlush(user);
 				return new Outcome(user, check, false);

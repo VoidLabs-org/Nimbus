@@ -1,5 +1,14 @@
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 
+/** The address parameter that opens Profile's password window. */
+export const PASSWORD_PARAM = "password";
+
+/**
+ * Profile with the password window open: where the old Password page and "Set a password first" on the Security page
+ * lead.
+ */
+export const PASSWORD_WINDOW_PATH = `/settings/profile?${PASSWORD_PARAM}`;
+
 /** A page in Settings, with the line the overview shows under its name. */
 export type SettingsItem = { to: string; label: string; description: string };
 

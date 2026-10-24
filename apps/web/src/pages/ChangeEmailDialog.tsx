@@ -43,8 +43,11 @@ export function ChangeEmailDialog({
   const [emailError, setEmailError] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
-  // The address was sent codes too fast: Send code is off while this counts down.
+  // An address was sent codes too fast: Send code is off for it while this counts down. The server counts per
+  // address, so typing another one lifts it.
   const [waitSeconds, setWaitSeconds] = useCountdown();
+  const [waitFor, setWaitFor] = useState("");
+  const waiting = waitSeconds > 0 && sameAddress(newEmail, waitFor);
   const [resendSeconds, setResendSeconds] = useCountdown();
 
   // Each time the window opens it starts at the new address, with nothing typed.
@@ -57,6 +60,8 @@ export function ChangeEmailDialog({
       setEmailError(null);
       setCode("");
       setCodeError(null);
+      setWaitSeconds(0);
+      setResendSeconds(0);
     }
   }
 
@@ -69,19 +74,27 @@ export function ChangeEmailDialog({
       setResendSeconds(RESEND_WAIT_SECONDS);
       setStep("code");
     },
-    onError: (failure) => {
+    onError: (failure, email) => {
       if (failure instanceof ApiError && failure.code === "reauth_required") {
         onReauthRequired();
       } else if (failure instanceof ApiError && failure.status === 429) {
         const seconds = failure.retryAfterSeconds ?? RESEND_WAIT_SECONDS;
-        if (step === "email") setWaitSeconds(seconds);
-        else setResendSeconds(seconds);
-      } else if (step !== "email") {
-        setCodeError(GENERIC_ERROR);
+        if (step === "email") {
+          setWaitFor(email);
+          setWaitSeconds(seconds);
+        } else {
+          setResendSeconds(seconds);
+        }
       } else if (failure instanceof ApiError && failure.code === "same_email") {
+        // From a resend too: the address is what is wrong, so go back to it.
         setEmailError(SAME_EMAIL);
+        setStep("email");
       } else if (failure instanceof ApiError && failure.code === "email_taken") {
         setEmailError(EMAIL_TAKEN);
+        setStep("email");
+      } else if (step !== "email") {
+        // A toast, not the code's error: the code typed may still be right.
+        toast.error("Couldn’t send a new code. Please try again.");
       } else if (failure instanceof ApiError && failure.fieldErrors.email) {
         setEmailError(failure.fieldErrors.email);
       } else {
@@ -118,8 +131,12 @@ export function ChangeEmailDialog({
 
   const busy = send.isPending || confirm.isPending;
 
-  /** Back to the new address, keeping what was typed so a typo can be fixed. */
+  /**
+   * Back to the new address, keeping what was typed so a typo can be fixed. Off while a request is out, so its answer
+   * can't land on the step the User moved to.
+   */
   function backToEmail() {
+    if (busy) return;
     setEmailError(null);
     setStep("email");
   }
@@ -163,7 +180,7 @@ export function ChangeEmailDialog({
           onSubmit={(event) => {
             event.preventDefault();
             const email = newEmail.trim();
-            if (email === "" || busy || waitSeconds > 0) return;
+            if (email === "" || busy || waiting) return;
             send.mutate(email);
           }}
         >
@@ -184,7 +201,7 @@ export function ChangeEmailDialog({
             error={emailError}
             disabled={busy}
           />
-          {waitSeconds > 0 ? (
+          {waiting ? (
             <div className={classes.alert} role="alert">
               <IconAlertCircle size={18} className={classes.noteMark} aria-hidden />
               Too many codes sent to this address. Try again in {clock(waitSeconds)}.
@@ -203,7 +220,7 @@ export function ChangeEmailDialog({
             <Button
               type="submit"
               loading={send.isPending}
-              disabled={newEmail.trim() === "" || waitSeconds > 0}
+              disabled={newEmail.trim() === "" || waiting}
             >
               Send code
             </Button>
@@ -252,7 +269,13 @@ export function ChangeEmailDialog({
                   Resend code
                 </Anchor>
               )}
-              <Anchor component="button" type="button" onClick={backToEmail}>
+              <Anchor
+                component="button"
+                type="button"
+                onClick={backToEmail}
+                aria-disabled={busy}
+                c={busy ? "dimmed" : undefined}
+              >
                 Use a different email
               </Anchor>
             </div>
@@ -284,14 +307,24 @@ export function ChangeEmailDialog({
             <Button variant="default" onClick={backToEmail} disabled={busy}>
               Use a different email
             </Button>
-            <Button loading={send.isPending} onClick={() => send.mutate(sentTo)}>
-              Send a new code
+            {/* The wait shows on the button, so a refused send never looks like nothing happened. */}
+            <Button
+              loading={send.isPending}
+              disabled={resendSeconds > 0}
+              onClick={() => send.mutate(sentTo)}
+            >
+              {resendSeconds > 0 ? `Send a new code in ${clock(resendSeconds)}` : "Send a new code"}
             </Button>
           </div>
         </div>
       )}
     </WindowFrame>
   );
+}
+
+/** The server compares addresses trimmed and lower-cased. */
+function sameAddress(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 const STEPS = ["Confirm it’s you", "New email", "Enter code"] as const;

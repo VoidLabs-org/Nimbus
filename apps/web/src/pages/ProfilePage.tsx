@@ -7,18 +7,13 @@ import { useSignInAgain } from "../auth/useSignInAgain";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 import { passwordChangedText } from "../settings/profileView";
+import { PASSWORD_PARAM } from "../settings/sections";
 import { ChangeEmailDialog } from "./ChangeEmailDialog";
 import { DisplayNameDialog } from "./DisplayNameDialog";
 import { PasswordDialog } from "./PasswordDialog";
 import { ReauthDialog } from "./ReauthDialog";
 import card from "./SecurityPage.module.css";
 import classes from "./ProfilePage.module.css";
-
-/**
- * The address parameter that opens the password window: the old Password page and "Set a password first" on the
- * Security page lead here with it.
- */
-export const PASSWORD_PARAM = "password";
 
 /**
  * Settings → Profile (design 39a): the User's avatar, name and email, and a card with their Display name, email and

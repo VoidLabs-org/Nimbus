@@ -102,10 +102,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   async function changePassword(input: ChangePasswordInput) {
     const signedIn = user?.id;
     await api.changePassword(input);
+    // The server's record of when it was set, not this computer's clock. The password is set whatever happens to
+    // this read, so if it fails the User is still marked as having one, with the time left unknown.
+    const fresh = await api.me().catch(() => null);
     // A sign-out, or another User signing in, meanwhile must not be marked by the slower request.
     setUser((current) =>
       current && current.id === signedIn
-        ? { ...current, hasPassword: true, passwordChangedAt: new Date().toISOString() }
+        ? (fresh ?? { ...current, hasPassword: true, passwordChangedAt: null })
         : current,
     );
   }

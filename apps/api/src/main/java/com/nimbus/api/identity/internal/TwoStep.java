@@ -218,10 +218,7 @@ class TwoStep {
 			var authenticator = store.find(userId).orElseThrow(NotOnException::new);
 			// Postgres keeps microseconds, so the time is cut to them before it is announced.
 			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-			var right = recoveryCode != null && !recoveryCode.isBlank()
-					? codeCheck.useRecoveryCode(userId, recoveryCode, now).isPresent()
-					: codeCheck.use(userId, authenticator, code, now);
-			if (!right) {
+			if (!codeCheck.useEither(userId, authenticator, code, recoveryCode, now).right()) {
 				throw new WrongSignInCodeException();
 			}
 			store.remove(userId);

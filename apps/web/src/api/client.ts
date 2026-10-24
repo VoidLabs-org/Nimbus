@@ -32,7 +32,14 @@ export type ChangePasswordInput = {
 
 export type LoginInput = { email: string; password: string };
 
-export type ResetPasswordInput = { email: string; code: string; newPassword: string };
+/** A User with Two-step verification also sends a Sign-in code or a Recovery code (`two_step_required`). */
+export type ResetPasswordInput = {
+  email: string;
+  code: string;
+  newPassword: string;
+  twoStepCode?: string;
+  recoveryCode?: string;
+};
 
 /** Where a Role is held and where a Permission applies: across Nimbus, or inside one project. */
 export type Kind = "platform" | "project";

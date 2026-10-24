@@ -439,3 +439,21 @@
     font-size: 22px;
   }
 }
+
+/* Forgot password for a User with Two-step verification: the second code under the new password. */
+.secondCode {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* "Use a recovery code" is a link, not a full-width row. */
+.secondCode > button:last-child {
+  align-self: flex-start;
+}
+
+.secondCodeLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+}

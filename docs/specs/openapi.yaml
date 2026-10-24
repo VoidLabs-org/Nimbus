@@ -571,7 +571,11 @@ paths:
         A right code sets the password, deletes the code, marks the email verified (publishing `EmailVerified` if it
         wasn't), ends every session of the User and clears the failed sign-ins for the email. The User is not signed
         in. A wrong try is counted; the fifth cancels the code. An unknown email gets the same answer as an expired
-        code. A new password that breaks the rule, or a malformed code, is refused without counting a try.
+        code. A new password that breaks the rule, or a malformed code, is refused without counting a try. A User with
+        Two-step verification also needs `twoStepCode` (a Sign-in code) or `recoveryCode` (ADR 0005): only once the
+        Reset code is right, a missing one answers `two_step_required` and a wrong one `invalid_two_step_code`, and
+        either way nothing changes and the Reset code stays usable with its tries. A right Recovery code is used up and
+        publishes `RecoveryCodeUsed`. Two-step verification stays on.
       requestBody:
         required: true
         content:
@@ -591,6 +595,20 @@ paths:
                   type: string
                   minLength: 8
                   maxLength: 128
+                twoStepCode:
+                  type: string
+                  maxLength: 64
+                  description: >-
+                    For a User with Two-step verification, a Sign-in code from their authenticator app; ignored when
+                    `recoveryCode` is given, and for Users without Two-step verification.
+                  example: "123456"
+                recoveryCode:
+                  type: string
+                  maxLength: 64
+                  description: >-
+                    For a User with Two-step verification who lost their phone, one of their Recovery codes (capitals,
+                    spaces and dashes ignored). A blank one counts as none.
+                  example: k7qx-2m9d
       responses:
         "204":
           description: The password was changed; sign in with it
@@ -598,7 +616,9 @@ paths:
           description: >-
             A field is invalid (`errors.newPassword`, `errors.code`, `errors.email`), the code is wrong (`code` is
             `invalid_code`, with `triesLeft`), or there is no live code for the email (`code` is `code_expired`:
-            expired, cancelled after 5 wrong tries, never issued, or no User has the email)
+            expired, cancelled after 5 wrong tries, never issued, or no User has the email). With a right Reset code, a
+            User with Two-step verification gets `two_step_required` without a second code, or
+            `invalid_two_step_code` for a wrong one (which counts toward the hourly lock on code checks)
           content:
             application/problem+json:
               schema:
@@ -608,7 +628,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: [invalid_code, code_expired]
+                        enum: [invalid_code, code_expired, two_step_required, invalid_two_step_code]
                       triesLeft:
                         type: integer
                       errors:

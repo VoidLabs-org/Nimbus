@@ -43,7 +43,8 @@ class PasswordResetController {
 	@PostMapping("/confirm")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	void confirm(@Valid @RequestBody ConfirmRequest request, HttpServletRequest http) {
-		passwordReset.reset(request.email(), request.code(), request.newPassword(), http.getRemoteAddr());
+		passwordReset.reset(request.email(), request.code(), request.newPassword(), request.twoStepCode(),
+				request.recoveryCode(), http.getRemoteAddr());
 	}
 
 	/** Capped like sign-in, so oversized input never reaches the background work. */
@@ -55,11 +56,17 @@ class PasswordResetController {
 
 	}
 
-	/** Spaces are dropped from the code, so one pasted with a space in it still works; the password is kept as typed. */
+	/**
+	 * Spaces are dropped from the code, so one pasted with a space in it still works; the password is kept as typed.
+	 * A User with Two-step verification also sends a Sign-in code ({@code twoStepCode}) or a Recovery code; anything
+	 * that isn't one is simply a wrong code.
+	 */
 	record ConfirmRequest(
 			@NotBlank @Size(max = ValidEmail.MAX_LENGTH) String email,
 			@NotNull(message = "Enter the 6-digit code") @Pattern(regexp = "\\d{6}", message = "Enter the 6-digit code") String code,
-			@ValidPassword String newPassword) {
+			@ValidPassword String newPassword,
+			@Size(max = 64) String twoStepCode,
+			@Size(max = 64) String recoveryCode) {
 
 		ConfirmRequest {
 			email = email == null ? null : email.strip();

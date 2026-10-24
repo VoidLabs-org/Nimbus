@@ -61,6 +61,13 @@ class TwoStepController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/** Remove: a Sign-in code, or a Recovery code, turns Two-step verification off. */
+	@DeleteMapping
+	ResponseEntity<Void> turnOff(@AuthenticationPrincipal Jwt token, @Valid @RequestBody RemoveRequest request) {
+		twoStep.turnOff(currentUser.id(), UsersController.sessionOf(token), request.code(), request.recoveryCode());
+		return ResponseEntity.noContent().build();
+	}
+
 	/** View new codes: a Sign-in code from the app replaces the Recovery codes; answers with the new ones. */
 	@PostMapping("/recovery-codes")
 	RecoveryCodesResponse newRecoveryCodes(@AuthenticationPrincipal Jwt token, @Valid @RequestBody CodeRequest request) {
@@ -70,6 +77,10 @@ class TwoStepController {
 
 	/** Anything that isn't 6 digits is simply a wrong code. */
 	record CodeRequest(@Size(max = 64) String code) {
+	}
+
+	/** A Recovery code, when given, is used instead of the Sign-in code. */
+	record RemoveRequest(@Size(max = 64) String code, @Size(max = 64) String recoveryCode) {
 	}
 
 	record RecoveryCodesResponse(List<String> recoveryCodes) {

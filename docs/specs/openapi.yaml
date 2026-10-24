@@ -912,6 +912,55 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    delete:
+      tags: [users]
+      summary: Remove Two-step verification
+      description: >-
+        Turns Two-step verification off after a Sign-in code from the User's authenticator app (one 30-second step
+        either side of now, never a step already used) or one of their Recovery codes (capitals, spaces and dashes
+        ignored). Deletes the authenticator key and every Recovery code, so a later setup starts fresh, and sign-ins
+        stop asking for a code. Publishes `TwoStepDisabled`. Ends no session. The request must come from a session that
+        is still running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: A Recovery code, when given and not blank, is checked instead of the Sign-in code.
+              properties:
+                code:
+                  type: string
+                  maxLength: 64
+                  example: "123456"
+                recoveryCode:
+                  type: string
+                  maxLength: 64
+                  example: k7qx-2m9d
+      responses:
+        "204":
+          description: Two-step verification is off
+        "400":
+          description: >-
+            The code is wrong, used already or isn't 6 digits, or the Recovery code is wrong or used (`code:
+            invalid_code`, which counts toward the hourly lock), or a field is over 64 characters (`errors.code`,
+            `errors.recoveryCode`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "Two-step verification is not on (`code: not_on`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
   /api/users/me/two-step/setup:
     delete:
       tags: [users]

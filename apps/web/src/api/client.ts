@@ -611,6 +611,14 @@ export function createApiClient(
         body: JSON.stringify({ code }),
       }),
 
+    /**
+     * Remove: a Sign-in code, or a Recovery code, turns Two-step verification off and deletes the key and the
+     * Recovery codes. 400 `invalid_code`, 409 `not_on`, 429 with `retryAfterSeconds` while the User is locked out of
+     * code checks.
+     */
+    turnOffTwoStep: (answer: TwoStepAnswer) =>
+      request<void>("/api/users/me/two-step", { method: "DELETE", body: JSON.stringify(answer) }),
+
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>
       request<AuditPage>(

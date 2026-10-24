@@ -3,7 +3,6 @@ package com.nimbus.api.identity.internal;
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
-import java.util.OptionalLong;
 
 import com.nimbus.api.identity.RecoveryCodeUsed;
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
@@ -39,9 +38,11 @@ class TwoStepSignIn {
 
 	private final ApplicationEventPublisher events;
 
+	private final Sessions sessions;
+
 	TwoStepSignIn(PendingSignIns pending, SignInCodeLock lock, TwoStepStore store, TwoStepSecrets secrets,
 			UserRepository users, Clock clock, PlatformTransactionManager transactionManager,
-			ApplicationEventPublisher events) {
+			ApplicationEventPublisher events, Sessions sessions) {
 		this.pending = pending;
 		this.lock = lock;
 		this.store = store;
@@ -50,6 +51,7 @@ class TwoStepSignIn {
 		this.clock = clock;
 		this.transaction = new TransactionTemplate(transactionManager);
 		this.events = events;
+		this.sessions = sessions;
 	}
 
 	/** Whether {@code user}, who just proved their password, also needs a Sign-in code. */
@@ -64,20 +66,22 @@ class TwoStepSignIn {
 
 	/**
 	 * Checks a Sign-in code, or a Recovery code, for the pending sign-in and, when it is right, ends that pending
-	 * sign-in and returns the User, for a Session to start. A right Recovery code is marked used and publishes
-	 * {@link RecoveryCodeUsed}, in the same transaction.
+	 * sign-in and starts the Session. A right Recovery code is marked used and publishes {@link RecoveryCodeUsed}. All
+	 * of it is one transaction, so a Session that fails to start gives back the code and the pending sign-in.
 	 *
 	 * @param pendingId from the cookie, or null when there was none
 	 * @param code the Sign-in code; ignored when {@code recoveryCode} is given
-	 * @param recoveryCode a Recovery code, compared with capitals, spaces and the dash ignored; null for a Sign-in
-	 * code
+	 * @param recoveryCode a Recovery code, compared with capitals, spaces and dashes ignored; null or blank for a
+	 * Sign-in code
+	 * @param userAgent the browser's {@code User-Agent}, kept with the Session as at sign-in; may be null
 	 * @throws SignInExpiredException when the pending sign-in is missing, unknown, used or expired, the User's
 	 * password changed since it started, or this was its last wrong code allowed
 	 * @throws TwoStep.WrongSignInCodeException when the code is wrong (a Recovery code also when it was used), with
 	 * the tries left
 	 * @throws LimitExceededException when the User got too many codes wrong in the last hour
 	 */
-	User finish(String pendingId, String code, String recoveryCode) {
+	SignedIn finish(String pendingId, String code, String recoveryCode, String userAgent) {
+		var usesRecoveryCode = recoveryCode != null && !recoveryCode.isBlank();
 		var found = pending.find(pendingId).orElseThrow(SignInExpiredException::new);
 		var userId = found.userId();
 		return transaction.execute(status -> {
@@ -89,17 +93,20 @@ class TwoStepSignIn {
 				throw new SignInExpiredException();
 			}
 			var authenticator = store.find(userId).orElseThrow(SignInExpiredException::new);
-			var key = secrets.decrypt(userId, authenticator.encryptedKey());
+			// Only a Sign-in code needs the key: a Recovery code still works when the key can't be read.
+			var key = usesRecoveryCode ? null : secrets.decrypt(userId, authenticator.encryptedKey());
 			// Counted only now, so failures that are not about the code never use up the User's hour.
 			var check = lock.check(userId);
 			// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
 			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-			var step = recoveryCode == null
-					? SignInCodeMath.matchingStep(key, code, now, authenticator.lastUsedStep())
-					: OptionalLong.empty();
-			var recoveryCodeUsed = recoveryCode != null && store.useRecoveryCode(userId,
-					secrets.hashRecoveryCode(userId, TwoStep.normalise(recoveryCode)), now);
-			if (step.isEmpty() && !recoveryCodeUsed) {
+			var step = usesRecoveryCode ? null
+					: SignInCodeMath.matchingStep(key, code, now, authenticator.lastUsedStep());
+			var codesLeft = usesRecoveryCode
+					? store.useRecoveryCode(userId, secrets.hashRecoveryCode(userId, TwoStep.normalise(recoveryCode)),
+							now)
+					: null;
+			var right = usesRecoveryCode ? codesLeft.isPresent() : step.isPresent();
+			if (!right) {
 				var triesLeft = pending.wrongCode(pendingId);
 				if (triesLeft == 0) {
 					throw new SignInExpiredException();
@@ -108,7 +115,7 @@ class TwoStepSignIn {
 			}
 			lock.right(userId, check);
 			var taken = pending.take(pendingId).orElseThrow(SignInExpiredException::new);
-			// Taken now, under the lock, so no other request can use it; given back if the sign-in isn't stored.
+			// Taken now, under the lock, so no other request can use it; given back if the Session doesn't start.
 			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 				@Override
 				public void afterCompletion(int outcome) {
@@ -117,14 +124,19 @@ class TwoStepSignIn {
 					}
 				}
 			});
-			if (recoveryCodeUsed) {
-				events.publishEvent(new RecoveryCodeUsed(userId, now, store.recoveryCodesLeft(userId)));
+			if (usesRecoveryCode) {
+				events.publishEvent(new RecoveryCodeUsed(userId, now, codesLeft.getAsInt()));
 			}
 			else {
 				store.useStep(userId, step.getAsLong());
 			}
-			return user;
+			// Joins this transaction, so it is stored with the used code or not at all.
+			return new SignedIn(user, sessions.start(user, userAgent));
 		});
+	}
+
+	/** @param token the new Session's first refresh token */
+	record SignedIn(User user, Sessions.IssuedToken token) {
 	}
 
 	/** Becomes a 401 with {@code code: sign_in_expired} that also clears the pending cookie. */

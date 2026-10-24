@@ -4,6 +4,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -47,10 +48,21 @@ class TwoStepStore {
 				});
 	}
 
-	/** Marks the User's unused Recovery code with this hash used. @return false when there is none */
-	boolean useRecoveryCode(UUID userId, String hash, Instant usedAt) {
-		return jdbc.update("UPDATE recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
-				Timestamp.from(usedAt), userId, hash) == 1;
+	/**
+	 * Marks the User's unused Recovery code with this hash used, in one round trip.
+	 *
+	 * @return the User's unused Recovery codes left after it; empty when there was no such code
+	 */
+	OptionalInt useRecoveryCode(UUID userId, String hash, Instant usedAt) {
+		// The outer query still sees the rows as they were before the update, so the code just used is taken off.
+		return jdbc.queryForObject("""
+				WITH used AS (
+				    UPDATE recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL RETURNING id
+				)
+				SELECT (SELECT count(*) FROM used) AS used,
+				       (SELECT count(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL) AS unused
+				""", (row, n) -> row.getInt("used") == 0 ? OptionalInt.empty()
+				: OptionalInt.of(row.getInt("unused") - 1), Timestamp.from(usedAt), userId, hash, userId);
 	}
 
 	int recoveryCodesLeft(UUID userId) {

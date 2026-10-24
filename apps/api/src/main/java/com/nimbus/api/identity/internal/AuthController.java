@@ -66,14 +66,15 @@ class AuthController {
 	}
 
 	/**
-	 * The second step of a sign-in: a right Sign-in code or Recovery code starts the Session as {@code /login} does and ends the
-	 * pending sign-in. The pending cookie is the only credential, so {@link NimbusHeaderGate} checks its header.
+	 * The second step of a sign-in: a right Sign-in code or Recovery code starts the Session as {@code /login} does
+	 * and ends the pending sign-in. The pending cookie is the only credential, so {@link NimbusHeaderGate} checks its header.
 	 */
 	@PostMapping("/two-step")
 	ResponseEntity<AuthResponse> twoStep(@CookieValue(name = PendingSignIns.COOKIE, required = false) String pendingId,
 			@Valid @RequestBody TwoStepRequest request, HttpServletRequest http) {
-		var user = twoStepSignIn.finish(pendingId, request.code(), request.recoveryCode());
-		return signedIn(HttpStatus.OK, user, http, PendingSignIns.clearedCookie());
+		var signedIn = twoStepSignIn.finish(pendingId, request.code(), request.recoveryCode(),
+				http.getHeader(HttpHeaders.USER_AGENT));
+		return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), PendingSignIns.clearedCookie());
 	}
 
 	/**

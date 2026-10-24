@@ -267,6 +267,23 @@ describe("the recovery code version of the two-step sign-in page", () => {
     expect(signInWithCode).toHaveBeenCalledWith({ recoveryCode: "K7QX 2M9D" });
   });
 
+  it("keeps the kind of code while one is checked, so its answer shows under the right box", async () => {
+    let refuse: (failure: unknown) => void = () => {};
+    show("/login/two-step", {
+      signInWithCode: () => new Promise((_, reject) => (refuse = reject)),
+    });
+
+    useRecoveryCode();
+    fireEvent.change(screen.getByLabelText("Recovery code"), { target: { value: "k7qx-2m9d" } });
+    verify();
+    fireEvent.click(screen.getByRole("button", { name: "Use your authenticator app" }));
+
+    expect(screen.getByRole("heading", { name: "Use a recovery code" })).toBeTruthy();
+    await act(async () => refuse(new ApiError(400, "Wrong", {}, null, "invalid_code", 4)));
+    expect(screen.getByLabelText("Recovery code")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("That recovery code isn’t right");
+  });
+
   it("says a wrong or used code isn't right, with the tries left", async () => {
     show("/login/two-step", {
       signInWithCode: () => Promise.reject(new ApiError(400, "Wrong", {}, null, "invalid_code", 1)),

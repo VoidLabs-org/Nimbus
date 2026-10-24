@@ -57,6 +57,30 @@ class RecoveryCodeSignInTests {
 			.expectStatus().isOk();
 	}
 
+	// As a code comes out of a PDF or a notes app: a no-break space, a tab, or a Unicode hyphen or dash.
+	@Test
+	void unicodeSpacesAndDashesAreIgnoredToo() {
+		var user = twoStepUser("rcs8@example.com");
+		var noBreakSpace = Character.toString(0x00A0);
+		var nonBreakingHyphen = Character.toString(0x2011);
+		var enDash = Character.toString(0x2013);
+
+		recoveryCode(pendingSignIn("rcs8@example.com"),
+				noBreakSpace + user.recoveryCodes().get(0).replace("-", nonBreakingHyphen) + "\t").expectStatus().isOk();
+		recoveryCode(pendingSignIn("rcs8@example.com"), user.recoveryCodes().get(1).replace("-", enDash))
+			.expectStatus().isOk();
+	}
+
+	@Test
+	void aBlankRecoveryCodeCountsAsNoneSoTheSignInCodeIsChecked() {
+		var user = twoStepUser("rcs9@example.com");
+
+		client.post().uri("/api/auth/two-step").header("X-Requested-With", "nimbus")
+			.cookie("two_step_pending", pendingSignIn("rcs9@example.com"))
+			.body(Map.of("code", SignInCodes.codeFor(user.key(), clock.instant()), "recoveryCode", " ")).exchange()
+			.expectStatus().isOk();
+	}
+
 	@Test
 	void wrongRecoveryCodesCountTowardTheFiveTriesAndTheHourlyLock() {
 		var user = twoStepUser("rcs3@example.com");
@@ -122,7 +146,7 @@ class RecoveryCodeSignInTests {
 		client.post().uri("/api/users/me/two-step").header("Authorization", "Bearer " + token).exchange()
 			.expectStatus().isNoContent();
 		clock.advance(Duration.ofSeconds(30));
-		return new TwoStepUser(token, codes);
+		return new TwoStepUser(token, key, codes);
 	}
 
 	private String pendingSignIn(String email) {
@@ -140,7 +164,7 @@ class RecoveryCodeSignInTests {
 			.cookie("two_step_pending", pending).body(Map.of("recoveryCode", code)).exchange();
 	}
 
-	private record TwoStepUser(String token, List<String> recoveryCodes) {
+	private record TwoStepUser(String token, String key, List<String> recoveryCodes) {
 	}
 
 }

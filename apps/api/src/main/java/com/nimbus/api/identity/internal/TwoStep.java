@@ -160,9 +160,12 @@ class TwoStep {
 		});
 	}
 
-	/** How a Recovery code is compared: capitals, spaces and the dash don't matter. */
+	/**
+	 * How a Recovery code is compared: capitals, spaces and dashes don't matter, including the tabs, no-break spaces
+	 * and Unicode hyphens and dashes (and the minus sign) a code picks up when copied from a document.
+	 */
 	static String normalise(String recoveryCode) {
-		return recoveryCode.toLowerCase(Locale.ROOT).replace(" ", "").replace("-", "");
+		return recoveryCode.toLowerCase(Locale.ROOT).replaceAll("[\\s\\p{Z}\\p{Pd}\\x{2212}]", "");
 	}
 
 	private static List<String> newRecoveryCodes() {

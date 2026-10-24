@@ -98,7 +98,8 @@ export default function TwoStepSignInPage() {
           <AuthTextInput
             label="Recovery code"
             placeholder="xxxx-xxxx"
-            autoComplete="one-time-code"
+            // Not "one-time-code": that offers the 6-digit codes from messages and apps, never a Recovery code.
+            autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
             autoFocus
@@ -134,7 +135,17 @@ export default function TwoStepSignInPage() {
           </AuthSubmit>
         </PinnedSubmit>
         <div className={classes.codeLinks}>
-          <Anchor component="button" type="button" onClick={() => switchTo(!useRecoveryCode)}>
+          {/* Off while a code is checked, so its answer can't land under the other kind of box. Stays a button, so
+              keyboard focus isn't lost. */}
+          <Anchor
+            component="button"
+            type="button"
+            onClick={() => {
+              if (!checking) switchTo(!useRecoveryCode);
+            }}
+            aria-disabled={checking}
+            c={checking ? "dimmed" : undefined}
+          >
             {useRecoveryCode
               ? "Use your authenticator app"
               : "Lost your phone? Use a recovery code"}

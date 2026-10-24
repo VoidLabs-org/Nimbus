@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -47,6 +50,50 @@ class NoticeMailTests {
 	@ValueSource(strings = { "https://example.dev/security?a=1&b=2", "http://localhost:3000/settings/security" })
 	void acceptsWebDestinationsIncludingLocalDevelopment(String url) {
 		assertThat(notice(url)).contains("href=\"" + url.replace("&", "&amp;") + "\"");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "title", "heading", "line", "details", "tile", "footer", "logoUrl" })
+	void missingArgumentsOfANoticeWithoutAButtonAreNamed(String missing) {
+		assertThatNullPointerException()
+			.isThrownBy(() -> NoticeMail.html(missing.equals("title") ? null : "Title",
+					missing.equals("heading") ? null : "Heading", missing.equals("line") ? null : "Line",
+					missing.equals("details") ? null : List.of(new NoticeMail.Detail("When", "Now")),
+					missing.equals("tile") ? null : Optional.empty(), missing.equals("footer") ? null : "Footer",
+					missing.equals("logoUrl") ? null : Optional.empty()))
+			.withMessage(missing);
+	}
+
+	@Test
+	void aNoticeWithoutAButtonListsItsDetailsEscapedAndInOrder() {
+		var html = NoticeMail.html("Changed", "Email changed", "Your email changed.",
+				List.of(new NoticeMail.Detail("New <email>", "a&b@example.dev"), new NoticeMail.Detail("When", "Today")),
+				Optional.of("Not you?"), "Footer", Optional.empty());
+
+		assertThat(html).contains("Your email changed.&#8199;")
+			.containsSubsequence(">New &lt;email&gt;</td>", ">a&amp;b@example.dev</td>", ">When</td>", ">Today</td>",
+					">Not you?</td>")
+			.doesNotContain("<a ");
+	}
+
+	@Test
+	void aNoticeWithoutAButtonNeedsADetail() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> NoticeMail.html("Title", "Heading", "Line", List.of(), Optional.empty(), "Footer",
+					Optional.empty()))
+			.withMessageContaining("details");
+	}
+
+	@Test
+	void theTimeIsInEnglishAndUtcWhateverTheServersLocale() {
+		var before = Locale.getDefault();
+		Locale.setDefault(Locale.GERMANY);
+		try {
+			assertThat(NoticeMail.time(Instant.parse("2026-10-24T09:05:00Z"))).isEqualTo("24 Oct 2026, 09:05 UTC");
+		}
+		finally {
+			Locale.setDefault(before);
+		}
 	}
 
 	private static String notice(String url) {

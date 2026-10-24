@@ -7,8 +7,8 @@ import java.util.Optional;
  * The shared email layout: the "Ink header band" design (30e), a dark band with the logo and
  * heading over a light card, and a small footer. Built from tables and inline styles, which is what mail programs
  * support. Callers supply their own card content, or use {@link NoticeMail} for a notice with a button.
- * Cards can use {@code muted} for body text, {@code ink} for emphasis and {@code tile} for inset backgrounds;
- * these classes apply the shared dark-mode colors.
+ * Cards can use {@code muted} for body text, {@code ink} for emphasis, {@code tile} for inset backgrounds and
+ * {@code rule} for borders; these classes apply the shared dark-mode colors.
  */
 public final class MailFrame {
 
@@ -66,7 +66,7 @@ public final class MailFrame {
 				<!--[if mso]><style>table,td{font-family:Arial,sans-serif!important}</style><![endif]-->
 				<style>
 				@media (max-width:620px){.px{padding-left:24px!important;padding-right:24px!important}%7$s}
-				@media (prefers-color-scheme:dark){.bg{background:#121110!important}.card{background:#1d1b19!important}.ink,h1{color:#f4f2ef!important}.muted{color:#c9c4bf!important}.tile{background:#2a2725!important}.foot{color:#a8a29d!important}}
+				@media (prefers-color-scheme:dark){.bg{background:#121110!important}.card{background:#1d1b19!important}.ink,h1{color:#f4f2ef!important}.muted{color:#c9c4bf!important}.tile{background:#2a2725!important}.foot{color:#a8a29d!important}.rule{border-color:#3a3633!important}}
 				</style>
 				</head>
 				<body style="margin:0;padding:0;background:#f4f2ef" class="bg">

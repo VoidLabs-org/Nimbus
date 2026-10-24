@@ -173,7 +173,10 @@ describe("api client", () => {
     expect(server.calls[1].url).toBe("/api/auth/two-step");
     expect(server.calls[1].init.method).toBe("POST");
     expect(new Headers(server.calls[1].init.headers).get("X-Requested-With")).toBe("nimbus");
-    expect(JSON.parse(String(server.calls[1].init.body))).toEqual({ code: "123456" });
+    expect(JSON.parse(String(server.calls[1].init.body))).toEqual({
+      code: "123456",
+      rememberBrowser: false,
+    });
     expect(authorization(server.calls[1])).toBeNull();
     expect(authorization(server.calls[2])).toBe("Bearer token-1");
   });

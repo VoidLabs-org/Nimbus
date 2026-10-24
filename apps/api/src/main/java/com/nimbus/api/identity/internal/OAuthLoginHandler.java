@@ -72,7 +72,11 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			var profile = profileOf(login);
 			// The provider's consent alone is not enough for a User with Two-step verification (ADR 0005): nothing is
 			// stored (no link, no Session), and the code page finishes the sign-in.
-			var pending = externalSignIn.whoSignsIn(profile).flatMap(existing -> twoStepSignIn.begin(existing, profile));
+			// The remembered cookie is SameSite=Lax, so it comes along on this redirect back from the provider.
+			var remembered = WebUtils.getCookie(request, RememberedBrowsers.COOKIE);
+			var pending = externalSignIn.whoSignsIn(profile)
+				.flatMap(existing -> twoStepSignIn.begin(existing, profile,
+						remembered == null ? null : remembered.getValue()));
 			if (pending.isPresent()) {
 				response.addHeader(HttpHeaders.SET_COOKIE, pending.get().toString());
 				redirect(response, "/login/two-step", returnTo);

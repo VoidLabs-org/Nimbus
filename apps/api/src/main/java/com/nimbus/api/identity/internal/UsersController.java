@@ -12,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -36,8 +37,12 @@ class UsersController {
 
 	private final LinkedIdentities linkedIdentities;
 
+	private final RememberedBrowsers rememberedBrowsers;
+
 	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords, Sessions sessions,
-			LinkedIdentities linkedIdentities) {
+			LinkedIdentities linkedIdentities,
+			RememberedBrowsers rememberedBrowsers) {
+		this.rememberedBrowsers = rememberedBrowsers;
 		this.users = users;
 		this.currentUser = currentUser;
 		this.passwords = passwords;
@@ -76,8 +81,11 @@ class UsersController {
 
 	/** Ends every session of the User except this one, without asking for a password; 204 even when there are none. */
 	@PostMapping("/me/sessions/sign-out-others")
-	ResponseEntity<Void> endOtherSessions(@AuthenticationPrincipal Jwt token) {
+	ResponseEntity<Void> endOtherSessions(@AuthenticationPrincipal Jwt token,
+			@CookieValue(name = RememberedBrowsers.COOKIE, required = false) String remembered) {
 		sessions.endOthers(currentUser.id(), sessionOf(token));
+		// The other devices ask for the code again; this browser stays remembered.
+		rememberedBrowsers.forgetAllExcept(currentUser.id(), remembered);
 		return ResponseEntity.noContent().build();
 	}
 

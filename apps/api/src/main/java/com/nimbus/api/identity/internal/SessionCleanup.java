@@ -16,7 +16,8 @@ import org.springframework.stereotype.Component;
  * {@code refresh_tokens} tables stop growing. It runs on a fixed delay ({@code nimbus.auth.session-cleanup-interval}).
  * Each delete takes at most {@code nimbus.auth.session-cleanup-batch-size} sessions and commits on its own, so a
  * large backlog never becomes one long transaction. Meant for a single API instance: two running it at once only
- * repeat the same deletes. Scheduling itself is switched on in {@code ApiApplication}.
+ * repeat the same deletes. It also deletes expired remembered browsers ({@link RememberedBrowsers}). Scheduling
+ * itself is switched on in {@code ApiApplication}.
  */
 @Component
 class SessionCleanup implements SchedulingConfigurer {
@@ -29,7 +30,11 @@ class SessionCleanup implements SchedulingConfigurer {
 
 	private final Clock clock;
 
-	SessionCleanup(SessionRepository sessions, AuthProperties properties, Clock clock) {
+	private final RememberedBrowsers rememberedBrowsers;
+
+	SessionCleanup(SessionRepository sessions, AuthProperties properties, Clock clock,
+			RememberedBrowsers rememberedBrowsers) {
+		this.rememberedBrowsers = rememberedBrowsers;
 		this.sessions = sessions;
 		this.properties = properties;
 		this.clock = clock;
@@ -64,6 +69,8 @@ class SessionCleanup implements SchedulingConfigurer {
 		}
 		while (batch == batchSize);
 		log.info("Removed {} ended sessions (ended before {})", removed, cutoff);
+		// Few rows (one per ticked browser, for 30 days), so one delete is enough.
+		log.info("Removed {} expired remembered browsers", rememberedBrowsers.deleteExpired());
 		return removed;
 	}
 

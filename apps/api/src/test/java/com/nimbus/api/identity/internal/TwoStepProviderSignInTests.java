@@ -23,6 +23,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
+import org.springframework.test.web.servlet.client.EntityExchangeResult;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
@@ -203,6 +204,55 @@ class TwoStepProviderSignInTests {
 		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/settings/security?connected=github");
 		assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
 		assertThat(linkedIdentities.listFor(user.getId())).hasSize(2);
+	}
+
+	@Test
+	void aRememberedBrowserGoesStraightToTheCallback() throws Exception {
+		var user = googleUser("tsp10@example.com", "g-tsp-10");
+		var key = turnOn(user);
+		var first = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), first, google("g-tsp-10", "tsp10@example.com"));
+		var remembered = rememberedIn(client.post().uri("/api/auth/two-step").header("X-Requested-With", "nimbus")
+			.cookie("two_step_pending", pendingIn(first))
+			.body(Map.of("code", SignInCodes.codeFor(key, clock.instant()), "rememberBrowser", true)).exchange()
+			.expectStatus().isOk().expectBody(String.class).returnResult());
+
+		var request = new MockHttpServletRequest();
+		request.setCookies(new Cookie(RememberedBrowsers.COOKIE, remembered));
+		var response = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(request, response, google("g-tsp-10", "tsp10@example.com"));
+
+		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/auth/callback");
+		assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).singleElement()
+			.satisfies(cookie -> assertThat(cookie).startsWith("refresh_token="));
+	}
+
+	@Test
+	void anotherUsersRememberedBrowserStillAsks() throws Exception {
+		var other = googleUser("tsp11a@example.com", "g-tsp-11a");
+		var otherKey = turnOn(other);
+		var first = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), first, google("g-tsp-11a", "tsp11a@example.com"));
+		var remembered = rememberedIn(client.post().uri("/api/auth/two-step").header("X-Requested-With", "nimbus")
+			.cookie("two_step_pending", pendingIn(first))
+			.body(Map.of("code", SignInCodes.codeFor(otherKey, clock.instant()), "rememberBrowser", true)).exchange()
+			.expectStatus().isOk().expectBody(String.class).returnResult());
+		turnOn(googleUser("tsp11b@example.com", "g-tsp-11b"));
+
+		var request = new MockHttpServletRequest();
+		request.setCookies(new Cookie(RememberedBrowsers.COOKIE, remembered));
+		var response = new MockHttpServletResponse();
+		handler.onAuthenticationSuccess(request, response, google("g-tsp-11b", "tsp11b@example.com"));
+
+		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/login/two-step");
+	}
+
+	private static String rememberedIn(EntityExchangeResult<?> result) {
+		var cookie = result.getResponseHeaders().getOrEmpty(HttpHeaders.SET_COOKIE).stream()
+			.filter(header -> header.startsWith(RememberedBrowsers.COOKIE + "="))
+			.findFirst()
+			.orElseThrow(() -> new AssertionError("no " + RememberedBrowsers.COOKIE + " cookie was set"));
+		return cookie.substring(RememberedBrowsers.COOKIE.length() + 1, cookie.indexOf(';'));
 	}
 
 	private User googleUser(String email, String sub) {

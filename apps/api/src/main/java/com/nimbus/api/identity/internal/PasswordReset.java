@@ -78,10 +78,14 @@ class PasswordReset {
 
 	private final SignInCodeCheck secondCodes;
 
+	private final RememberedBrowsers rememberedBrowsers;
+
 	PasswordReset(UserRepository users, EmailedCodeKinds codeKinds, PasswordEncoder passwordEncoder, Sessions sessions,
 			SignIn signIn, Mailer mailer, MailAssets mailAssets, Clock clock, ApplicationEventPublisher events,
 			PlatformTransactionManager transactionManager, AuthProperties properties, EmailSendBudget sendBudget,
-			TwoStepStore twoStep, SignInCodeCheck secondCodes) {
+			TwoStepStore twoStep, SignInCodeCheck secondCodes,
+			RememberedBrowsers rememberedBrowsers) {
+		this.rememberedBrowsers = rememberedBrowsers;
 		this.twoStep = twoStep;
 		this.secondCodes = secondCodes;
 		this.sendBudget = sendBudget;
@@ -217,6 +221,7 @@ class PasswordReset {
 				events.publishEvent(new EmailVerified(user.getId(), user.email()));
 			}
 			sessions.endAll(user);
+			rememberedBrowsers.forgetAll(user.getId());
 			return null;
 		});
 		// Thrown only now: throwing inside the transaction would roll back the count of a wrong try.

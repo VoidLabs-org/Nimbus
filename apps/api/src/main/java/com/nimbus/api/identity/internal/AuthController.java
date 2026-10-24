@@ -55,9 +55,10 @@ class AuthController {
 	 * needed, and a cookie holds the pending sign-in that {@code /two-step} finishes.
 	 */
 	@PostMapping("/login")
-	ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+	ResponseEntity<?> login(@Valid @RequestBody LoginRequest request,
+			@CookieValue(name = RememberedBrowsers.COOKIE, required = false) String remembered, HttpServletRequest http) {
 		var user = signIn.signIn(request.email(), request.password(), http.getRemoteAddr());
-		var pending = twoStepSignIn.begin(user);
+		var pending = twoStepSignIn.begin(user, null, remembered);
 		if (pending.isPresent()) {
 			return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, pending.get().toString())
@@ -74,7 +75,11 @@ class AuthController {
 	ResponseEntity<AuthResponse> twoStep(@CookieValue(name = PendingSignIns.COOKIE, required = false) String pendingId,
 			@Valid @RequestBody TwoStepRequest request, HttpServletRequest http) {
 		var signedIn = twoStepSignIn.finish(pendingId, request.code(), request.recoveryCode(),
-				http.getHeader(HttpHeaders.USER_AGENT));
+				Boolean.TRUE.equals(request.rememberBrowser()), http.getHeader(HttpHeaders.USER_AGENT));
+		if (signedIn.rememberedToken() != null) {
+			return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), PendingSignIns.clearedCookie(),
+					RememberedBrowsers.cookie(signedIn.rememberedToken()));
+		}
 		return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), PendingSignIns.clearedCookie());
 	}
 
@@ -166,7 +171,8 @@ class AuthController {
 	 * A Sign-in code, or a Recovery code instead when the User lost their phone. Anything that isn't 6 digits is simply
 	 * a wrong Sign-in code.
 	 */
-	record TwoStepRequest(@Size(max = 64) String code, @Size(max = 64) String recoveryCode) {
+	/** @param rememberBrowser "Don't ask again on this device for 30 days"; null counts as not ticked */
+	record TwoStepRequest(@Size(max = 64) String code, @Size(max = 64) String recoveryCode, Boolean rememberBrowser) {
 	}
 
 }

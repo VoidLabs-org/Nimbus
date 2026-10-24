@@ -21,7 +21,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * GitHub, a pending sign-in waits for a Sign-in code from the User's app, and only a right one lets a Session start.
  * A provider sign-in stores nothing (no link, no avatar) until then. A code is accepted once: the step
  * that last signed the User in, and every older one, is refused. A User who lost their phone gives one of their
- * Recovery codes instead, which then is used up. A refresh never comes here.
+ * Recovery codes instead, which then is used up. A refresh never comes here. A browser where the User ticked "Don't
+ * ask again on this device for 30 days" ({@link RememberedBrowsers}) skips the second step.
  */
 @Service
 class TwoStepSignIn {
@@ -46,9 +47,12 @@ class TwoStepSignIn {
 
 	private final SignInCodeCheck codeCheck;
 
+	private final RememberedBrowsers rememberedBrowsers;
+
 	TwoStepSignIn(PendingSignIns pending, SignInCodeLock lock, TwoStepStore store, UserRepository users,
 			Clock clock, PlatformTransactionManager transactionManager, ApplicationEventPublisher events,
-			Sessions sessions, ExternalSignIn externalSignIn, SignInCodeCheck codeCheck) {
+			Sessions sessions, ExternalSignIn externalSignIn, SignInCodeCheck codeCheck,
+			RememberedBrowsers rememberedBrowsers) {
 		this.pending = pending;
 		this.lock = lock;
 		this.store = store;
@@ -59,25 +63,29 @@ class TwoStepSignIn {
 		this.sessions = sessions;
 		this.externalSignIn = externalSignIn;
 		this.codeCheck = codeCheck;
+		this.rememberedBrowsers = rememberedBrowsers;
 	}
 
 	/**
-	 * Starts the second step when {@code user}, who just proved their password, has Two-step verification.
+	 * Starts the second step when {@code user}, who just proved their password, has Two-step verification, on a
+	 * browser that isn't remembered.
 	 *
 	 * @return the pending sign-in's cookie; empty when no code is needed and the Session can start now
 	 */
 	Optional<ResponseCookie> begin(User user) {
-		return begin(user, null);
+		return begin(user, null, null);
 	}
 
 	/**
-	 * Starts the second step when {@code user}, whom a provider's {@code profile} signs in as, has Two-step
-	 * verification. Nothing of the profile is stored until the code is right.
+	 * Starts the second step when {@code user}, whom a provider's {@code profile} signs in as (null for a password
+	 * sign-in), has Two-step verification. Nothing of the profile is stored until the code is right.
 	 *
+	 * @param rememberedToken the browser's {@link RememberedBrowsers#COOKIE}, or null: when it remembers this User's
+	 * browser, no code is needed
 	 * @return the pending sign-in's cookie; empty when no code is needed and the sign-in can go ahead now
 	 */
-	Optional<ResponseCookie> begin(User user, ExternalProfile profile) {
-		if (store.find(user.getId()).isEmpty()) {
+	Optional<ResponseCookie> begin(User user, ExternalProfile profile, String rememberedToken) {
+		if (store.find(user.getId()).isEmpty() || rememberedBrowsers.isRemembered(user.getId(), rememberedToken)) {
 			return Optional.empty();
 		}
 		return Optional.of(PendingSignIns.cookie(pending.start(user.getId(), user.passwordHash(), profile)));
@@ -92,6 +100,7 @@ class TwoStepSignIn {
 	 * @param code the Sign-in code; ignored when {@code recoveryCode} is given
 	 * @param recoveryCode a Recovery code, compared with capitals, spaces and dashes ignored; null or blank for a
 	 * Sign-in code
+	 * @param rememberBrowser "Don't ask again on this device for 30 days": a right code also remembers this browser
 	 * @param userAgent the browser's {@code User-Agent}, kept with the Session as at sign-in; may be null
 	 * @throws SignInExpiredException when the pending sign-in is missing, unknown, used or expired, the User's
 	 * password changed since a password sign-in started, the provider of a provider sign-in no longer signs in as the
@@ -100,7 +109,7 @@ class TwoStepSignIn {
 	 * the tries left
 	 * @throws LimitExceededException when the User got too many codes wrong in the last hour
 	 */
-	SignedIn finish(String pendingId, String code, String recoveryCode, String userAgent) {
+	SignedIn finish(String pendingId, String code, String recoveryCode, boolean rememberBrowser, String userAgent) {
 		var found = pending.find(pendingId).orElseThrow(SignInExpiredException::new);
 		var userId = found.userId();
 		// A User over the lock is refused before their row is locked.
@@ -142,8 +151,9 @@ class TwoStepSignIn {
 			if (found.profile() != null && !externalSignIn.signIn(found.profile()).getId().equals(userId)) {
 				throw new SignInExpiredException();
 			}
-			// Joins this transaction, so it is stored with the used code or not at all.
-			return new SignedIn(user, sessions.start(user, userAgent));
+			// Join this transaction, so they are stored with the used code or not at all.
+			var remembered = rememberBrowser ? rememberedBrowsers.remember(userId) : null;
+			return new SignedIn(user, sessions.start(user, userAgent), remembered);
 		});
 	}
 
@@ -156,8 +166,11 @@ class TwoStepSignIn {
 		}
 	}
 
-	/** @param token the new Session's first refresh token */
-	record SignedIn(User user, Sessions.IssuedToken token) {
+	/**
+	 * @param token the new Session's first refresh token
+	 * @param rememberedToken for the {@link RememberedBrowsers#COOKIE} cookie; null when the browser wasn't remembered
+	 */
+	record SignedIn(User user, Sessions.IssuedToken token, String rememberedToken) {
 	}
 
 	/** Becomes a 401 with {@code code: sign_in_expired} that also clears the pending cookie. */

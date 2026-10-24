@@ -1,4 +1,4 @@
-import { Anchor } from "@mantine/core";
+import { Anchor, Checkbox } from "@mantine/core";
 import { useState, type SyntheticEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "../api/client";
@@ -31,6 +31,8 @@ export default function TwoStepSignInPage() {
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [code, setCode] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
+  // "Don't ask again on this device for 30 days", on both versions of the page; switching keeps it.
+  const [rememberBrowser, setRememberBrowser] = useState(false);
   const [checking, setChecking] = useState(false);
   const [codeMessage, setCodeMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export default function TwoStepSignInPage() {
     setCodeMessage(null);
     setFormError(null);
     try {
-      await signInWithCode(useRecoveryCode ? { recoveryCode } : { code });
+      await signInWithCode(useRecoveryCode ? { recoveryCode } : { code }, rememberBrowser);
       void navigate(safeReturnPath(searchParams.get("returnTo")), { replace: true });
     } catch (failure) {
       setChecking(false);
@@ -125,6 +127,12 @@ export default function TwoStepSignInPage() {
         {codeMessage && <CodeAlert marked>{codeMessage}</CodeAlert>}
         {locked && <CodeAlert marked>{tooManyAttemptsIn(lockSeconds)}</CodeAlert>}
         {formError && <CodeAlert>{formError}</CodeAlert>}
+        <Checkbox
+          label="Don’t ask again on this device for 30 days"
+          checked={rememberBrowser}
+          onChange={(event) => setRememberBrowser(event.currentTarget.checked)}
+          disabled={checking}
+        />
         <PinnedSubmit>
           <AuthSubmit loading={checking} disabled={!ready || locked}>
             Verify

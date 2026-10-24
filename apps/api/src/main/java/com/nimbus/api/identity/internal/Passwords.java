@@ -29,8 +29,12 @@ class Passwords {
 	/** Wrong guesses at the current password, per User: a stolen access token mustn't allow unlimited tries. */
 	private final SlidingWindowLimiter failuresByUser;
 
+	private final RememberedBrowsers rememberedBrowsers;
+
 	Passwords(UserRepository users, PasswordEncoder passwordEncoder, Sessions sessions, AuthProperties properties,
-			Clock clock, PlatformTransactionManager transactionManager) {
+			Clock clock, PlatformTransactionManager transactionManager,
+			RememberedBrowsers rememberedBrowsers) {
+		this.rememberedBrowsers = rememberedBrowsers;
 		this.users = users;
 		this.passwordEncoder = passwordEncoder;
 		this.sessions = sessions;
@@ -74,6 +78,8 @@ class Passwords {
 			locked.changePassword(hash);
 			if (changing) {
 				sessions.endAllExcept(userId, sessionId);
+				// This browser too: a security change starts from a clean slate.
+				rememberedBrowsers.forgetAll(userId);
 			}
 		});
 	}

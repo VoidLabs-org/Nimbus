@@ -83,8 +83,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return "signed-in" as const;
   }
 
-  async function signInWithCode(answer: TwoStepAnswer) {
-    signedInAs(await api.signInWithCode(answer));
+  async function signInWithCode(answer: TwoStepAnswer, rememberBrowser?: boolean) {
+    signedInAs(await api.signInWithCode(answer, rememberBrowser));
   }
 
   async function updateDisplayName(displayName: string) {

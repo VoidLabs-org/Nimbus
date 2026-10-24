@@ -124,6 +124,14 @@ class PendingSignIns {
 		pending.remove(id);
 	}
 
+	/** Ends every pending sign-in of the User, e.g. because they turned Two-step verification off. */
+	void endAllFor(UUID userId) {
+		var ids = byUser.remove(userId);
+		if (ids != null) {
+			ids.forEach(pending::remove);
+		}
+	}
+
 	/** Only for the code check, and gone when the pending sign-in would be. */
 	static ResponseCookie cookie(String id) {
 		return cookie(id, LIFETIME);

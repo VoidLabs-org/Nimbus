@@ -57,9 +57,12 @@ class TwoStep {
 
 	private final SignInCodeCheck codeCheck;
 
+	private final PendingSignIns pending;
+
 	TwoStep(TwoStepStore store, TwoStepSetups setups, TwoStepSecrets secrets, UserRepository users, Sessions sessions,
 			ApplicationEventPublisher events, Clock clock, AuthProperties properties,
-			PlatformTransactionManager transactionManager, SignInCodeLock lock, SignInCodeCheck codeCheck) {
+			PlatformTransactionManager transactionManager, SignInCodeLock lock, SignInCodeCheck codeCheck,
+			PendingSignIns pending) {
 		this.store = store;
 		this.setups = setups;
 		this.secrets = secrets;
@@ -71,6 +74,7 @@ class TwoStep {
 		this.transaction = new TransactionTemplate(transactionManager);
 		this.lock = lock;
 		this.codeCheck = codeCheck;
+		this.pending = pending;
 	}
 
 	Status status(UUID userId, UUID sessionId) {
@@ -196,7 +200,7 @@ class TwoStep {
 	/**
 	 * Remove: a Sign-in code from the User's app, or one of their Recovery codes when they lost their phone, turns
 	 * Two-step verification off. The key and the Recovery codes are deleted, so a later setup starts fresh, and sign-ins
-	 * stop asking for a code. Ends no Session.
+	 * stop asking for a code; the User's sign-ins still waiting for one end. Ends no Session.
 	 *
 	 * @param code the Sign-in code; ignored when {@code recoveryCode} is given
 	 * @param recoveryCode a Recovery code, compared with capitals, spaces and dashes ignored; null or blank for a
@@ -223,6 +227,8 @@ class TwoStep {
 			store.remove(userId);
 			events.publishEvent(new TwoStepDisabled(userId, now));
 		});
+		// Sign-ins started while it was on can't finish without a code any more, nor with the next setup's.
+		pending.endAllFor(userId);
 	}
 
 	/** Replaces the User's Recovery codes with these, kept only as hashes of the normalised code. */

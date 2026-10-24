@@ -54,6 +54,9 @@ class RemoveTwoStepTests {
 	AccessTokens accessTokens;
 
 	@Autowired
+	TwoStepSignIn twoStepSignIn;
+
+	@Autowired
 	MovableClock clock;
 
 	@Test
@@ -157,6 +160,20 @@ class RemoveTwoStepTests {
 		assertThat(again.key()).isNotEqualTo(user.key());
 		assertThat(again.recoveryCodes()).hasSize(10).doesNotContainAnyElementsOf(user.recoveryCodes());
 		status(user.token()).expectBody().jsonPath("$.enabled").isEqualTo(true);
+	}
+
+	@Test
+	void aSignInWaitingForItsCodeEndsAndDoesNotTakeTheNextSetupsCode() {
+		var user = twoStepUser("rts11@example.com");
+		var waiting = twoStepSignIn.begin(user.user()).orElseThrow();
+		remove(user.token(), Map.of("code", SignInCodes.codeFor(user.key(), clock.instant()))).expectStatus()
+			.isNoContent();
+		var again = turnOn(user.token());
+
+		client.post().uri("/api/auth/two-step").header("X-Requested-With", "nimbus")
+			.cookie(waiting.getName(), waiting.getValue())
+			.body(Map.of("code", SignInCodes.codeFor(again.key(), clock.instant()))).exchange().expectStatus()
+			.isUnauthorized().expectBody().jsonPath("$.code").isEqualTo("sign_in_expired");
 	}
 
 	@Test

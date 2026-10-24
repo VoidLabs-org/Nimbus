@@ -3,16 +3,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
-import { ApiError, api, type TwoStepAnswer } from "../api/client";
-import {
-  GENERIC_ERROR,
-  tooManyAttemptsIn,
-  WRONG_RECOVERY_CODE,
-  WRONG_SIGN_IN_CODE,
-} from "../api/messages";
+import { api, type TwoStepAnswer } from "../api/client";
+import { tooManyAttemptsIn, WRONG_RECOVERY_CODE, WRONG_SIGN_IN_CODE } from "../api/messages";
 import { queryKeys } from "../api/queries";
-import { CODE_LENGTH, CodePinInput, RECOVERY_CODE_MAX } from "../auth/CodeEntry";
+import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
+import { recoveryCodeInputProps } from "../auth/recoveryCode";
 import { useCountdown } from "../auth/countdown";
+import { showCodeCheckFailure } from "./codeCheckFailure";
 import dialogs from "./DisconnectDialogs.module.css";
 import classes from "./TwoStepSetupDialog.module.css";
 
@@ -55,27 +52,19 @@ export function RemoveTwoStepDialog({ opened, onClose }: { opened: boolean; onCl
       void client.invalidateQueries({ queryKey: queryKeys.twoStep });
       onClose();
     },
-    onError: (failure) => {
-      if (failure instanceof ApiError && failure.status === 401) return;
-      if (failure instanceof ApiError && failure.code === "invalid_code") {
-        setError(useRecoveryCode ? WRONG_RECOVERY_CODE : WRONG_SIGN_IN_CODE);
-        setCode("");
-        return;
-      }
-      if (failure instanceof ApiError && failure.status === 429) {
-        setCode("");
-        if (failure.retryAfterSeconds) setLockSeconds(failure.retryAfterSeconds);
-        else setError("Too many attempts. Try again later.");
-        return;
-      }
-      if (failure instanceof ApiError && failure.code === "not_on") {
-        toast.info("Two-step verification is already off.");
-        void client.invalidateQueries({ queryKey: queryKeys.twoStep });
-        onClose();
-        return;
-      }
-      setError(GENERIC_ERROR);
-    },
+    onError: (failure) =>
+      showCodeCheckFailure(failure, {
+        wrongCode: useRecoveryCode ? WRONG_RECOVERY_CODE : WRONG_SIGN_IN_CODE,
+        setError,
+        // A Recovery code stays, so a typo in it can be fixed; Remove waits until it is changed.
+        clearCode: () => setCode(""),
+        setLockSeconds,
+        onNotOn: () => {
+          toast.info("Two-step verification is already off.");
+          void client.invalidateQueries({ queryKey: queryKeys.twoStep });
+          onClose();
+        },
+      }),
   });
 
   return (
@@ -97,21 +86,15 @@ export function RemoveTwoStepDialog({ opened, onClose }: { opened: boolean; onCl
         className={classes.body}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!ready || remove.isPending || locked) return;
+          if (!ready || remove.isPending || locked || error !== null) return;
           remove.mutate(useRecoveryCode ? { recoveryCode } : { code });
         }}
       >
         <div className={classes.codeBlock}>
           {useRecoveryCode ? (
             <TextInput
-              label="Recovery code"
-              placeholder="xxxx-xxxx"
-              // Not "one-time-code": that offers the 6-digit codes from messages and apps, never a Recovery code.
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
+              {...recoveryCodeInputProps}
               data-autofocus
-              maxLength={RECOVERY_CODE_MAX}
               value={recoveryCode}
               onChange={(event) => {
                 setRecoveryCode(event.currentTarget.value);
@@ -161,7 +144,12 @@ export function RemoveTwoStepDialog({ opened, onClose }: { opened: boolean; onCl
           <Button variant="default" onClick={onClose} disabled={remove.isPending}>
             Cancel
           </Button>
-          <Button type="submit" color="red" loading={remove.isPending} disabled={!ready || locked}>
+          <Button
+            type="submit"
+            color="red"
+            loading={remove.isPending}
+            disabled={!ready || locked || error !== null}
+          >
             Remove
           </Button>
         </div>

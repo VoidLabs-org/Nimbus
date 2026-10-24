@@ -5,9 +5,6 @@ import classes from "./AuthLayout.module.css";
 /** Digits in a Verification code, a Reset code or a Sign-in code. */
 export const CODE_LENGTH = 6;
 
-/** A Recovery code as the server takes it at most; anything longer is never one. */
-export const RECOVERY_CODE_MAX = 64;
-
 // The look and the code's rules are fixed: callers can't pass the props that carry them.
 type CodeLook =
   | "length"

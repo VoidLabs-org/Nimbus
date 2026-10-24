@@ -152,6 +152,13 @@ describe("Remove two-step verification", () => {
     expect((await within(dialog).findByRole("alert")).textContent).toBe(
       "That recovery code isn’t right, or it was used already.",
     );
+    // The refused code stays to be fixed, but can't be sent again as it is.
+    const box = within(dialog).getByRole("textbox", { name: "Recovery code" });
+    expect((box as HTMLInputElement).value).toBe("abcd-efgh");
+    const submit = within(dialog).getByRole("button", { name: "Remove" });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(box, { target: { value: "abcd-efgx" } });
+    expect(submit.hasAttribute("disabled")).toBe(false);
   });
 
   it("shows the wait as m:ss while the User is locked out of code checks", async () => {

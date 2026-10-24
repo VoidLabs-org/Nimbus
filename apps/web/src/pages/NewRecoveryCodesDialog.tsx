@@ -3,11 +3,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
-import { ApiError, api } from "../api/client";
-import { GENERIC_ERROR, tooManyAttemptsIn, WRONG_SIGN_IN_CODE } from "../api/messages";
+import { api } from "../api/client";
+import { tooManyAttemptsIn, WRONG_SIGN_IN_CODE } from "../api/messages";
 import { queryKeys } from "../api/queries";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
 import { useCountdown } from "../auth/countdown";
+import { showCodeCheckFailure } from "./codeCheckFailure";
 import dialogs from "./DisconnectDialogs.module.css";
 import { SaveRecoveryCodes } from "./SaveRecoveryCodes";
 import classes from "./TwoStepSetupDialog.module.css";
@@ -53,27 +54,18 @@ export function NewRecoveryCodesDialog({
       // The count is back to 10 of 10 now, whether or not the User saves these.
       void client.invalidateQueries({ queryKey: queryKeys.twoStep });
     },
-    onError: (failure) => {
-      if (failure instanceof ApiError && failure.status === 401) return;
-      if (failure instanceof ApiError && failure.code === "invalid_code") {
-        setError(WRONG_SIGN_IN_CODE);
-        setCode("");
-        return;
-      }
-      if (failure instanceof ApiError && failure.status === 429) {
-        setCode("");
-        if (failure.retryAfterSeconds) setLockSeconds(failure.retryAfterSeconds);
-        else setError("Too many attempts. Try again later.");
-        return;
-      }
-      if (failure instanceof ApiError && failure.code === "not_on") {
-        toast.info("Two-step verification is off.");
-        void client.invalidateQueries({ queryKey: queryKeys.twoStep });
-        onClose();
-        return;
-      }
-      setError(GENERIC_ERROR);
-    },
+    onError: (failure) =>
+      showCodeCheckFailure(failure, {
+        wrongCode: WRONG_SIGN_IN_CODE,
+        setError,
+        clearCode: () => setCode(""),
+        setLockSeconds,
+        onNotOn: () => {
+          toast.info("Two-step verification is off.");
+          void client.invalidateQueries({ queryKey: queryKeys.twoStep });
+          onClose();
+        },
+      }),
   });
 
   return (

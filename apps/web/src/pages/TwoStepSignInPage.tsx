@@ -10,13 +10,8 @@ import {
 } from "../api/messages";
 import { AuthForm, AuthLayout, AuthSubmit, AuthTextInput } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
-import {
-  CodeAlert,
-  CODE_LENGTH,
-  CodePinInput,
-  PinnedSubmit,
-  RECOVERY_CODE_MAX,
-} from "../auth/CodeEntry";
+import { CodeAlert, CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
+import { recoveryCodeInputProps } from "../auth/recoveryCode";
 import { useCountdown } from "../auth/countdown";
 import { returnToSearch, safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -103,14 +98,8 @@ export default function TwoStepSignInPage() {
       <AuthForm onSubmit={(event) => void verify(event)}>
         {useRecoveryCode ? (
           <AuthTextInput
-            label="Recovery code"
-            placeholder="xxxx-xxxx"
-            // Not "one-time-code": that offers the 6-digit codes from messages and apps, never a Recovery code.
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
+            {...recoveryCodeInputProps}
             autoFocus
-            maxLength={RECOVERY_CODE_MAX}
             value={recoveryCode}
             onChange={(event) => {
               const value = event.currentTarget.value;

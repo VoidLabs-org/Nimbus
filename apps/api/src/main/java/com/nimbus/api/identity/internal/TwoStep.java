@@ -51,9 +51,11 @@ class TwoStep {
 
 	private final TransactionTemplate transaction;
 
+	private final SignInCodeLock lock;
+
 	TwoStep(TwoStepStore store, TwoStepSetups setups, TwoStepSecrets secrets, UserRepository users, Sessions sessions,
 			ApplicationEventPublisher events, Clock clock, AuthProperties properties,
-			PlatformTransactionManager transactionManager) {
+			PlatformTransactionManager transactionManager, SignInCodeLock lock) {
 		this.store = store;
 		this.setups = setups;
 		this.secrets = secrets;
@@ -63,6 +65,7 @@ class TwoStep {
 		this.clock = clock;
 		this.recentSignIn = properties.linkRecentSignIn();
 		this.transaction = new TransactionTemplate(transactionManager);
+		this.lock = lock;
 	}
 
 	Status status(UUID userId, UUID sessionId) {
@@ -102,10 +105,12 @@ class TwoStep {
 	 * @throws SetupExpiredException when this Session has no setup in progress, or the code was the last wrong one
 	 * allowed
 	 * @throws WrongSignInCodeException when the code doesn't fit the key
+	 * @throws SlidingWindowLimiter.LimitExceededException when the User got too many codes wrong in the last hour
 	 */
 	List<String> verifySetup(UUID userId, UUID sessionId, String code) {
 		sessions.requireActive(sessionId, userId);
 		var setup = setups.find(userId, sessionId).orElseThrow(SetupExpiredException::new);
+		var check = lock.check(userId);
 		var step = SignInCodeMath.matchingStep(setup.key(), code, clock.instant(), null);
 		if (step.isEmpty()) {
 			if (setups.wrongCode(userId, setup)) {
@@ -113,6 +118,7 @@ class TwoStep {
 			}
 			throw new WrongSignInCodeException();
 		}
+		lock.right(userId, check);
 		if (setup.isVerified()) {
 			return setup.recoveryCodes();
 		}
@@ -206,8 +212,20 @@ class TwoStep {
 
 	static class WrongSignInCodeException extends RuntimeException {
 
+		private final Integer triesLeft;
+
 		WrongSignInCodeException() {
+			this(null);
+		}
+
+		/** @param triesLeft for a pending sign-in; null where the tries aren't counted down */
+		WrongSignInCodeException(Integer triesLeft) {
 			super("That code didn't work. Check your authenticator app and try again.");
+			this.triesLeft = triesLeft;
+		}
+
+		Integer triesLeft() {
+			return triesLeft;
 		}
 
 	}

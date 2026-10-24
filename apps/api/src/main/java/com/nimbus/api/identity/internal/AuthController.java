@@ -14,7 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,11 +32,15 @@ class AuthController {
 
 	private final Sessions sessions;
 
-	AuthController(Registration registration, SignIn signIn, AccessTokens accessTokens, Sessions sessions) {
+	private final TwoStepSignIn twoStepSignIn;
+
+	AuthController(Registration registration, SignIn signIn, AccessTokens accessTokens, Sessions sessions,
+			TwoStepSignIn twoStepSignIn) {
 		this.registration = registration;
 		this.signIn = signIn;
 		this.accessTokens = accessTokens;
 		this.sessions = sessions;
+		this.twoStepSignIn = twoStepSignIn;
 	}
 
 	@PostMapping("/register")
@@ -47,21 +50,39 @@ class AuthController {
 		return signedIn(HttpStatus.CREATED, user, http);
 	}
 
+	/**
+	 * A User with Two-step verification gets no Session for the password alone: the answer says a Sign-in code is
+	 * needed, and a cookie holds the pending sign-in that {@code /two-step} finishes.
+	 */
 	@PostMapping("/login")
-	ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+	ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
 		var user = signIn.signIn(request.email(), request.password(), http.getRemoteAddr());
+		if (twoStepSignIn.isRequired(user)) {
+			return ResponseEntity.ok()
+				.header(HttpHeaders.SET_COOKIE, PendingSignIns.cookie(twoStepSignIn.start(user)).toString())
+				.body(new TwoStepRequiredResponse(true));
+		}
 		return signedIn(HttpStatus.OK, user, http);
 	}
 
 	/**
+	 * The second step of a sign-in: a right Sign-in code starts the Session as {@code /login} does and ends the
+	 * pending sign-in. The pending cookie is the only credential, so {@link NimbusHeaderGate} checks its header.
+	 */
+	@PostMapping("/two-step")
+	ResponseEntity<AuthResponse> twoStep(@CookieValue(name = PendingSignIns.COOKIE, required = false) String pendingId,
+			@Valid @RequestBody TwoStepRequest request, HttpServletRequest http) {
+		var user = twoStepSignIn.finish(pendingId, request.code());
+		return signedIn(HttpStatus.OK, user, http, PendingSignIns.clearedCookie());
+	}
+
+	/**
 	 * Exchanges the refresh cookie for a new one and a fresh access token. The cookie is the only credential, so
-	 * the request must also carry a header that cross-site forms can't set.
+	 * the request must also carry a header that cross-site forms can't set ({@link NimbusHeaderGate}).
 	 */
 	@PostMapping("/refresh")
 	ResponseEntity<AuthResponse> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
-			@RequestHeader(name = "X-Requested-With", required = false) String requestedWith,
 			HttpServletRequest http) {
-		requireNimbusHeader(requestedWith);
 		var refreshed = sessions.refresh(refreshToken, http.getRemoteAddr());
 		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token());
 	}
@@ -71,35 +92,27 @@ class AuthController {
 	 * credential, so it needs the same header. Succeeds even if there was no session left to end.
 	 */
 	@PostMapping("/logout")
-	ResponseEntity<Void> logout(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
-			@RequestHeader(name = "X-Requested-With", required = false) String requestedWith) {
-		requireNimbusHeader(requestedWith);
+	ResponseEntity<Void> logout(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
 		sessions.end(refreshToken);
 		return ResponseEntity.noContent()
 			.header(HttpHeaders.SET_COOKIE, clearedRefreshCookie().toString())
 			.build();
 	}
 
-	/**
-	 * Endpoints that the refresh cookie alone authenticates must come from the Nimbus app: cross-site forms
-	 * can't set this header. Call it first in every such endpoint. When a third one appears, move the check
-	 * into a filter for those routes.
-	 */
-	private static void requireNimbusHeader(String requestedWith) {
-		if (!"nimbus".equals(requestedWith)) {
-			throw new NotFromAppException();
-		}
-	}
-
 	/** Starts a session: the access token goes in the body, the refresh token only in the cookie. */
-	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user, HttpServletRequest http) {
-		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT)));
+	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user, HttpServletRequest http,
+			ResponseCookie... alsoSet) {
+		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT)), alsoSet);
 	}
 
-	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken) {
-		return ResponseEntity.status(status)
-			.header(HttpHeaders.SET_COOKIE, refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString())
-			.body(new AuthResponse(accessTokens.issueFor(user, refreshToken.sessionId()), UserResponse.from(user)));
+	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken,
+			ResponseCookie... alsoSet) {
+		var response = ResponseEntity.status(status)
+			.header(HttpHeaders.SET_COOKIE, refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
+		for (var cookie : alsoSet) {
+			response.header(HttpHeaders.SET_COOKIE, cookie.toString());
+		}
+		return response.body(new AuthResponse(accessTokens.issueFor(user, refreshToken.sessionId()), UserResponse.from(user)));
 	}
 
 	/** Tells the browser to drop a refresh token the server rejected, instead of resending it on every load. */
@@ -144,13 +157,11 @@ class AuthController {
 	record AuthResponse(String accessToken, UserResponse user) {
 	}
 
-	/** Thrown when a cookie-authenticated request lacks {@code X-Requested-With: nimbus}; becomes a 403. */
-	static class NotFromAppException extends RuntimeException {
+	record TwoStepRequiredResponse(boolean twoStepRequired) {
+	}
 
-		NotFromAppException() {
-			super("This request must come from the Nimbus app");
-		}
-
+	/** Anything that isn't 6 digits is simply a wrong code. */
+	record TwoStepRequest(@Size(max = 64) String code) {
 	}
 
 }

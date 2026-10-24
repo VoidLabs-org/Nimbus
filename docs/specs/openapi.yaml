@@ -123,6 +123,10 @@ paths:
     post:
       tags: [auth]
       summary: Sign in with email and password
+      description: >-
+        For a User with Two-step verification a right password starts no session: the answer is
+        `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that
+        `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code.
       security: []
       requestBody:
         required: true
@@ -132,14 +136,25 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: Signed in
+          description: Signed in, or (with Two-step verification) a Sign-in code is needed
           headers:
             Set-Cookie:
-              $ref: "#/components/headers/RefreshCookie"
+              description: >-
+                The refresh cookie when signed in (see `RefreshCookie`); otherwise the pending cookie (see the
+                `twoStepPendingCookie` scheme)
+              schema:
+                type: string
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/AuthResponse"
+                  - type: object
+                    required: [twoStepRequired]
+                    properties:
+                      twoStepRequired:
+                        type: boolean
+                        const: true
         "400":
           $ref: "#/components/responses/InvalidFields"
         "401":
@@ -150,6 +165,85 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "429":
           $ref: "#/components/responses/TooManyAttempts"
+
+  /api/auth/two-step:
+    post:
+      tags: [auth]
+      summary: Finish a password sign-in with a Sign-in code
+      description: >-
+        Checks a Sign-in code from the User's authenticator app for the pending sign-in in the `two_step_pending`
+        cookie. One 30-second step either side of now is accepted, but never the step that last signed the User in or
+        an older one. A right code starts the session as `POST /api/auth/login` does and ends the pending sign-in. A
+        pending sign-in lasts 5 minutes and allows 5 wrong codes. A refresh never comes here.
+      security:
+        - twoStepPendingCookie: []
+      parameters:
+        - name: X-Requested-With
+          in: header
+          required: true
+          description: Must be `nimbus`. Cross-site forms can't set it, so other sites can't use the cookie.
+          schema:
+            type: string
+            const: nimbus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: Signed in; the pending cookie is cleared
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: >-
+            The code is wrong or isn't 6 digits (`code: invalid_code`, with `triesLeft`), or it is over 64 characters
+            (`errors.code`)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      triesLeft:
+                        type: integer
+        "401":
+          description: >-
+            `code: sign_in_expired`: the pending sign-in is missing, unknown, used or older than 5 minutes, or this was
+            its 5th wrong code. Clears the pending cookie; the User signs in again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The X-Requested-With header is missing or not `nimbus`
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: >-
+            The User got `nimbus.auth.wrong-sign-in-codes-per-hour` (default 10) codes wrong in the last hour, across
+            sign-ins and setup; every code check is refused until `Retry-After` seconds have passed
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /api/auth/oauth2/google:
     get:
@@ -860,8 +954,8 @@ paths:
         Checks a Sign-in code against the key being set up (one 30-second step either side of now is accepted) and
         answers with the 10 Recovery codes the User must save. A setup that is proved already answers with the same
         codes, so a second tab or a double click never replaces them. Only the session that started the setup can prove
-        it, and 5 wrong codes throw it away. Turns nothing on. The request must come from a session that is still
-        running.
+        it, and 5 wrong codes throw it away. Wrong codes also count toward the User's hourly lock on Sign-in codes.
+        Turns nothing on. The request must come from a session that is still running.
       requestBody:
         required: true
         content:
@@ -909,6 +1003,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
   /api/access/permissions:
     get:
       tags: [access]
@@ -1393,6 +1489,13 @@ components:
       type: apiKey
       in: cookie
       name: refresh_token
+    twoStepPendingCookie:
+      type: apiKey
+      in: cookie
+      name: two_step_pending
+      description: >-
+        Set by `POST /api/auth/login` for a User with Two-step verification: `two_step_pending=<random id>; HttpOnly;
+        Secure; SameSite=Strict; Path=/api/auth/two-step; Max-Age=300`. Single use.
 
   parameters:
     LinkTicket:
@@ -1892,7 +1995,7 @@ components:
                     additionalProperties:
                       type: string
     TooManyAttempts:
-      description: Rate limited (failed sign-ins per email or IP address, registrations, refreshes, forgot-password requests or reset attempts per IP address, or wrong current passwords per User)
+      description: Rate limited (failed sign-ins per email or IP address, registrations, refreshes, forgot-password requests or reset attempts per IP address, wrong current passwords per User, or wrong Sign-in codes per User)
       headers:
         Retry-After:
           description: Seconds until another attempt may succeed

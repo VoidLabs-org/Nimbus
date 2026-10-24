@@ -226,6 +226,23 @@ class TwoStepSetupTests {
 		post(token, "/setup/verify", Map.of("code", right)).expectStatus().isEqualTo(409);
 	}
 
+	// The same hourly lock as signing in, so restarting setup is no way to keep guessing.
+	@Test
+	void tenWrongCodesInAnHourLockTheCodeCheck() {
+		var token = tokenFor("ts16@example.com");
+		for (var round = 0; round < 2; round++) {
+			var key = startSetup(token);
+			var wrong = Map.of("code", SignInCodes.codeFor(key, clock.instant()).equals("000000") ? "000001" : "000000");
+			for (var attempt = 0; attempt < 5; attempt++) {
+				post(token, "/setup/verify", wrong);
+			}
+		}
+
+		var key = startSetup(token);
+		post(token, "/setup/verify", Map.of("code", SignInCodes.codeFor(key, clock.instant()))).expectStatus()
+			.isEqualTo(429).expectHeader().exists("Retry-After");
+	}
+
 	@Test
 	void closingTheWindowThrowsTheSetupAway() {
 		var token = tokenFor("ts14@example.com");

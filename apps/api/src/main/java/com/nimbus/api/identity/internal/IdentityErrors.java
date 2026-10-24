@@ -69,7 +69,19 @@ class IdentityErrors {
 	ProblemDetail wrongSignInCode(TwoStep.WrongSignInCodeException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", "invalid_code");
+		if (e.triesLeft() != null) {
+			problem.setProperty("triesLeft", e.triesLeft());
+		}
 		return problem;
+	}
+
+	@ExceptionHandler
+	ResponseEntity<ProblemDetail> signInExpired(TwoStepSignIn.SignInExpiredException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
+		problem.setProperty("code", "sign_in_expired");
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+			.header(HttpHeaders.SET_COOKIE, PendingSignIns.clearedCookie().toString())
+			.body(problem);
 	}
 
 	@ExceptionHandler
@@ -111,11 +123,6 @@ class IdentityErrors {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Some fields are invalid");
 		problem.setProperty("errors", Map.of("currentPassword", e.getMessage()));
 		return problem;
-	}
-
-	@ExceptionHandler
-	ProblemDetail notFromApp(AuthController.NotFromAppException e) {
-		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
 	}
 
 	@ExceptionHandler

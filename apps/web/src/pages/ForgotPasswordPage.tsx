@@ -1,10 +1,10 @@
 import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
 import { useMutation } from "@tanstack/react-query";
-import { useState, type ReactNode, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { api, ApiError } from "../api/client";
-import { tooManyAttemptsIn, tooManyAttemptsMessage } from "../api/messages";
+import { GENERIC_ERROR, tooManyAttemptsIn, tooManyAttemptsMessage } from "../api/messages";
 import {
   AuthForm,
   AuthLayout,
@@ -13,26 +13,10 @@ import {
   AuthTextInput,
 } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
-import { CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
+import { CodeAlert as Alert, CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
 import { clock, RESEND_WAIT_SECONDS, useCountdown } from "../auth/countdown";
 import { passwordError } from "../auth/password";
 import { useSession } from "../auth/useSession";
-
-const GENERIC_ERROR = "Something went wrong. Please try again.";
-
-/** A red message under the form; step 2's carry the "!" mark. */
-function Alert({ marked, children }: { marked?: boolean; children: ReactNode }) {
-  return (
-    <div className={classes.codeError} role="alert">
-      {marked && (
-        <span className={classes.codeErrorMark} aria-hidden>
-          !
-        </span>
-      )}
-      {children}
-    </div>
-  );
-}
 
 /**
  * Forgot password, in two steps on one page. Step 1 asks for the email and has a Reset code emailed to it (the

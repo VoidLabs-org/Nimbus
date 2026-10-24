@@ -158,6 +158,26 @@ describe("api client", () => {
     expect(authorization(server.calls[2])).toBe("Bearer token-2");
   });
 
+  it("starts no session for a password alone when a Sign-in code is needed, and the code finishes it", async () => {
+    const server = fakeServer(
+      json(200, { twoStepRequired: true }),
+      json(200, { accessToken: "token-1", user: alice }),
+      json(200, alice),
+    );
+    const api = createApiClient(server.fetchFn);
+
+    expect(await api.login({ email: "alice@example.com", password: "correct horse" })).toBeNull();
+    expect(await api.signInWithCode("123456")).toEqual(alice);
+    await api.me();
+
+    expect(server.calls[1].url).toBe("/api/auth/two-step");
+    expect(server.calls[1].init.method).toBe("POST");
+    expect(new Headers(server.calls[1].init.headers).get("X-Requested-With")).toBe("nimbus");
+    expect(JSON.parse(String(server.calls[1].init.body))).toEqual({ code: "123456" });
+    expect(authorization(server.calls[1])).toBeNull();
+    expect(authorization(server.calls[2])).toBe("Bearer token-1");
+  });
+
   it("tells how long to wait when the server is limiting attempts", async () => {
     const server = fakeServer(
       new Response(

@@ -174,3 +174,12 @@
     min-height: 44px;
   }
 }
+
+/* The QR code couldn't be drawn: the key beside it still works. */
+.qrFailed {
+  margin: 0;
+  padding: 16px;
+  font-size: 13px;
+  text-align: center;
+  color: #4a4643;
+}

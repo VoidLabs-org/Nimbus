@@ -2,15 +2,14 @@ import { IconDeviceMobile, IconKey } from "@tabler/icons-react";
 import { Button } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { Glyph } from "@repo/ui/glyph";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { ApiError, api, type TwoStepSetup } from "../api/client";
 import { queryKeys, useTwoStep } from "../api/queries";
-import { loginPath } from "../auth/returnPath";
-import { useSession } from "../auth/useSession";
+import { useSignInAgain } from "../auth/useSignInAgain";
 import { ReauthDialog } from "./ReauthDialog";
 import { TwoStepSetupDialog } from "./TwoStepSetupDialog";
 import classes from "./SecurityPage.module.css";
@@ -28,8 +27,6 @@ const SETUP_PARAM = "setup";
 export function TwoStepCard() {
   const query = useTwoStep();
   const client = useQueryClient();
-  const navigate = useNavigate();
-  const { logout } = useSession();
   const [setup, setSetup] = useState<TwoStepSetup | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [reauthOpen, setReauthOpen] = useState(false);
@@ -57,15 +54,8 @@ export function TwoStepCard() {
       toast.error("Couldn’t start setting up two-step verification. Please try again.");
     },
   });
-  const signInAgain = useMutation({
-    mutationFn: async () => {
-      // Back here with the setup window asked for, so the User doesn't have to find Set up again. Signing out sends
-      // the app to the sign-in page by itself; passing the page makes that one come back here.
-      const back = `/settings/security?${SETUP_PARAM}=two-step`;
-      await logout(back);
-      void navigate(loginPath(back));
-    },
-  });
+  // Back here with the setup window asked for, so the User doesn't have to find Set up again.
+  const signInAgain = useSignInAgain(`/settings/security?${SETUP_PARAM}=two-step`);
 
   // Coming back from signing in again: open the setup window by itself (unless it's on by now), once, and take the
   // parameter out of the address so a reload doesn't open it again.

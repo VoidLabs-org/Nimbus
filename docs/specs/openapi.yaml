@@ -800,6 +800,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
   /api/users/me/two-step/setup:
+    delete:
+      tags: [users]
+      summary: Throw away the setup in progress
+      description: >-
+        The User closed the setup window: this session's setup in progress, proved or not, is thrown away, so it can't
+        be turned on later. The request must come from a session that is still running.
+      responses:
+        "204":
+          description: Thrown away, or there was none
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       tags: [users]
       summary: Start setting up Two-step verification
@@ -845,8 +858,10 @@ paths:
       summary: Prove the authenticator app has the key
       description: >-
         Checks a Sign-in code against the key being set up (one 30-second step either side of now is accepted) and
-        answers with the 10 Recovery codes the User must save. Turns nothing on. The request must come from a session
-        that is still running.
+        answers with the 10 Recovery codes the User must save. A setup that is proved already answers with the same
+        codes, so a second tab or a double click never replaces them. Only the session that started the setup can prove
+        it, and 5 wrong codes throw it away. Turns nothing on. The request must come from a session that is still
+        running.
       requestBody:
         required: true
         content:
@@ -875,7 +890,9 @@ paths:
                       pattern: "^[a-z0-9]{4}-[a-z0-9]{4}$"
                       example: k7qx-2m9d
         "400":
-          description: "The code doesn't fit the key, or isn't 6 digits (`code: invalid_code`)"
+          description: >-
+            The code doesn't fit the key or isn't 6 digits (`code: invalid_code`), or it is over 64 characters
+            (`errors.code`)
           content:
             application/problem+json:
               schema:
@@ -885,7 +902,9 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          description: "No setup in progress (`code: setup_expired`)"
+          description: >-
+            No setup in progress for this session (`code: setup_expired`): never started, started by another session,
+            expired, discarded, replaced, or thrown away by this, the 5th wrong code
           content:
             application/problem+json:
               schema:

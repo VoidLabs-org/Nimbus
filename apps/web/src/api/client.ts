@@ -567,6 +567,9 @@ export function createApiClient(
         body: JSON.stringify({ code }),
       }),
 
+    /** Throws away this sign-in's setup in progress, because the User closed the window; 204 also when there is none. */
+    discardTwoStepSetup: () => request<void>("/api/users/me/two-step/setup", { method: "DELETE" }),
+
     /** Turns Two-step verification on with the setup just proved. 409 `setup_expired` or `already_on`. */
     turnOnTwoStep: () => request<void>("/api/users/me/two-step", { method: "POST" }),
 

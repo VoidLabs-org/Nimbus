@@ -2,6 +2,7 @@
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { QueryClientProvider } from "@tanstack/react-query";
+import QRCode from "qrcode";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -66,6 +67,7 @@ beforeEach(() => {
   vi.spyOn(api, "sessions").mockResolvedValue([]);
   vi.spyOn(api, "providers").mockResolvedValue([]);
   vi.spyOn(api, "linkedIdentities").mockResolvedValue([]);
+  vi.spyOn(api, "discardTwoStepSetup").mockResolvedValue();
 });
 afterEach(() => {
   cleanup();
@@ -253,6 +255,7 @@ describe("setting up Two-step verification", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(turnOn).not.toHaveBeenCalled();
+    expect(api.discardTwoStepSetup).toHaveBeenCalledTimes(1);
     expect(await within(await card()).findByRole("button", { name: "Set up" })).toBeTruthy();
   });
 
@@ -360,5 +363,19 @@ describe("signing in again, with the app's real sign-in state", () => {
         "/login?returnTo=%2Fsettings%2Fsecurity%3Fsetup%3Dtwo-step",
       ),
     );
+  });
+});
+
+describe("when the QR code can't be drawn", () => {
+  it("says so and points to the key", async () => {
+    vi.spyOn(api, "twoStep").mockResolvedValue(OFF);
+    vi.spyOn(QRCode, "toString").mockImplementation((() =>
+      Promise.reject(new Error("too long"))) as unknown as typeof QRCode.toString);
+    show();
+
+    const dialog = await openSetup();
+
+    await within(dialog).findByText("Couldn’t draw the QR code. Enter the key instead.");
+    expect(within(dialog).getByText("JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP")).toBeTruthy();
   });
 });

@@ -6,6 +6,7 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Objects;
 import java.util.UUID;
 
 import javax.crypto.Cipher;
@@ -36,12 +37,11 @@ class TwoStepSecrets {
 	private final SecretKeySpec hashKey;
 
 	TwoStepSecrets(AuthProperties properties) {
-		if (properties.twoStepSecret() == null || properties.twoStepSecret().isBlank()) {
-			throw new IllegalStateException(HINT);
-		}
+		// A missing value is normally stopped earlier by @NotBlank; here it is just one more too-short secret.
+		var configured = Objects.requireNonNullElse(properties.twoStepSecret(), "");
 		byte[] secret;
 		try {
-			secret = Base64.getDecoder().decode(properties.twoStepSecret().strip());
+			secret = Base64.getDecoder().decode(configured.strip());
 		}
 		catch (IllegalArgumentException e) {
 			throw new IllegalStateException(HINT, e);

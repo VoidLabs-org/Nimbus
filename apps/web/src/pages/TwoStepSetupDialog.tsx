@@ -93,11 +93,17 @@ export function TwoStepSetupDialog({
     },
   });
   const busy = verify.isPending || turnOn.isPending;
+  // Closing without turning it on throws the setup away on the server too, so nothing can turn it on later with
+  // codes the User may not have kept. A failure only leaves it to expire after 10 minutes.
+  const cancel = () => {
+    api.discardTwoStepSetup().catch(() => {});
+    onClose();
+  };
 
   return (
     <WindowFrame
       opened={opened}
-      onClose={busy ? () => {} : onClose}
+      onClose={busy ? () => {} : cancel}
       title={
         step === "expired" ? (
           "Start again"
@@ -164,7 +170,7 @@ export function TwoStepSetupDialog({
             )}
           </div>
           <div className={dialogs.footer}>
-            <Button variant="default" onClick={onClose} disabled={busy}>
+            <Button variant="default" onClick={cancel} disabled={busy}>
               Cancel
             </Button>
             <Button type="submit" loading={verify.isPending} disabled={code.length !== CODE_LENGTH}>
@@ -216,7 +222,7 @@ export function TwoStepSetupDialog({
         <div className={classes.body}>
           <p className={classes.expired}>This setup timed out. Start again to get a new code.</p>
           <div className={dialogs.footer}>
-            <Button variant="default" onClick={onClose} disabled={restarting}>
+            <Button variant="default" onClick={cancel} disabled={restarting}>
               Cancel
             </Button>
             <Button loading={restarting} onClick={onRestart}>
@@ -232,22 +238,31 @@ export function TwoStepSetupDialog({
 /** The QR code an authenticator app scans, drawn here in the browser: the key never goes to another server. */
 function QrCode({ value }: { value: string }) {
   const [svg, setSvg] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let current = true;
-    void QRCode.toString(value, {
+    QRCode.toString(value, {
       type: "svg",
       margin: 1,
       errorCorrectionLevel: "M",
       color: { dark: "#000000", light: "#ffffff" },
-    }).then((drawn) => {
-      if (current) setSvg(drawn);
-    });
+    }).then(
+      (drawn) => {
+        if (current) setSvg(drawn);
+      },
+      () => {
+        if (current) setFailed(true);
+      },
+    );
     return () => {
       current = false;
     };
   }, [value]);
   return (
     <div className={classes.qr}>
+      {failed && (
+        <p className={classes.qrFailed}>Couldn’t draw the QR code. Enter the key instead.</p>
+      )}
       {svg && (
         <img
           src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
@@ -281,5 +296,6 @@ function download(codes: string[]) {
   link.href = url;
   link.download = "nimbus-recovery-codes.txt";
   link.click();
-  URL.revokeObjectURL(url);
+  // Some browsers start the download after click() returns, so the address must outlive it for a while.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

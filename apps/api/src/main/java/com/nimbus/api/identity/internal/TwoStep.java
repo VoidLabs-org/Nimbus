@@ -86,7 +86,7 @@ class TwoStep {
 		}
 		sessions.requireStartedWithin(sessionId, userId, recentSignIn);
 		var key = SignInCodeMath.newKey();
-		setups.start(userId, key);
+		setups.start(userId, sessionId, key);
 		var encoded = SignInCodeMath.base32(key);
 		var label = URLEncoder.encode("Nimbus:" + users.require(userId).email(), StandardCharsets.UTF_8)
 			.replace("+", "%20")
@@ -95,19 +95,39 @@ class TwoStep {
 	}
 
 	/**
-	 * Checks a code from the User's app against the key being set up and makes the Recovery codes they are shown.
+	 * Checks a code from the User's app against the key being set up and makes the Recovery codes they are shown. A
+	 * setup that is proved already answers with the codes it has, so a second tab or a double click never replaces
+	 * the codes the User saved.
 	 *
-	 * @throws SetupExpiredException when no setup is in progress
+	 * @throws SetupExpiredException when this Session has no setup in progress, or the code was the last wrong one
+	 * allowed
 	 * @throws WrongSignInCodeException when the code doesn't fit the key
 	 */
 	List<String> verifySetup(UUID userId, UUID sessionId, String code) {
 		sessions.requireActive(sessionId, userId);
-		var setup = setups.find(userId).orElseThrow(SetupExpiredException::new);
-		var step = SignInCodeMath.matchingStep(setup.key(), code, clock.instant(), null)
-			.orElseThrow(WrongSignInCodeException::new);
-		var codes = newRecoveryCodes();
-		setups.verified(userId, setup, step, codes);
-		return codes;
+		var setup = setups.find(userId, sessionId).orElseThrow(SetupExpiredException::new);
+		var step = SignInCodeMath.matchingStep(setup.key(), code, clock.instant(), null);
+		if (step.isEmpty()) {
+			if (setups.wrongCode(userId, setup)) {
+				throw new SetupExpiredException();
+			}
+			throw new WrongSignInCodeException();
+		}
+		if (setup.isVerified()) {
+			return setup.recoveryCodes();
+		}
+		var proved = setups.verified(userId, setup, step.getAsLong(), newRecoveryCodes());
+		if (proved == null || !proved.isVerified()) {
+			// Thrown away or replaced while this code was checked.
+			throw new SetupExpiredException();
+		}
+		return proved.recoveryCodes();
+	}
+
+	/** Throws away the setup this Session has in progress, if any: the User closed the window. */
+	void discardSetup(UUID userId, UUID sessionId) {
+		sessions.requireActive(sessionId, userId);
+		setups.discard(userId, sessionId);
 	}
 
 	/**
@@ -123,7 +143,7 @@ class TwoStep {
 			if (store.find(userId).isPresent()) {
 				throw new AlreadyOnException();
 			}
-			var setup = setups.takeVerified(userId).orElseThrow(SetupExpiredException::new);
+			var setup = setups.takeVerified(userId, sessionId).orElseThrow(SetupExpiredException::new);
 			// Postgres keeps microseconds, so the time is cut to them before it is stored and announced.
 			var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 			store.add(userId, secrets.encrypt(userId, setup.key()), now, setup.verifiedStep());

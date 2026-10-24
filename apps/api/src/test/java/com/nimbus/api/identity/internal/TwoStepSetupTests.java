@@ -178,6 +178,77 @@ class TwoStepSetupTests {
 		post(token, "/setup", null).expectStatus().isForbidden();
 	}
 
+	// Two tabs, or a double click: the codes the User saved must be the ones that are stored.
+	@Test
+	void verifyingAgainAnswersWithTheSameRecoveryCodes() {
+		var token = tokenFor("ts11@example.com");
+		var key = startSetup(token);
+		var code = Map.of("code", SignInCodes.codeFor(key, clock.instant()));
+
+		List<String> first = JsonPath.read(body(post(token, "/setup/verify", code).expectStatus().isOk()),
+				"$.recoveryCodes");
+		List<String> second = JsonPath.read(body(post(token, "/setup/verify", code).expectStatus().isOk()),
+				"$.recoveryCodes");
+
+		assertThat(second).isEqualTo(first);
+	}
+
+	@Test
+	void onlyTheSessionThatStartedASetupCanProveItOrTurnItOn() {
+		var email = "ts12@example.com";
+		var starter = tokenFor(email);
+		var other = tokenFor(email);
+		var key = startSetup(starter);
+		var code = Map.of("code", SignInCodes.codeFor(key, clock.instant()));
+
+		post(other, "/setup/verify", code).expectStatus().isEqualTo(409).expectBody().jsonPath("$.code")
+			.isEqualTo("setup_expired");
+		post(starter, "/setup/verify", code).expectStatus().isOk();
+		post(other, "", null).expectStatus().isEqualTo(409).expectBody().jsonPath("$.code")
+			.isEqualTo("setup_expired");
+
+		post(starter, "", null).expectStatus().isNoContent();
+	}
+
+	@Test
+	void fiveWrongCodesThrowTheSetupAway() {
+		var token = tokenFor("ts13@example.com");
+		var key = startSetup(token);
+		var right = SignInCodes.codeFor(key, clock.instant());
+		var wrong = Map.of("code", right.equals("000000") ? "000001" : "000000");
+
+		for (var attempt = 0; attempt < 4; attempt++) {
+			post(token, "/setup/verify", wrong).expectStatus().isBadRequest();
+		}
+		post(token, "/setup/verify", wrong).expectStatus().isEqualTo(409).expectBody().jsonPath("$.code")
+			.isEqualTo("setup_expired");
+
+		post(token, "/setup/verify", Map.of("code", right)).expectStatus().isEqualTo(409);
+	}
+
+	@Test
+	void closingTheWindowThrowsTheSetupAway() {
+		var token = tokenFor("ts14@example.com");
+		var key = startSetup(token);
+		post(token, "/setup/verify", Map.of("code", SignInCodes.codeFor(key, clock.instant()))).expectStatus().isOk();
+
+		client.delete().uri("/api/users/me/two-step/setup").header("Authorization", "Bearer " + token).exchange()
+			.expectStatus().isNoContent();
+
+		post(token, "", null).expectStatus().isEqualTo(409).expectBody().jsonPath("$.code")
+			.isEqualTo("setup_expired");
+		status(token).expectStatus().isOk().expectBody().jsonPath("$.enabled").isEqualTo(false);
+	}
+
+	@Test
+	void aCodeLongerThanAnyRealOneIsRefusedAsInvalid() {
+		var token = tokenFor("ts15@example.com");
+		startSetup(token);
+
+		post(token, "/setup/verify", Map.of("code", "1".repeat(65))).expectStatus().isBadRequest().expectBody()
+			.jsonPath("$.errors.code").isNotEmpty();
+	}
+
 	@Test
 	void needsASignedInUser() {
 		client.get().uri("/api/users/me/two-step").exchange().expectStatus().isUnauthorized();

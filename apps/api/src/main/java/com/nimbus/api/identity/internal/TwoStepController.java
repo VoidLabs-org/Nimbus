@@ -3,10 +3,12 @@ package com.nimbus.api.identity.internal;
 import java.util.List;
 
 import com.nimbus.api.identity.CurrentUser;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -40,9 +42,16 @@ class TwoStepController {
 
 	/** A code from the app proves it has the key; answers with the Recovery codes to save. */
 	@PostMapping("/setup/verify")
-	RecoveryCodesResponse verifySetup(@AuthenticationPrincipal Jwt token, @RequestBody CodeRequest request) {
+	RecoveryCodesResponse verifySetup(@AuthenticationPrincipal Jwt token, @Valid @RequestBody CodeRequest request) {
 		return new RecoveryCodesResponse(
 				twoStep.verifySetup(currentUser.id(), UsersController.sessionOf(token), request.code()));
+	}
+
+	/** Throws away this Session's setup in progress: the User closed the window. 204 also when there is none. */
+	@DeleteMapping("/setup")
+	ResponseEntity<Void> discardSetup(@AuthenticationPrincipal Jwt token) {
+		twoStep.discardSetup(currentUser.id(), UsersController.sessionOf(token));
+		return ResponseEntity.noContent().build();
 	}
 
 	/** Turns Two-step verification on with the setup the User just proved. */

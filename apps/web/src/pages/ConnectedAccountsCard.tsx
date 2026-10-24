@@ -1,14 +1,14 @@
 import { Button } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { ApiError, api } from "../api/client";
 import { connectErrorMessage } from "../api/messages";
 import { PROVIDERS } from "../auth/providers";
-import { loginPath } from "../auth/returnPath";
+import { useSignInAgain } from "../auth/useSignInAgain";
 import { goTo } from "../auth/redirect";
 import { useSession } from "../auth/useSession";
 import { queryKeys, useLinkedIdentities, useProviders } from "../api/queries";
@@ -25,9 +25,8 @@ import classes from "./SecurityPage.module.css";
 export function ConnectedAccountsCard() {
   const providers = useProviders();
   const identities = useLinkedIdentities();
-  const { user, logout } = useSession();
+  const { user } = useSession();
   const client = useQueryClient();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   // The provider whose "Sign in again" window is open (kept after closing so it still names it while fading).
   const [reauth, setReauth] = useState<{ id: string; open: boolean } | null>(null);
@@ -82,13 +81,7 @@ export function ConnectedAccountsCard() {
       toast.error(`Couldn’t start connecting ${nameOf(id)}. Please try again.`);
     },
   });
-  const signInAgain = useMutation({
-    mutationFn: async () => {
-      // Signing out sends the app to the sign-in page by itself; passing the page makes that one come back here.
-      await logout("/settings/security");
-      void navigate(loginPath("/settings/security"));
-    },
-  });
+  const signInAgain = useSignInAgain("/settings/security");
   // The provider the open dialog is about, and which one: the question, or the "set a password first" answer.
   const [dialog, setDialog] = useState<{
     id: string;

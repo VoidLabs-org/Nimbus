@@ -65,19 +65,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   async function register(input: RegisterInput) {
-    const registered = await api.register(input);
+    signedInAs(await api.register(input));
+  }
+
+  function signedInAs(signedIn: User) {
     queryClient.clear();
     setConfirmingFor(null);
-    setUser(registered);
+    setUser(signedIn);
     setSignedOutOnPurpose(false);
   }
 
   async function login(input: LoginInput) {
     const signedIn = await api.login(input);
-    queryClient.clear();
-    setConfirmingFor(null);
-    setUser(signedIn);
-    setSignedOutOnPurpose(false);
+    if (!signedIn) return "two-step" as const;
+    signedInAs(signedIn);
+    return "signed-in" as const;
+  }
+
+  async function signInWithCode(code: string) {
+    signedInAs(await api.signInWithCode(code));
   }
 
   async function updateDisplayName(displayName: string) {
@@ -130,6 +136,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         retry,
         register,
         login,
+        signInWithCode,
         updateDisplayName,
         changePassword,
         verifyEmail,

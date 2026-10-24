@@ -21,7 +21,13 @@ export type Session = {
   /** Checks the session again after it was unavailable. */
   retry: () => void;
   register: (input: RegisterInput) => Promise<void>;
-  login: (input: LoginInput) => Promise<void>;
+  /**
+   * Signs in with email and password. Resolves to "two-step" when the User has Two-step verification and must still
+   * enter a Sign-in code with {@link signInWithCode}; nobody is signed in until then.
+   */
+  login: (input: LoginInput) => Promise<"signed-in" | "two-step">;
+  /** Finishes a password sign-in with a Sign-in code. Rejects with an ApiError if refused (see `api.signInWithCode`). */
+  signInWithCode: (code: string) => Promise<void>;
   /** Changes the signed-in User's display name. Rejects with an ApiError (field errors for 400) if refused. */
   updateDisplayName: (displayName: string) => Promise<void>;
   /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */

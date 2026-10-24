@@ -175,6 +175,9 @@ export const EMAIL_UNVERIFIED = "email_unverified";
 
 type AuthResponse = { accessToken: string; user: User };
 
+/** The answer to a right password when the User has Two-step verification: no Session yet. */
+type TwoStepRequired = { twoStepRequired: true };
+
 /** A failed API call, carrying the server's problem details (RFC 9457). */
 export class ApiError extends Error {
   readonly status: number;
@@ -347,20 +350,22 @@ export function createApiClient(
     }
   }
 
-  // Waits for a refresh under way, so it can't answer after this and replace the new session.
-  function startSession(path: string, input: RegisterInput | LoginInput): Promise<User> {
+  // Waits for a refresh under way, so it can't answer after this and replace the new session. Resolves to null when
+  // the server started none because a Sign-in code is still needed.
+  function startSession(path: string, input: object, headers?: HeadersInit): Promise<User | null> {
     return inFlight(
       (async () => {
         await refreshing?.catch(() => {});
-        const { accessToken: token, user } = await request<AuthResponse>(
+        const answer = await request<AuthResponse | TwoStepRequired>(
           path,
-          { method: "POST", body: JSON.stringify(input) },
+          { method: "POST", body: JSON.stringify(input), headers },
           { authenticated: false },
         );
-        accessToken = token;
+        if (!("accessToken" in answer)) return null;
+        accessToken = answer.accessToken;
         lostReported = false;
         credentialChanges++;
-        return user;
+        return answer.user;
       })(),
     );
   }
@@ -450,10 +455,25 @@ export function createApiClient(
       ),
 
     /** Creates a User and signs them in. Whoever was signed in stays so if it fails. */
-    register: (input: RegisterInput) => startSession("/api/auth/register", input),
+    register: (input: RegisterInput) => startSession("/api/auth/register", input) as Promise<User>,
 
-    /** Signs in with email and password. Whoever was signed in stays so if it fails. */
+    /**
+     * Signs in with email and password. Whoever was signed in stays so if it fails. Resolves to null for a User with
+     * Two-step verification: the server keeps the sign-in pending, and {@link signInWithCode} finishes it.
+     */
     login: (input: LoginInput) => startSession("/api/auth/login", input),
+
+    /**
+     * Finishes a pending sign-in with a Sign-in code from the User's authenticator app. Rejects with an ApiError:
+     * "invalid_code" with `triesLeft`, 401 "sign_in_expired" when the pending sign-in is over, or 429 with
+     * `retryAfterSeconds` while the User is locked out of code checks.
+     */
+    signInWithCode: (code: string) =>
+      startSession(
+        "/api/auth/two-step",
+        { code },
+        { "X-Requested-With": "nimbus" },
+      ) as Promise<User>,
 
     me: () => request<User>("/api/users/me"),
 

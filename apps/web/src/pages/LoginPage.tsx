@@ -20,11 +20,14 @@ export default function LoginPage() {
   const { login } = useSession();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  // After a password reset the User arrives with their email kept, so only the new password is left to type.
+  // After a password reset the User arrives with their email kept, so only the new password is left to type. From
+  // a Two-step verification sign-in that timed out they arrive with a notice saying so.
   const location = useLocation();
-  const keptEmail = (location.state as { email?: unknown } | null)?.email;
-  const resetEmail = typeof keptEmail === "string" ? keptEmail : "";
-  const [formError, setFormError] = useState<string | null>(null);
+  const state = location.state as { email?: unknown; notice?: unknown } | null;
+  const resetEmail = typeof state?.email === "string" ? state.email : "";
+  const [formError, setFormError] = useState<string | null>(
+    typeof state?.notice === "string" ? state.notice : null,
+  );
   // Set by the server when a provider sign-in ended back here with a reason. It describes the last provider
   // attempt only, so it goes away once the User tries the form instead.
   const [providerErrorShown, setProviderErrorShown] = useState(true);
@@ -51,7 +54,12 @@ export default function LoginPage() {
     setFormError(null);
     setProviderErrorShown(false);
     try {
-      await login({ ...values, email: values.email.trim() });
+      const outcome = await login({ ...values, email: values.email.trim() });
+      if (outcome === "two-step") {
+        // The code page keeps returnTo, and goes back here with it.
+        navigate({ pathname: "/login/two-step", search: searchParams.toString() });
+        return;
+      }
       navigate(safeReturnPath(searchParams.get("returnTo")), { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {

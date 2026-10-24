@@ -2,7 +2,7 @@ import { PinInput, type PinInputProps } from "@mantine/core";
 import type { ReactNode } from "react";
 import classes from "./AuthLayout.module.css";
 
-/** Digits in a Verification code or a Reset code. */
+/** Digits in a Verification code, a Reset code or a Sign-in code. */
 export const CODE_LENGTH = 6;
 
 // The look and the code's rules are fixed: callers can't pass the props that carry them.
@@ -48,4 +48,18 @@ export function CodePinInput({
  */
 export function PinnedSubmit({ children }: { children: ReactNode }) {
   return <div className={classes.pinnedSubmit}>{children}</div>;
+}
+
+/** A red message under a code form; those about the code itself carry the "!" mark. */
+export function CodeAlert({ marked, children }: { marked?: boolean; children: ReactNode }) {
+  return (
+    <div className={classes.codeError} role="alert">
+      {marked && (
+        <span className={classes.codeErrorMark} aria-hidden>
+          !
+        </span>
+      )}
+      {children}
+    </div>
+  );
 }

@@ -51,7 +51,8 @@ class SecurityConfig {
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(requests -> requests
 				.requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh",
-					"/api/auth/logout", "/api/auth/password-reset", "/api/auth/password-reset/confirm")
+					"/api/auth/logout", "/api/auth/password-reset", "/api/auth/password-reset/confirm",
+					"/api/auth/two-step")
 				.permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
 				.requestMatchers("/error").permitAll()

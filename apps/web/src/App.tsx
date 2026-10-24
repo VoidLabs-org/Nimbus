@@ -17,6 +17,7 @@ import ProjectPage from "./pages/ProjectPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import RolesPage from "./pages/RolesPage";
 import SecurityPage from "./pages/SecurityPage";
+import TwoStepSignInPage from "./pages/TwoStepSignInPage";
 import SettingsOverview from "./settings/SettingsOverview";
 import { AppShell } from "./shell/AppShell";
 import { NotFoundPage, SessionExpiredPage } from "./shell/StatusPages";
@@ -64,6 +65,7 @@ export function AppRoutes() {
       </Route>
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/login/two-step" element={<TwoStepSignInPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       {/* Where a session lost mid-use lands; no navbar, since nobody is signed in. */}

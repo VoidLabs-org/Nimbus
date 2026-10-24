@@ -32,6 +32,8 @@ import org.springframework.validation.annotation.Validated;
  * @param emailSendsPerHour emails allowed to one address within an hour
  * @param limitWindow the sliding window the other limits count over
  * @param linkRecentSignIn how recently the Session must have started for the User to connect a provider
+ * @param wrongSignInCodesPerHour wrong Sign-in codes allowed for one User within an hour, across pending sign-ins and
+ * setup; past it every code check for that User is refused until the hour clears
  * @param twoStepSecret base64 of at least 32 bytes (TWO_STEP_SECRET in .env); encrypts authenticator keys and keys
  * the Recovery code hashes, so losing it means every User sets up Two-step verification again
  * @param publicUrl the origin browsers use to reach Nimbus (PUBLIC_URL), without a trailing slash; the OAuth providers (Google, GitHub) and the
@@ -57,6 +59,7 @@ record AuthProperties(
 		@DefaultValue("5") @Positive int emailSendsPerHour,
 		@DefaultValue("15m") Duration limitWindow,
 		@DefaultValue("10m") Duration linkRecentSignIn,
+		@DefaultValue("10") @Positive int wrongSignInCodesPerHour,
 		@NotBlank(message = "set TWO_STEP_SECRET in apps/api/.env (see .env.example)") String twoStepSecret,
 		@DefaultValue("http://localhost:3000") String publicUrl) {
 

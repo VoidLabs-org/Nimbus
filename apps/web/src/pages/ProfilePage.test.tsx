@@ -520,6 +520,32 @@ describe("Confirm it’s you", () => {
     });
   });
 
+  it("stays open while the password is checked, so no code goes out after the User left", async () => {
+    vi.spyOn(api, "requestEmailChange").mockRejectedValue(reauth());
+    vi.spyOn(api, "confirmItsYou").mockReturnValue(new Promise(() => {}));
+    show();
+
+    const dialog = await reachConfirm();
+    enterPassword(dialog, "my password");
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Password").hasAttribute("disabled")).toBe(true),
+    );
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("goes back to the new address, still typed, to fix it", async () => {
+    vi.spyOn(api, "requestEmailChange").mockRejectedValue(reauth());
+    show();
+
+    const dialog = await reachConfirm();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+
+    const address = await within(dialog).findByRole("textbox", { name: "New email" });
+    expect((address as HTMLInputElement).value).toBe("new@example.com");
+  });
+
   it("goes back to the password from the code step, keeping it", async () => {
     vi.spyOn(api, "requestEmailChange").mockRejectedValue(reauth());
     vi.spyOn(api, "confirmItsYou").mockRejectedValue(

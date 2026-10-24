@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
-import { ApiError, api } from "../api/client";
+import { ApiError, api, type ConfirmAnswer } from "../api/client";
 import { GENERIC_ERROR } from "../api/messages";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
 import { clock, RESEND_WAIT_SECONDS, useCountdown } from "../auth/countdown";
@@ -148,7 +148,14 @@ export function ChangeEmailDialog({
     },
   });
 
-  const busy = send.isPending || confirm.isPending;
+  // Confirm it's you: a right answer goes on to send the code to the address typed before the User was asked.
+  const confirmIt = useMutation({
+    mutationFn: (answer: ConfirmAnswer) => api.confirmItsYou(answer),
+    onSuccess: () => send.mutate(newEmail.trim()),
+  });
+
+  // The window can't close while any of them is out, so no answer lands after the User has gone.
+  const busy = send.isPending || confirm.isPending || confirmIt.isPending;
 
   /**
    * Back to the new address, keeping what was typed so a typo can be fixed. Off while a request is out, so its answer
@@ -204,11 +211,10 @@ export function ChangeEmailDialog({
           onPhase={setConfirmPhase}
           recovery={confirmRecovery}
           onRecovery={setConfirmRecovery}
-          sending={send.isPending}
-          // Renewed: send the code to the address the User typed before they were asked.
-          onConfirmed={() => send.mutate(newEmail.trim())}
+          confirm={(answer, onError) => confirmIt.mutate(answer, { onError })}
+          busy={busy}
           onSignInAgain={onReauthRequired}
-          onCancel={onClose}
+          onBack={backToEmail}
         />
       ) : step === "email" ? (
         <form

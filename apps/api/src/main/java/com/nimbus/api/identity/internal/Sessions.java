@@ -203,8 +203,10 @@ class Sessions {
 	}
 
 	/**
-	 * Records that the User just confirmed it was them in this Session. Runs in the caller's transaction, which holds
-	 * the User's row lock, so a sign-out everywhere either ends the Session first (this fails) or after.
+	 * Records that the User just confirmed it was them in this Session, in the caller's transaction. A sign-out that
+	 * commits meanwhile isn't ordered against it (the sign-outs don't take the User's row lock), and needn't be: the
+	 * stamp only writes {@code confirmed_at} ({@code @DynamicUpdate}), so an ended Session stays ended, and every use
+	 * of the stamp checks that the Session is still running.
 	 *
 	 * @throws InvalidBearerTokenException when the session has ended
 	 */

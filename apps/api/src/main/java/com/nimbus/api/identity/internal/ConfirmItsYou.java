@@ -61,6 +61,9 @@ class ConfirmItsYou {
 					() -> new InvalidBearerTokenException("The User for this token no longer exists"));
 			var secondCodeFailure = secondCodes.check(userId, twoStepCode, recoveryCode);
 			if (secondCodeFailure != null) {
+				// Rolled back, as for forgot password, so a wrong answer changes nothing. A wrong code still counts
+				// toward the User's hourly lock, which is kept outside the database.
+				status.setRollbackOnly();
 				return secondCodeFailure;
 			}
 			sessions.markConfirmed(sessionId, userId);

@@ -30,6 +30,9 @@ class EmailChangeTests {
 
 	private static final String PASSWORD = "correct horse";
 
+	/** The three bullets that hide most of an address. */
+	private static final String DOTS = String.valueOf((char) 0x2022).repeat(3);
+
 	@Autowired
 	RestTestClient client;
 
@@ -55,6 +58,46 @@ class EmailChangeTests {
 
 		signIn("ec1-new@example.com").expectStatus().isOk();
 		signIn("ec1-old@example.com").expectStatus().isUnauthorized();
+	}
+
+	@Test
+	void theOldAddressIsToldOnlyOnceTheRightCodeIsEntered() {
+		var token = verifiedUser("ec13-old@example.com");
+		request(token, "ec13-new@example.com").expectStatus().isNoContent();
+		var right = RecordingMailer.lastCodeFor("ec13-new@example.com");
+		confirm(token, right.equals("000000") ? "111111" : "000000").expectStatus().isBadRequest();
+		// Only the Verification code from registering so far.
+		assertThat(RecordingMailer.sentTo("ec13-old@example.com")).hasSize(1);
+
+		confirm(token, right).expectStatus().isOk();
+
+		var mails = RecordingMailer.sentTo("ec13-old@example.com");
+		assertThat(mails).hasSize(2);
+		var notice = mails.get(1);
+		assertThat(notice.subject()).isEqualTo("Your Nimbus email was changed");
+		assertThat(notice.text()).contains("The email on your account is now e" + DOTS + "@example.com.")
+			.doesNotContain("ec13-new").doesNotContain(right);
+		assertThat(notice.html()).contains("e" + DOTS + "@example.com").doesNotContain("ec13-new")
+			.doesNotContain("<a href");
+		assertThat(RecordingMailer.sentTo("ec13-new@example.com")).hasSize(1);
+	}
+
+	@Test
+	void aNoticeThatCantBeSentLeavesTheChangeInPlace() {
+		var token = verifiedUser("ec14-old@example.com");
+		request(token, "ec14-new@example.com").expectStatus().isNoContent();
+		var code = RecordingMailer.lastCodeFor("ec14-new@example.com");
+
+		RecordingMailer.failing(true);
+		try {
+			confirm(token, code).expectStatus().isOk();
+		}
+		finally {
+			RecordingMailer.failing(false);
+		}
+
+		assertThat(RecordingMailer.attemptedTo("ec14-old@example.com")).hasSize(2);
+		me(token).expectStatus().isOk().expectBody().jsonPath("$.email").isEqualTo("ec14-new@example.com");
 	}
 
 	@Test

@@ -42,6 +42,20 @@ class IdentityMailLayoutTests {
 				Instant.parse("2026-10-19T00:00:00Z"), "https://example.dev/settings/security", logo(variant)));
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "fallback", "logo" })
+	void emailChangeCodeEmailMatchesTheSavedLayout(String variant) throws IOException {
+		assertUnchanged("email-change-" + variant, EmailChangeMail.to("nadia@gmail.com", "482917",
+				Duration.ofMinutes(15), logo(variant)));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "fallback", "logo" })
+	void emailChangedEmailMatchesTheSavedLayout(String variant) throws IOException {
+		assertUnchanged("email-changed-" + variant, EmailChangedMail.to("ada@example.com", "nadia@gmail.com",
+				Instant.parse("2026-10-24T09:05:00Z"), logo(variant)));
+	}
+
 	private static Optional<String> logo(String variant) {
 		return variant.equals("logo") ? Optional.of("https://assets.example.dev/icon.png?a=1&b=2") : Optional.empty();
 	}

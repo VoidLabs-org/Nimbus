@@ -1,13 +1,17 @@
 package com.nimbus.api.identity.internal;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
 
+import com.nimbus.api.identity.EmailChanged;
 import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.stereotype.Service;
@@ -18,7 +22,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Changes a verified User's email. A Verification code is mailed to the new address, and the email changes only
  * when it is entered, so a typo can't lock anyone out. One pending change per User: asking again replaces it and
  * its code. Nothing but the email changes: Sessions, the password, Two-step verification and Linked identities
- * stay as they are. Any Reset or Verification code mailed to the old address is cancelled.
+ * stay as they are. Any Reset or Verification code mailed to the old address is cancelled, and the old address is
+ * told the email changed.
  */
 @Service
 class EmailChange {
@@ -43,11 +48,15 @@ class EmailChange {
 
 	private final TransactionTemplate transaction;
 
+	private final ApplicationEventPublisher events;
+
+	private final Clock clock;
+
 	private final Duration recentSignIn;
 
 	EmailChange(UserRepository users, Sessions sessions, EmailedCodeKinds codeKinds, EmailSendBudget sendBudget,
 			Mailer mailer, MailAssets mailAssets, PlatformTransactionManager transactionManager,
-			AuthProperties properties) {
+			ApplicationEventPublisher events, Clock clock, AuthProperties properties) {
 		this.users = users;
 		this.sessions = sessions;
 		this.codes = codeKinds.emailChange();
@@ -57,6 +66,8 @@ class EmailChange {
 		this.mailer = mailer;
 		this.mailAssets = mailAssets;
 		this.transaction = new TransactionTemplate(transactionManager);
+		this.events = events;
+		this.clock = clock;
 		this.recentSignIn = properties.linkRecentSignIn();
 	}
 
@@ -98,8 +109,9 @@ class EmailChange {
 	}
 
 	/**
-	 * Changes the email to the pending address when {@code code} is right. A wrong try is counted even though it
-	 * fails, so the counting is committed before the failure is reported.
+	 * Changes the email to the pending address when {@code code} is right, publishing {@link EmailChanged} with the
+	 * change and telling the old address once it has committed. A wrong try is counted even though it fails, so the
+	 * counting is committed before the failure is reported.
 	 *
 	 * @throws EmailedCodes.WrongCodeException when the code is wrong and tries are left
 	 * @throws EmailedCodes.CodeExpiredException when no change is pending: expired, never asked for, or cancelled
@@ -115,13 +127,15 @@ class EmailChange {
 						() -> new InvalidBearerTokenException("The User for this token no longer exists"));
 				var check = codes.check(userId, code);
 				if (!(check instanceof EmailedCodes.Check.Right right)) {
-					return new Outcome(user, check, false);
+					return new Outcome(user, check, false, null, null);
 				}
 				if (users.existsByEmail(right.newEmail())) {
 					// Keep the code: nothing about it was wrong.
 					status.setRollbackOnly();
-					return new Outcome(user, check, true);
+					return new Outcome(user, check, true, null, null);
 				}
+				var oldEmail = user.email();
+				var at = clock.instant();
 				user.changeEmail(right.newEmail());
 				// Codes mailed to the old address prove nothing about the new one: a Reset code there would let
 				// whoever reads the old inbox set the password.
@@ -129,7 +143,8 @@ class EmailChange {
 				verificationCodes.discard(userId);
 				// Flushed here, so a User who took the address a moment ago fails this transaction, not the next.
 				users.saveAndFlush(user);
-				return new Outcome(user, check, false);
+				events.publishEvent(new EmailChanged(userId, right.newEmail(), at));
+				return new Outcome(user, check, false, oldEmail, at);
 			});
 		}
 		catch (DataIntegrityViolationException e) {
@@ -145,10 +160,19 @@ class EmailChange {
 		if (!outcome.check().isRight()) {
 			throw outcome.check().failure();
 		}
+		try {
+			mailer.send(EmailChangedMail.to(outcome.oldEmail(), outcome.user().email(), outcome.changedAt(),
+					mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
+		}
+		catch (RuntimeException e) {
+			// Fire and forget, as the mail module promises: the change has happened and stays.
+			log.warn("Could not tell user {} at their old address that their email changed", userId, e);
+		}
 		return outcome.user();
 	}
 
-	private record Outcome(User user, EmailedCodes.Check check, boolean taken) {
+	/** @param oldEmail and {@code changedAt} are set only when the email changed */
+	private record Outcome(User user, EmailedCodes.Check check, boolean taken, String oldEmail, Instant changedAt) {
 	}
 
 	static class SameEmailException extends RuntimeException {

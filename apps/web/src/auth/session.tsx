@@ -11,6 +11,7 @@ import {
   type User,
 } from "../api/client";
 import { failedLoad } from "../api/failure";
+import { queryKeys } from "../api/queries";
 import { SignInCheck } from "../shell/SignInCheck";
 import { OfflinePage, ServerErrorPage } from "../shell/StatusPages";
 import { loginPath } from "./returnPath";
@@ -103,8 +104,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const updated = await api.uploadProfilePicture(picture);
     // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower upload.
     setUser((current) => (current?.id === updated.id ? updated : current));
-    // Role holders and the Audit log show the picture too; they load it again.
-    void queryClient.invalidateQueries();
+    // Role holders and the Audit log show pictures too; only they load again.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.audit });
+    void queryClient.invalidateQueries({
+      predicate: ({ queryKey }) => queryKey[0] === "roles" && queryKey[2] === "holders",
+    });
   }
 
   async function changePassword(input: ChangePasswordInput) {

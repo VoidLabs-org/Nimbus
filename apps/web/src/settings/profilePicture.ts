@@ -22,16 +22,22 @@ export type CropArea = { x: number; y: number; width: number; height: number };
 /** The size of the square sent up; the server makes its own 256×256 from it. */
 const UPLOAD_SIZE = 512;
 
+/** The largest square in the middle of a `width`×`height` image: what the crop window shows before any move. */
+export function centredSquare(width: number, height: number): CropArea {
+  const side = Math.min(width, height);
+  return { x: (width - side) / 2, y: (height - side) / 2, width: side, height: side };
+}
+
 /**
- * The chosen square of the photo as a JPEG, transparency on white. Falls back to the file itself when the crop isn't
- * known yet or the browser can't draw it: the server crops to the centred square anyway.
+ * The chosen square of the photo as a JPEG, transparency on white, drawn by the browser, which also turns a phone
+ * photo upright (the server ignores EXIF orientation). Before the crop window has reported a crop, that is the centred
+ * square it shows. Only a browser that can't draw it (or decode the photo) sends the file itself.
  */
 export async function croppedPicture(
   file: File,
   src: string,
   area: CropArea | null,
 ): Promise<Blob> {
-  if (!area) return file;
   const canvas = document.createElement("canvas");
   canvas.width = UPLOAD_SIZE;
   canvas.height = UPLOAD_SIZE;
@@ -39,15 +45,16 @@ export async function croppedPicture(
   if (!context) return file;
   try {
     const image = await loadImage(src);
+    const square = area ?? centredSquare(image.naturalWidth, image.naturalHeight);
     context.fillStyle = "#fff";
     context.fillRect(0, 0, UPLOAD_SIZE, UPLOAD_SIZE);
     context.imageSmoothingQuality = "high";
     context.drawImage(
       image,
-      area.x,
-      area.y,
-      area.width,
-      area.height,
+      square.x,
+      square.y,
+      square.width,
+      square.height,
       0,
       0,
       UPLOAD_SIZE,

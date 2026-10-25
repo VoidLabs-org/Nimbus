@@ -666,6 +666,25 @@ describe("the Profile picture card", () => {
     );
   });
 
+  it("can't be closed while the photo is uploading", async () => {
+    const uploadProfilePicture = vi.fn(() => new Promise<void>(() => {}));
+    show(session(alice, { uploadProfilePicture }));
+    const card = await pictureCard();
+
+    choose(card, photo());
+    const dialog = await screen.findByRole("dialog", { name: "Position your photo" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save photo" }));
+    await waitFor(() => expect(uploadProfilePicture).toHaveBeenCalled());
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Position your photo" })).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
+    expect(
+      (within(dialog).getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
   it("keeps the window open to try again when the upload doesn't get through", async () => {
     const uploadProfilePicture = vi.fn(() => Promise.reject(new Error("offline")));
     const error = vi.spyOn(toast, "error");

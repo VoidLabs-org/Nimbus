@@ -77,6 +77,19 @@ class ProfilePictureUploadTests {
 	}
 
 	@Test
+	void aLargePhotoIsReadAtLowerResolutionAndStillComesOutRight() throws IOException {
+		var token = verifiedUser("pp12@example.com");
+		var large = png(6000, 4000, true);
+		assertThat(large.length).isLessThan(FIVE_MB);
+
+		var picture = ImageIO.read(new ByteArrayInputStream(fetch(avatarOf(upload(token, large, "big.png", "image/png")))));
+
+		assertThat(picture.getWidth()).isEqualTo(256);
+		assertThat(nearly(picture.getRGB(2, 2), Color.WHITE)).isTrue();
+		assertThat(nearly(picture.getRGB(128, 128), Color.BLUE)).isTrue();
+	}
+
+	@Test
 	void aPhonePhotosLocationDataIsNotKept() {
 		var token = verifiedUser("pp2@example.com");
 		var withExif = jpegWithExif(320, 320, "GPS 6.9271 N 79.8612 E");

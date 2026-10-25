@@ -24,16 +24,12 @@ class ProfilePictureController {
 
 	private final ProfilePictures pictures;
 
-	private final UserRepository users;
-
 	private final CurrentUser currentUser;
 
 	private final Sessions sessions;
 
-	ProfilePictureController(ProfilePictures pictures, UserRepository users, CurrentUser currentUser,
-			Sessions sessions) {
+	ProfilePictureController(ProfilePictures pictures, CurrentUser currentUser, Sessions sessions) {
 		this.pictures = pictures;
-		this.users = users;
 		this.currentUser = currentUser;
 		this.sessions = sessions;
 	}
@@ -42,25 +38,32 @@ class ProfilePictureController {
 	@PutMapping(path = "/api/users/me/profile-picture", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	UserResponse upload(@AuthenticationPrincipal Jwt token, @RequestPart("file") MultipartFile file)
 			throws IOException {
-		var user = users.require(currentUser.id());
-		sessions.requireActive(UsersController.sessionOf(token), user.getId());
+		var userId = currentUser.id();
+		// A deleted User's sessions are gone with them, so this is also their 401.
+		sessions.requireActive(UsersController.sessionOf(token), userId);
 		if (file.getSize() > ProfilePictures.MAX_UPLOAD_BYTES) {
 			// Before reading it into memory.
 			throw new ProfilePictures.FileTooLargeException();
 		}
-		return UserResponse.from(pictures.upload(user.getId(), file.getBytes()), pictures);
+		return UserResponse.from(pictures.upload(userId, file.getBytes()), pictures);
 	}
 
 	/** An uploaded photo, for anyone with its address: {@code <img>} tags send no access token. */
 	@GetMapping("/api/profile-pictures/{key}")
 	ResponseEntity<InputStreamResource> picture(@PathVariable String key) {
 		return pictures.read(key)
-			.map(object -> ResponseEntity.ok()
-				.header(HttpHeaders.CACHE_CONTROL, FOREVER)
-				.contentType(MediaType.parseMediaType(object.contentType()))
-				.contentLength(object.length())
+			.map(object -> {
+				var response = ResponseEntity.ok()
+					.header(HttpHeaders.CACHE_CONTROL, FOREVER)
+					// Every photo is stored as a JPEG; an object that lost its type is still one.
+					.contentType(object.contentType() == null ? MediaType.IMAGE_JPEG
+							: MediaType.parseMediaType(object.contentType()));
+				if (object.length() >= 0) {
+					response.contentLength(object.length());
+				}
 				// Spring closes the stream once it has been sent.
-				.body(new InputStreamResource(object.content())))
+				return response.body(new InputStreamResource(object.content()));
+			})
 			.orElseGet(() -> ResponseEntity.notFound().build());
 	}
 

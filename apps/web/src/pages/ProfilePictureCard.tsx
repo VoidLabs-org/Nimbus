@@ -25,6 +25,7 @@ export function ProfilePictureCard({ user }: { user: User }) {
   const input = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<{ file: File; src: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   function choose(file: File | undefined) {
     // So picking the same file again still counts as a change.
@@ -35,24 +36,32 @@ export function ProfilePictureCard({ user }: { user: User }) {
     if (!wrong) setPhoto({ file, src: URL.createObjectURL(file) });
   }
 
-  function close() {
+  function finish() {
     if (photo) URL.revokeObjectURL(photo.src);
     setPhoto(null);
   }
 
+  // Not while saving: a failed upload keeps the window open to try again, so it must still be there.
+  function close() {
+    if (!saving) finish();
+  }
+
   async function save(picture: Blob) {
+    setSaving(true);
     try {
       await uploadProfilePicture(picture);
       toast.success("Profile picture updated");
-      close();
+      finish();
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 400) {
         setError(failure.code === "unreadable_image" ? UNREADABLE : WRONG_FILE);
-        close();
+        finish();
       } else {
         // The window stays open with the photo where the User put it, to try again.
         toast.error("Couldn't upload your photo. Check your connection and try again.");
       }
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -86,7 +95,7 @@ export function ProfilePictureCard({ user }: { user: User }) {
           </div>
         </div>
       </Panel>
-      <PositionPhotoDialog photo={photo} onSave={save} onClose={close} />
+      <PositionPhotoDialog photo={photo} saving={saving} onSave={save} onClose={close} />
     </section>
   );
 }

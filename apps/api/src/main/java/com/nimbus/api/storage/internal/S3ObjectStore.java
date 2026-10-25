@@ -38,7 +38,8 @@ class S3ObjectStore implements ObjectStore {
 		try {
 			var object = s3.getObject(get -> get.bucket(bucket).key(key));
 			var response = object.response();
-			return Optional.of(new StoredObject(response.contentType(), response.contentLength(), object));
+			var length = response.contentLength() == null ? -1 : response.contentLength();
+			return Optional.of(new StoredObject(response.contentType(), length, object));
 		}
 		catch (NoSuchKeyException e) {
 			return Optional.empty();

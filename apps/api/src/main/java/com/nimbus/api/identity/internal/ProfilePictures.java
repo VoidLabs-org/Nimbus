@@ -98,9 +98,12 @@ class ProfilePictures {
 
 	/**
 	 * The address of the picture the User shows: their uploaded photo once they chose it, otherwise the picture their
-	 * last provider sign-in brought, as before Users could choose. Null for initials.
+	 * last provider sign-in brought, as before Users could choose. Null for initials, chosen or not.
 	 */
 	String addressOf(User user) {
+		if (user.pictureSource() == PictureSource.INITIALS) {
+			return null;
+		}
 		if (user.pictureSource() == PictureSource.UPLOADED && user.uploadedPictureKey() != null) {
 			return baseUrl + "/" + user.uploadedPictureKey();
 		}

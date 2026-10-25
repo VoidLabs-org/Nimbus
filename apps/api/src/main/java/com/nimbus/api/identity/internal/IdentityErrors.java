@@ -3,6 +3,9 @@ package com.nimbus.api.identity.internal;
 import java.util.Map;
 import java.util.TreeMap;
 
+import com.nimbus.api.storage.StorageException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -15,6 +18,8 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 /** Turns identity errors into RFC 9457 problem details. */
 @RestControllerAdvice(basePackageClasses = IdentityErrors.class)
 class IdentityErrors {
+
+	private static final Logger log = LoggerFactory.getLogger(IdentityErrors.class);
 
 	@ExceptionHandler
 	ProblemDetail emailAlreadyRegistered(Registration.EmailAlreadyRegisteredException e) {
@@ -57,10 +62,18 @@ class IdentityErrors {
 		return problem;
 	}
 
-	/** A file over the multipart limit, which sits just above {@link ProfilePictures#MAX_UPLOAD_BYTES}. */
+	/** A file over the multipart ceiling, which only the identity upload endpoint can receive here. */
 	@ExceptionHandler
 	ProblemDetail uploadTooLarge(MaxUploadSizeExceededException e) {
 		return fileTooLarge(new ProfilePictures.FileTooLargeException());
+	}
+
+	/** The bucket couldn't be reached: a picture can't be stored or loaded right now, but nothing is broken for good. */
+	@ExceptionHandler
+	ProblemDetail storageUnavailable(StorageException e) {
+		log.warn("The object store failed", e);
+		return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+				"Pictures can't be stored or loaded right now. Try again in a moment.");
 	}
 
 	@ExceptionHandler

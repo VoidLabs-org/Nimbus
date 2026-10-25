@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pictureFileError, previewStyle } from "./profilePicture";
+import { centredSquare, pictureFileError, previewStyle } from "./profilePicture";
 
 describe("pictureFileError", () => {
   it("takes JPEG, PNG and WebP up to exactly 5 MB", () => {
@@ -24,5 +24,12 @@ describe("previewStyle", () => {
 
     expect(style.backgroundSize).toBe("250% 250%");
     expect(style.backgroundPosition).toBe("100% 100%");
+  });
+});
+
+describe("centredSquare", () => {
+  it("takes the middle of a landscape photo and the middle of a portrait one", () => {
+    expect(centredSquare(4000, 3000)).toEqual({ x: 500, y: 0, width: 3000, height: 3000 });
+    expect(centredSquare(3024, 4032)).toEqual({ x: 0, y: 504, width: 3024, height: 3024 });
   });
 });

@@ -552,10 +552,6 @@ export function createApiClient(
     },
 
     /**
-     * Changes the email to the pending address and returns the updated User. Rejects with an ApiError:
-     * "invalid_code" with `triesLeft`, "code_expired", or 409 "email_taken" when someone took the address meanwhile.
-     */
-    /**
      * Uploads `picture` as the signed-in User's Profile picture and shows it; returns the User, whose `avatarUrl` is its
      * new address. A 400 says why it was refused: `code` "file_too_large", "unsupported_type" or "unreadable_image".
      */
@@ -565,6 +561,10 @@ export function createApiClient(
       return request<User>("/api/users/me/profile-picture", { method: "PUT", body: form });
     },
 
+    /**
+     * Changes the email to the pending address and returns the updated User. Rejects with an ApiError:
+     * "invalid_code" with `triesLeft`, "code_expired", or 409 "email_taken" when someone took the address meanwhile.
+     */
     confirmEmailChange: (code: string) =>
       request<User>("/api/users/me/email-change/confirm", {
         method: "POST",

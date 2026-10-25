@@ -26,6 +26,12 @@ final class PictureImages {
 	/** Larger images are refused before they're decoded: a small PNG can unpack into gigabytes. */
 	private static final long MAX_PIXELS = 50_000_000;
 
+	/**
+	 * Images are decoded at no more than about this many pixels (2048x2048, 16 MB), skipping pixels while reading a
+	 * larger one. Plenty for a 256-pixel result, and it keeps parallel uploads of large photos from filling the heap.
+	 */
+	private static final double DECODED_PIXELS = 2048.0 * 2048.0;
+
 	private static final float QUALITY = 0.85f;
 
 	private static final byte[] JPEG = { (byte) 0xFF, (byte) 0xD8, (byte) 0xFF };
@@ -61,10 +67,14 @@ final class PictureImages {
 			ImageReader reader = readers.next();
 			try {
 				reader.setInput(input, true, true);
-				if ((long) reader.getWidth(0) * reader.getHeight(0) > MAX_PIXELS) {
+				var pixels = (long) reader.getWidth(0) * reader.getHeight(0);
+				if (pixels > MAX_PIXELS) {
 					throw new UnreadableImageException();
 				}
-				return reader.read(0);
+				var params = reader.getDefaultReadParam();
+				var step = (int) Math.max(1, Math.ceil(Math.sqrt(pixels / DECODED_PIXELS)));
+				params.setSourceSubsampling(step, step, 0, 0);
+				return reader.read(0, params);
 			}
 			finally {
 				reader.dispose();

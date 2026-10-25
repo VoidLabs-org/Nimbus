@@ -291,18 +291,19 @@ class ProfilePictureUploadTests {
 	}
 
 	@Test
-	void refusedUploadsDontCountAndTheCurrentPhotoStays() {
+	void aRefusedFileStillCountsButLeavesTheCurrentPhotoAlone() {
 		var token = verifiedUser("pp17@example.com");
 		var current = avatarOf(upload(token, png(64, 64, false), "me.png", "image/png"));
 
-		for (var i = 0; i < 12; i++) {
+		for (var i = 0; i < 9; i++) {
 			upload(token, "not a picture".getBytes(StandardCharsets.UTF_8), "x.png", "image/png").expectStatus()
 				.isBadRequest();
 		}
 
+		upload(token, "not a picture".getBytes(StandardCharsets.UTF_8), "x.png", "image/png").expectStatus()
+			.isEqualTo(429);
 		me(token).expectStatus().isOk().expectBody().jsonPath("$.avatarUrl").isEqualTo(current);
 		fetch(current);
-		upload(token, png(64, 64, false), "again.png", "image/png").expectStatus().isOk();
 	}
 
 	@Test

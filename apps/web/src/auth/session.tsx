@@ -110,10 +110,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   async function removeProfilePicture() {
     const signedIn = user?.id;
     await api.removeProfilePicture();
-    // What they show now is the server's call (initials if the photo was shown), so read the User again.
-    const fresh = await api.me();
+    // What they show now is the server's call (initials if the photo was shown), so read the User again. The photo
+    // is gone whatever happens to this read, so if it fails the User is shown without one.
+    const fresh = await api.me().catch(() => null);
     // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower request.
-    setUser((current) => (current && current.id === signedIn ? fresh : current));
+    setUser((current) =>
+      current && current.id === signedIn
+        ? (fresh ?? { ...current, avatarUrl: null, hasUploadedPicture: false })
+        : current,
+    );
     refreshPictures();
   }
 

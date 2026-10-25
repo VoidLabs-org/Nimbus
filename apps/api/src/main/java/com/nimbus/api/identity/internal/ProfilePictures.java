@@ -26,10 +26,13 @@ class ProfilePictures {
 	/** The largest file accepted, before it is cropped and re-encoded. */
 	static final long MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-	/** Uploads one User may make in {@link #UPLOAD_WINDOW}; refused ones don't count. */
+	/** Uploads one User may make in {@link #UPLOAD_WINDOW}; only uploads that failed in the bucket or database give theirs back. */
 	static final int UPLOADS_PER_WINDOW = 10;
 
 	static final Duration UPLOAD_WINDOW = Duration.ofHours(1);
+
+	private static final String LIMIT_MESSAGE = "You've uploaded " + UPLOADS_PER_WINDOW
+			+ " photos this hour. Try again later.";
 
 	private static final Logger log = LoggerFactory.getLogger(ProfilePictures.class);
 
@@ -63,6 +66,11 @@ class ProfilePictures {
 		this.uploadsByUser = new SlidingWindowLimiter(UPLOADS_PER_WINDOW, UPLOAD_WINDOW, clock);
 	}
 
+	/** Refuses early, without counting, when the User used up their uploads. */
+	void requireUnderLimit(UUID userId) {
+		uploadsByUser.requireUnder(userId.toString(), LIMIT_MESSAGE);
+	}
+
 	/**
 	 * Makes the file the User's uploaded photo and shows it. The photo is stored under a fresh key before the User
 	 * is saved, so the User never points at a missing object; if saving fails, the new object is deleted (best
@@ -77,15 +85,13 @@ class ProfilePictures {
 		if (file.length > MAX_UPLOAD_BYTES) {
 			throw new FileTooLargeException();
 		}
-		var counted = uploadsByUser.acquire(userId.toString(),
-				"You've uploaded " + UPLOADS_PER_WINDOW + " photos this hour. Try again later.");
-		Saved saved;
+		var counted = uploadsByUser.acquire(userId.toString(), LIMIT_MESSAGE);
+		// A file that can't be used still cost the decoding, so it stays counted.
+		var picture = PictureImages.toProfilePicture(file);
 		var key = newKey();
-		var stored = false;
+		Saved saved;
 		try {
-			var picture = PictureImages.toProfilePicture(file);
 			store.store(FOLDER + key, picture, PictureImages.CONTENT_TYPE);
-			stored = true;
 			saved = transaction.execute(status -> {
 				var user = users.findLockedById(userId).orElseThrow();
 				var replaced = user.useUploadedPicture(key, clock.instant());
@@ -93,11 +99,10 @@ class ProfilePictures {
 			});
 		}
 		catch (RuntimeException e) {
-			// A refused or failed upload leaves the current picture and doesn't use up the User's uploads.
+			// The bucket or the database failed, not the User's file: it doesn't use up their uploads, and the
+			// object may exist even when the store call timed out.
 			uploadsByUser.release(userId.toString(), counted);
-			if (stored) {
-				deleteQuietly(key);
-			}
+			deleteQuietly(key);
 			throw e;
 		}
 		if (saved.replaced() != null) {

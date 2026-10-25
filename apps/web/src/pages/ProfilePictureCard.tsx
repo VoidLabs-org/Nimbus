@@ -104,13 +104,13 @@ export function ProfilePictureCard({ user }: { user: User }) {
             <div className={classes.actions}>
               <Button
                 variant="default"
-                disabled={limit !== null}
+                disabled={limit !== null || removing}
                 onClick={() => input.current?.click()}
               >
                 {user.hasUploadedPicture ? "Replace" : "Upload photo"}
               </Button>
               {user.hasUploadedPicture && (
-                <Button variant="default" loading={removing} onClick={remove}>
+                <Button variant="default" loading={removing} disabled={saving} onClick={remove}>
                   Remove
                 </Button>
               )}

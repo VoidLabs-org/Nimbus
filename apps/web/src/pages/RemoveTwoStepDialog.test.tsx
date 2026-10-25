@@ -34,6 +34,7 @@ const session: Session = {
   signInWithCode: unused,
   updateDisplayName: unused,
   changeEmail: unused,
+  uploadProfilePicture: unused,
   changePassword: unused,
   verifyEmail: unused,
   confirmingEmail: false,

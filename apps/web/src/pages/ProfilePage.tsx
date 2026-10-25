@@ -1,4 +1,4 @@
-import { Avatar, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { Button, Container, Stack, Text, Title } from "@mantine/core";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { Panel } from "@repo/ui/panel";
@@ -11,13 +11,14 @@ import { PASSWORD_PARAM } from "../settings/sections";
 import { ChangeEmailDialog } from "./ChangeEmailDialog";
 import { DisplayNameDialog } from "./DisplayNameDialog";
 import { PasswordDialog } from "./PasswordDialog";
+import { ProfilePictureCard } from "./ProfilePictureCard";
 import { ReauthDialog } from "./ReauthDialog";
 import card from "./SecurityPage.module.css";
 import classes from "./ProfilePage.module.css";
 
 /**
- * Settings → Profile (design 39a): the User's avatar, name and email, and a card with their Display name, email and
- * password, each with a button that opens its window.
+ * Settings → Profile (designs 39a and 35a): the Profile picture card, then a card with the User's Display name, email
+ * and password, each with a button that opens its window.
  */
 export default function ProfilePage() {
   const { user } = useSession();
@@ -49,23 +50,7 @@ export default function ProfilePage() {
             How you appear to your team.
           </Text>
         </div>
-        <Group gap="md" wrap="nowrap">
-          {/* Falls back to initials when there is no image, or it fails to load. No referrer: Google's image host
-              refuses some requests that carry one. */}
-          <Avatar
-            src={user.avatarUrl}
-            imageProps={{ referrerPolicy: "no-referrer" }}
-            name={user.displayName}
-            color="initials"
-            size={64}
-          />
-          <div className={classes.who}>
-            <Text fw={600}>{user.displayName}</Text>
-            <Text size="sm" c="var(--color-accent-2-700)">
-              {user.email}
-            </Text>
-          </div>
-        </Group>
+        <ProfilePictureCard user={user} />
         <section aria-label="Account">
           <Panel p={0}>
             <ul className={card.list}>

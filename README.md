@@ -25,6 +25,7 @@ A project management app where teams create projects, issues, boards and sprints
 1. `pnpm install`
 2. **Database:** copy `apps/api/.env.example` to `apps/api/.env` and fill in the shared dev database values (ask the team). Never commit `.env`.
    To use a local database instead, skip the `.env` and run `docker compose up -d`.
+   **Uploads** (Profile pictures) go to a bucket: with the shared dev database, add the shared R2 bucket's `STORAGE_*` values to `.env` (ask the team); with a local database, `docker compose up -d` also starts MinIO, which the API uses by default.
 3. `pnpm dev` to start the API and website.
    It also restarts the API by itself when you change Java code (see below).
 
@@ -54,7 +55,7 @@ Run from the repo root.
 | `pnpm lint`                   | Lint with oxlint                                                            |
 | `pnpm check-types`            | Type-check the TypeScript code                                              |
 | `pnpm format`                 | Format with oxfmt (`pnpm format:check` to only check)                       |
-| `docker compose down`         | Stop the database (data is kept in a Docker volume)                         |
+| `docker compose down`         | Stop the database and MinIO (data is kept in Docker volumes)                |
 
 ## Repository layout
 

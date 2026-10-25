@@ -17,22 +17,26 @@ class UserDirectory implements Users {
 
 	private final UserRepository users;
 
-	UserDirectory(UserRepository users) {
+	private final ProfilePictures pictures;
+
+	UserDirectory(UserRepository users, ProfilePictures pictures) {
 		this.users = users;
+		this.pictures = pictures;
 	}
 
 	@Override
 	public Optional<UserSummary> findByEmail(String email) {
-		return users.findByEmail(email.strip().toLowerCase(Locale.ROOT)).map(UserDirectory::summary);
+		return users.findByEmail(email.strip().toLowerCase(Locale.ROOT)).map(this::summary);
 	}
 
 	@Override
 	public List<UserSummary> findAllById(Collection<UUID> ids) {
-		return users.findAllById(ids).stream().map(UserDirectory::summary).toList();
+		return users.findAllById(ids).stream().map(this::summary).toList();
 	}
 
-	private static UserSummary summary(User user) {
-		return new UserSummary(user.getId(), user.email(), user.displayName(), user.avatarUrl(), user.emailVerified());
+	private UserSummary summary(User user) {
+		return new UserSummary(user.getId(), user.email(), user.displayName(), pictures.addressOf(user),
+				user.emailVerified());
 	}
 
 }

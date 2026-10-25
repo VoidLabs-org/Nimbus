@@ -272,7 +272,10 @@ export function createApiClient(
 
   async function send<T>(path: string, init: RequestInit, authenticated: boolean): Promise<T> {
     const headers = new Headers(init.headers);
-    if (init.body !== undefined) headers.set("Content-Type", "application/json");
+    // A form sets its own multipart type, with the boundary.
+    if (init.body !== undefined && !(init.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
     if (authenticated && accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
     let response: Response;
@@ -552,6 +555,16 @@ export function createApiClient(
      * Changes the email to the pending address and returns the updated User. Rejects with an ApiError:
      * "invalid_code" with `triesLeft`, "code_expired", or 409 "email_taken" when someone took the address meanwhile.
      */
+    /**
+     * Uploads `picture` as the signed-in User's Profile picture and shows it; returns the User, whose `avatarUrl` is its
+     * new address. A 400 says why it was refused: `code` "file_too_large", "unsupported_type" or "unreadable_image".
+     */
+    uploadProfilePicture: (picture: Blob) => {
+      const form = new FormData();
+      form.append("file", picture, "profile-picture.jpg");
+      return request<User>("/api/users/me/profile-picture", { method: "PUT", body: form });
+    },
+
     confirmEmailChange: (code: string) =>
       request<User>("/api/users/me/email-change/confirm", {
         method: "POST",

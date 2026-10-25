@@ -99,6 +99,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser((current) => (current?.id === updated.id ? updated : current));
   }
 
+  async function uploadProfilePicture(picture: Blob) {
+    const updated = await api.uploadProfilePicture(picture);
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower upload.
+    setUser((current) => (current?.id === updated.id ? updated : current));
+    // Role holders and the Audit log show the picture too; they load it again.
+    void queryClient.invalidateQueries();
+  }
+
   async function changePassword(input: ChangePasswordInput) {
     const signedIn = user?.id;
     await api.changePassword(input);
@@ -151,6 +159,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         signInWithCode,
         updateDisplayName,
         changeEmail,
+        uploadProfilePicture,
         changePassword,
         verifyEmail,
         confirmingEmail,

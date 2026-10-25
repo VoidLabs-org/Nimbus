@@ -44,6 +44,11 @@ export type Session = {
    * `api.confirmEmailChange`) if refused.
    */
   changeEmail: (code: string) => Promise<void>;
+  /**
+   * Uploads `picture` as the signed-in User's Profile picture, which then shows everywhere at once. Rejects with an
+   * ApiError (see `api.uploadProfilePicture`) if refused.
+   */
+  uploadProfilePicture: (picture: Blob) => Promise<void>;
   /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */
   changePassword: (input: ChangePasswordInput) => Promise<void>;
   /**

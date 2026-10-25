@@ -36,6 +36,7 @@ function session(user: User, overrides: Partial<Session> = {}): Session {
     signInWithCode: unused,
     updateDisplayName: unused,
     changeEmail: unused,
+    uploadProfilePicture: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,
@@ -561,5 +562,125 @@ describe("Confirm it’s you", () => {
     expect((within(dialog).getByLabelText("Password") as HTMLInputElement).value).toBe(
       "my password",
     );
+  });
+});
+
+describe("the Profile picture card", () => {
+  beforeEach(() => {
+    // jsdom has no object URLs; the crop window only needs something to point its image at.
+    URL.createObjectURL = vi.fn(() => "blob:photo");
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  async function pictureCard() {
+    return screen.findByRole("region", { name: "Profile picture" });
+  }
+
+  function choose(card: HTMLElement, file: File) {
+    fireEvent.change(within(card).getByLabelText("Choose a photo"), { target: { files: [file] } });
+  }
+
+  const photo = (size = 1024, type = "image/jpeg", name = "me.jpg") =>
+    new File([new Uint8Array(size)], name, { type });
+
+  it("shows the User's picture above the account card, with the files it accepts", async () => {
+    show(session({ ...alice, avatarUrl: "/api/profile-pictures/abc" }));
+
+    const card = await pictureCard();
+    expect(card.querySelector("img")?.getAttribute("src")).toBe("/api/profile-pictures/abc");
+    expect(within(card).getByRole("button", { name: "Upload photo" })).toBeTruthy();
+    expect(within(card).getByText("JPEG, PNG or WebP, up to 5 MB.")).toBeTruthy();
+    const regions = screen
+      .getAllByRole("region")
+      .map((region) => region.getAttribute("aria-label"));
+    expect(regions.indexOf("Profile picture")).toBeLessThan(regions.indexOf("Account"));
+  });
+
+  it("refuses a file over 5 MB, or of another type, before anything opens or uploads", async () => {
+    const uploadProfilePicture = vi.fn(unused);
+    show(session(alice, { uploadProfilePicture }));
+    const card = await pictureCard();
+
+    choose(card, photo(5 * 1024 * 1024 + 1));
+    expect(within(card).getByRole("alert").textContent).toBe(
+      "That file is over 5 MB. Choose a JPEG, PNG or WebP up to 5 MB.",
+    );
+    expect(within(card).queryByText("JPEG, PNG or WebP, up to 5 MB.")).toBeNull();
+
+    choose(card, photo(1024, "image/gif", "funny.gif"));
+    expect(within(card).getByRole("alert").textContent).toContain("Choose a JPEG, PNG or WebP");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(uploadProfilePicture).not.toHaveBeenCalled();
+  });
+
+  it("positions the photo, saves it and says so", async () => {
+    const uploadProfilePicture = vi.fn((_picture: Blob) => Promise.resolve());
+    const success = vi.spyOn(toast, "success");
+    show(session(alice, { uploadProfilePicture }));
+    const card = await pictureCard();
+    const file = photo();
+
+    choose(card, file);
+    const dialog = await screen.findByRole("dialog", { name: "Position your photo" });
+    expect(within(dialog).getByText("Drag to move, use the slider to zoom.")).toBeTruthy();
+    expect(within(dialog).getByText("Preview")).toBeTruthy();
+    expect(within(dialog).getByRole("slider", { name: "Zoom" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save photo" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // jsdom can't draw, so the file goes up as it is; the server crops it to its centre.
+    expect(uploadProfilePicture).toHaveBeenCalledWith(file);
+    expect(success).toHaveBeenCalledWith("Profile picture updated");
+    expect(within(card).getByText("JPEG, PNG or WebP, up to 5 MB.")).toBeTruthy();
+  });
+
+  it("leaves everything as it was on Cancel", async () => {
+    const uploadProfilePicture = vi.fn(unused);
+    show(session(alice, { uploadProfilePicture }));
+    const card = await pictureCard();
+
+    choose(card, photo());
+    const dialog = await screen.findByRole("dialog", { name: "Position your photo" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(uploadProfilePicture).not.toHaveBeenCalled();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:photo");
+  });
+
+  it("says when the server couldn't read the image", async () => {
+    const uploadProfilePicture = vi.fn(() =>
+      Promise.reject(new ApiError(400, "This image can't be read", {}, null, "unreadable_image")),
+    );
+    show(session(alice, { uploadProfilePicture }));
+    const card = await pictureCard();
+
+    choose(card, photo());
+    const dialog = await screen.findByRole("dialog", { name: "Position your photo" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save photo" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(within(card).getByRole("alert").textContent).toBe(
+      "We couldn’t read that image. Try a different file.",
+    );
+  });
+
+  it("keeps the window open to try again when the upload doesn't get through", async () => {
+    const uploadProfilePicture = vi.fn(() => Promise.reject(new Error("offline")));
+    const error = vi.spyOn(toast, "error");
+    show(session(alice, { uploadProfilePicture }));
+    const card = await pictureCard();
+
+    choose(card, photo());
+    const dialog = await screen.findByRole("dialog", { name: "Position your photo" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save photo" }));
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        "Couldn't upload your photo. Check your connection and try again.",
+      ),
+    );
+    expect(screen.getByRole("dialog", { name: "Position your photo" })).toBeTruthy();
   });
 });

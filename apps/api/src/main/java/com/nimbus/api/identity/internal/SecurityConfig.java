@@ -40,7 +40,7 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
  * The API is stateless, so Spring's CSRF tokens and HTTP sessions are off.
  */
 @Configuration
-@EnableConfigurationProperties(AuthProperties.class)
+@EnableConfigurationProperties({ AuthProperties.class, ProfilePictureProperties.class })
 class SecurityConfig {
 
 	@Bean
@@ -55,6 +55,8 @@ class SecurityConfig {
 					"/api/auth/two-step")
 				.permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
+				// Profile pictures load in <img> tags, which can't send the access token; their keys are unguessable.
+				.requestMatchers(HttpMethod.GET, "/api/profile-pictures/*").permitAll()
 				.requestMatchers("/error").permitAll()
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))

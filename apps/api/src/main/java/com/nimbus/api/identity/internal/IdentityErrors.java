@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /** Turns identity errors into RFC 9457 problem details. */
 @RestControllerAdvice(basePackageClasses = IdentityErrors.class)
@@ -46,6 +47,33 @@ class IdentityErrors {
 	ProblemDetail wrongConfirmPassword(ConfirmItsYou.WrongPasswordException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Some fields are invalid");
 		problem.setProperty("errors", Map.of("password", e.getMessage()));
+		return problem;
+	}
+
+	@ExceptionHandler
+	ProblemDetail fileTooLarge(ProfilePictures.FileTooLargeException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "file_too_large");
+		return problem;
+	}
+
+	/** A file over the multipart limit, which sits just above {@link ProfilePictures#MAX_UPLOAD_BYTES}. */
+	@ExceptionHandler
+	ProblemDetail uploadTooLarge(MaxUploadSizeExceededException e) {
+		return fileTooLarge(new ProfilePictures.FileTooLargeException());
+	}
+
+	@ExceptionHandler
+	ProblemDetail unsupportedType(PictureImages.UnsupportedTypeException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "unsupported_type");
+		return problem;
+	}
+
+	@ExceptionHandler
+	ProblemDetail unreadableImage(PictureImages.UnreadableImageException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "unreadable_image");
 		return problem;
 	}
 

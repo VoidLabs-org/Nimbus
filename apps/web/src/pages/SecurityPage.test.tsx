@@ -41,6 +41,7 @@ function session(user: User | null, logout: () => Promise<void> = unused): Sessi
     signInWithCode: unused,
     updateDisplayName: unused,
     changeEmail: unused,
+    uploadProfilePicture: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,

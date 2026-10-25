@@ -41,8 +41,12 @@ class UsersController {
 
 	private final ConfirmItsYou confirmItsYou;
 
+	private final ProfilePictures pictures;
+
 	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords, Sessions sessions,
-			LinkedIdentities linkedIdentities, RememberedBrowsers rememberedBrowsers, ConfirmItsYou confirmItsYou) {
+			LinkedIdentities linkedIdentities, RememberedBrowsers rememberedBrowsers, ConfirmItsYou confirmItsYou,
+			ProfilePictures pictures) {
+		this.pictures = pictures;
 		this.rememberedBrowsers = rememberedBrowsers;
 		this.confirmItsYou = confirmItsYou;
 		this.users = users;
@@ -55,16 +59,16 @@ class UsersController {
 	/** The signed-in User's profile; an invalid-token 401 if their token outlived the User. */
 	@GetMapping("/me")
 	UserResponse me() {
-		return UserResponse.from(users.require(currentUser.id()));
+		return UserResponse.from(users.require(currentUser.id()), pictures);
 	}
 
-	/** Changes the display name only; email, password and avatar are not editable here. */
+	/** Changes the display name only; email, password and Profile picture are not editable here. */
 	@PatchMapping("/me")
 	@Transactional
 	UserResponse updateMe(@Valid @RequestBody UpdateProfileRequest request) {
 		var user = users.require(currentUser.id());
 		user.rename(request.displayName());
-		return UserResponse.from(user);
+		return UserResponse.from(user, pictures);
 	}
 
 	/** Sets the first password of a User who has none, or changes the existing one (which must be given). */

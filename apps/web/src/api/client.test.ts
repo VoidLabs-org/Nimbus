@@ -62,6 +62,26 @@ describe("api client", () => {
     expect(authorization(server.calls[2])).toBe("Bearer token-1");
   });
 
+  it("uploads a Profile picture as a multipart form, leaving its content type to the browser", async () => {
+    const updated = { ...alice, avatarUrl: "/api/profile-pictures/abc" };
+    const server = fakeServer(
+      json(200, { accessToken: "token-1", user: alice }),
+      json(200, updated),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.login({ email: alice.email, password: "correct horse" });
+    const picture = new Blob(["jpeg bytes"], { type: "image/jpeg" });
+
+    expect(await api.uploadProfilePicture(picture)).toEqual(updated);
+    const upload = server.calls[1];
+    expect(upload.url).toBe("/api/users/me/profile-picture");
+    expect(upload.init.method).toBe("PUT");
+    expect(authorization(upload)).toBe("Bearer token-1");
+    expect(new Headers(upload.init.headers).has("Content-Type")).toBe(false);
+    const file = (upload.init.body as FormData).get("file") as File;
+    expect(await file.text()).toBe("jpeg bytes");
+  });
+
   it("sends no access token before the User is signed in", async () => {
     const server = fakeServer(json(401, { status: 401 }), json(401, { status: 401 }));
     const api = createApiClient(server.fetchFn, {

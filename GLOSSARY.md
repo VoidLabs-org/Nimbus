@@ -104,6 +104,10 @@ _Avoid_: Login, device
 A Google or GitHub login attached to a User, letting them sign in without a password. A User links one by connecting it on the Security page and unlinks it by disconnecting it. A disconnected one is not linked again until the User connects it.
 _Avoid_: Social account, external account, provider user, connected account (UI copy only)
 
+**Profile picture**:
+The image shown for a User next to their name: a photo they uploaded, the picture from one of their Linked identities, or their initials.
+_Avoid_: Avatar, photo, profile image
+
 **Notification**:
 A message to one User about something that happened to an Issue they're involved with or to their account, shown in Nimbus and sometimes emailed.
 _Avoid_: Alert (for Issue ones), message, activity

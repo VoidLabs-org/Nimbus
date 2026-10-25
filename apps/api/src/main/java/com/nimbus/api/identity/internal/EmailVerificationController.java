@@ -19,7 +19,10 @@ class EmailVerificationController {
 
 	private final CurrentUser currentUser;
 
-	EmailVerificationController(EmailVerification verification, CurrentUser currentUser) {
+	private final ProfilePictures pictures;
+
+	EmailVerificationController(EmailVerification verification, CurrentUser currentUser, ProfilePictures pictures) {
+		this.pictures = pictures;
 		this.verification = verification;
 		this.currentUser = currentUser;
 	}
@@ -27,7 +30,7 @@ class EmailVerificationController {
 	/** Checks the code the signed-in User typed; the same session carries on, now verified. */
 	@PostMapping
 	UserResponse verify(@Valid @RequestBody VerifyRequest request) {
-		return UserResponse.from(verification.verify(currentUser.id(), request.code()));
+		return UserResponse.from(verification.verify(currentUser.id(), request.code()), pictures);
 	}
 
 	/** Mails a new code, which replaces the old one. {@code 429} with {@code Retry-After} when the address was mailed too recently or too often. */

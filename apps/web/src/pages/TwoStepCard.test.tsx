@@ -39,6 +39,7 @@ function session(logout: () => Promise<void> = unused): Session {
     signInWithCode: unused,
     updateDisplayName: unused,
     changeEmail: unused,
+    uploadProfilePicture: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,

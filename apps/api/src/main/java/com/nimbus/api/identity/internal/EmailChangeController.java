@@ -23,7 +23,11 @@ class EmailChangeController {
 
 	private final CurrentUser currentUser;
 
-	EmailChangeController(EmailChange emailChange, Sessions sessions, CurrentUser currentUser) {
+	private final ProfilePictures pictures;
+
+	EmailChangeController(EmailChange emailChange, Sessions sessions, CurrentUser currentUser,
+			ProfilePictures pictures) {
+		this.pictures = pictures;
 		this.emailChange = emailChange;
 		this.sessions = sessions;
 		this.currentUser = currentUser;
@@ -40,7 +44,7 @@ class EmailChangeController {
 	@PostMapping("/confirm")
 	UserResponse confirm(@AuthenticationPrincipal Jwt token, @Valid @RequestBody ConfirmRequest request) {
 		sessions.requireActive(UsersController.sessionOf(token), currentUser.id());
-		return UserResponse.from(emailChange.confirm(currentUser.id(), request.code()));
+		return UserResponse.from(emailChange.confirm(currentUser.id(), request.code()), pictures);
 	}
 
 	/** The same email rule as at registration. */

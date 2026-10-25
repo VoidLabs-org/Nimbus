@@ -11,6 +11,12 @@ export const WRONG_FILE = "That file is over 5 MB. Choose a JPEG, PNG or WebP up
 /** The server's `unreadable_image` (35f). */
 export const UNREADABLE = "We couldn’t read that image. Try a different file.";
 
+/** The server's 429 on the 10th-plus upload in an hour (35g); the wait comes from `Retry-After`. */
+export function uploadLimitMessage(retryAfterSeconds: number | null): string {
+  const minutes = Math.max(1, Math.ceil((retryAfterSeconds ?? 60) / 60));
+  return `You've uploaded 10 photos this hour. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+}
+
 /** Null when the file can be uploaded, otherwise what to tell the User. */
 export function pictureFileError(file: { type: string; size: number }): string | null {
   return PICTURE_TYPES.includes(file.type) && file.size <= MAX_PICTURE_BYTES ? null : WRONG_FILE;

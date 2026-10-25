@@ -104,7 +104,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const updated = await api.uploadProfilePicture(picture);
     // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower upload.
     setUser((current) => (current?.id === updated.id ? updated : current));
-    // Role holders and the Audit log show pictures too; only they load again.
+    refreshPictures();
+  }
+
+  async function removeProfilePicture() {
+    const signedIn = user?.id;
+    await api.removeProfilePicture();
+    // What they show now is the server's call (initials if the photo was shown), so read the User again. The photo
+    // is gone whatever happens to this read, so if it fails the User is shown without one.
+    const fresh = await api.me().catch(() => null);
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower request.
+    setUser((current) =>
+      current && current.id === signedIn
+        ? (fresh ?? { ...current, avatarUrl: null, hasUploadedPicture: false })
+        : current,
+    );
+    refreshPictures();
+  }
+
+  // Role holders and the Audit log show pictures too; only they load again.
+  function refreshPictures() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.audit });
     void queryClient.invalidateQueries({
       predicate: ({ queryKey }) => queryKey[0] === "roles" && queryKey[2] === "holders",
@@ -164,6 +183,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         updateDisplayName,
         changeEmail,
         uploadProfilePicture,
+        removeProfilePicture,
         changePassword,
         verifyEmail,
         confirmingEmail,

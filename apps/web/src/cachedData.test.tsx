@@ -113,6 +113,7 @@ describe("a different User", () => {
     hasPassword: true,
     emailVerified: true,
     passwordChangedAt: null,
+    hasUploadedPicture: false,
   });
 
   /** Signs out and in as the other User, with the Roles page up for whoever is signed in. */

@@ -19,6 +19,7 @@ const alice: User = {
   hasPassword: true,
   emailVerified: true,
   passwordChangedAt: null,
+  hasUploadedPicture: false,
 };
 
 const unused = () => Promise.resolve();
@@ -37,6 +38,7 @@ function session(user: User, overrides: Partial<Session> = {}): Session {
     updateDisplayName: unused,
     changeEmail: unused,
     uploadProfilePicture: unused,
+    removeProfilePicture: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,
@@ -701,5 +703,106 @@ describe("the Profile picture card", () => {
       ),
     );
     expect(screen.getByRole("dialog", { name: "Position your photo" })).toBeTruthy();
+  });
+
+  describe("with an uploaded photo", () => {
+    const uploaded: User = {
+      ...alice,
+      avatarUrl: "/api/profile-pictures/abc",
+      hasUploadedPicture: true,
+    };
+
+    it("offers Replace and Remove instead of Upload photo", async () => {
+      show(session(uploaded));
+
+      const card = await pictureCard();
+      expect(within(card).getByRole("button", { name: "Replace" })).toBeTruthy();
+      expect(within(card).getByRole("button", { name: "Remove" })).toBeTruthy();
+      expect(within(card).queryByRole("button", { name: "Upload photo" })).toBeNull();
+    });
+
+    it("replaces the photo through the same window", async () => {
+      const uploadProfilePicture = vi.fn((_picture: Blob) => Promise.resolve());
+      show(session(uploaded, { uploadProfilePicture }));
+      const card = await pictureCard();
+
+      choose(card, photo());
+      const dialog = await screen.findByRole("dialog", { name: "Position your photo" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save photo" }));
+
+      await waitFor(() => expect(uploadProfilePicture).toHaveBeenCalled());
+    });
+
+    it("removes the photo and says so", async () => {
+      const removeProfilePicture = vi.fn(unused);
+      const success = vi.spyOn(toast, "success");
+      show(session(uploaded, { removeProfilePicture }));
+      const card = await pictureCard();
+
+      fireEvent.click(within(card).getByRole("button", { name: "Remove" }));
+
+      await waitFor(() => expect(success).toHaveBeenCalledWith("Profile picture updated"));
+      expect(removeProfilePicture).toHaveBeenCalledOnce();
+    });
+
+    it("tells the User when the photo couldn't be removed", async () => {
+      const removeProfilePicture = vi.fn(() => Promise.reject(new Error("offline")));
+      const error = vi.spyOn(toast, "error");
+      show(session(uploaded, { removeProfilePicture }));
+      const card = await pictureCard();
+
+      fireEvent.click(within(card).getByRole("button", { name: "Remove" }));
+
+      await waitFor(() =>
+        expect(error).toHaveBeenCalledWith(
+          "Couldn't remove your photo. Check your connection and try again.",
+        ),
+      );
+    });
+
+    it("explains the hourly limit, disables Replace and keeps Remove working", async () => {
+      const uploadProfilePicture = vi.fn(() =>
+        Promise.reject(new ApiError(429, "Too many", {}, 1080)),
+      );
+      show(session(uploaded, { uploadProfilePicture }));
+      const card = await pictureCard();
+
+      choose(card, photo());
+      const dialog = await screen.findByRole("dialog", { name: "Position your photo" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save photo" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(within(card).getByRole("alert").textContent).toBe(
+        "You've uploaded 10 photos this hour. Try again in 18 minutes.",
+      );
+      expect(
+        (within(card).getByRole("button", { name: "Replace" }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      expect(
+        (within(card).getByRole("button", { name: "Remove" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+    });
+  });
+
+  it("disables Upload photo after the limit and enables it when the wait is over", async () => {
+    const uploadProfilePicture = vi.fn(() =>
+      Promise.reject(new ApiError(429, "Too many", {}, 1080)),
+    );
+    const timers = vi.spyOn(globalThis, "setTimeout");
+    show(session(alice, { uploadProfilePicture }));
+    const card = await pictureCard();
+    choose(card, photo());
+    const dialog = await screen.findByRole("dialog", { name: "Position your photo" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save photo" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const upload = within(card).getByRole("button", { name: "Upload photo" }) as HTMLButtonElement;
+    expect(upload.disabled).toBe(true);
+
+    const waitOver = timers.mock.calls.find(([, delay]) => delay === 1080 * 1000)?.[0];
+    expect(waitOver).toBeTypeOf("function");
+    act(() => (waitOver as () => void)());
+
+    expect(upload.disabled).toBe(false);
+    expect(within(card).queryByRole("alert")).toBeNull();
   });
 });

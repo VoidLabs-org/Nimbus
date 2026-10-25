@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import javax.imageio.ImageIO;
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.TestcontainersConfiguration;
 import com.nimbus.api.identity.EmailCodes;
+import com.nimbus.api.identity.MovableClock;
 import com.nimbus.api.identity.RefreshCookies;
 import com.nimbus.api.identity.Users;
 import org.junit.jupiter.api.Test;
@@ -34,7 +36,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
  * Uploading a Profile picture from Profile, and loading it back the way an {@code <img>} does: without signing in.
  * Pictures go to MinIO in a container.
  */
-@Import(TestcontainersConfiguration.class)
+@Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
 class ProfilePictureUploadTests {
@@ -51,6 +53,9 @@ class ProfilePictureUploadTests {
 
 	@Autowired
 	Users users;
+
+	@Autowired
+	MovableClock clock;
 
 	@Test
 	void anUploadedPhotoIsServedAsA256PixelJpegThatBrowsersMayCacheForever() throws IOException {
@@ -222,6 +227,100 @@ class ProfilePictureUploadTests {
 			.exchange().expectStatus().is2xxSuccessful();
 
 		upload(token, png(64, 64, false), "me.png", "image/png").expectStatus().isUnauthorized();
+	}
+
+	@Test
+	void replacingAPhotoDeletesTheOldOne() {
+		var token = verifiedUser("pp13@example.com");
+		var first = avatarOf(upload(token, png(64, 64, false), "a.png", "image/png"));
+
+		var second = avatarOf(upload(token, png(80, 80, false), "b.png", "image/png"));
+
+		client.get().uri(first).exchange().expectStatus().isNotFound();
+		fetch(second);
+	}
+
+	@Test
+	void removingTheShownPhotoDeletesItAndShowsInitials() {
+		var token = verifiedUser("pp14@example.com");
+		externalSignIn.signIn(google("pp14@example.com", "https://lh3.example.com/first.png"));
+		var uploaded = avatarOf(upload(token, png(64, 64, false), "me.png", "image/png"));
+
+		remove(token).expectStatus().isNoContent();
+
+		client.get().uri(uploaded).exchange().expectStatus().isNotFound();
+		// Initials, not the provider's picture it showed before the upload.
+		me(token).expectStatus().isOk().expectBody().jsonPath("$.avatarUrl").isEmpty();
+		// Uploading again works.
+		fetch(avatarOf(upload(token, png(64, 64, false), "again.png", "image/png")));
+	}
+
+	@Test
+	void removingWithoutAnUploadChangesNothing() {
+		var token = verifiedUser("pp15@example.com");
+		externalSignIn.signIn(google("pp15@example.com", "https://lh3.example.com/first.png"));
+
+		remove(token).expectStatus().isNoContent();
+
+		me(token).expectStatus().isOk().expectBody().jsonPath("$.avatarUrl")
+			.isEqualTo("https://lh3.example.com/first.png");
+	}
+
+	@Test
+	void nobodyCanRemoveWithoutSigningIn() {
+		client.delete().uri("/api/users/me/profile-picture").exchange().expectStatus().isUnauthorized();
+	}
+
+	@Test
+	void tenUploadsAnHourAreAllowedAndTheNextWaitsForTheOldestToAgeOut() {
+		var token = verifiedUser("pp16@example.com");
+		var picture = png(32, 32, false);
+		for (var i = 0; i < 10; i++) {
+			upload(token, picture, "me.png", "image/png").expectStatus().isOk();
+			clock.advance(Duration.ofMinutes(1));
+		}
+
+		// The first upload was 10 minutes ago.
+		upload(token, picture, "me.png", "image/png").expectStatus().isEqualTo(429)
+			.expectHeader().valueEquals("Retry-After", "3000");
+		// Removing is not an upload.
+		remove(token).expectStatus().isNoContent();
+
+		clock.advance(Duration.ofMinutes(50));
+		upload(token, picture, "me.png", "image/png").expectStatus().isOk();
+	}
+
+	@Test
+	void aRefusedFileStillCountsButLeavesTheCurrentPhotoAlone() {
+		var token = verifiedUser("pp17@example.com");
+		var current = avatarOf(upload(token, png(64, 64, false), "me.png", "image/png"));
+
+		for (var i = 0; i < 9; i++) {
+			upload(token, "not a picture".getBytes(StandardCharsets.UTF_8), "x.png", "image/png").expectStatus()
+				.isBadRequest();
+		}
+
+		upload(token, "not a picture".getBytes(StandardCharsets.UTF_8), "x.png", "image/png").expectStatus()
+			.isEqualTo(429);
+		me(token).expectStatus().isOk().expectBody().jsonPath("$.avatarUrl").isEqualTo(current);
+		fetch(current);
+	}
+
+	@Test
+	void theLimitIsPerUser() {
+		var busy = verifiedUser("pp18@example.com");
+		var other = verifiedUser("pp19@example.com");
+		for (var i = 0; i < 10; i++) {
+			upload(busy, png(32, 32, false), "me.png", "image/png").expectStatus().isOk();
+		}
+
+		upload(busy, png(32, 32, false), "me.png", "image/png").expectStatus().isEqualTo(429);
+		upload(other, png(32, 32, false), "me.png", "image/png").expectStatus().isOk();
+	}
+
+	private RestTestClient.ResponseSpec remove(String token) {
+		return client.delete().uri("/api/users/me/profile-picture").header("Authorization", "Bearer " + token)
+			.exchange();
 	}
 
 	private String verifiedUser(String email) {

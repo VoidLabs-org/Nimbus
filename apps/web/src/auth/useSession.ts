@@ -49,6 +49,11 @@ export type Session = {
    * ApiError (see `api.uploadProfilePicture`) if refused.
    */
   uploadProfilePicture: (picture: Blob) => Promise<void>;
+  /**
+   * Removes the signed-in User's uploaded Profile picture, so they show initials. Rejects with an ApiError if the
+   * request fails.
+   */
+  removeProfilePicture: () => Promise<void>;
   /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */
   changePassword: (input: ChangePasswordInput) => Promise<void>;
   /**

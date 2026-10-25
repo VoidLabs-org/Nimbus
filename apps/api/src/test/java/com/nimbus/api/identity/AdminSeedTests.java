@@ -20,7 +20,8 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 
 /** The seed runs at startup, before any test method, so a listener records what it publishes. */
 @Import({ TestcontainersConfiguration.class, RecordingMailer.class, AdminSeedTests.Recorder.class })
-@ApplicationModuleTest
+// With storage, which identity uses for Profile pictures; mail is stood in for by RecordingMailer.
+@ApplicationModuleTest(extraIncludes = "storage")
 @AutoConfigureRestTestClient
 @TestPropertySource(properties = { "nimbus.admin.email=Root@Example.com", "nimbus.admin.password=seeded password" })
 class AdminSeedTests {

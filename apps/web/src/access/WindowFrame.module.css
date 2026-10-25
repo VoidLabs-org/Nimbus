@@ -15,6 +15,12 @@
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
 }
 
+/* Full screen on a phone (the photo window): no rounded corners or edge against the screen's. */
+.content[data-full-screen] {
+  border: 0;
+  border-radius: 0;
+}
+
 /* A slim rounded scrollbar in the theme's colours, with no arrow buttons, inset from the rounded corners. Chrome
    and Safari use the ::-webkit-scrollbar styles and ignore them if scrollbar-width is set, so the standard
    properties are only for browsers without them (Firefox). */

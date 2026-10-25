@@ -16,7 +16,8 @@ import org.springframework.modulith.test.PublishedEvents;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 @Import({ TestcontainersConfiguration.class, RecordingMailer.class })
-@ApplicationModuleTest
+// With storage, which identity uses for Profile pictures; mail is stood in for by RecordingMailer.
+@ApplicationModuleTest(extraIncludes = "storage")
 @AutoConfigureRestTestClient
 class UserRegisteredEventTests {
 

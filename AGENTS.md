@@ -23,7 +23,7 @@ Project management app (projects, issues, boards, sprints) with AI features. Tea
 
 ## Commands
 
-- Database: shared dev DB via `apps/api/.env` (git-ignored, see `.env.example`), or `docker compose up -d` for a local one on port 5433. Never commit `.env` or put credentials in tracked files.
+- Database: shared dev DB via `apps/api/.env` (git-ignored, see `.env.example`), or `docker compose up -d` for a local one on port 5433 (plus MinIO on 9000 for uploads; the shared DB uses the shared R2 bucket, `STORAGE_*` in `.env`). Never commit `.env` or put credentials in tracked files.
 - `pnpm dev`: API (8080) + web (3000). `pnpm dev:desktop` also opens Electron. It also runs the API's `dev:watch`, which recompiles on save so Spring DevTools restarts the API. Changes to `.env` still need a manual restart.
 - `pnpm build`, `pnpm lint`, `pnpm check-types`, `pnpm test`, `pnpm format`
 

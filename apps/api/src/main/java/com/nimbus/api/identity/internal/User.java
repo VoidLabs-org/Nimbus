@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.PostLoad;
@@ -30,7 +31,17 @@ class User implements Persistable<UUID> {
 
 	private String passwordHash;
 
+	// The picture the last Google or GitHub sign-in brought. Shown while the User has never chosen what to show.
 	private String avatarUrl;
+
+	// What the User chose to show as their Profile picture; null until they choose.
+	@Convert(converter = PictureSource.Column.class)
+	private PictureSource pictureSource;
+
+	// The photo they uploaded: its key in the bucket and when it was uploaded. Null without one.
+	private String uploadedPictureKey;
+
+	private Instant uploadedPictureAt;
 
 	private boolean emailVerified;
 
@@ -99,6 +110,19 @@ class User implements Persistable<UUID> {
 		this.avatarUrl = avatarUrl;
 	}
 
+	/**
+	 * Makes the photo stored under {@code key} the User's uploaded photo, and shows it.
+	 *
+	 * @return the key of the photo it replaces, or null
+	 */
+	String useUploadedPicture(String key, Instant now) {
+		var replaced = uploadedPictureKey;
+		this.uploadedPictureKey = key;
+		this.uploadedPictureAt = micros(now);
+		this.pictureSource = PictureSource.UPLOADED;
+		return replaced;
+	}
+
 	/** The User proved they own {@code email} (lower-cased) with the code mailed there, so it stays verified. */
 	void changeEmail(String email) {
 		this.email = email;
@@ -132,6 +156,21 @@ class User implements Persistable<UUID> {
 
 	String avatarUrl() {
 		return avatarUrl;
+	}
+
+	/** Null while the User has never chosen what to show. */
+	PictureSource pictureSource() {
+		return pictureSource;
+	}
+
+	/** Null without an uploaded photo. */
+	String uploadedPictureKey() {
+		return uploadedPictureKey;
+	}
+
+	/** Null without an uploaded photo. */
+	Instant uploadedPictureAt() {
+		return uploadedPictureAt;
 	}
 
 	boolean emailVerified() {

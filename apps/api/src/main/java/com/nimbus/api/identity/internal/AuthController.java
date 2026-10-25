@@ -34,8 +34,11 @@ class AuthController {
 
 	private final TwoStepSignIn twoStepSignIn;
 
+	private final ProfilePictures pictures;
+
 	AuthController(Registration registration, SignIn signIn, AccessTokens accessTokens, Sessions sessions,
-			TwoStepSignIn twoStepSignIn) {
+			TwoStepSignIn twoStepSignIn, ProfilePictures pictures) {
+		this.pictures = pictures;
 		this.registration = registration;
 		this.signIn = signIn;
 		this.accessTokens = accessTokens;
@@ -118,7 +121,7 @@ class AuthController {
 		for (var cookie : alsoSet) {
 			response.header(HttpHeaders.SET_COOKIE, cookie.toString());
 		}
-		return response.body(new AuthResponse(accessTokens.issueFor(user, refreshToken.sessionId()), UserResponse.from(user)));
+		return response.body(new AuthResponse(accessTokens.issueFor(user, refreshToken.sessionId()), UserResponse.from(user, pictures)));
 	}
 
 	/** Tells the browser to drop a refresh token the server rejected, instead of resending it on every load. */

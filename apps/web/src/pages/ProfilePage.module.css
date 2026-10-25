@@ -4,9 +4,3 @@
 .dots {
   letter-spacing: 0.1em;
 }
-
-/* A long email must wrap, not push the page wider than a phone. */
-.who {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}

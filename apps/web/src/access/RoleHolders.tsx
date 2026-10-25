@@ -1,16 +1,6 @@
-import {
-  Alert,
-  Avatar,
-  Badge,
-  Button,
-  Group,
-  Modal,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { Alert, Badge, Button, Group, Modal, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { ProfilePicture } from "@repo/ui/profile-picture";
 import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { useMutation } from "@tanstack/react-query";
@@ -135,10 +125,10 @@ export function RoleHolders({ role }: { role: Role }) {
               <Table.Tr key={holder.id}>
                 <Table.Td>
                   <Group gap="sm">
-                    <Avatar
+                    <ProfilePicture
+                      name={holder.displayName ?? "Unknown User"}
                       src={holder.avatarUrl}
-                      name={holder.displayName ?? undefined}
-                      size="sm"
+                      size={26}
                     />
                     <div>
                       <Group gap={6}>

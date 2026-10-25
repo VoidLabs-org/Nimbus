@@ -912,6 +912,73 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/users/me/profile-picture:
+    put:
+      tags: [users]
+      summary: Upload the signed-in User's Profile picture
+      description: >-
+        Stores a JPEG, PNG or WebP of at most 5 MB as the User's uploaded photo, cropped to its centred square,
+        resized to 256x256 and re-encoded as JPEG without metadata, and shows it. The photo gets a new address on
+        every upload. Needs a running Session and a verified email.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: The User, whose `avatarUrl` is now the uploaded photo's address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: >-
+            The file is over 5 MB (`code: file_too_large`), isn't a JPEG, PNG or WebP (`code: unsupported_type`), or
+            can't be read (`code: unreadable_image`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/profile-pictures/{key}:
+    get:
+      tags: [users]
+      summary: An uploaded Profile picture
+      description: >-
+        Public, for `<img>` tags, which send no access token; keys are unguessable and change with every upload, so a
+        response may be cached for a year.
+      security: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The photo
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=31536000, immutable
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No photo has this key
   /api/users/me/linked-identities:
     get:
       tags: [users]
@@ -1978,7 +2045,10 @@ components:
           type: string
         avatarUrl:
           type: [string, "null"]
-          format: uri
+          format: uri-reference
+          description: >-
+            The Profile picture the User shows: their uploaded photo (by default an address under
+            `/api/profile-pictures/`), or the picture their last Google or GitHub sign-in brought; null for initials
         hasPassword:
           type: boolean
           description: False for Users who only sign in with Google or GitHub; the app asks for a current password only when true

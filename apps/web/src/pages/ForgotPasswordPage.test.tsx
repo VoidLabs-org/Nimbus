@@ -37,6 +37,7 @@ function session(user: User | null): Session {
     signInWithCode: unused,
     updateDisplayName: unused,
     changeEmail: unused,
+    uploadProfilePicture: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,

@@ -308,6 +308,23 @@
   color: var(--color-accent-800);
 }
 
+/* Profile picture: initials on orange when there is no image, grey for System. */
+.nimbus-profile-picture {
+  flex: none;
+}
+
+.nimbus-profile-picture .mantine-Avatar-placeholder {
+  font-weight: 700;
+  border: 0;
+  background: var(--color-accent);
+  color: var(--on-accent);
+}
+
+.nimbus-profile-picture[data-tone="system"] .mantine-Avatar-placeholder {
+  background: var(--color-accent-2-200);
+  color: var(--color-text);
+}
+
 /* Pill tabs: the chosen tab is ink on the page colour. */
 .nimbus-pill-tabs {
   background: var(--glass);

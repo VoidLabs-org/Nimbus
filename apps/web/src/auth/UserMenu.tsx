@@ -1,6 +1,7 @@
 import { IconChevronDown } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import { Avatar, Button, Group, Menu, Modal, Text, type FloatingPosition } from "@mantine/core";
+import { Button, Group, Menu, Modal, Text, type FloatingPosition } from "@mantine/core";
+import { ProfilePicture } from "@repo/ui/profile-picture";
 import { toast } from "@repo/ui/toast";
 import { useState } from "react";
 import classes from "./UserMenu.module.css";
@@ -54,15 +55,7 @@ export function UserMenu({
             data-nav-focus="account"
             aria-label={`Account menu for ${user.displayName}`}
           >
-            {/* Falls back to initials of the name when there is no image, or it fails to load. No referrer:
-                Google's image host refuses some requests that carry one. */}
-            <Avatar
-              src={user.avatarUrl}
-              imageProps={{ referrerPolicy: "no-referrer" }}
-              name={user.displayName}
-              color="initials"
-              size={36}
-            />
+            <ProfilePicture name={user.displayName} src={user.avatarUrl} size={36} />
             {!compact && (
               <>
                 <span className={classes.name}>{user.displayName.split(" ")[0]}</span>

@@ -17,5 +17,32 @@ services:
       timeout: 5s
       retries: 10
 
+  # Stands in for Cloudflare R2 (uploaded Profile pictures) with a local database. The API's defaults point here.
+  # MinIO no longer publishes images on Docker Hub, so this is Chainguard's build, pinned by digest.
+  minio:
+    image: chainguard/minio@sha256:73297936408b731668ca0e835ac9add1a35cb6026a125c2f0cd476d9ef48222c
+    container_name: nimbus-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: nimbus
+      MINIO_ROOT_PASSWORD: nimbus-minio
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      # The MinIO console, to look at the bucket in a browser.
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  # Creates the bucket, then exits; it fails and restarts until MinIO is up. The image has no shell.
+  minio-bucket:
+    image: chainguard/minio-client@sha256:5830e3a2faa7b2141c07675976240759afcda4cab7a9c25011adf5ca056fb142
+    depends_on:
+      - minio
+    environment:
+      MC_HOST_local: http://nimbus:nimbus-minio@minio:9000
+    command: ["mb", "--ignore-existing", "local/nimbus"]
+    restart: on-failure
+
 volumes:
   postgres-data:
+  minio-data:

@@ -2,6 +2,7 @@ package com.nimbus.api.identity.internal;
 
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +26,11 @@ class ProfilePictures {
 	/** The largest file accepted, before it is cropped and re-encoded. */
 	static final long MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+	/** Uploads one User may make in {@link #UPLOAD_WINDOW}; refused ones don't count. */
+	static final int UPLOADS_PER_WINDOW = 10;
+
+	static final Duration UPLOAD_WINDOW = Duration.ofHours(1);
+
 	private static final Logger log = LoggerFactory.getLogger(ProfilePictures.class);
 
 	/** Keys are 16 random bytes, URL-safe base64 without padding. Anything else can't be one. */
@@ -45,6 +51,8 @@ class ProfilePictures {
 
 	private final String baseUrl;
 
+	private final SlidingWindowLimiter uploadsByUser;
+
 	ProfilePictures(ObjectStore store, UserRepository users, PlatformTransactionManager transactionManager, Clock clock,
 			ProfilePictureProperties properties) {
 		this.store = store;
@@ -52,6 +60,7 @@ class ProfilePictures {
 		this.transaction = new TransactionTemplate(transactionManager);
 		this.clock = clock;
 		this.baseUrl = properties.baseUrl();
+		this.uploadsByUser = new SlidingWindowLimiter(UPLOADS_PER_WINDOW, UPLOAD_WINDOW, clock);
 	}
 
 	/**
@@ -59,6 +68,7 @@ class ProfilePictures {
 	 * is saved, so the User never points at a missing object; if saving fails, the new object is deleted (best
 	 * effort). The photo it replaces is deleted after the save; a failure there is only logged.
 	 *
+	 * @throws SlidingWindowLimiter.LimitExceededException after {@value #UPLOADS_PER_WINDOW} uploads in the last hour
 	 * @throws FileTooLargeException over {@link #MAX_UPLOAD_BYTES}
 	 * @throws PictureImages.UnsupportedTypeException when it isn't a JPEG, PNG or WebP
 	 * @throws PictureImages.UnreadableImageException when it can't be decoded
@@ -67,11 +77,15 @@ class ProfilePictures {
 		if (file.length > MAX_UPLOAD_BYTES) {
 			throw new FileTooLargeException();
 		}
-		var picture = PictureImages.toProfilePicture(file);
-		var key = newKey();
-		store.store(FOLDER + key, picture, PictureImages.CONTENT_TYPE);
+		var counted = uploadsByUser.acquire(userId.toString(),
+				"You've uploaded " + UPLOADS_PER_WINDOW + " photos this hour. Try again later.");
 		Saved saved;
+		var key = newKey();
+		var stored = false;
 		try {
+			var picture = PictureImages.toProfilePicture(file);
+			store.store(FOLDER + key, picture, PictureImages.CONTENT_TYPE);
+			stored = true;
 			saved = transaction.execute(status -> {
 				var user = users.findLockedById(userId).orElseThrow();
 				var replaced = user.useUploadedPicture(key, clock.instant());
@@ -79,13 +93,28 @@ class ProfilePictures {
 			});
 		}
 		catch (RuntimeException e) {
-			deleteQuietly(key);
+			// A refused or failed upload leaves the current picture and doesn't use up the User's uploads.
+			uploadsByUser.release(userId.toString(), counted);
+			if (stored) {
+				deleteQuietly(key);
+			}
 			throw e;
 		}
 		if (saved.replaced() != null) {
 			deleteQuietly(saved.replaced());
 		}
 		return saved.user();
+	}
+
+	/**
+	 * Removes the User's uploaded photo and deletes it from the bucket (a failure there is only logged). If it was
+	 * shown, the User shows initials. Nothing changes without an upload.
+	 */
+	void remove(UUID userId) {
+		var removed = transaction.execute(status -> users.findLockedById(userId).orElseThrow().removeUploadedPicture());
+		if (removed != null) {
+			deleteQuietly(removed);
+		}
 	}
 
 	/** The uploaded photo with this key; empty for anything that isn't one. Close it once sent. */

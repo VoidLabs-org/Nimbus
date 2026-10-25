@@ -919,7 +919,7 @@ paths:
       description: >-
         Stores a JPEG, PNG or WebP of at most 5 MB as the User's uploaded photo, cropped to its centred square,
         resized to 256x256 and re-encoded as JPEG without metadata, and shows it. The photo gets a new address on
-        every upload. Needs a running Session and a verified email.
+        every upload. Needs a running Session and a verified email. A User may upload 10 photos in an hour.
       requestBody:
         required: true
         content:
@@ -946,6 +946,29 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          description: 10 uploads in the last hour; `Retry-After` says how many seconds until another is allowed
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags: [users]
+      summary: Remove the signed-in User's uploaded Profile picture
+      description: >-
+        Deletes the uploaded photo. If it was the picture shown, the User shows initials. Needs a running Session and a
+        verified email.
+      responses:
+        "204":
+          description: Removed, or there was no uploaded photo (nothing changes then)
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2033,7 +2056,17 @@ components:
 
     User:
       type: object
-      required: [id, email, displayName, avatarUrl, hasPassword, emailVerified, passwordChangedAt]
+      required:
+        [
+          id,
+          email,
+          displayName,
+          avatarUrl,
+          hasPassword,
+          emailVerified,
+          passwordChangedAt,
+          hasUploadedPicture,
+        ]
       properties:
         id:
           type: string
@@ -2065,6 +2098,9 @@ components:
           description: >-
             When the password was last set (sign-up, change, first password, forgot password). Null without a password,
             and for passwords set before Nimbus kept the time.
+        hasUploadedPicture:
+          type: boolean
+          description: Whether the User has an uploaded photo, whether or not it is the picture shown
 
     SessionInfo:
       type: object

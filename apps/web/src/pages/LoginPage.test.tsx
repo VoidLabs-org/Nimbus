@@ -19,6 +19,7 @@ const alice: User = {
   hasPassword: true,
   emailVerified: true,
   passwordChangedAt: null,
+  hasUploadedPicture: false,
 };
 
 const unused = () => Promise.resolve();
@@ -48,6 +49,7 @@ function FakeSession({ fakes, children }: { fakes: Fakes; children: ReactNode })
     updateDisplayName: unused,
     changeEmail: unused,
     uploadProfilePicture: unused,
+    removeProfilePicture: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,

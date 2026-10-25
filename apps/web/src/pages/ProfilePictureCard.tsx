@@ -2,7 +2,7 @@ import { Button } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { toast } from "@repo/ui/toast";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, type User } from "../api/client";
 import { useSession } from "../auth/useSession";
 import {
@@ -10,22 +10,33 @@ import {
   PICTURE_TYPES,
   pictureFileError,
   UNREADABLE,
+  uploadLimitMessage,
   WRONG_FILE,
 } from "../settings/profilePicture";
 import { PositionPhotoDialog } from "./PositionPhotoDialog";
 import classes from "./ProfilePictureCard.module.css";
 
 /**
- * Profile's picture card (design 35a, without the Show choice yet): the User's picture and "Upload photo". A chosen file
- * is checked here first (35e), then positioned in "Position your photo" (35c) and uploaded; what goes wrong replaces
- * the hint in red (35e, 35f).
+ * Profile's picture card (design 35a, without the Show choice yet): the User's picture and "Upload photo", or Replace
+ * and Remove once they have an upload (35d). A chosen file is checked here first (35e), then positioned in "Position
+ * your photo" (35c) and uploaded; what goes wrong replaces the hint in red (35e, 35f). After 10 uploads in an hour the
+ * message says how long to wait (35g) and the upload button stays disabled until then; Remove keeps working.
  */
 export function ProfilePictureCard({ user }: { user: User }) {
-  const { uploadProfilePicture } = useSession();
+  const { uploadProfilePicture, removeProfilePicture } = useSession();
   const input = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<{ file: File; src: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  // Set by a 429; cleared once the wait is over.
+  const [limit, setLimit] = useState<{ message: string; seconds: number } | null>(null);
+
+  useEffect(() => {
+    if (!limit) return;
+    const timer = setTimeout(() => setLimit(null), limit.seconds * 1000);
+    return () => clearTimeout(timer);
+  }, [limit]);
 
   function choose(file: File | undefined) {
     // So picking the same file again still counts as a change.
@@ -53,7 +64,11 @@ export function ProfilePictureCard({ user }: { user: User }) {
       toast.success("Profile picture updated");
       finish();
     } catch (failure) {
-      if (failure instanceof ApiError && failure.status === 400) {
+      if (failure instanceof ApiError && failure.status === 429) {
+        const seconds = failure.retryAfterSeconds ?? 60;
+        setLimit({ message: uploadLimitMessage(failure.retryAfterSeconds), seconds });
+        finish();
+      } else if (failure instanceof ApiError && failure.status === 400) {
         setError(failure.code === "unreadable_image" ? UNREADABLE : WRONG_FILE);
         finish();
       } else {
@@ -65,6 +80,20 @@ export function ProfilePictureCard({ user }: { user: User }) {
     }
   }
 
+  async function remove() {
+    setRemoving(true);
+    try {
+      await removeProfilePicture();
+      setError(null);
+      toast.success("Profile picture updated");
+    } catch {
+      toast.error("Couldn't remove your photo. Check your connection and try again.");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  const message = limit?.message ?? error;
   return (
     <section aria-label="Profile picture">
       <Panel p={22}>
@@ -73,9 +102,18 @@ export function ProfilePictureCard({ user }: { user: User }) {
           <div className={classes.text}>
             <div className={classes.title}>Profile picture</div>
             <div className={classes.actions}>
-              <Button variant="default" onClick={() => input.current?.click()}>
-                Upload photo
+              <Button
+                variant="default"
+                disabled={limit !== null}
+                onClick={() => input.current?.click()}
+              >
+                {user.hasUploadedPicture ? "Replace" : "Upload photo"}
               </Button>
+              {user.hasUploadedPicture && (
+                <Button variant="default" loading={removing} onClick={remove}>
+                  Remove
+                </Button>
+              )}
               <input
                 ref={input}
                 type="file"
@@ -87,10 +125,10 @@ export function ProfilePictureCard({ user }: { user: User }) {
               />
             </div>
             <div
-              className={error ? classes.error : classes.hint}
-              role={error ? "alert" : undefined}
+              className={message ? classes.error : classes.hint}
+              role={message ? "alert" : undefined}
             >
-              {error ?? PICTURE_HINT}
+              {message ?? PICTURE_HINT}
             </div>
           </div>
         </div>

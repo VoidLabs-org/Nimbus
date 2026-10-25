@@ -22,6 +22,7 @@ const alice: User = {
   hasPassword: true,
   emailVerified: true,
   passwordChangedAt: null,
+  hasUploadedPicture: false,
 };
 
 const unused = () => Promise.resolve();
@@ -40,6 +41,7 @@ function session(logout: () => Promise<void> = unused): Session {
     updateDisplayName: unused,
     changeEmail: unused,
     uploadProfilePicture: unused,
+    removeProfilePicture: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,

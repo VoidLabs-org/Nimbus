@@ -11,6 +11,8 @@ export type User = {
   emailVerified: boolean;
   /** When the password was last set; null without one, or when it was set before Nimbus kept the time. */
   passwordChangedAt: string | null;
+  /** True when the User has an uploaded photo, whether or not it is the picture shown. */
+  hasUploadedPicture: boolean;
 };
 
 export type RegisterInput = { displayName: string; email: string; password: string };
@@ -553,13 +555,21 @@ export function createApiClient(
 
     /**
      * Uploads `picture` as the signed-in User's Profile picture and shows it; returns the User, whose `avatarUrl` is its
-     * new address. A 400 says why it was refused: `code` "file_too_large", "unsupported_type" or "unreadable_image".
+     * new address. A 400 says why it was refused: `code` "file_too_large", "unsupported_type" or "unreadable_image"; a 429
+     * means 10 uploads in the last hour, and `retryAfterSeconds` says how long to wait.
      */
     uploadProfilePicture: (picture: Blob) => {
       const form = new FormData();
       form.append("file", picture, "profile-picture.jpg");
       return request<User>("/api/users/me/profile-picture", { method: "PUT", body: form });
     },
+
+    /**
+     * Removes the signed-in User's uploaded Profile picture (also fine without one). Read the User again for what
+     * they show now.
+     */
+    removeProfilePicture: () =>
+      request<void>("/api/users/me/profile-picture", { method: "DELETE" }),
 
     /**
      * Changes the email to the pending address and returns the updated User. Rejects with an ApiError:

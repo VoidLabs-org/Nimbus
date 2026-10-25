@@ -9,10 +9,13 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -46,6 +49,15 @@ class ProfilePictureController {
 			throw new ProfilePictures.FileTooLargeException();
 		}
 		return UserResponse.from(pictures.upload(userId, file.getBytes()), pictures);
+	}
+
+	/** Removes the User's uploaded photo; needs a running Session. {@code 204} also when there was none. */
+	@DeleteMapping("/api/users/me/profile-picture")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	void remove(@AuthenticationPrincipal Jwt token) {
+		var userId = currentUser.id();
+		sessions.requireActive(UsersController.sessionOf(token), userId);
+		pictures.remove(userId);
 	}
 
 	/** An uploaded photo, for anyone with its address: {@code <img>} tags send no access token. */

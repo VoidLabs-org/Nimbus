@@ -123,6 +123,25 @@ class User implements Persistable<UUID> {
 		return replaced;
 	}
 
+	/**
+	 * Forgets the uploaded photo. If it was the one shown, the User shows initials: not the provider's picture they
+	 * had before, which they replaced by choosing a photo.
+	 *
+	 * @return the key of the photo removed, or null when there was none (nothing changes then)
+	 */
+	String removeUploadedPicture() {
+		var removed = uploadedPictureKey;
+		if (removed == null) {
+			return null;
+		}
+		this.uploadedPictureKey = null;
+		this.uploadedPictureAt = null;
+		if (pictureSource == PictureSource.UPLOADED) {
+			this.pictureSource = PictureSource.INITIALS;
+		}
+		return removed;
+	}
+
 	/** The User proved they own {@code email} (lower-cased) with the code mailed there, so it stays verified. */
 	void changeEmail(String email) {
 		this.email = email;

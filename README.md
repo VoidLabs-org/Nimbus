@@ -41,6 +41,10 @@ The website forwards `/api/*` calls to the API, so the browser only talks to por
 
 **API auto-restart.** `pnpm dev` also runs `pnpm --filter api dev:watch` (set up in `apps/api/turbo.json`), which is Gradle's `classes --continuous`: it recompiles whenever you save a `.java` file and copies changed resources such as new migrations, and Spring DevTools (development only, not in the deployed jar) sees the change and restarts the API, which is much faster than stopping and starting `pnpm dev`. Changes to `apps/api/.env` are not picked up this way; restart `pnpm dev` for those. Each restart resets in-memory state such as rate-limit counters.
 
+## Desktop app
+
+`pnpm dev:desktop` opens the Electron window on the dev server, so it works like the website. The packaged app (`pnpm start:desktop`, which builds the website first) loads the built files instead and talks to the API at `NIMBUS_API_URL` (default `http://localhost:8080`; use `https` for anything but your own computer). Google and GitHub sign-in are not available in the packaged app, only email and password. Details: [docs/specs/desktop.md](docs/specs/desktop.md) and ADR 0007.
+
 ## Commands
 
 Run from the repo root.
@@ -49,6 +53,7 @@ Run from the repo root.
 | ----------------------------- | --------------------------------------------------------------------------- |
 | `pnpm dev`                    | Start the API and website                                                   |
 | `pnpm dev:desktop`            | Same, plus the Electron desktop window                                      |
+| `pnpm start:desktop`          | Build the website and run the packaged desktop app; see below               |
 | `pnpm --filter api dev:watch` | Recompile the API on every save so it restarts (`pnpm dev` already runs it) |
 | `pnpm build`                  | Build everything                                                            |
 | `pnpm test`                   | Run backend tests (needs Docker)                                            |

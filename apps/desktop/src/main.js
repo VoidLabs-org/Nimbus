@@ -1,7 +1,10 @@
 // Electron main process: a thin desktop shell around the web app (apps/web).
-import { app, BrowserWindow, net, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, net, protocol, safeStorage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createApiProxy, parseApiUrl } from "./api-proxy.js";
+import { createCookieStore } from "./cookie-store.js";
+import { resolveWebFile } from "./static-files.js";
 
 const isDev = process.argv.includes("--dev");
 const DEV_URL = "http://localhost:3000";
@@ -14,23 +17,44 @@ protocol.registerSchemesAsPrivileged([
   { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
-function serveWebDist() {
-  protocol.handle("app", (request) => {
-    const { pathname } = new URL(request.url);
-    const filePath = path.resolve(WEB_DIST, `.${decodeURIComponent(pathname)}`);
-    const relative = path.relative(WEB_DIST, filePath);
-    // Block paths that escape the dist folder, e.g. app://nimbus/../../secret.txt
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      return new Response("Bad request", { status: 400 });
-    }
-    // Client-side routes (no file extension) fall back to index.html
-    const target = path.extname(filePath) ? filePath : path.join(WEB_DIST, "index.html");
-    return net.fetch(pathToFileURL(target).toString());
+// The built app is served from app://nimbus. Its /api calls go to the real API (NIMBUS_API_URL), which this process
+// talks to for it and whose cookies it keeps, because a page on app:// can't carry them (ADR 0007).
+async function serveWebDist(apiUrl) {
+  const cookieStore = createCookieStore({
+    file: path.join(app.getPath("userData"), "api-cookies.bin"),
+    safeStorage,
+  });
+  const jar = await cookieStore.load();
+  const proxyApi = createApiProxy({
+    apiUrl,
+    jar,
+    onChange: () =>
+      cookieStore.save(jar).catch((error) => console.error("Could not save the sign-in:", error)),
+  });
+
+  protocol.handle("app", async (request) => {
+    const proxied = await proxyApi(request);
+    if (proxied) return proxied;
+
+    const found = resolveWebFile(WEB_DIST, new URL(request.url).pathname);
+    if ("error" in found) return new Response(found.error, { status: 400 });
+    return net.fetch(pathToFileURL(found.file).toString());
   });
 }
 
 function createWindow() {
-  const win = new BrowserWindow({ width: 1280, height: 800, title: "Nimbus" });
+  const win = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    title: "Nimbus",
+    webPreferences: {
+      preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
+      contextIsolation: true,
+      sandbox: true,
+      // The preload reads this: only the built app on app://nimbus is "packaged".
+      additionalArguments: isDev ? [] : ["--nimbus-packaged"],
+    },
+  });
   const appOrigin = new URL(isDev ? DEV_URL : APP_URL).origin;
 
   // Open external links in the default browser instead of new Electron windows (#14, #15)
@@ -49,8 +73,18 @@ function createWindow() {
   win.loadURL(isDev ? DEV_URL : APP_URL);
 }
 
-app.whenReady().then(() => {
-  if (!isDev) serveWebDist();
+app.whenReady().then(async () => {
+  if (!isDev) {
+    let apiUrl;
+    try {
+      apiUrl = parseApiUrl(process.env.NIMBUS_API_URL);
+    } catch (error) {
+      dialog.showErrorBox("Nimbus can't start", error.message);
+      app.quit();
+      return;
+    }
+    await serveWebDist(apiUrl);
+  }
   createWindow();
 
   app.on("activate", () => {

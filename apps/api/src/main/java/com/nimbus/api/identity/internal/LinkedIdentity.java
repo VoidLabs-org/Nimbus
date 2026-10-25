@@ -28,14 +28,19 @@ class LinkedIdentity {
 	/** The Google email or GitHub username to show the User; null for an identity linked before it was kept. */
 	private String accountName;
 
+	/** The picture the provider last sent for the person, or null when it sent none yet. Not copied into storage. */
+	private String pictureUrl;
+
 	protected LinkedIdentity() {
 	}
 
-	LinkedIdentity(UUID userId, String provider, String providerUserId, String accountName, Instant createdAt) {
+	LinkedIdentity(UUID userId, String provider, String providerUserId, String accountName, String pictureUrl,
+			Instant createdAt) {
 		this.userId = userId;
 		this.provider = provider;
 		this.providerUserId = providerUserId;
 		this.accountName = accountName;
+		this.pictureUrl = pictureUrl;
 		this.createdAt = createdAt;
 	}
 
@@ -51,6 +56,10 @@ class LinkedIdentity {
 		return accountName;
 	}
 
+	String pictureUrl() {
+		return pictureUrl;
+	}
+
 	Instant createdAt() {
 		return createdAt;
 	}
@@ -59,6 +68,13 @@ class LinkedIdentity {
 	void refreshAccountName(String accountName) {
 		if (accountName != null) {
 			this.accountName = accountName;
+		}
+	}
+
+	/** Follows a change of picture at the provider; a sign-in that brings none leaves the one we have. */
+	void refreshPicture(String pictureUrl) {
+		if (pictureUrl != null) {
+			this.pictureUrl = pictureUrl;
 		}
 	}
 

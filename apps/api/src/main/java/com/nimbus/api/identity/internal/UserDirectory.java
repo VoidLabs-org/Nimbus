@@ -26,17 +26,18 @@ class UserDirectory implements Users {
 
 	@Override
 	public Optional<UserSummary> findByEmail(String email) {
-		return users.findByEmail(email.strip().toLowerCase(Locale.ROOT)).map(this::summary);
+		return users.findByEmail(email.strip().toLowerCase(Locale.ROOT)).map(user -> summary(user, pictures.addressOf(user)));
 	}
 
 	@Override
 	public List<UserSummary> findAllById(Collection<UUID> ids) {
-		return users.findAllById(ids).stream().map(this::summary).toList();
+		var found = users.findAllById(ids);
+		var addresses = pictures.addressesOf(found);
+		return found.stream().map(user -> summary(user, addresses.get(user.getId()))).toList();
 	}
 
-	private UserSummary summary(User user) {
-		return new UserSummary(user.getId(), user.email(), user.displayName(), pictures.addressOf(user),
-				user.emailVerified());
+	private UserSummary summary(User user, String avatarUrl) {
+		return new UserSummary(user.getId(), user.email(), user.displayName(), avatarUrl, user.emailVerified());
 	}
 
 }

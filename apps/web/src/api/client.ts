@@ -13,6 +13,20 @@ export type User = {
   passwordChangedAt: string | null;
   /** True when the User has an uploaded photo, whether or not it is the picture shown. */
   hasUploadedPicture: boolean;
+  /** What the User shows; null for a picture from before connected accounts kept their own, which is none of these. */
+  pictureSource: PictureSource | null;
+  /** What the User may pick from; `avatarUrl` is the picture of the one shown. */
+  pictureOptions: PictureOptions;
+};
+
+export type PictureSource = "uploaded" | "google" | "github" | "initials";
+
+export type PictureOptions = {
+  /** When the uploaded photo was added (ISO 8601), and its address for the thumbnail; null without an upload. */
+  uploadedAt: string | null;
+  uploadedUrl: string | null;
+  /** Each connected provider that has a picture, Google first. `label` is the Google email or the GitHub name. */
+  providers: { provider: "google" | "github"; pictureUrl: string; label: string }[];
 };
 
 export type RegisterInput = { displayName: string; email: string; password: string };
@@ -563,6 +577,16 @@ export function createApiClient(
       form.append("file", picture, "profile-picture.jpg");
       return request<User>("/api/users/me/profile-picture", { method: "PUT", body: form });
     },
+
+    /**
+     * Sets what the signed-in User's Profile picture shows and returns the User. 400 `source_unavailable` when they
+     * have no such upload, the provider isn't connected, or it sent no picture.
+     */
+    chooseProfilePictureSource: (source: PictureSource) =>
+      request<User>("/api/users/me/profile-picture/source", {
+        method: "PUT",
+        body: JSON.stringify({ source }),
+      }),
 
     /**
      * Removes the signed-in User's uploaded Profile picture (also fine without one). Read the User again for what

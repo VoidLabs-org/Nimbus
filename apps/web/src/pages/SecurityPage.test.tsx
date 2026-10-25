@@ -24,6 +24,8 @@ const alice: User = {
   emailVerified: true,
   passwordChangedAt: null,
   hasUploadedPicture: false,
+  pictureSource: "initials",
+  pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [] },
 };
 
 const unused = () => Promise.resolve();
@@ -44,6 +46,7 @@ function session(user: User | null, logout: () => Promise<void> = unused): Sessi
     changeEmail: unused,
     uploadProfilePicture: unused,
     removeProfilePicture: unused,
+    choosePictureSource: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,

@@ -1,5 +1,8 @@
 package com.nimbus.api.identity.internal;
 
+import java.util.Arrays;
+import java.util.Optional;
+
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 
@@ -12,6 +15,21 @@ enum PictureSource {
 
 	PictureSource(String value) {
 		this.value = value;
+	}
+
+	/** The lower-case word the API and the database use. */
+	String value() {
+		return value;
+	}
+
+	/** The option with this word; empty for anything else. */
+	static Optional<PictureSource> parse(String value) {
+		return Arrays.stream(values()).filter(source -> source.value.equals(value)).findFirst();
+	}
+
+	/** The option that shows the picture of this provider's Linked identity; empty for any other word. */
+	static Optional<PictureSource> ofProvider(String provider) {
+		return parse(provider).filter(source -> source != UPLOADED && source != INITIALS);
 	}
 
 	/** Stored as the lower-case word the {@code users_picture_source_check} constraint allows. */

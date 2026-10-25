@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -51,6 +52,17 @@ class ProfilePictureController {
 		// Before the file is read into memory, so a User over the limit costs nothing more.
 		pictures.requireUnderLimit(userId);
 		return UserResponse.from(pictures.upload(userId, file.getBytes()), pictures);
+	}
+
+	/** Chooses what the User shows: {@code uploaded}, {@code google}, {@code github} or {@code initials}. */
+	@PutMapping("/api/users/me/profile-picture/source")
+	UserResponse choose(@AuthenticationPrincipal Jwt token, @RequestBody ChooseSourceRequest request) {
+		var userId = currentUser.id();
+		sessions.requireActive(UsersController.sessionOf(token), userId);
+		return UserResponse.from(pictures.choose(userId, request.source()), pictures);
+	}
+
+	record ChooseSourceRequest(String source) {
 	}
 
 	/** Removes the User's uploaded photo; needs a running Session. {@code 204} also when there was none. */

@@ -2,6 +2,7 @@ import { createContext, use } from "react";
 import type {
   ChangePasswordInput,
   LoginInput,
+  PictureSource,
   RegisterInput,
   TwoStepAnswer,
   User,
@@ -54,6 +55,11 @@ export type Session = {
    * request fails.
    */
   removeProfilePicture: () => Promise<void>;
+  /**
+   * Sets what the signed-in User's Profile picture shows, which then shows everywhere at once. Rejects with an ApiError
+   * (see `api.chooseProfilePictureSource`) if refused.
+   */
+  choosePictureSource: (source: PictureSource) => Promise<void>;
   /** Sets or changes the signed-in User's password. Rejects with an ApiError (field errors for 400, 429 when blocked) if refused. */
   changePassword: (input: ChangePasswordInput) => Promise<void>;
   /**

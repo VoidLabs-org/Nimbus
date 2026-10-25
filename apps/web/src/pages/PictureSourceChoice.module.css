@@ -1,0 +1,81 @@
+/* "Show" on Profile's picture card, from the "Nimbus Themes" design (35a, 35b, 35d). Colours come only from the theme variables. */
+.root {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.label {
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent-2-700);
+}
+
+.options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+
+.option[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-100);
+}
+
+.option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.hint {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--color-accent-2-700);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* On a phone the cards go full width. */
+@media (max-width: 36em) {
+  .options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

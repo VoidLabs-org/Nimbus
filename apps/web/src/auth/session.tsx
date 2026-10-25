@@ -6,6 +6,7 @@ import {
   ApiError,
   type ChangePasswordInput,
   type LoginInput,
+  type PictureSource,
   type RegisterInput,
   type TwoStepAnswer,
   type User,
@@ -122,6 +123,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     refreshPictures();
   }
 
+  async function choosePictureSource(source: PictureSource) {
+    const signedIn = user?.id;
+    let updated: User;
+    try {
+      updated = await api.chooseProfilePictureSource(source);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "source_unavailable") {
+        // The options on screen are out of date (a provider was disconnected elsewhere): read them again.
+        const fresh = await api.me().catch(() => null);
+        if (fresh) setUser((current) => (current && current.id === signedIn ? fresh : current));
+      }
+      throw error;
+    }
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower request.
+    setUser((current) => (current?.id === updated.id ? updated : current));
+    refreshPictures();
+  }
+
   // Role holders and the Audit log show pictures too; only they load again.
   function refreshPictures() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.audit });
@@ -184,6 +203,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         changeEmail,
         uploadProfilePicture,
         removeProfilePicture,
+        choosePictureSource,
         changePassword,
         verifyEmail,
         confirmingEmail,

@@ -101,3 +101,23 @@ export function previewStyle(src: string, area: CropArea | null) {
     backgroundPosition: `${offset(area.x, area.width)}% ${offset(area.y, area.height)}%`,
   };
 }
+
+/** The letters Mantine's Avatar draws for a name, so the hint agrees with the thumbnail beside it. */
+export function initialsOf(name: string): string {
+  const words = name.split(" ");
+  if (words.length === 1) return name.slice(0, 2).toUpperCase();
+  return words
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+/** "24 Oct 2026", in the same order and spelling wherever the browser is set to. */
+export function uploadedOn(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}

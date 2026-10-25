@@ -20,6 +20,8 @@ const alice: User = {
   emailVerified: true,
   passwordChangedAt: null,
   hasUploadedPicture: false,
+  pictureSource: "initials",
+  pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [] },
 };
 
 const unused = () => Promise.resolve();
@@ -39,6 +41,7 @@ function session(user: User, overrides: Partial<Session> = {}): Session {
     changeEmail: unused,
     uploadProfilePicture: unused,
     removeProfilePicture: unused,
+    choosePictureSource: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,
@@ -804,5 +807,170 @@ describe("the Profile picture card", () => {
 
     expect(upload.disabled).toBe(false);
     expect(within(card).queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("the Show choice on the Profile picture card", () => {
+  const google = {
+    provider: "google" as const,
+    pictureUrl: "https://lh3.example.com/a.png",
+    label: "alice@gmail.com",
+  };
+  const github = {
+    provider: "github" as const,
+    pictureUrl: "https://avatars.example.com/a.png",
+    label: "alice-codes",
+  };
+
+  async function show_() {
+    return within(await screen.findByRole("group", { name: "Show" }));
+  }
+
+  it("offers the uploaded photo (disabled) and Initials to a User with nothing else (35a)", async () => {
+    show(session({ ...alice, pictureSource: "initials" }));
+
+    const options = await show_();
+    const uploaded = options.getByRole("button", { name: /Uploaded photo/ }) as HTMLButtonElement;
+    expect(uploaded.disabled).toBe(true);
+    expect(within(uploaded).getByText("Upload a photo to use this")).toBeTruthy();
+    const initials = options.getByRole("button", { name: /Initials/ });
+    expect(within(initials).getByText("AL on orange")).toBeTruthy();
+    expect(initials.getAttribute("aria-pressed")).toBe("true");
+    expect(options.queryByRole("button", { name: /Google/ })).toBeNull();
+    expect(options.queryByRole("button", { name: /GitHub/ })).toBeNull();
+  });
+
+  it("lists Google and GitHub with their account while connected with a picture (35b)", async () => {
+    show(
+      session({
+        ...alice,
+        avatarUrl: google.pictureUrl,
+        pictureSource: "google",
+        pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [google, github] },
+      }),
+    );
+
+    const options = await show_();
+    const radios = options.getAllByRole("button").map((radio) => radio.textContent);
+    expect(radios).toEqual([
+      // The thumbnails without an image show initials.
+      "ALUploaded photoUpload a photo to use this",
+      "Googlealice@gmail.com",
+      "GitHubalice-codes",
+      "ALInitialsAL on orange",
+    ]);
+    expect(options.getByRole("button", { name: /Google/ }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(options.getByRole("button", { name: /GitHub/ }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
+  it("says when the photo was added and lets the User pick it (35d)", async () => {
+    show(
+      session({
+        ...alice,
+        hasUploadedPicture: true,
+        pictureSource: "initials",
+        pictureOptions: {
+          uploadedAt: "2026-10-24T09:30:00Z",
+          uploadedUrl: "/api/profile-pictures/abc",
+          providers: [],
+        },
+      }),
+    );
+
+    const uploaded = (await show_()).getByRole("button", { name: /Uploaded photo/ });
+    expect((uploaded as HTMLButtonElement).disabled).toBe(false);
+    expect(within(uploaded).getByText("Added 24 Oct 2026")).toBeTruthy();
+  });
+
+  it("saves a pick at once and says so", async () => {
+    const choosePictureSource = vi.fn((_source: string) => Promise.resolve());
+    const success = vi.spyOn(toast, "success");
+    show(
+      session(
+        {
+          ...alice,
+          pictureSource: "initials",
+          pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [github] },
+        },
+        { choosePictureSource },
+      ),
+    );
+
+    fireEvent.click((await show_()).getByRole("button", { name: /GitHub/ }));
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith("Profile picture updated"));
+    expect(choosePictureSource).toHaveBeenCalledWith("github");
+  });
+
+  it("does nothing when the shown option is picked again", async () => {
+    const choosePictureSource = vi.fn(unused);
+    show(session({ ...alice, pictureSource: "initials" }, { choosePictureSource }));
+
+    fireEvent.click((await show_()).getByRole("button", { name: /Initials/ }));
+
+    expect(choosePictureSource).not.toHaveBeenCalled();
+  });
+
+  it("tells the User when the pick didn't save", async () => {
+    const choosePictureSource = vi.fn(() => Promise.reject(new Error("offline")));
+    const error = vi.spyOn(toast, "error");
+    show(
+      session(
+        {
+          ...alice,
+          pictureSource: "initials",
+          pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [google] },
+        },
+        { choosePictureSource },
+      ),
+    );
+
+    fireEvent.click((await show_()).getByRole("button", { name: /Google/ }));
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        "Couldn't change your profile picture. Check your connection and try again.",
+      ),
+    );
+  });
+
+  it("says so when the pick isn't available any more, not that the connection failed", async () => {
+    const choosePictureSource = vi.fn(() =>
+      Promise.reject(
+        new ApiError(400, "That picture isn't available", {}, null, "source_unavailable"),
+      ),
+    );
+    const error = vi.spyOn(toast, "error");
+    show(
+      session(
+        {
+          ...alice,
+          pictureSource: "initials",
+          pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [github] },
+        },
+        { choosePictureSource },
+      ),
+    );
+
+    fireEvent.click((await show_()).getByRole("button", { name: /GitHub/ }));
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith("That picture isn't available any more."),
+    );
+  });
+
+  it("selects nothing for a picture that belongs to no option", async () => {
+    show(session({ ...alice, avatarUrl: "https://old.example.com/a.png", pictureSource: null }));
+
+    const options = await show_();
+    expect(
+      options
+        .getAllByRole("button")
+        .every((radio) => radio.getAttribute("aria-pressed") === "false"),
+    ).toBe(true);
   });
 });

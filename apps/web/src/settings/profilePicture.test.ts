@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { centredSquare, pictureFileError, previewStyle } from "./profilePicture";
+import {
+  centredSquare,
+  initialsOf,
+  pictureFileError,
+  previewStyle,
+  uploadedOn,
+} from "./profilePicture";
 
 describe("pictureFileError", () => {
   it("takes JPEG, PNG and WebP up to exactly 5 MB", () => {
@@ -31,5 +37,20 @@ describe("centredSquare", () => {
   it("takes the middle of a landscape photo and the middle of a portrait one", () => {
     expect(centredSquare(4000, 3000)).toEqual({ x: 500, y: 0, width: 3000, height: 3000 });
     expect(centredSquare(3024, 4032)).toEqual({ x: 0, y: 504, width: 3024, height: 3024 });
+  });
+});
+
+describe("initialsOf", () => {
+  it("takes the first letters of the first two words, or the first two of a single word", () => {
+    expect(initialsOf("Uditha Thathsaridu")).toBe("UT");
+    expect(initialsOf("Alice")).toBe("AL");
+    expect(initialsOf("ada king lovelace")).toBe("AK");
+    expect(initialsOf("  ")).toBe("");
+  });
+});
+
+describe("uploadedOn", () => {
+  it("writes the day, short month and year", () => {
+    expect(uploadedOn("2026-10-24T12:00:00Z")).toBe("24 Oct 2026");
   });
 });

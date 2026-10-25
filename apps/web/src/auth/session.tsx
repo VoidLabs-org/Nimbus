@@ -6,6 +6,7 @@ import {
   ApiError,
   type ChangePasswordInput,
   type LoginInput,
+  type PictureSource,
   type RegisterInput,
   type TwoStepAnswer,
   type User,
@@ -122,6 +123,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     refreshPictures();
   }
 
+  async function choosePictureSource(source: PictureSource) {
+    const updated = await api.chooseProfilePictureSource(source);
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower request.
+    setUser((current) => (current?.id === updated.id ? updated : current));
+    refreshPictures();
+  }
+
   // Role holders and the Audit log show pictures too; only they load again.
   function refreshPictures() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.audit });
@@ -184,6 +192,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         changeEmail,
         uploadProfilePicture,
         removeProfilePicture,
+        choosePictureSource,
         changePassword,
         verifyEmail,
         confirmingEmail,

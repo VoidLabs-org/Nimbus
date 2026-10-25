@@ -101,3 +101,21 @@ export function previewStyle(src: string, area: CropArea | null) {
     backgroundPosition: `${offset(area.x, area.width)}% ${offset(area.y, area.height)}%`,
   };
 }
+
+/** The letters the initials picture shows: the first letters of the first two words, or of a single word its first two. */
+export function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "";
+  const letters =
+    words.length === 1 ? [...words[0]!].slice(0, 2) : words.slice(0, 2).map((w) => [...w][0]!);
+  return letters.join("").toUpperCase();
+}
+
+/** "24 Oct 2026", in the same order and spelling wherever the browser is set to. */
+export function uploadedOn(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}

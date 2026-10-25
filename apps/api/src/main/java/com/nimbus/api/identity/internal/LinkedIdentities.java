@@ -54,10 +54,13 @@ class LinkedIdentities {
 
 	private final TransactionTemplate transaction;
 
+	private final ProfilePictures pictures;
+
 	LinkedIdentities(LinkedIdentityRepository identities, DisconnectedProviders disconnectedProviders,
 			UserRepository users, Sessions sessions, Mailer mailer, Clock clock, AuthProperties properties,
 			PlatformTransactionManager transactionManager, EnabledProviders enabledProviders, MailAssets mailAssets,
-			LinkTickets tickets) {
+			LinkTickets tickets, ProfilePictures pictures) {
+		this.pictures = pictures;
 		this.enabledProviders = enabledProviders;
 		this.mailAssets = mailAssets;
 		this.tickets = tickets;
@@ -137,6 +140,11 @@ class LinkedIdentities {
 			}
 			if (user.passwordHash() == null && linked.size() == removing.size()) {
 				throw new LastSignInMethodException();
+			}
+			// The picture goes with the identity; if it was the one shown, the User shows initials, not another one.
+			var shown = pictures.shown(user, linked).source();
+			if (shown != null && shown.value().equals(provider)) {
+				user.choosePictureSource(PictureSource.INITIALS);
 			}
 			identities.deleteAll(removing);
 			disconnectedProviders.mark(userId, provider, disconnectedAt[0]);

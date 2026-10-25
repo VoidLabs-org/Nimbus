@@ -31,7 +31,8 @@ class User implements Persistable<UUID> {
 
 	private String passwordHash;
 
-	// The picture the last Google or GitHub sign-in brought. Shown while the User has never chosen what to show.
+	// Only the fallback of a User who never chose and whose Linked identities have no picture yet: before each identity
+	// kept its own, this was the picture the last Google or GitHub sign-in brought. Cleared once an identity gets one.
 	private String avatarUrl;
 
 	// What the User chose to show as their Profile picture; null until they choose.
@@ -74,12 +75,11 @@ class User implements Persistable<UUID> {
 	}
 
 	/** A User created from a provider login. The provider vouched for the email, so it starts verified. */
-	static User fromProvider(String email, String displayName, String avatarUrl, Instant now) {
+	static User fromProvider(String email, String displayName, Instant now) {
 		var user = new User();
 		user.id = UUID.randomUUID();
 		user.email = email;
 		user.displayName = displayName;
-		user.avatarUrl = avatarUrl;
 		user.emailVerified = true;
 		user.createdAt = now;
 		user.isNew = true;
@@ -106,8 +106,14 @@ class User implements Persistable<UUID> {
 		this.displayName = displayName;
 	}
 
-	void changeAvatar(String avatarUrl) {
-		this.avatarUrl = avatarUrl;
+	/** A Linked identity has its own picture now, so the one from before they were kept is not needed any more. */
+	void clearFallbackAvatar() {
+		this.avatarUrl = null;
+	}
+
+	/** Shows this, which the caller has checked is available. */
+	void choosePictureSource(PictureSource source) {
+		this.pictureSource = source;
 	}
 
 	/**

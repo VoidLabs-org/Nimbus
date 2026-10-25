@@ -3,10 +3,18 @@ package com.nimbus.api.identity.internal;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import com.nimbus.api.storage.ObjectStore;
 import com.nimbus.api.storage.StoredObject;
@@ -34,6 +42,11 @@ class ProfilePictures {
 	private static final String LIMIT_MESSAGE = "You've uploaded " + UPLOADS_PER_WINDOW
 			+ " photos this hour. Try again later.";
 
+	private static final List<String> PROVIDER_ORDER = List.of(GoogleProfiles.PROVIDER, GithubProfiles.PROVIDER);
+
+	private static final Map<String, String> PROVIDER_NAMES = Map.of(GoogleProfiles.PROVIDER, "Google",
+			GithubProfiles.PROVIDER, "GitHub");
+
 	private static final Logger log = LoggerFactory.getLogger(ProfilePictures.class);
 
 	/** Keys are 16 random bytes, URL-safe base64 without padding. Anything else can't be one. */
@@ -48,6 +61,8 @@ class ProfilePictures {
 
 	private final UserRepository users;
 
+	private final LinkedIdentityRepository identities;
+
 	private final TransactionTemplate transaction;
 
 	private final Clock clock;
@@ -56,10 +71,11 @@ class ProfilePictures {
 
 	private final SlidingWindowLimiter uploadsByUser;
 
-	ProfilePictures(ObjectStore store, UserRepository users, PlatformTransactionManager transactionManager, Clock clock,
-			ProfilePictureProperties properties) {
+	ProfilePictures(ObjectStore store, UserRepository users, LinkedIdentityRepository identities,
+			PlatformTransactionManager transactionManager, Clock clock, ProfilePictureProperties properties) {
 		this.store = store;
 		this.users = users;
+		this.identities = identities;
 		this.transaction = new TransactionTemplate(transactionManager);
 		this.clock = clock;
 		this.baseUrl = properties.baseUrl();
@@ -131,17 +147,95 @@ class ProfilePictures {
 	}
 
 	/**
-	 * The address of the picture the User shows: their uploaded photo once they chose it, otherwise the picture their
-	 * last provider sign-in brought, as before Users could choose. Null for initials, chosen or not.
+	 * Makes {@code source} what the User shows. The pick is checked against what the User has now, under their row
+	 * lock.
+	 *
+	 * @throws SourceUnavailableException for an upload they don't have, a provider that isn't connected or sent no
+	 * picture, or a word that is none of the options
 	 */
+	User choose(UUID userId, String source) {
+		var wanted = PictureSource.parse(source).orElseThrow(SourceUnavailableException::new);
+		return transaction.execute(status -> {
+			var user = users.findLockedById(userId).orElseThrow();
+			var available = switch (wanted) {
+				case INITIALS -> true;
+				case UPLOADED -> user.uploadedPictureKey() != null;
+				case GOOGLE, GITHUB -> identities.findByUserId(userId)
+					.stream()
+					.anyMatch(identity -> identity.provider().equals(wanted.value()) && identity.pictureUrl() != null);
+			};
+			if (!available) {
+				throw new SourceUnavailableException();
+			}
+			user.choosePictureSource(wanted);
+			return user;
+		});
+	}
+
+	/** What the User shows, and the options they may pick from. Reads their Linked identities. */
+	PictureView viewOf(User user) {
+		var linked = identities.findByUserId(user.getId());
+		var shown = shown(user, linked);
+		var providers = withPictures(linked)
+			.sorted(Comparator.comparingInt(identity -> PROVIDER_ORDER.indexOf(identity.provider())))
+			.map(identity -> new PictureOption(identity.provider(), identity.pictureUrl(),
+					identity.accountName() != null ? identity.accountName()
+							: PROVIDER_NAMES.getOrDefault(identity.provider(), identity.provider())))
+			.toList();
+		var uploadedUrl = user.uploadedPictureKey() == null ? null : baseUrl + "/" + user.uploadedPictureKey();
+		return new PictureView(shown.source(), shown.address(), user.uploadedPictureAt(), uploadedUrl, providers);
+	}
+
+	/** The addresses of the pictures these Users show, with one read for all their Linked identities. */
+	Map<UUID, String> addressesOf(Collection<User> users) {
+		var byUser = new HashMap<UUID, List<LinkedIdentity>>();
+		if (!users.isEmpty()) {
+			identities.findByUserIdIn(users.stream().map(User::getId).toList())
+				.forEach(identity -> byUser.computeIfAbsent(identity.userId(), id -> new ArrayList<>()).add(identity));
+		}
+		var addresses = new HashMap<UUID, String>();
+		users.forEach(user -> addresses.put(user.getId(),
+				shown(user, byUser.getOrDefault(user.getId(), List.of())).address()));
+		return addresses;
+	}
+
+	/** The address of the picture the User shows; null for initials. */
 	String addressOf(User user) {
-		if (user.pictureSource() == PictureSource.INITIALS) {
-			return null;
+		return viewOf(user).address();
+	}
+
+	/**
+	 * Which option the User shows and where its picture is. Their choice decides; never having chosen means the
+	 * earliest-linked identity that has a picture, then the old {@code avatar_url} fallback, then initials.
+	 */
+	Shown shown(User user, List<LinkedIdentity> linked) {
+		var source = user.pictureSource();
+		if (source == null) {
+			var earliest = withPictures(linked).findFirst();
+			if (earliest.isPresent()) {
+				var identity = earliest.get();
+				return new Shown(PictureSource.ofProvider(identity.provider()).orElse(null), identity.pictureUrl());
+			}
+			// Unknown which provider the old picture came from, so no option is selected.
+			return user.avatarUrl() != null ? new Shown(null, user.avatarUrl())
+					: new Shown(PictureSource.INITIALS, null);
 		}
-		if (user.pictureSource() == PictureSource.UPLOADED && user.uploadedPictureKey() != null) {
-			return baseUrl + "/" + user.uploadedPictureKey();
-		}
-		return user.avatarUrl();
+		return switch (source) {
+			case INITIALS -> new Shown(source, null);
+			case UPLOADED -> user.uploadedPictureKey() == null ? new Shown(PictureSource.INITIALS, null)
+					: new Shown(source, baseUrl + "/" + user.uploadedPictureKey());
+			case GOOGLE, GITHUB -> withPictures(linked).filter(identity -> identity.provider().equals(source.value()))
+				.findFirst()
+				.map(identity -> new Shown(source, identity.pictureUrl()))
+				.orElse(new Shown(PictureSource.INITIALS, null));
+		};
+	}
+
+	/** The identities that have a picture, earliest-linked first. */
+	private static Stream<LinkedIdentity> withPictures(List<LinkedIdentity> linked) {
+		return linked.stream()
+			.filter(identity -> identity.pictureUrl() != null)
+			.sorted(Comparator.comparing(LinkedIdentity::createdAt));
 	}
 
 	private String newKey() {
@@ -160,6 +254,34 @@ class ProfilePictures {
 	}
 
 	private record Saved(User user, String replaced) {
+	}
+
+	/** @param source the option shown; null for the old fallback picture, which belongs to no option */
+	record Shown(PictureSource source, String address) {
+	}
+
+	/** A connected provider the User may show the picture of. */
+	record PictureOption(String provider, String pictureUrl, String label) {
+	}
+
+	/**
+	 * @param source the option shown; null for the old fallback picture
+	 * @param address the address of the picture shown; null for initials
+	 * @param uploadedAt when the uploaded photo was added; null without one
+	 * @param uploadedUrl the address of the uploaded photo, shown or not; null without one
+	 * @param providers the connected providers that have a picture, Google first
+	 */
+	record PictureView(PictureSource source, String address, Instant uploadedAt, String uploadedUrl,
+			List<PictureOption> providers) {
+	}
+
+	/** The pick isn't one the User can make now. */
+	static class SourceUnavailableException extends RuntimeException {
+
+		SourceUnavailableException() {
+			super("That picture isn't available");
+		}
+
 	}
 
 	/** The file is over {@link #MAX_UPLOAD_BYTES}. */

@@ -77,6 +77,13 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail sourceUnavailable(ProfilePictures.SourceUnavailableException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", "source_unavailable");
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail unsupportedType(PictureImages.UnsupportedTypeException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", "unsupported_type");

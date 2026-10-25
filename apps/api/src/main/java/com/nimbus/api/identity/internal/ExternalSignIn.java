@@ -76,7 +76,7 @@ class ExternalSignIn {
 		if (linked.isPresent()) {
 			var user = users.findById(linked.get().userId()).orElseThrow();
 			linked.get().refreshAccountName(profile.accountName());
-			return refreshAvatar(user, profile);
+			return refreshPicture(user, linked.get(), profile);
 		}
 		if (!profile.emailVerified() || profile.email() == null) {
 			throw new EmailUnverifiedException();
@@ -109,7 +109,7 @@ class ExternalSignIn {
 		if (!profile.emailVerified() || profile.email() == null) {
 			throw new EmailUnverifiedException();
 		}
-		users.findLockedById(userId).orElseThrow();
+		var user = users.findLockedById(userId).orElseThrow();
 		// Under the lock, so a "sign out everywhere" either comes first (and this fails) or waits for the link.
 		if (!sessions.isActive(sessionId, userId)) {
 			throw new ConnectExpiredException();
@@ -120,30 +120,31 @@ class ExternalSignIn {
 				throw new AlreadyLinkedException();
 			}
 			existing.get().refreshAccountName(profile.accountName());
+			refreshPicture(user, existing.get(), profile);
 			return false;
 		}
 		if (identities.findByUserId(userId).stream().anyMatch(identity -> identity.provider().equals(profile.provider()))) {
 			throw new ProviderAlreadyConnectedException();
 		}
-		identities.saveAndFlush(new LinkedIdentity(userId, profile.provider(), profile.providerUserId(),
-				profile.accountName(), clock.instant()));
+		var identity = identities.saveAndFlush(new LinkedIdentity(userId, profile.provider(), profile.providerUserId(),
+				profile.accountName(), profile.avatarUrl(), clock.instant()));
+		refreshPicture(user, identity, profile);
 		disconnectedProviders.clear(userId, profile.provider());
 		return true;
 	}
 
 	private User create(ExternalProfile profile) {
-		var user = users.saveAndFlush(User.fromProvider(profile.email(), displayNameOf(profile), profile.avatarUrl(),
-				clock.instant()));
+		var user = users.saveAndFlush(User.fromProvider(profile.email(), displayNameOf(profile), clock.instant()));
 		identities.saveAndFlush(new LinkedIdentity(user.getId(), profile.provider(), profile.providerUserId(),
-				profile.accountName(), clock.instant()));
+				profile.accountName(), profile.avatarUrl(), clock.instant()));
 		events.publishEvent(new UserRegistered(user.getId(), user.email(), user.displayName()));
 		return user;
 	}
 
 	private User link(User user, ExternalProfile profile) {
-		identities.saveAndFlush(new LinkedIdentity(user.getId(), profile.provider(), profile.providerUserId(),
-				profile.accountName(), clock.instant()));
-		refreshAvatar(user, profile);
+		var identity = identities.saveAndFlush(new LinkedIdentity(user.getId(), profile.provider(),
+				profile.providerUserId(), profile.accountName(), profile.avatarUrl(), clock.instant()));
+		refreshPicture(user, identity, profile);
 		if (!user.emailVerified()) {
 			// Someone registered this email with a password but never proved they own it. The person the
 			// provider just vouched for is the real owner, so whatever the first registrant knows stops working.
@@ -155,9 +156,11 @@ class ExternalSignIn {
 		return user;
 	}
 
-	private User refreshAvatar(User user, ExternalProfile profile) {
+	/** Only this identity's own picture follows the provider; what the User chose to show is never touched. */
+	private User refreshPicture(User user, LinkedIdentity identity, ExternalProfile profile) {
 		if (profile.avatarUrl() != null) {
-			user.changeAvatar(profile.avatarUrl());
+			identity.refreshPicture(profile.avatarUrl());
+			user.clearFallbackAvatar();
 		}
 		return user;
 	}

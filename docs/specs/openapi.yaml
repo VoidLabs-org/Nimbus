@@ -973,6 +973,41 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/users/me/profile-picture/source:
+    put:
+      tags: [users]
+      summary: Choose what the signed-in User's Profile picture shows
+      description: Needs a running Session and a verified email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                source:
+                  type: string
+                  enum: [uploaded, google, github, initials]
+      responses:
+        "200":
+          description: The User, whose `avatarUrl` is the chosen picture's address (null for initials)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: >-
+            The option isn't available: no uploaded photo, a provider that isn't connected or sent no picture, or any
+            other word (`code: source_unavailable`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/profile-pictures/{key}:
     get:
       tags: [users]
@@ -2066,6 +2101,8 @@ components:
           emailVerified,
           passwordChangedAt,
           hasUploadedPicture,
+          pictureSource,
+          pictureOptions,
         ]
       properties:
         id:
@@ -2101,6 +2138,40 @@ components:
         hasUploadedPicture:
           type: boolean
           description: Whether the User has an uploaded photo, whether or not it is the picture shown
+        pictureSource:
+          type: [string, "null"]
+          enum: [uploaded, google, github, initials, null]
+          description: >-
+            What the User shows. Null for a picture from before Linked identities kept their own, which belongs to none
+            of the options.
+        pictureOptions:
+          type: object
+          required: [uploadedAt, uploadedUrl, providers]
+          description: What the User may pick from with `PUT /api/users/me/profile-picture/source`
+          properties:
+            uploadedAt:
+              type: [string, "null"]
+              format: date-time
+            uploadedUrl:
+              type: [string, "null"]
+              format: uri-reference
+              description: The uploaded photo's address, shown or not; null without an upload
+            providers:
+              type: array
+              description: Each connected provider that sent a picture, Google first
+              items:
+                type: object
+                required: [provider, pictureUrl, label]
+                properties:
+                  provider:
+                    type: string
+                    enum: [google, github]
+                  pictureUrl:
+                    type: string
+                    format: uri
+                  label:
+                    type: string
+                    description: The Google email or the GitHub username
 
     SessionInfo:
       type: object

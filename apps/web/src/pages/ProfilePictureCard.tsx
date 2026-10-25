@@ -13,11 +13,12 @@ import {
   uploadLimitMessage,
   WRONG_FILE,
 } from "../settings/profilePicture";
+import { PictureSourceChoice } from "./PictureSourceChoice";
 import { PositionPhotoDialog } from "./PositionPhotoDialog";
 import classes from "./ProfilePictureCard.module.css";
 
 /**
- * Profile's picture card (design 35a, without the Show choice yet): the User's picture and "Upload photo", or Replace
+ * Profile's picture card (design 35a): the User's picture and "Upload photo", or Replace
  * and Remove once they have an upload (35d). A chosen file is checked here first (35e), then positioned in "Position
  * your photo" (35c) and uploaded; what goes wrong replaces the hint in red (35e, 35f). After 10 uploads in an hour the
  * message says how long to wait (35g) and the upload button stays disabled until then; Remove keeps working.
@@ -132,6 +133,7 @@ export function ProfilePictureCard({ user }: { user: User }) {
             </div>
           </div>
         </div>
+        <PictureSourceChoice user={user} />
       </Panel>
       <PositionPhotoDialog photo={photo} saving={saving} onSave={save} onClose={close} />
     </section>

@@ -1,37 +1,19 @@
-// Electron main process: a thin desktop shell around the web app (apps/web).
-import { app, BrowserWindow, net, protocol, shell } from "electron";
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+// Electron main process: a desktop shell around the web app (apps/web). It loads Nimbus from a URL (ADR 0007).
+import { app, BrowserWindow, dialog, shell } from "electron";
+import { fileURLToPath } from "node:url";
+import { isNavigationAllowed, parseNimbusUrl } from "./nimbus-url.js";
 
-const isDev = process.argv.includes("--dev");
-const DEV_URL = "http://localhost:3000";
-const APP_URL = "app://nimbus/";
-const WEB_DIST = fileURLToPath(new URL("../../web/dist/", import.meta.url));
-
-// Production loads the built web app from a custom protocol instead of file://
-// (Electron security checklist #18). Must be registered before the app is ready.
-protocol.registerSchemesAsPrivileged([
-  { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
-]);
-
-function serveWebDist() {
-  protocol.handle("app", (request) => {
-    const { pathname } = new URL(request.url);
-    const filePath = path.resolve(WEB_DIST, `.${decodeURIComponent(pathname)}`);
-    const relative = path.relative(WEB_DIST, filePath);
-    // Block paths that escape the dist folder, e.g. app://nimbus/../../secret.txt
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      return new Response("Bad request", { status: 400 });
-    }
-    // Client-side routes (no file extension) fall back to index.html
-    const target = path.extname(filePath) ? filePath : path.join(WEB_DIST, "index.html");
-    return net.fetch(pathToFileURL(target).toString());
+function createWindow(nimbusUrl) {
+  const win = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    title: "Nimbus",
+    webPreferences: {
+      preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
+      contextIsolation: true,
+      sandbox: true,
+    },
   });
-}
-
-function createWindow() {
-  const win = new BrowserWindow({ width: 1280, height: 800, title: "Nimbus" });
-  const appOrigin = new URL(isDev ? DEV_URL : APP_URL).origin;
 
   // Open external links in the default browser instead of new Electron windows (#14, #15)
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -41,20 +23,28 @@ function createWindow() {
     return { action: "deny" };
   });
 
-  // Never navigate the app window away from the app itself (#13)
+  // The window stays on Nimbus, or on the provider sign-in page Nimbus sent it to, where the provider's own form
+  // must work (#13). Redirects through Google or GitHub and back are not page navigations, so they are not checked.
   win.webContents.on("will-navigate", (event, url) => {
-    if (new URL(url).origin !== appOrigin) event.preventDefault();
+    if (!isNavigationAllowed(nimbusUrl, win.webContents.getURL(), url)) event.preventDefault();
   });
 
-  win.loadURL(isDev ? DEV_URL : APP_URL);
+  win.loadURL(nimbusUrl.href);
 }
 
 app.whenReady().then(() => {
-  if (!isDev) serveWebDist();
-  createWindow();
+  let nimbusUrl;
+  try {
+    nimbusUrl = parseNimbusUrl(process.env.NIMBUS_URL);
+  } catch (error) {
+    dialog.showErrorBox("Nimbus can't start", error.message);
+    app.quit();
+    return;
+  }
+  createWindow(nimbusUrl);
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(nimbusUrl);
   });
 });
 

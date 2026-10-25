@@ -116,6 +116,22 @@ _Avoid_: Alert (for Issue ones), message, activity
 A Notification about a change to a User's sign-in or account security, which they can't turn off.
 _Avoid_: Warning, security notification
 
+**Desktop app**:
+Nimbus run as its own application window, as opposed to Nimbus in a browser. It has its own shell: the Sidebar, Tabs and Jump.
+_Avoid_: Electron app (outside the code), native app
+
+**Sidebar**:
+The panel on the left of the Desktop app with Home, Projects and Settings. It is either open, showing names, or folded into a narrow rail of icons. The browser's equivalent is the navbar.
+_Avoid_: Navbar (that is the browser's), menu
+
+**Tab**:
+A page open in the Desktop app, kept in a row at the top of the window. It is not a browser tab.
+_Avoid_: Window, page (when the open page is meant)
+
+**Jump**:
+The Desktop app's quick "Search or jump to…" box, opened with Ctrl or ⌘ K, that opens a page by name.
+_Avoid_: Command palette, search
+
 ## Development workflow
 
 **Feature spec**:

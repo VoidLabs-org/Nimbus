@@ -4,8 +4,9 @@
   "type": "module",
   "main": "src/main.js",
   "scripts": {
-    "dev": "electron . --dev",
+    "dev": "electron .",
     "start": "electron .",
+    "test": "node --test",
     "lint": "oxlint --max-warnings 0"
   },
   "devDependencies": {

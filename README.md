@@ -41,6 +41,10 @@ The website forwards `/api/*` calls to the API, so the browser only talks to por
 
 **API auto-restart.** `pnpm dev` also runs `pnpm --filter api dev:watch` (set up in `apps/api/turbo.json`), which is Gradle's `classes --continuous`: it recompiles whenever you save a `.java` file and copies changed resources such as new migrations, and Spring DevTools (development only, not in the deployed jar) sees the change and restarts the API, which is much faster than stopping and starting `pnpm dev`. Changes to `apps/api/.env` are not picked up this way; restart `pnpm dev` for those. Each restart resets in-memory state such as rate-limit counters.
 
+## Desktop app
+
+`pnpm dev:desktop` opens the Electron window on the dev server, so it works like the website. The window loads Nimbus from `NIMBUS_URL` (default `http://localhost:3000`), so once Nimbus is hosted, pointing it there is a setting, not a rebuild. Details: [docs/specs/desktop.md](docs/specs/desktop.md) and ADR 0007.
+
 ## Commands
 
 Run from the repo root.

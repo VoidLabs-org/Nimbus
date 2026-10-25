@@ -5,7 +5,6 @@
     "build": "turbo run build",
     "dev": "turbo run dev --filter=!desktop",
     "dev:desktop": "turbo run dev --filter=desktop",
-    "start:desktop": "pnpm --filter web build && pnpm --filter desktop start",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "format": "oxfmt",

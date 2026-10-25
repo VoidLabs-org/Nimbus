@@ -3,7 +3,6 @@
 const { contextBridge } = require("electron");
 
 contextBridge.exposeInMainWorld("nimbusDesktop", {
-  // True when the page is the built app on app://nimbus, which has no way to finish a Google or GitHub sign-in:
-  // the providers send the browser back to the PUBLIC_URL origin, not to this window (ADR 0007).
-  packaged: process.argv.includes("--nimbus-packaged"),
+  /** "darwin" (macOS), "win32" or "linux". */
+  platform: process.platform,
 });

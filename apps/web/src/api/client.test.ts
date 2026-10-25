@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ApiError, createApiClient, NetworkError } from "./client";
 
 const alice = { id: "5b0c", email: "alice@example.com", displayName: "Alice", avatarUrl: null };
@@ -604,28 +604,6 @@ describe("api client", () => {
     expect(providers).toEqual(["google", "github"]);
     expect(server.calls[1].url).toBe("/api/auth/providers");
     expect(authorization(server.calls[1])).toBeNull();
-  });
-
-  // Google and GitHub send the browser back to PUBLIC_URL, which is not the packaged Desktop app's window.
-  describe("in the packaged Desktop app", () => {
-    afterEach(() => vi.unstubAllGlobals());
-
-    it("offers no sign-in providers, without asking the server", async () => {
-      vi.stubGlobal("window", { nimbusDesktop: { packaged: true } });
-      const server = fakeServer();
-      const api = createApiClient(server.fetchFn);
-
-      expect(await api.providers()).toEqual([]);
-      expect(server.calls).toEqual([]);
-    });
-
-    it("still offers them when the Desktop app runs the dev server", async () => {
-      vi.stubGlobal("window", { nimbusDesktop: { packaged: false } });
-      const server = fakeServer(json(200, { providers: ["google"] }));
-      const api = createApiClient(server.fetchFn);
-
-      expect(await api.providers()).toEqual(["google"]);
-    });
   });
 
   // Buttons are optional; the sign-in form still works, so a failure here must not look like a lost session.

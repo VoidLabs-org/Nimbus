@@ -1,5 +1,4 @@
 import { sessionExpiredPath } from "../auth/returnPath";
-import { canUseProviders } from "../desktop";
 
 export type User = {
   id: string;
@@ -533,17 +532,12 @@ export function createApiClient(
 
     /**
      * The ids of the "Continue with ..." providers the server has switched on, in the order to show them
-     * (empty when none, and always in the packaged Desktop app, where they can't finish). Public, so no access token
-     * goes along; a failure says nothing about the session.
+     * (empty when none). Public, so no access token goes along; a failure says nothing about the session.
      */
     providers: () =>
-      canUseProviders()
-        ? request<{ providers: string[] }>(
-            "/api/auth/providers",
-            {},
-            { authenticated: false },
-          ).then((response) => response.providers)
-        : Promise.resolve([]),
+      request<{ providers: string[] }>("/api/auth/providers", {}, { authenticated: false }).then(
+        (response) => response.providers,
+      ),
 
     /** Changes the display name and returns the updated User. */
     updateProfile: (input: { displayName: string }) =>

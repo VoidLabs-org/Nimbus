@@ -224,6 +224,33 @@ class ProfilePictureSourceTests {
 	}
 
 	@Test
+	void connectingAnotherProviderKeepsAMigratedUsersOldPicture() {
+		var token = verifiedUser("ps13@example.com");
+		externalSignIn.signIn(google("ps13@example.com", null));
+		jdbc.update("UPDATE users SET avatar_url = ? WHERE id = ?", "https://lh3.example.com/legacy13.png",
+				idOf(token));
+
+		externalSignIn.signIn(github("ps13@example.com", "https://avatars.example.com/ps13.png"));
+
+		me(token).expectBody().jsonPath("$.avatarUrl").isEqualTo("https://lh3.example.com/legacy13.png");
+		// The new provider is still a choice.
+		choose(token, "github").expectStatus().isOk();
+	}
+
+	@Test
+	void disconnectingAProviderTakesAMigratedUsersOldPictureWithIt() {
+		var token = verifiedUser("ps14@example.com");
+		externalSignIn.signIn(google("ps14@example.com", null));
+		var id = idOf(token);
+		jdbc.update("UPDATE users SET avatar_url = ? WHERE id = ?", "https://lh3.example.com/legacy14.png", id);
+
+		disconnect(token, "google");
+
+		me(token).expectBody().jsonPath("$.avatarUrl").isEmpty().jsonPath("$.pictureSource").isEqualTo("initials");
+		assertThat(jdbc.queryForObject("SELECT avatar_url FROM users WHERE id = ?", String.class, id)).isNull();
+	}
+
+	@Test
 	void aDeletedPhotoNoLongerCountsAsAnOption() {
 		var token = verifiedUser("ps12@example.com");
 		upload(token).expectStatus().isOk();

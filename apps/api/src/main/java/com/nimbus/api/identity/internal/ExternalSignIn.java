@@ -76,7 +76,7 @@ class ExternalSignIn {
 		if (linked.isPresent()) {
 			var user = users.findById(linked.get().userId()).orElseThrow();
 			linked.get().refreshAccountName(profile.accountName());
-			return refreshPicture(user, linked.get(), profile);
+			return refreshPicture(user, linked.get(), profile, true);
 		}
 		if (!profile.emailVerified() || profile.email() == null) {
 			throw new EmailUnverifiedException();
@@ -120,7 +120,7 @@ class ExternalSignIn {
 				throw new AlreadyLinkedException();
 			}
 			existing.get().refreshAccountName(profile.accountName());
-			refreshPicture(user, existing.get(), profile);
+			refreshPicture(user, existing.get(), profile, true);
 			return false;
 		}
 		if (identities.findByUserId(userId).stream().anyMatch(identity -> identity.provider().equals(profile.provider()))) {
@@ -128,7 +128,7 @@ class ExternalSignIn {
 		}
 		var identity = identities.saveAndFlush(new LinkedIdentity(userId, profile.provider(), profile.providerUserId(),
 				profile.accountName(), profile.avatarUrl(), clock.instant()));
-		refreshPicture(user, identity, profile);
+		refreshPicture(user, identity, profile, false);
 		disconnectedProviders.clear(userId, profile.provider());
 		return true;
 	}
@@ -144,7 +144,7 @@ class ExternalSignIn {
 	private User link(User user, ExternalProfile profile) {
 		var identity = identities.saveAndFlush(new LinkedIdentity(user.getId(), profile.provider(),
 				profile.providerUserId(), profile.accountName(), profile.avatarUrl(), clock.instant()));
-		refreshPicture(user, identity, profile);
+		refreshPicture(user, identity, profile, false);
 		if (!user.emailVerified()) {
 			// Someone registered this email with a password but never proved they own it. The person the
 			// provider just vouched for is the real owner, so whatever the first registrant knows stops working.
@@ -157,10 +157,13 @@ class ExternalSignIn {
 	}
 
 	/** Only this identity's own picture follows the provider; what the User chose to show is never touched. */
-	private User refreshPicture(User user, LinkedIdentity identity, ExternalProfile profile) {
+	private User refreshPicture(User user, LinkedIdentity identity, ExternalProfile profile, boolean alreadyLinked) {
 		if (profile.avatarUrl() != null) {
 			identity.refreshPicture(profile.avatarUrl());
-			user.clearFallbackAvatar();
+			// The old fallback picture came from an identity the User already had; a new one doesn't replace it.
+			if (alreadyLinked) {
+				user.clearFallbackAvatar();
+			}
 		}
 		return user;
 	}

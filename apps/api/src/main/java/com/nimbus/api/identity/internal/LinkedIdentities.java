@@ -27,7 +27,7 @@ class LinkedIdentities {
 
 	private static final Logger log = LoggerFactory.getLogger(LinkedIdentities.class);
 
-	private static final Map<String, String> NAMES = Map.of(GoogleProfiles.PROVIDER, "Google",
+	static final Map<String, String> NAMES = Map.of(GoogleProfiles.PROVIDER, "Google",
 			GithubProfiles.PROVIDER, "GitHub");
 
 	private final LinkedIdentityRepository identities;
@@ -142,9 +142,12 @@ class LinkedIdentities {
 				throw new LastSignInMethodException();
 			}
 			// The picture goes with the identity; if it was the one shown, the User shows initials, not another one.
-			var shown = pictures.shown(user, linked).source();
-			if (shown != null && shown.value().equals(provider)) {
+			var shown = pictures.shown(user, linked);
+			// The old fallback picture belongs to no option, so it may be this provider's: it goes too.
+			if (shown.source() == null && shown.address() != null
+					|| shown.source() != null && shown.source().value().equals(provider)) {
 				user.choosePictureSource(PictureSource.INITIALS);
+				user.clearFallbackAvatar();
 			}
 			identities.deleteAll(removing);
 			disconnectedProviders.mark(userId, provider, disconnectedAt[0]);

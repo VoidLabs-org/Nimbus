@@ -39,7 +39,7 @@
   background: var(--row-hover);
 }
 
-.option[aria-checked="true"] {
+.option[aria-pressed="true"] {
   border-color: var(--color-accent);
   background: var(--color-accent-100);
 }

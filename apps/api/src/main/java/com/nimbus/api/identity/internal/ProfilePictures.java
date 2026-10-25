@@ -44,9 +44,6 @@ class ProfilePictures {
 
 	private static final List<String> PROVIDER_ORDER = List.of(GoogleProfiles.PROVIDER, GithubProfiles.PROVIDER);
 
-	private static final Map<String, String> PROVIDER_NAMES = Map.of(GoogleProfiles.PROVIDER, "Google",
-			GithubProfiles.PROVIDER, "GitHub");
-
 	private static final Logger log = LoggerFactory.getLogger(ProfilePictures.class);
 
 	/** Keys are 16 random bytes, URL-safe base64 without padding. Anything else can't be one. */
@@ -180,10 +177,10 @@ class ProfilePictures {
 			.sorted(Comparator.comparingInt(identity -> PROVIDER_ORDER.indexOf(identity.provider())))
 			.map(identity -> new PictureOption(identity.provider(), identity.pictureUrl(),
 					identity.accountName() != null ? identity.accountName()
-							: PROVIDER_NAMES.getOrDefault(identity.provider(), identity.provider())))
+							: LinkedIdentities.NAMES.getOrDefault(identity.provider(), identity.provider())))
 			.toList();
-		var uploadedUrl = user.uploadedPictureKey() == null ? null : baseUrl + "/" + user.uploadedPictureKey();
-		return new PictureView(shown.source(), shown.address(), user.uploadedPictureAt(), uploadedUrl, providers);
+		return new PictureView(shown.source(), shown.address(), user.uploadedPictureAt(), uploadedAddress(user),
+				providers);
 	}
 
 	/** The addresses of the pictures these Users show, with one read for all their Linked identities. */
@@ -201,7 +198,7 @@ class ProfilePictures {
 
 	/** The address of the picture the User shows; null for initials. */
 	String addressOf(User user) {
-		return viewOf(user).address();
+		return shown(user, identities.findByUserId(user.getId())).address();
 	}
 
 	/**
@@ -211,24 +208,32 @@ class ProfilePictures {
 	Shown shown(User user, List<LinkedIdentity> linked) {
 		var source = user.pictureSource();
 		if (source == null) {
+			// Only Users from before identities kept pictures have one. It stays until a sign-in with an identity they
+			// already had gives that identity its own, so connecting another provider doesn't swap their picture.
+			if (user.avatarUrl() != null) {
+				return new Shown(null, user.avatarUrl());
+			}
 			var earliest = withPictures(linked).findFirst();
 			if (earliest.isPresent()) {
 				var identity = earliest.get();
 				return new Shown(PictureSource.ofProvider(identity.provider()).orElse(null), identity.pictureUrl());
 			}
-			// Unknown which provider the old picture came from, so no option is selected.
-			return user.avatarUrl() != null ? new Shown(null, user.avatarUrl())
-					: new Shown(PictureSource.INITIALS, null);
+			return new Shown(PictureSource.INITIALS, null);
 		}
 		return switch (source) {
 			case INITIALS -> new Shown(source, null);
 			case UPLOADED -> user.uploadedPictureKey() == null ? new Shown(PictureSource.INITIALS, null)
-					: new Shown(source, baseUrl + "/" + user.uploadedPictureKey());
+					: new Shown(source, uploadedAddress(user));
 			case GOOGLE, GITHUB -> withPictures(linked).filter(identity -> identity.provider().equals(source.value()))
 				.findFirst()
 				.map(identity -> new Shown(source, identity.pictureUrl()))
 				.orElse(new Shown(PictureSource.INITIALS, null));
 		};
+	}
+
+	/** The address the uploaded photo is served at; null without one. */
+	private String uploadedAddress(User user) {
+		return user.uploadedPictureKey() == null ? null : baseUrl + "/" + user.uploadedPictureKey();
 	}
 
 	/** The identities that have a picture, earliest-linked first. */

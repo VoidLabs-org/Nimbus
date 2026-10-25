@@ -45,7 +45,8 @@ describe("initialsOf", () => {
     expect(initialsOf("Uditha Thathsaridu")).toBe("UT");
     expect(initialsOf("Alice")).toBe("AL");
     expect(initialsOf("ada king lovelace")).toBe("AK");
-    expect(initialsOf("  ")).toBe("");
+    // Like the thumbnail: a double space leaves an empty word, which has no letter.
+    expect(initialsOf("Ada  King")).toBe("A");
   });
 });
 

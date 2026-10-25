@@ -102,13 +102,15 @@ export function previewStyle(src: string, area: CropArea | null) {
   };
 }
 
-/** The letters the initials picture shows: the first letters of the first two words, or of a single word its first two. */
+/** The letters Mantine's Avatar draws for a name, so the hint agrees with the thumbnail beside it. */
 export function initialsOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "";
-  const letters =
-    words.length === 1 ? [...words[0]!].slice(0, 2) : words.slice(0, 2).map((w) => [...w][0]!);
-  return letters.join("").toUpperCase();
+  const words = name.split(" ");
+  if (words.length === 1) return name.slice(0, 2).toUpperCase();
+  return words
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
 /** "24 Oct 2026", in the same order and spelling wherever the browser is set to. */

@@ -823,21 +823,21 @@ describe("the Show choice on the Profile picture card", () => {
   };
 
   async function show_() {
-    return within(await screen.findByRole("radiogroup", { name: "Show" }));
+    return within(await screen.findByRole("group", { name: "Show" }));
   }
 
   it("offers the uploaded photo (disabled) and Initials to a User with nothing else (35a)", async () => {
     show(session({ ...alice, pictureSource: "initials" }));
 
     const options = await show_();
-    const uploaded = options.getByRole("radio", { name: /Uploaded photo/ }) as HTMLButtonElement;
+    const uploaded = options.getByRole("button", { name: /Uploaded photo/ }) as HTMLButtonElement;
     expect(uploaded.disabled).toBe(true);
     expect(within(uploaded).getByText("Upload a photo to use this")).toBeTruthy();
-    const initials = options.getByRole("radio", { name: /Initials/ });
+    const initials = options.getByRole("button", { name: /Initials/ });
     expect(within(initials).getByText("AL on orange")).toBeTruthy();
-    expect(initials.getAttribute("aria-checked")).toBe("true");
-    expect(options.queryByRole("radio", { name: /Google/ })).toBeNull();
-    expect(options.queryByRole("radio", { name: /GitHub/ })).toBeNull();
+    expect(initials.getAttribute("aria-pressed")).toBe("true");
+    expect(options.queryByRole("button", { name: /Google/ })).toBeNull();
+    expect(options.queryByRole("button", { name: /GitHub/ })).toBeNull();
   });
 
   it("lists Google and GitHub with their account while connected with a picture (35b)", async () => {
@@ -851,7 +851,7 @@ describe("the Show choice on the Profile picture card", () => {
     );
 
     const options = await show_();
-    const radios = options.getAllByRole("radio").map((radio) => radio.textContent);
+    const radios = options.getAllByRole("button").map((radio) => radio.textContent);
     expect(radios).toEqual([
       // The thumbnails without an image show initials.
       "ALUploaded photoUpload a photo to use this",
@@ -859,10 +859,10 @@ describe("the Show choice on the Profile picture card", () => {
       "GitHubalice-codes",
       "ALInitialsAL on orange",
     ]);
-    expect(options.getByRole("radio", { name: /Google/ }).getAttribute("aria-checked")).toBe(
+    expect(options.getByRole("button", { name: /Google/ }).getAttribute("aria-pressed")).toBe(
       "true",
     );
-    expect(options.getByRole("radio", { name: /GitHub/ }).getAttribute("aria-checked")).toBe(
+    expect(options.getByRole("button", { name: /GitHub/ }).getAttribute("aria-pressed")).toBe(
       "false",
     );
   });
@@ -881,7 +881,7 @@ describe("the Show choice on the Profile picture card", () => {
       }),
     );
 
-    const uploaded = (await show_()).getByRole("radio", { name: /Uploaded photo/ });
+    const uploaded = (await show_()).getByRole("button", { name: /Uploaded photo/ });
     expect((uploaded as HTMLButtonElement).disabled).toBe(false);
     expect(within(uploaded).getByText("Added 24 Oct 2026")).toBeTruthy();
   });
@@ -900,7 +900,7 @@ describe("the Show choice on the Profile picture card", () => {
       ),
     );
 
-    fireEvent.click((await show_()).getByRole("radio", { name: /GitHub/ }));
+    fireEvent.click((await show_()).getByRole("button", { name: /GitHub/ }));
 
     await waitFor(() => expect(success).toHaveBeenCalledWith("Profile picture updated"));
     expect(choosePictureSource).toHaveBeenCalledWith("github");
@@ -910,7 +910,7 @@ describe("the Show choice on the Profile picture card", () => {
     const choosePictureSource = vi.fn(unused);
     show(session({ ...alice, pictureSource: "initials" }, { choosePictureSource }));
 
-    fireEvent.click((await show_()).getByRole("radio", { name: /Initials/ }));
+    fireEvent.click((await show_()).getByRole("button", { name: /Initials/ }));
 
     expect(choosePictureSource).not.toHaveBeenCalled();
   });
@@ -929,12 +929,37 @@ describe("the Show choice on the Profile picture card", () => {
       ),
     );
 
-    fireEvent.click((await show_()).getByRole("radio", { name: /Google/ }));
+    fireEvent.click((await show_()).getByRole("button", { name: /Google/ }));
 
     await waitFor(() =>
       expect(error).toHaveBeenCalledWith(
         "Couldn't change your profile picture. Check your connection and try again.",
       ),
+    );
+  });
+
+  it("says so when the pick isn't available any more, not that the connection failed", async () => {
+    const choosePictureSource = vi.fn(() =>
+      Promise.reject(
+        new ApiError(400, "That picture isn't available", {}, null, "source_unavailable"),
+      ),
+    );
+    const error = vi.spyOn(toast, "error");
+    show(
+      session(
+        {
+          ...alice,
+          pictureSource: "initials",
+          pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [github] },
+        },
+        { choosePictureSource },
+      ),
+    );
+
+    fireEvent.click((await show_()).getByRole("button", { name: /GitHub/ }));
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith("That picture isn't available any more."),
     );
   });
 
@@ -944,8 +969,8 @@ describe("the Show choice on the Profile picture card", () => {
     const options = await show_();
     expect(
       options
-        .getAllByRole("radio")
-        .every((radio) => radio.getAttribute("aria-checked") === "false"),
+        .getAllByRole("button")
+        .every((radio) => radio.getAttribute("aria-pressed") === "false"),
     ).toBe(true);
   });
 });

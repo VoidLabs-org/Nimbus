@@ -1,5 +1,7 @@
 package com.nimbus.api.projects.internal;
 
+import java.util.List;
+
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -29,6 +31,11 @@ class ProjectsController {
 	@ResponseStatus(HttpStatus.CREATED)
 	ProjectService.ProjectView create(@Valid @RequestBody CreateProject request) {
 		return projects.create(currentUser.id(), request.key(), request.name(), request.description());
+	}
+
+	@GetMapping
+	List<ProjectService.ProjectView> list() {
+		return projects.listFor(currentUser.id());
 	}
 
 	@GetMapping("/{key}")

@@ -9,7 +9,7 @@ import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
 
-/** Read-only project details. Editing, listing and archiving belong to the following tickets. */
+/** Read-only project details. Editing and archiving belong to the following tickets. */
 export default function ProjectPage() {
   const { key = "" } = useParams();
   const query = useProject(key);

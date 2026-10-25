@@ -16,6 +16,8 @@ export const queryKeys = {
   linkedIdentities: ["linkedIdentities"] as const,
   twoStep: ["twoStep"] as const,
   providers: ["providers"] as const,
+  // The list, and one project under it; a change to the list invalidates it with `exact` so projects stay cached.
+  projects: ["projects"] as const,
   project: (key: string) => ["projects", key.toUpperCase()] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
@@ -27,6 +29,11 @@ export const queryKeys = {
   myPermissions: (userId: string) => ["permissions", userId] as const,
 };
 
+/** The projects the signed-in User is a Member of, for the Projects page. */
+export function useProjects() {
+  return useQuery({ queryKey: queryKeys.projects, queryFn: () => api.projects() });
+}
+
 /** Project reads share the app's session-scoped cache. */
 export function useProject(key: string) {
   return useQuery({ queryKey: queryKeys.project(key), queryFn: () => api.project(key) });
@@ -34,14 +41,20 @@ export function useProject(key: string) {
 
 /**
  * Keep the server's created project, so opening it right after shows it at once, without a skeleton (it is then
- * refreshed, as every cached page is: stale time 0). Creating one changes no other project, so nothing else is
- * invalidated (the projects list, #39, will be).
+ * refreshed, as every cached page is: stale time 0), and mark the list stale, since it has a new project. No other
+ * project changes. The list is only marked, not fetched: the page that makes the project is about to be left, and the
+ * list is fetched when it is shown next.
  */
 export function useProjectCreated() {
   const client = useQueryClient();
   return async (project: Project) => {
     await client.cancelQueries({ queryKey: queryKeys.project(project.key), exact: true });
     client.setQueryData(queryKeys.project(project.key), project);
+    void client.invalidateQueries({
+      queryKey: queryKeys.projects,
+      exact: true,
+      refetchType: "none",
+    });
   };
 }
 

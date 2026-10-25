@@ -82,6 +82,38 @@ describe("api client", () => {
     expect(await file.text()).toBe("jpeg bytes");
   });
 
+  it("lists the signed-in User's projects in the order the server sends them", async () => {
+    const projects = [
+      {
+        id: "p2",
+        key: "APP",
+        name: "apple",
+        description: "Fruit",
+        archived: false,
+        createdAt: "2026-10-19T00:00:00Z",
+      },
+      {
+        id: "p1",
+        key: "NIM",
+        name: "Nimbus",
+        description: null,
+        archived: false,
+        createdAt: "2026-10-18T00:00:00Z",
+      },
+    ];
+    const server = fakeServer(
+      json(200, { accessToken: "token-1", user: alice }),
+      json(200, projects),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.login({ email: alice.email, password: "correct horse" });
+
+    expect(await api.projects()).toEqual(projects);
+    expect(server.calls[1].url).toBe("/api/projects");
+    expect(server.calls[1].init.method).toBeUndefined();
+    expect(authorization(server.calls[1])).toBe("Bearer token-1");
+  });
+
   it("sends no access token before the User is signed in", async () => {
     const server = fakeServer(json(401, { status: 401 }), json(401, { status: 401 }));
     const api = createApiClient(server.fetchFn, {

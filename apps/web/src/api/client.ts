@@ -523,6 +523,9 @@ export function createApiClient(
 
     me: () => request<User>("/api/users/me"),
 
+    /** The projects the signed-in User is a Member of, active ones only, sorted by name by the server. */
+    projects: () => request<Project[]>("/api/projects"),
+
     /** Creates a project and adds the signed-in User as its first Member. */
     createProject: (input: CreateProjectInput) =>
       request<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),

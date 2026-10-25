@@ -1,0 +1,92 @@
+/* The Projects list, in the style of the Roles list (RolesPage.module.css). Colours come only from the theme
+   variables. */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px 24px;
+}
+
+.description {
+  max-width: 620px;
+  margin-top: 8px;
+  font-size: 15px;
+  color: var(--color-accent-2-700);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 20px;
+  font-size: 14px;
+  color: var(--color-accent-2-700);
+}
+
+/* The project, then the arrow. A line sits between rows, not above the first. */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  gap: 24px;
+  align-items: center;
+  padding: 18px 20px;
+  border-top: 1px solid var(--line);
+  border-radius: 20px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.list li:first-child .row,
+.skeleton .row:first-child {
+  border-top: 0;
+}
+
+a.row:hover {
+  background: var(--row-hover);
+}
+
+.project {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+/* At most two lines of the description; a long one doesn't stretch the row. */
+.summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: var(--color-accent-2-700);
+}
+
+.arrow {
+  display: flex;
+  align-items: center;
+  color: var(--color-accent-2-500);
+}
+
+@media (max-width: 48em) {
+  .row {
+    gap: 16px;
+    padding: 16px;
+  }
+}

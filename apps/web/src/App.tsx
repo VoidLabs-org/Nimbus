@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { createQueryClient } from "./api/queryClient";
 import { RequireUser, SessionProvider } from "./auth/session";
@@ -20,6 +20,7 @@ import TwoStepSignInPage from "./pages/TwoStepSignInPage";
 import SettingsOverview from "./settings/SettingsOverview";
 import { PASSWORD_WINDOW_PATH } from "./settings/sections";
 import { AppShell } from "./shell/AppShell";
+import { isDesktop } from "./shell/desktop";
 import { NotFoundPage, SessionExpiredPage } from "./shell/StatusPages";
 
 export default function App() {
@@ -36,15 +37,28 @@ export default function App() {
   );
 }
 
+// The Desktop app's shell, in its own chunk so the browser never downloads it.
+const DesktopShell = lazy(() => import("./shell/DesktopShell"));
+
+/** The shell around every signed-in page: the Sidebar in the Desktop app, the navbar in a browser. */
+function SignedInShell() {
+  if (!isDesktop()) return <AppShell />;
+  return (
+    <Suspense fallback={null}>
+      <DesktopShell />
+    </Suspense>
+  );
+}
+
 /** Every page of the app, by address. */
 export function AppRoutes() {
   return (
     <Routes>
-      {/* Every signed-in page, inside the navbar shell. */}
+      {/* Every signed-in page, inside the navbar shell (the Sidebar in the Desktop app). */}
       <Route
         element={
           <RequireUser>
-            <AppShell />
+            <SignedInShell />
           </RequireUser>
         }
       >

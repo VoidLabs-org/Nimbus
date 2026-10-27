@@ -37,6 +37,17 @@ function webOrigin(address) {
 }
 
 /**
+ * Whether `address` is a page of Nimbus itself. The preload script runs on every page the window shows, a provider's
+ * sign-in page too, so main only takes calls from Nimbus's own pages.
+ *
+ * @param {URL} nimbusUrl
+ * @param {string} address
+ */
+export function isNimbusPage(nimbusUrl, address) {
+  return webOrigin(address) === nimbusUrl.origin;
+}
+
+/**
  * Whether the window may navigate from the page it shows to `target`. Within Nimbus, and within whatever site the
  * window is on at that moment: a Google or GitHub sign-in page (reached by a redirect from Nimbus) must be able to
  * submit its own form. A hop from one site to another, such as a Nimbus page linking to a stranger or a provider page

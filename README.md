@@ -43,7 +43,9 @@ The website forwards `/api/*` calls to the API, so the browser only talks to por
 
 ## Desktop app
 
-`pnpm dev:desktop` opens the Electron window on the dev server, so it works like the website. The window loads Nimbus from `NIMBUS_URL` (default `http://localhost:3000`), so once Nimbus is hosted, pointing it there is a setting, not a rebuild. Details: [docs/specs/desktop.md](docs/specs/desktop.md) and ADR 0007.
+`pnpm dev:desktop` opens the Electron window on the dev server, so it works like the website. The window loads Nimbus from `NIMBUS_URL` (default `http://localhost:3000`), so once Nimbus is hosted, pointing it there is a setting, not a rebuild.
+
+In the window, Nimbus has its own shell: a Sidebar instead of the navbar, which folds into a rail of icons with its button or Ctrl `\` (⌘ `\` on macOS), and a hidden title bar. There is no menu bar on Windows and Linux (a minimal one on macOS); `pnpm dev:desktop` starts it with `--dev`, which adds reload and developer tools (Ctrl R, Ctrl Shift I). Details: [docs/specs/desktop.md](docs/specs/desktop.md) and ADR 0007.
 
 ## Commands
 

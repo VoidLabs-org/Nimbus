@@ -1,12 +1,19 @@
 import { Container, Stack, Text, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { ThemePicker } from "@repo/ui/theme-picker";
+import { isDesktop } from "../shell/desktop";
 import { NavPositionPicker } from "../shell/NavPositionPicker";
+import { SidebarPicker } from "../shell/SidebarPicker";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 
-/** Settings → Appearance: pick Paper, Ink, Fog or Slate. The choice is kept in this browser. */
+/**
+ * Settings → Appearance: pick Paper, Ink, Fog or Slate, and where the navbar sits (in the Desktop app, whether the
+ * Sidebar is open or folded). The choices are kept in this browser, or on this computer in the Desktop app.
+ */
 export default function AppearancePage() {
+  const desktop = isDesktop();
+  const keptIn = desktop ? "on this computer" : "in this browser";
   return (
     <Container size="md" px={0} py="xl">
       <Stack gap="lg">
@@ -15,7 +22,7 @@ export default function AppearancePage() {
           <Title order={1}>Appearance</Title>
           <Text c="dimmed" mt={6}>
             Choose how Nimbus looks. Paper and Ink are flat; Fog and Slate are glass. Your choice is
-            kept in this browser.
+            kept {keptIn}.
           </Text>
         </div>
         <Panel p="lg">
@@ -29,18 +36,22 @@ export default function AppearancePage() {
           </Stack>
         </Panel>
         <Panel p="lg">
-          <Stack gap="md">
-            <div>
-              <Title order={2} fz={20}>
-                Navbar position
-              </Title>
-              <Text size="sm" c="dimmed" mt={4}>
-                Put the navbar on any edge. Top and bottom keep it horizontal; left and right turn
-                it into a narrow rail. Your choice is kept in this browser.
-              </Text>
-            </div>
-            <NavPositionPicker />
-          </Stack>
+          {desktop ? (
+            <SidebarPicker />
+          ) : (
+            <Stack gap="md">
+              <div>
+                <Title order={2} fz={20}>
+                  Navbar position
+                </Title>
+                <Text size="sm" c="dimmed" mt={4}>
+                  Put the navbar on any edge. Top and bottom keep it horizontal; left and right turn
+                  it into a narrow rail. Your choice is kept in this browser.
+                </Text>
+              </div>
+              <NavPositionPicker />
+            </Stack>
+          )}
         </Panel>
       </Stack>
     </Container>

@@ -1,19 +1,24 @@
 // Electron main process: a desktop shell around the web app (apps/web). It loads Nimbus from a URL (ADR 0007).
-import { app, BrowserWindow, dialog, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from "electron";
 import { fileURLToPath } from "node:url";
-import { isNavigationAllowed, parseNimbusUrl } from "./nimbus-url.js";
+import { isDevLaunch, menuTemplate, overlayColors, windowChrome } from "./chrome.js";
+import { isNavigationAllowed, isNimbusPage, parseNimbusUrl } from "./nimbus-url.js";
+
+const dev = isDevLaunch(process.argv);
 
 function createWindow(nimbusUrl) {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    ...windowChrome(process.platform, nativeTheme.shouldUseDarkColors ? "dark" : "light"),
     title: "Nimbus",
     webPreferences: {
       preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
       contextIsolation: true,
       sandbox: true,
+      devTools: dev,
     },
   });
+  // Windows and Linux keep the menu for its shortcuts but never show it (see menuTemplate).
+  win.setMenuBarVisibility(false);
 
   // Open external links in the default browser instead of new Electron windows (#14, #15)
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -41,6 +46,20 @@ app.whenReady().then(() => {
     app.quit();
     return;
   }
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, dev)));
+
+  // The page's theme (nimbusDesktop.setTheme): native menus and dialogs follow it, and so do the Windows buttons.
+  ipcMain.on("nimbus:theme", (event, mode) => {
+    if (
+      (mode !== "light" && mode !== "dark") ||
+      !isNimbusPage(nimbusUrl, event.senderFrame?.url ?? "")
+    )
+      return;
+    nativeTheme.themeSource = mode;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && process.platform === "win32") win.setTitleBarOverlay(overlayColors(mode));
+  });
+
   createWindow(nimbusUrl);
 
   app.on("activate", () => {

@@ -1,0 +1,205 @@
+/* The Desktop app's shell, from the "Nimbus Desktop v2" design (2a). Colours come only from the theme variables, so all
+   four themes work: the Sidebar is a card like the browser's navbar (frosted on Fog and Slate), and the page shows the
+   theme's background behind it as in a browser.
+
+   The window has no title bar of its own (apps/desktop/src/chrome.js), so the top 46px are the drag area: the
+   Sidebar's top row and the title row above the page. Buttons in them opt out. macOS draws its traffic lights in the
+   Sidebar's top row; Windows draws its buttons over the right end of the title row. */
+.shell {
+  --title-row: 46px;
+  --sidebar-open: 248px;
+  --sidebar-rail: 68px;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-open);
+  box-sizing: border-box;
+  overflow: hidden auto;
+  background: var(--card);
+  border-right: 1px solid var(--line);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.shell[data-folded] .sidebar {
+  width: var(--sidebar-rail);
+}
+
+.sidebarTitle,
+.titleRow {
+  flex: none;
+  height: var(--title-row);
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.sidebarTitle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+}
+
+/* Clickable controls in a drag area must opt out, or a click drags the window instead. */
+.sidebarTitle > *,
+.titleRow > * {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/* The window's own buttons sit at the right end of the title row on Windows; nothing of the page goes under them. */
+.shell[data-platform="win32"] .titleRow {
+  padding-right: 140px;
+}
+
+.foldButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--color-accent-2-700);
+}
+
+.foldButton:hover {
+  background: var(--seg);
+}
+
+/* Open: the brand, the account, then the links in sections. */
+.open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 12px 14px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 12px;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.account > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Empty until the Notification bell exists. */
+.bellSlot:empty {
+  display: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.row:hover {
+  background: var(--row-hover);
+}
+
+.rowIcon {
+  display: flex;
+  width: 18px;
+  justify-content: center;
+}
+
+/* The open page's link, in the open Sidebar or the rail. Two classes, so it wins over .row and .railLink (and their
+   hover) wherever they are in this file. */
+.row.active,
+.row.active:hover,
+.railLink.active,
+.railLink.active:hover {
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+
+/* Folded: a rail of round icons. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 14px;
+}
+
+.railLogo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.railItem {
+  display: flex;
+}
+
+.railLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.railLink:hover {
+  background: var(--seg);
+}
+
+.rail > .foldButton {
+  margin-bottom: 8px;
+}
+
+/* The page, beside the Sidebar, scrolling on its own under the title row. */
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}

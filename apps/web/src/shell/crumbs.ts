@@ -28,3 +28,9 @@ export function collapseCrumbs(
         .find((crumb) => crumb.to) ?? null,
   };
 }
+
+/** What the Desktop app's Tab for a page is called: its breadcrumb's last crumb, or null while that is still loading. */
+export function tabTitle(crumbs: Crumb[]): string | null {
+  const current = crumbs.at(-1);
+  return current && !current.pending && current.label ? current.label : null;
+}

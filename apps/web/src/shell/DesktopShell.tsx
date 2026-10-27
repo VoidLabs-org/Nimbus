@@ -6,6 +6,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
+import { useSession } from "../auth/useSession";
 import { PageContent } from "./AppShell";
 import { useSettingsOverlay } from "../settings/settingsOverlay";
 import {
@@ -16,9 +17,12 @@ import {
   type NimbusDesktop,
 } from "./desktop";
 import classes from "./DesktopShell.module.css";
+import { TabRow } from "./TabRow";
 import { DESTINATIONS, type Destination } from "./navigation";
 import { NimbusLogo } from "./NimbusLogo";
 import { AUTO_FOLD_QUERY, isFoldShortcut, useSidebarState } from "./sidebarState";
+import { TabTitleContext } from "./tabTitle";
+import { useTabShortcuts, useTabs } from "./useTabs";
 
 type Platform = NimbusDesktop["platform"];
 
@@ -159,8 +163,8 @@ function FoldButton({
 
 /**
  * The Desktop app's shell for every signed-in page (the browser gets AppShell's navbar instead), laid out like the
- * Claude app: the Sidebar down the left, and beside it a title row (Tabs to come; the window's own buttons at its right
- * on Windows) over the page. The Sidebar and the title row are the window's frame, in the theme's surface colour, and
+ * Claude app: the Sidebar down the left, and beside it a title row (the Tabs, see useTabs; the window's own
+ * buttons at its right on Windows) over the page. The Sidebar and the title row are the window's frame, in the theme's surface colour, and
  * the window is dragged by their top 46px; the page shows the theme's background, so it stands apart.
  *
  * There is no brand row, as in other desktop apps: on Windows and Linux the Nimbus icon at the top left opens the app
@@ -184,6 +188,10 @@ export default function DesktopShell() {
   const folded = narrow ? !openWhileNarrow : chosen === "folded";
   const settingsOpen = useSettingsOverlay() === "behind";
   useSettingsShortcut(platform, settingsOpen);
+  // RequireUser only shows the shell to a signed-in User.
+  const userId = useSession().user!.id;
+  const tabs = useTabs(userId, settingsOpen);
+  useTabShortcuts(platform, settingsOpen, tabs);
 
   // Peeking holds the page it started on, so opening another page from the Sidebar ends it.
   const [peekedAt, setPeekedAt] = useState<string | null>(null);
@@ -261,11 +269,15 @@ export default function DesktopShell() {
         </nav>
       )}
       <div className={classes.main} ref={mainRef}>
-        {/* The window is dragged by this row; Tabs go here. */}
-        <div className={classes.titleRow} />
+        {/* The window is dragged by this row, but for its Tabs. */}
+        <div className={classes.titleRow}>
+          <TabRow tabs={tabs.tabs} onClose={tabs.close} />
+        </div>
         <div className={classes.content}>
           <Container size="lg">
-            <PageContent />
+            <TabTitleContext value={tabs.name}>
+              <PageContent />
+            </TabTitleContext>
           </Container>
         </div>
       </div>

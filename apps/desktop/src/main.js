@@ -1,15 +1,51 @@
 // Electron main process: a desktop shell around the web app (apps/web). It loads Nimbus from a URL (ADR 0007).
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  shell,
+} from "electron";
 import { fileURLToPath } from "node:url";
-import { isDevLaunch, menuPosition, menuTemplate, overlayColors, windowChrome } from "./chrome.js";
+import {
+  appIconFile,
+  isDevLaunch,
+  menuPosition,
+  menuTemplate,
+  overlayColors,
+  windowChrome,
+} from "./chrome.js";
 import { isNavigationAllowed, isNimbusPage, parseNimbusUrl } from "./nimbus-url.js";
 
 const dev = isDevLaunch(process.argv);
 
+/** The OS's light or dark mode, which the taskbar, the Dock and (until the page says) the window buttons follow. */
+function osMode() {
+  return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+}
+
+/** The Nimbus icon for the OS's mode (see appIconFile). */
+function appIcon() {
+  return nativeImage.createFromPath(
+    fileURLToPath(new URL(`../assets/${appIconFile(osMode())}`, import.meta.url)),
+  );
+}
+
+/** Shows the icon for the OS's mode on every window (taskbar on Windows and Linux) and on the macOS Dock. */
+function applyAppIcon() {
+  const icon = appIcon();
+  if (process.platform === "darwin") app.dock?.setIcon(icon);
+  else for (const win of BrowserWindow.getAllWindows()) win.setIcon(icon);
+}
+
 function createWindow(nimbusUrl) {
   const win = new BrowserWindow({
-    ...windowChrome(process.platform, nativeTheme.shouldUseDarkColors ? "dark" : "light"),
+    ...windowChrome(process.platform, osMode()),
     title: "Nimbus",
+    icon: appIcon(),
     webPreferences: {
       preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
       contextIsolation: true,
@@ -69,6 +105,9 @@ app.whenReady().then(() => {
   });
 
   createWindow(nimbusUrl);
+  applyAppIcon();
+  // The OS switched between light and dark: the taskbar or Dock changed colour, so the icon follows.
+  nativeTheme.on("updated", applyAppIcon);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(nimbusUrl);

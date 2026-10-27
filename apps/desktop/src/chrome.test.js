@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isDevLaunch, menuPosition, menuTemplate, overlayColors, windowChrome } from "./chrome.js";
+import {
+  appIconFile,
+  isDevLaunch,
+  menuPosition,
+  menuTemplate,
+  overlayColors,
+  windowChrome,
+} from "./chrome.js";
 
 /** The roles in a menu template, nested menus as arrays, so a test reads like the menu. */
 function roles(items) {
@@ -67,8 +74,16 @@ describe("menuTemplate", () => {
       assert.deepEqual(roles(menuTemplate(platform, false)), [
         "editMenu",
         ["View", view],
-        "windowMenu",
+        ["Window", ["minimize", "close"]],
       ]);
+    }
+  });
+
+  it("leaves Ctrl W to the page on Windows and Linux, which closes a Tab with it", () => {
+    for (const platform of ["win32", "linux"]) {
+      const windowMenu = menuTemplate(platform, false).find((item) => item.label === "Window");
+      const close = windowMenu.submenu.find((item) => item.role === "close");
+      assert.equal(close.accelerator, "Ctrl+Shift+W", platform);
     }
   });
 
@@ -105,5 +120,12 @@ describe("isDevLaunch", () => {
   it("is on only with --dev", () => {
     assert.equal(isDevLaunch(["electron", ".", "--dev"]), true);
     assert.equal(isDevLaunch(["electron", "."]), false);
+  });
+});
+
+describe("appIconFile", () => {
+  it("shows the dark Nimbus mark on a light taskbar or Dock, and the light one on a dark", () => {
+    assert.equal(appIconFile("light"), "nimbus-icon-light.png");
+    assert.equal(appIconFile("dark"), "nimbus-icon-dark.png");
   });
 });

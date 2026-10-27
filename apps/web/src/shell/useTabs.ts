@@ -8,6 +8,7 @@ import {
   duplicateTab,
   insertTab,
   nameTab,
+  newTab,
   openInNewTab,
   readTabs,
   selectedTab,
@@ -34,8 +35,9 @@ type Held = {
  * The Tabs, for the signed-in User. Kept on this computer per User and read when the shell starts for them: the window
  * starts on Home, so that start goes back to the Tab they were on instead (a Settings address opened at start keeps
  * Home behind the overlay). Opening a page the usual way shows it in the selected Tab, as in a browser; a new Tab
- * opens only when asked for (`openInNewTab`). The query string doesn't count. Switching Tabs is opening the page:
- * nothing is kept alive in the background.
+ * opens only when asked for (`openInNewTab`). The query string doesn't count, and Settings, which opens over a Tab's
+ * page, never lands in one. Switching Tabs is opening the page: nothing is kept alive in the background. Tab actions
+ * work on the Tabs as they are when React applies them, so a name arriving meanwhile isn't lost.
  */
 export function useTabs(userId: string, settingsOpen: boolean) {
   const location = useLocation();
@@ -58,7 +60,9 @@ export function useTabs(userId: string, settingsOpen: boolean) {
     setHeld(restore());
   } else if (waitingFrom !== null) {
     if (location.key !== waitingFrom) setHeld({ ...held, waitingFrom: null, restoreTo: null });
-  } else {
+  } else if (!settingsOpen && !isSettingsPath(pathname)) {
+    // Settings is never in a Tab: while it is open over a page, that page (Home, for a Settings address opened
+    // directly) stays out of the selected Tab, and when its overlay can't load it shows as a page in the shell.
     const next = showInTab(tabs, pathname);
     if (next !== tabs) set(next);
   }
@@ -67,24 +71,29 @@ export function useTabs(userId: string, settingsOpen: boolean) {
   }, [restoreTo, navigate]);
   useEffect(() => writeTabs(userId, tabs), [userId, tabs]);
 
-  /** Makes `next` the Tabs and opens `go`, keeping the page now showing out of them until it has opened. */
-  const change = (next: Tabs, go: string | null, closed: ClosedTab[] = []) => {
+  /**
+   * Changes the Tabs with `update` and opens `go`, keeping the page now showing out of them until it has opened.
+   * `closed` goes on the reopen stack in row order, the left-most on top, so reopening a group puts each back where it
+   * was. Opening another Tab's page replaces the address rather than adding one, so Back never loads one Tab's page
+   * into another.
+   */
+  const change = (update: (current: Tabs) => Tabs, go: string | null, closed: ClosedTab[] = []) => {
     setHeld((current) => ({
       ...current,
-      tabs: next,
+      tabs: update(current.tabs),
       waitingFrom: go === null ? current.waitingFrom : location.key,
-      closed: [...[...closed].reverse(), ...current.closed],
+      closed: [...closed, ...current.closed],
     }));
-    if (go !== null) navigate(go);
+    if (go !== null) navigate(go, { replace: true });
   };
 
   const select = (id: string) => {
     const tab = tabs.tabs.find((each) => each.id === id);
-    if (tab && id !== tabs.selected) change({ ...tabs, selected: id }, tab.path);
+    if (tab && id !== tabs.selected) change((current) => ({ ...current, selected: id }), tab.path);
   };
   const close = (ids: string[]) => {
-    const { state, go, closed } = closeTabs(tabs, ids);
-    change(state, go, closed);
+    const { go, closed } = closeTabs(tabs, ids);
+    change((current) => closeTabs(current, ids).state, go, closed);
   };
   const closeOthers = (id: string) =>
     close(tabs.tabs.filter((tab) => tab.id !== id).map((tab) => tab.id));
@@ -92,16 +101,26 @@ export function useTabs(userId: string, settingsOpen: boolean) {
     const index = tabs.tabs.findIndex((tab) => tab.id === id);
     if (index >= 0) close(tabs.tabs.slice(index + 1).map((tab) => tab.id));
   };
-  const openNew = (path: string) => change(openInNewTab(tabs, path), path);
+  const openNew = (path: string) => {
+    const tab = newTab(path);
+    change((current) => openInNewTab(current, tab), path);
+  };
   const duplicate = (id: string) => {
-    const next = duplicateTab(tabs, id);
-    change(next, selectedTab(next)?.path ?? null);
+    const tab = tabs.tabs.find((each) => each.id === id);
+    if (!tab) return;
+    const copy = { ...tab, id: crypto.randomUUID() };
+    change((current) => duplicateTab(current, id, copy), tab.path);
   };
   const reopen = () => {
-    const [last, ...rest] = held.closed;
+    const [last] = held.closed;
     if (!last) return;
-    setHeld((current) => ({ ...current, closed: rest }));
-    change(insertTab(tabs, last.tab, last.index), last.tab.path);
+    setHeld((current) => ({
+      ...current,
+      tabs: insertTab(current.tabs, last.tab, last.index),
+      waitingFrom: location.key,
+      closed: current.closed.filter((each) => each !== last),
+    }));
+    navigate(last.tab.path, { replace: true });
   };
   const cycle = (step: 1 | -1) => {
     const tab = cycleTab(tabs, step);
@@ -126,14 +145,6 @@ export function useTabs(userId: string, settingsOpen: boolean) {
 
 export type TabActions = ReturnType<typeof useTabs>;
 
-/** Ctrl Shift T (⌘ Shift T on macOS): reopens the last closed Tab, as in browsers. */
-function isReopenShortcut(event: KeyboardEvent, platform: NimbusDesktop["platform"]): boolean {
-  const mac = platform === "darwin";
-  if (event.altKey || !event.shiftKey) return false;
-  if (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return false;
-  return event.key.toLowerCase() === "t" || event.code === "KeyT";
-}
-
 /**
  * Ctrl or ⌘ W closes the selected Tab, Ctrl or ⌘ Shift T reopens the last closed one; Ctrl Tab and Ctrl Shift Tab
  * (Ctrl on macOS too, as in browsers) move to the next and the previous Tab, round the ends. While Settings is open
@@ -148,7 +159,7 @@ export function useTabShortcuts(
     if (isModifierShortcut(event, platform, "w", "KeyW")) {
       event.preventDefault();
       if (!settingsOpen && actions.tabs.selected !== null) actions.close([actions.tabs.selected]);
-    } else if (isReopenShortcut(event, platform)) {
+    } else if (isModifierShortcut(event, platform, "T", "KeyT", { shift: true })) {
       event.preventDefault();
       if (!settingsOpen) actions.reopen();
     } else if (event.key === "Tab" && event.ctrlKey && !event.altKey && !event.metaKey) {

@@ -24,7 +24,7 @@ import { NimbusLogo } from "./NimbusLogo";
 import { AUTO_FOLD_QUERY, isFoldShortcut, useSidebarState } from "./sidebarState";
 import { TabTitleContext } from "./tabTitle";
 import { linkMenu, tabMenu } from "./tabMenus";
-import { useNewTabClicks, useTabShortcuts, useTabs } from "./useTabs";
+import { useNewTabClicks, useTabShortcuts, useTabs, type TabActions } from "./useTabs";
 
 type Platform = NimbusDesktop["platform"];
 
@@ -132,6 +132,25 @@ function AppMenuButton() {
  */
 const SETTINGS = DESTINATIONS.find((destination) => destination.id === "settings")!;
 
+/** Where a right-click menu opened, and on what: a Tab (by id) or a Sidebar link. */
+type MenuTarget = { x: number; y: number; on: { tab: string } | { link: Destination } };
+
+/** The right-click menu for `target`, from the Tabs now; none once its Tab has closed. */
+function menuState(
+  target: MenuTarget | null,
+  tabs: TabActions,
+  open: (path: string) => void,
+  platform: Platform,
+): ContextMenuState | null {
+  if (!target) return null;
+  const { x, y, on } = target;
+  if ("link" in on) {
+    return { x, y, label: on.link.label, items: linkMenu(on.link.to, tabs, open, platform) };
+  }
+  const tab = tabs.tabs.tabs.find((each) => each.id === on.tab);
+  return tab ? { x, y, label: tab.title, items: tabMenu(tab, tabs, platform) } : null;
+}
+
 /** How long the pointer rests on the Sidebar button, while folded, before the Sidebar peeks out. */
 export const PEEK_DELAY_MS = 300;
 
@@ -207,7 +226,9 @@ export default function DesktopShell() {
   const navigate = useNavigate();
   useNewTabClicks(platform, tabs.openNew, navigate);
   // The right-click menu open now (a Tab's, a Sidebar link's), if any.
-  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [menuAt, setMenuAt] = useState<MenuTarget | null>(null);
+  // Built from the Tabs as they are now, not as they were when it opened: a Tab named or closed meanwhile shows.
+  const menu = menuState(menuAt, tabs, navigate, platform);
 
   // Peeking holds the page it started on, so opening another page from the Sidebar ends it.
   const [peekedAt, setPeekedAt] = useState<string | null>(null);
@@ -269,13 +290,7 @@ export default function DesktopShell() {
                 <SidebarRow
                   key={destination.id}
                   destination={destination}
-                  onMenu={(at) =>
-                    setMenu({
-                      ...at,
-                      label: destination.label,
-                      items: linkMenu(destination.to, tabs, navigate, platform),
-                    })
-                  }
+                  onMenu={(at) => setMenuAt({ ...at, on: { link: destination } })}
                 />
               ),
             )}
@@ -302,9 +317,7 @@ export default function DesktopShell() {
             onSelect={tabs.select}
             onClose={(id) => tabs.close([id])}
             onNew={() => tabs.openNew("/")}
-            onMenu={(tab, at) =>
-              setMenu({ ...at, label: tab.title, items: tabMenu(tab, tabs, platform) })
-            }
+            onMenu={(tab, at) => setMenuAt({ ...at, on: { tab: tab.id } })}
           />
         </div>
         <div className={classes.content}>
@@ -325,7 +338,7 @@ export default function DesktopShell() {
         onPointerIn={startPeek}
         onPointerOut={endPeekOnPage}
       />
-      <ContextMenu menu={menu} onClose={() => setMenu(null)} />
+      <ContextMenu menu={menu} onClose={() => setMenuAt(null)} />
     </div>
   );
 }

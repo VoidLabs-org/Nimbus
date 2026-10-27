@@ -32,6 +32,23 @@ export function appIconFile(mode) {
   return mode === "dark" ? "nimbus-icon-dark.png" : "nimbus-icon-light.png";
 }
 
+/** Where Windows keeps its light and dark settings, for `reg query`. */
+export const PERSONALIZE_KEY = String.raw`HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`;
+
+/**
+ * Windows' own mode, from `reg query PERSONALIZE_KEY /v SystemUsesLightTheme`: the taskbar follows it, and it can
+ * differ from the apps' mode that Electron's nativeTheme reports (by default Windows is dark, apps light). Null when
+ * the answer says nothing about it.
+ *
+ * @param {string} output
+ * @returns {"light" | "dark" | null}
+ */
+export function windowsTaskbarMode(output) {
+  const value = /SystemUsesLightTheme\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(output)?.[1];
+  if (value === undefined) return null;
+  return Number.parseInt(value, 16) === 0 ? "dark" : "light";
+}
+
 /**
  * The app window's options apart from webPreferences: never smaller than 800×560, and a hidden title bar, so the page
  * draws its own frame (the Sidebar and a title row). Windows keeps its buttons drawn by the OS over the right end of

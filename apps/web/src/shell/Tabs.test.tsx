@@ -2,7 +2,7 @@
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError, type Project, type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
@@ -102,10 +102,16 @@ afterEach(() => {
   window.matchMedia = realMatchMedia;
 });
 
-/** The address the app is on, shown so a test can read it. */
+/** The address the app is on, shown so a test can read it, and Back, as the mouse's back button would do. */
 function Address() {
   const location = useLocation();
-  return <output data-testid="address">{location.pathname + location.search}</output>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="address">{location.pathname + location.search}</output>
+      <button type="button" data-testid="back" onClick={() => void navigate(-1)} />
+    </>
+  );
 }
 
 function renderAt(path: string, user: User | null = alice) {
@@ -395,6 +401,23 @@ describe("the Desktop app's Tabs", () => {
     expect(address()).toBe("/projects");
   });
 
+  it("leaves the other Tabs alone on Back after switching Tabs", async () => {
+    storeTabs(
+      alice.id,
+      [
+        ["/", "Home"],
+        ["/projects", "Projects"],
+      ],
+      1,
+    );
+    renderAt("/projects");
+
+    const row = await tabRow();
+    fireEvent.click(within(row).getByRole("tab", { name: "Home" }));
+    fireEvent.click(screen.getByTestId("back"));
+    expect(tabNames(row)).toEqual(["Home", "Projects"]);
+  });
+
   it("closes the selected Tab with Ctrl W on Windows", async () => {
     storeTabs(
       alice.id,
@@ -535,6 +558,37 @@ describe("a Tab's right-click menu", () => {
     expect(tabNames(row)).toEqual(["Home", "Projects", "Projects", "Apollo"]);
     expect(selectedIndex(row)).toBe(2);
     expect(address()).toBe("/projects");
+  });
+
+  it("acts on the Tabs as they are when picked, not as they were when it opened", async () => {
+    let finish: (project: Project) => void = () => {};
+    vi.mocked(api.project).mockImplementation(
+      () => new Promise<Project>((resolve) => (finish = resolve)),
+    );
+    renderAt("/projects/APO");
+
+    const row = await tabRow();
+    fireEvent.contextMenu(within(row).getByRole("tab", { name: "APO" }), {
+      clientX: 40,
+      clientY: 20,
+    });
+    const menu = await screen.findByRole("menu");
+    finish(PROJECTS.APO!);
+    await within(row).findByRole("tab", { name: "Apollo" });
+    fireEvent.click(within(menu).getByText("Duplicate tab").closest("[role=menuitem]")!);
+    expect(tabNames(row)).toEqual(["Apollo", "Apollo"]);
+  });
+
+  it("reopens a group of closed Tabs in their order", async () => {
+    storeTabs(alice.id, [...three, ["/projects/GEM", "Gemini"]], 0);
+    renderAt("/");
+
+    const row = await tabRow();
+    await pickFromMenu(within(row).getByRole("tab", { name: "Home" }), "Close other tabs");
+    for (let reopened = 0; reopened < 3; reopened++) {
+      fireEvent.keyDown(window, { key: "T", code: "KeyT", ctrlKey: true, shiftKey: true });
+    }
+    expect(tabNames(row)).toEqual(["Home", "Projects", "Apollo", "Gemini"]);
   });
 
   it("reopens the last closed Tab where it was, as Ctrl Shift T does", async () => {

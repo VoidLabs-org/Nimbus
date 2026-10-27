@@ -60,18 +60,16 @@ export function insertTab(state: Tabs, tab: Tab, index: number): Tabs {
   return { tabs: [...state.tabs.slice(0, at), tab, ...state.tabs.slice(at)], selected: tab.id };
 }
 
-/** Opens `path` in a new Tab right after the selected one (or at the end), and selects it. */
-export function openInNewTab(state: Tabs, path: string): Tabs {
-  const index = state.tabs.findIndex((tab) => tab.id === state.selected);
-  return insertTab(state, newTab(path), index < 0 ? state.tabs.length : index + 1);
+/** Adds `tab` (a new one) right after the selected Tab, or at the end, and selects it. */
+export function openInNewTab(state: Tabs, tab: Tab): Tabs {
+  const index = state.tabs.findIndex((each) => each.id === state.selected);
+  return insertTab(state, tab, index < 0 ? state.tabs.length : index + 1);
 }
 
-/** A copy of Tab `id` right after it, selected. */
-export function duplicateTab(state: Tabs, id: string): Tabs {
+/** Adds `copy` (Tab `id` under a new id) right after it, and selects it. */
+export function duplicateTab(state: Tabs, id: string, copy: Tab): Tabs {
   const index = state.tabs.findIndex((tab) => tab.id === id);
-  if (index < 0) return state;
-  const tab = state.tabs[index]!;
-  return insertTab(state, { ...tab, id: crypto.randomUUID() }, index + 1);
+  return index < 0 ? state : insertTab(state, copy, index + 1);
 }
 
 /** Names the selected Tab after its page's breadcrumb, while it still shows `path`. */

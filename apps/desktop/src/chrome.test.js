@@ -7,6 +7,7 @@ import {
   menuTemplate,
   overlayColors,
   windowChrome,
+  windowsTaskbarMode,
 } from "./chrome.js";
 
 /** The roles in a menu template, nested menus as arrays, so a test reads like the menu. */
@@ -120,6 +121,25 @@ describe("isDevLaunch", () => {
   it("is on only with --dev", () => {
     assert.equal(isDevLaunch(["electron", ".", "--dev"]), true);
     assert.equal(isDevLaunch(["electron", "."]), false);
+  });
+});
+
+describe("windowsTaskbarMode", () => {
+  const output = (value) =>
+    "\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\r\n" +
+    `    SystemUsesLightTheme    REG_DWORD    ${value}\r\n\r\n`;
+
+  it("reads Windows mode, which the taskbar follows, from reg's answer", () => {
+    assert.equal(windowsTaskbarMode(output("0x0")), "dark");
+    assert.equal(windowsTaskbarMode(output("0x1")), "light");
+  });
+
+  it("knows nothing from any other answer", () => {
+    assert.equal(windowsTaskbarMode(""), null);
+    assert.equal(
+      windowsTaskbarMode("ERROR: The system was unable to find the specified value"),
+      null,
+    );
   });
 });
 

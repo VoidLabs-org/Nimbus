@@ -48,17 +48,18 @@ export type ShortcutKey = {
 };
 
 /**
- * Whether a key press is ⌘ + `key` on macOS, Ctrl + `key` elsewhere, with no other modifier. Matched on the key or, for
- * keyboards where that key types something else, on its position (`code`).
+ * Whether a key press is ⌘ + `key` on macOS, Ctrl + `key` elsewhere, with Shift only when `shift` says so and no other
+ * modifier. Matched on the key or, for keyboards where that key types something else, on its position (`code`).
  */
 export function isModifierShortcut(
   event: ShortcutKey,
   platform: NimbusDesktop["platform"],
   key: string,
   code: string,
+  { shift = false }: { shift?: boolean } = {},
 ): boolean {
   const mac = platform === "darwin";
-  if (event.altKey || event.shiftKey) return false;
+  if (event.altKey || event.shiftKey !== shift) return false;
   if (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return false;
   return event.key === key || event.code === code;
 }

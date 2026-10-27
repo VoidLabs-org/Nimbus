@@ -6,6 +6,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
+import { useSession } from "../auth/useSession";
 import { PageContent } from "./AppShell";
 import { useSettingsOverlay } from "../settings/settingsOverlay";
 import {
@@ -16,9 +17,14 @@ import {
   type NimbusDesktop,
 } from "./desktop";
 import classes from "./DesktopShell.module.css";
+import { ContextMenu, type ContextMenuState } from "./ContextMenu";
+import { TabRow } from "./TabRow";
 import { DESTINATIONS, type Destination } from "./navigation";
 import { NimbusLogo } from "./NimbusLogo";
 import { AUTO_FOLD_QUERY, isFoldShortcut, useSidebarState } from "./sidebarState";
+import { TabTitleContext } from "./tabTitle";
+import { linkMenu, tabMenu } from "./tabMenus";
+import { useNewTabClicks, useTabShortcuts, useTabs, type TabActions } from "./useTabs";
 
 type Platform = NimbusDesktop["platform"];
 
@@ -44,12 +50,15 @@ function SidebarRow({
   destination,
   active = false,
   keyShortcuts,
+  onMenu,
 }: {
   destination: Destination;
   /** Highlighted whatever the address says (Settings, while its overlay is open over the page). */
   active?: boolean;
   /** The row's keyboard shortcut, for screen readers (aria-keyshortcuts); not shown. */
   keyShortcuts?: string;
+  /** Opens the link's right-click menu at the pointer. */
+  onMenu?: (at: { x: number; y: number }) => void;
 }) {
   return (
     <NavLink
@@ -57,6 +66,13 @@ function SidebarRow({
       end={destination.end}
       data-active={active || undefined}
       aria-keyshortcuts={keyShortcuts}
+      onContextMenu={
+        onMenu &&
+        ((event) => {
+          event.preventDefault();
+          onMenu({ x: event.clientX, y: event.clientY });
+        })
+      }
       className={({ isActive }) =>
         isActive || active ? `${classes.row} ${classes.active}` : classes.row
       }
@@ -116,6 +132,25 @@ function AppMenuButton() {
  */
 const SETTINGS = DESTINATIONS.find((destination) => destination.id === "settings")!;
 
+/** Where a right-click menu opened, and on what: a Tab (by id) or a Sidebar link. */
+type MenuTarget = { x: number; y: number; on: { tab: string } | { link: Destination } };
+
+/** The right-click menu for `target`, from the Tabs now; none once its Tab has closed. */
+function menuState(
+  target: MenuTarget | null,
+  tabs: TabActions,
+  open: (path: string) => void,
+  platform: Platform,
+): ContextMenuState | null {
+  if (!target) return null;
+  const { x, y, on } = target;
+  if ("link" in on) {
+    return { x, y, label: on.link.label, items: linkMenu(on.link.to, tabs, open, platform) };
+  }
+  const tab = tabs.tabs.tabs.find((each) => each.id === on.tab);
+  return tab ? { x, y, label: tab.title, items: tabMenu(tab, tabs, platform) } : null;
+}
+
 /** How long the pointer rests on the Sidebar button, while folded, before the Sidebar peeks out. */
 export const PEEK_DELAY_MS = 300;
 
@@ -159,8 +194,8 @@ function FoldButton({
 
 /**
  * The Desktop app's shell for every signed-in page (the browser gets AppShell's navbar instead), laid out like the
- * Claude app: the Sidebar down the left, and beside it a title row (Tabs to come; the window's own buttons at its right
- * on Windows) over the page. The Sidebar and the title row are the window's frame, in the theme's surface colour, and
+ * Claude app: the Sidebar down the left, and beside it a title row (the Tabs, see useTabs; the window's own
+ * buttons at its right on Windows) over the page. The Sidebar and the title row are the window's frame, in the theme's surface colour, and
  * the window is dragged by their top 46px; the page shows the theme's background, so it stands apart.
  *
  * There is no brand row, as in other desktop apps: on Windows and Linux the Nimbus icon at the top left opens the app
@@ -184,6 +219,16 @@ export default function DesktopShell() {
   const folded = narrow ? !openWhileNarrow : chosen === "folded";
   const settingsOpen = useSettingsOverlay() === "behind";
   useSettingsShortcut(platform, settingsOpen);
+  // RequireUser only shows the shell to a signed-in User.
+  const userId = useSession().user!.id;
+  const tabs = useTabs(userId, settingsOpen);
+  useTabShortcuts(platform, settingsOpen, tabs);
+  const navigate = useNavigate();
+  useNewTabClicks(platform, tabs.openNew, navigate);
+  // The right-click menu open now (a Tab's, a Sidebar link's), if any.
+  const [menuAt, setMenuAt] = useState<MenuTarget | null>(null);
+  // Built from the Tabs as they are now, not as they were when it opened: a Tab named or closed meanwhile shows.
+  const menu = menuState(menuAt, tabs, navigate, platform);
 
   // Peeking holds the page it started on, so opening another page from the Sidebar ends it.
   const [peekedAt, setPeekedAt] = useState<string | null>(null);
@@ -242,7 +287,11 @@ export default function DesktopShell() {
           <div className={classes.open}>
             {DESTINATIONS.filter((destination) => destination.id !== "settings").map(
               (destination) => (
-                <SidebarRow key={destination.id} destination={destination} />
+                <SidebarRow
+                  key={destination.id}
+                  destination={destination}
+                  onMenu={(at) => setMenuAt({ ...at, on: { link: destination } })}
+                />
               ),
             )}
             <div className={classes.bottom}>
@@ -261,11 +310,21 @@ export default function DesktopShell() {
         </nav>
       )}
       <div className={classes.main} ref={mainRef}>
-        {/* The window is dragged by this row; Tabs go here. */}
-        <div className={classes.titleRow} />
+        {/* The window is dragged by this row, but for its Tabs. */}
+        <div className={classes.titleRow}>
+          <TabRow
+            tabs={tabs.tabs}
+            onSelect={tabs.select}
+            onClose={(id) => tabs.close([id])}
+            onNew={() => tabs.openNew("/")}
+            onMenu={(tab, at) => setMenuAt({ ...at, on: { tab: tab.id } })}
+          />
+        </div>
         <div className={classes.content}>
           <Container size="lg">
-            <PageContent />
+            <TabTitleContext value={tabs.name}>
+              <PageContent />
+            </TabTitleContext>
           </Container>
         </div>
       </div>
@@ -279,6 +338,7 @@ export default function DesktopShell() {
         onPointerIn={startPeek}
         onPointerOut={endPeekOnPage}
       />
+      <ContextMenu menu={menu} onClose={() => setMenuAt(null)} />
     </div>
   );
 }

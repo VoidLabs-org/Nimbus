@@ -23,6 +23,33 @@ export function overlayColors(mode) {
 }
 
 /**
+ * The Nimbus icon for the taskbar, the window and the Dock (in `assets/`), for the OS's light or dark mode: those are
+ * drawn in the OS's colours, not the page's theme. The light-mode file is the dark mark, the dark-mode one the light.
+ *
+ * @param {"light" | "dark"} mode
+ */
+export function appIconFile(mode) {
+  return mode === "dark" ? "nimbus-icon-dark.png" : "nimbus-icon-light.png";
+}
+
+/** Where Windows keeps its light and dark settings, for `reg query`. */
+export const PERSONALIZE_KEY = String.raw`HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`;
+
+/**
+ * Windows' own mode, from `reg query PERSONALIZE_KEY /v SystemUsesLightTheme`: the taskbar follows it, and it can
+ * differ from the apps' mode that Electron's nativeTheme reports (by default Windows is dark, apps light). Null when
+ * the answer says nothing about it.
+ *
+ * @param {string} output
+ * @returns {"light" | "dark" | null}
+ */
+export function windowsTaskbarMode(output) {
+  const value = /SystemUsesLightTheme\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(output)?.[1];
+  if (value === undefined) return null;
+  return Number.parseInt(value, 16) === 0 ? "dark" : "light";
+}
+
+/**
  * The app window's options apart from webPreferences: never smaller than 800×560, and a hidden title bar, so the page
  * draws its own frame (the Sidebar and a title row). Windows keeps its buttons drawn by the OS over the right end of
  * the title row; macOS keeps its traffic lights, inset into the Sidebar's top row; Linux keeps the native frame.
@@ -44,7 +71,8 @@ export function windowChrome(platform, mode) {
 /**
  * The application menu. macOS shows a minimal one (the app, Edit, View with zoom and full screen, Window); Windows and
  * Linux get Edit, View and Window too but never show a menu bar (main hides it): their shortcuts still work, and the
- * Nimbus icon at the top left of the page pops the menu up (nimbusDesktop.showAppMenu), like Notion's. Reload and
+ * Nimbus icon at the top left of the page pops the menu up (nimbusDesktop.showAppMenu), like Notion's. Their Window
+ * menu closes the window with Ctrl Shift W, not the usual Ctrl W, which the page keeps for closing a Tab. Reload and
  * developer tools are there only for development.
  *
  * @param {NodeJS.Platform} platform
@@ -71,8 +99,11 @@ export function menuTemplate(platform, dev) {
     ],
   };
   const edit = { role: "editMenu" };
-  const window = { role: "windowMenu" };
-  if (platform === "darwin") return [{ role: "appMenu" }, edit, view, window];
+  if (platform === "darwin") return [{ role: "appMenu" }, edit, view, { role: "windowMenu" }];
+  const window = {
+    label: "Window",
+    submenu: [{ role: "minimize" }, { role: "close", accelerator: "Ctrl+Shift+W" }],
+  };
   return [edit, view, window];
 }
 

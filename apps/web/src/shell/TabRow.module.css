@@ -1,0 +1,102 @@
+/* The Tab row in the Desktop app's title row (design "Nimbus Desktop v2", 2a): tabs standing on the row's bottom edge,
+   the selected one in the page's colour so it joins the page below. Colours come only from the theme variables. */
+/* The Tabs and the + after them; only as wide as they are, so the rest of the title row stays the drag area. */
+.row {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  align-self: stretch;
+}
+
+.tabs {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  align-self: stretch;
+  overflow: auto hidden;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  height: 36px;
+  padding: 0 8px 0 16px;
+  box-sizing: border-box;
+  border-radius: 14px 14px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-accent-2-700);
+}
+
+.tab:hover {
+  background: var(--row-hover);
+}
+
+.tab[data-selected],
+.tab[data-selected]:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.name {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--seg);
+}
+
+.add {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px 14px 0 0;
+  background: none;
+  color: var(--color-accent-2-700);
+  cursor: pointer;
+}
+
+.add:hover {
+  background: var(--row-hover);
+  color: var(--color-text);
+}

@@ -49,6 +49,7 @@
 }
 
 .titleRow {
+  display: flex;
   background: var(--color-surface);
 }
 
@@ -56,12 +57,6 @@
 .titleRow > * {
   app-region: no-drag;
   -webkit-app-region: no-drag;
-}
-
-/* Linux keeps its native frame, so an empty row would only waste room while the Sidebar is open; folded, the row holds
-   the Sidebar button. The Tabs (#180) will bring it back for good. */
-.shell[data-platform="linux"]:not([data-folded]) .titleRow {
-  display: none;
 }
 
 /* Folded, the Sidebar button sits at the start of the title row; what the row holds starts after it. */

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isDevLaunch, menuPosition, menuTemplate, overlayColors, windowChrome } from "./chrome.js";
+import {
+  appIconFile,
+  isDevLaunch,
+  menuPosition,
+  menuTemplate,
+  overlayColors,
+  windowChrome,
+  windowsTaskbarMode,
+} from "./chrome.js";
 
 /** The roles in a menu template, nested menus as arrays, so a test reads like the menu. */
 function roles(items) {
@@ -67,8 +75,16 @@ describe("menuTemplate", () => {
       assert.deepEqual(roles(menuTemplate(platform, false)), [
         "editMenu",
         ["View", view],
-        "windowMenu",
+        ["Window", ["minimize", "close"]],
       ]);
+    }
+  });
+
+  it("leaves Ctrl W to the page on Windows and Linux, which closes a Tab with it", () => {
+    for (const platform of ["win32", "linux"]) {
+      const windowMenu = menuTemplate(platform, false).find((item) => item.label === "Window");
+      const close = windowMenu.submenu.find((item) => item.role === "close");
+      assert.equal(close.accelerator, "Ctrl+Shift+W", platform);
     }
   });
 
@@ -105,5 +121,31 @@ describe("isDevLaunch", () => {
   it("is on only with --dev", () => {
     assert.equal(isDevLaunch(["electron", ".", "--dev"]), true);
     assert.equal(isDevLaunch(["electron", "."]), false);
+  });
+});
+
+describe("windowsTaskbarMode", () => {
+  const output = (value) =>
+    "\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\r\n" +
+    `    SystemUsesLightTheme    REG_DWORD    ${value}\r\n\r\n`;
+
+  it("reads Windows mode, which the taskbar follows, from reg's answer", () => {
+    assert.equal(windowsTaskbarMode(output("0x0")), "dark");
+    assert.equal(windowsTaskbarMode(output("0x1")), "light");
+  });
+
+  it("knows nothing from any other answer", () => {
+    assert.equal(windowsTaskbarMode(""), null);
+    assert.equal(
+      windowsTaskbarMode("ERROR: The system was unable to find the specified value"),
+      null,
+    );
+  });
+});
+
+describe("appIconFile", () => {
+  it("shows the dark Nimbus mark on a light taskbar or Dock, and the light one on a dark", () => {
+    assert.equal(appIconFile("light"), "nimbus-icon-light.png");
+    assert.equal(appIconFile("dark"), "nimbus-icon-dark.png");
   });
 });

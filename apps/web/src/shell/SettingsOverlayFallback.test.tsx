@@ -2,7 +2,7 @@
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type User } from "../api/client";
@@ -84,5 +84,31 @@ describe("the Desktop app, when its Settings overlay can't load", () => {
     expect(await screen.findByRole("heading", { name: "Profile" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
+  });
+
+  it("leaves Settings, shown as a page, out of the Tabs", async () => {
+    localStorage.setItem(
+      `nimbus-tabs:${alice.id}`,
+      JSON.stringify({
+        tabs: [{ id: "t0", path: "/projects", title: "Projects" }],
+        selected: "t0",
+      }),
+    );
+    render(
+      <NimbusThemeProvider>
+        <MemoryRouter initialEntries={["/settings/profile"]}>
+          <QueryClientProvider client={createQueryClient()}>
+            <SessionContext value={session}>
+              <AppRoutes />
+            </SessionContext>
+          </QueryClientProvider>
+        </MemoryRouter>
+      </NimbusThemeProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Profile" })).toBeTruthy();
+    const tabs = within(screen.getByRole("tablist", { name: "Tabs" })).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Projects"]);
+    localStorage.clear();
   });
 });

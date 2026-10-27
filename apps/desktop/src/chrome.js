@@ -24,8 +24,8 @@ export function overlayColors(mode) {
 
 /**
  * The app window's options apart from webPreferences: never smaller than 800×560, and a hidden title bar, so the page
- * draws its own title row. Windows keeps its buttons drawn by the OS over that row; macOS keeps its traffic lights,
- * inset to sit in the Sidebar's top row; Linux keeps the native frame.
+ * draws its own frame (the Sidebar and a title row). Windows keeps its buttons drawn by the OS over the right end of
+ * the title row; macOS keeps its traffic lights, inset into the Sidebar's top row; Linux keeps the native frame.
  *
  * @param {NodeJS.Platform} platform
  * @param {"light" | "dark"} mode the OS's, until the page says which theme it shows

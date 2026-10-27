@@ -53,7 +53,10 @@ function SidebarRow({ destination }: { destination: Destination }) {
   );
 }
 
-/** The fold button: folds the open Sidebar, or opens the rail; its tooltip names the shortcut. */
+/**
+ * The fold button: folds the open Sidebar or opens the rail; its tooltip names the shortcut. It stays in one place at the
+ * top left of the window whether the Sidebar is open or folded, so it is where the pointer left it.
+ */
 function FoldButton({
   folded,
   platform,
@@ -65,7 +68,7 @@ function FoldButton({
 }) {
   const label = folded ? "Open the Sidebar" : "Fold the Sidebar";
   return (
-    <Tooltip label={`${label} (${modifierLabel(platform)} \\)`} position="right" withArrow>
+    <Tooltip label={`${label} (${modifierLabel(platform)} \\)`} position="bottom-start" withArrow>
       <UnstyledButton
         className={classes.foldButton}
         onClick={onClick}
@@ -82,11 +85,13 @@ function FoldButton({
 }
 
 /**
- * The Desktop app's shell for every signed-in page (the browser gets AppShell's navbar instead): a Sidebar on the left
- * and the page beside it, under a title row the window is dragged by (Tabs will go there). The Sidebar is open (the account at its
- * top, then Home, Projects and Settings by name; Settings lists its own pages) or folded into a rail of icons with tooltips; the
- * fold button and Ctrl or ⌘ \ switch between them. The choice is kept on this computer. Under 960px wide the Sidebar
- * folds itself without changing the choice, and the button or shortcut opens it until the window is widened again.
+ * The Desktop app's shell for every signed-in page (the browser gets AppShell's navbar instead), as in the "Nimbus
+ * Desktop v2" design (2a): the Sidebar down the left, and beside it a title row (Tabs to come; the window's own buttons
+ * at its right on Windows) over the page. The Sidebar and the title row are the window's frame, in the theme's surface
+ * colour, and the window is dragged by their top 46px; the page shows the theme's background, so it stands apart. The
+ * Sidebar is open (the account, then Home, Projects and Settings by name; Settings lists its own pages) or folded into a rail of icons with tooltips; the fold button and Ctrl or ⌘ \ switch between
+ * them. The choice is kept on this computer. Under 960px wide the Sidebar folds itself without changing the choice,
+ * and the button or shortcut opens it until the window is widened again.
  */
 export default function DesktopShell() {
   const platform = nimbusDesktop()?.platform ?? "linux";
@@ -108,9 +113,8 @@ export default function DesktopShell() {
   return (
     <div className={classes.shell} data-platform={platform} data-folded={folded || undefined}>
       <nav className={classes.sidebar} aria-label="Main">
-        <div className={classes.sidebarTitle}>
-          {!folded && <FoldButton folded={false} platform={platform} onClick={toggle} />}
-        </div>
+        {/* Dragged by, like the title row; macOS draws its traffic lights at its left end, the fold button sits over it. */}
+        <div className={classes.sidebarTop} />
         {folded ? (
           <div className={classes.rail}>
             <Tooltip label="Home" position="right" withArrow>
@@ -123,7 +127,6 @@ export default function DesktopShell() {
                 <NimbusLogo size={28} />
               </UnstyledButton>
             </Tooltip>
-            <FoldButton folded platform={platform} onClick={toggle} />
             <UserMenu variant="avatar" placement="right-start" offset={14} />
             {/* The Notification bell goes here once Notifications exist. */}
             <div className={classes.bellSlot} data-slot="bell" />
@@ -171,6 +174,9 @@ export default function DesktopShell() {
           </Container>
         </div>
       </div>
+      {/* Last, on purpose: Electron applies drag and no-drag areas in page order, so a drag row after the button would
+          take its clicks. */}
+      <FoldButton folded={folded} platform={platform} onClick={toggle} />
     </div>
   );
 }

@@ -167,14 +167,14 @@ describe("the Desktop app's Sidebar", () => {
 
     const nav = await sidebar();
     expect(within(nav).getByText("Projects")).toBeTruthy();
-    fireEvent.click(within(nav).getByRole("button", { name: "Fold the Sidebar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fold the Sidebar" }));
 
     // Folded, the names are only tooltips and labels.
     expect(within(nav).queryByText("Projects")).toBeNull();
     expect(linkNames(nav)).toEqual(["Home", "Projects", "Settings"]);
     expect(localStorage.getItem(SIDEBAR_KEY)).toBe("folded");
 
-    fireEvent.click(within(nav).getByRole("button", { name: "Open the Sidebar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open the Sidebar" }));
     expect(within(nav).getByText("Projects")).toBeTruthy();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBe("open");
   });
@@ -183,22 +183,22 @@ describe("the Desktop app's Sidebar", () => {
     asDesktop("win32");
     renderAt("/");
 
-    const nav = await sidebar();
+    await sidebar();
     fireEvent.keyDown(window, { key: "\\", code: "Backslash", ctrlKey: true });
-    expect(within(nav).getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "\\", code: "Backslash", ctrlKey: true });
-    expect(within(nav).getByRole("button", { name: "Fold the Sidebar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Fold the Sidebar" })).toBeTruthy();
   });
 
   it("folds with ⌘ \\ on macOS, not Ctrl \\", async () => {
     asDesktop("darwin");
     renderAt("/");
 
-    const nav = await sidebar();
+    await sidebar();
     fireEvent.keyDown(window, { key: "\\", code: "Backslash", ctrlKey: true });
-    expect(within(nav).getByRole("button", { name: "Fold the Sidebar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Fold the Sidebar" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "\\", code: "Backslash", metaKey: true });
-    expect(within(nav).getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
   });
 
   it("starts folded when that was chosen on this computer", async () => {
@@ -206,8 +206,8 @@ describe("the Desktop app's Sidebar", () => {
     asDesktop();
     renderAt("/");
 
-    const nav = await sidebar();
-    expect(within(nav).getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    await sidebar();
+    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
   });
 
   it("folds itself under 960px wide without changing the choice, and opens on request", async () => {
@@ -216,10 +216,10 @@ describe("the Desktop app's Sidebar", () => {
     renderAt("/");
 
     const nav = await sidebar();
-    expect(within(nav).getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBeNull();
 
-    fireEvent.click(within(nav).getByRole("button", { name: "Open the Sidebar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open the Sidebar" }));
     expect(within(nav).getByText("Projects")).toBeTruthy();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBeNull();
   });
@@ -228,13 +228,13 @@ describe("the Desktop app's Sidebar", () => {
     asDesktop();
     renderAt("/settings/appearance");
 
-    const nav = await sidebar();
+    await sidebar();
     expect(screen.queryByText("Navbar position")).toBeNull();
     // The theme's note and the Sidebar's both say so.
     expect(screen.getAllByText("kept on this computer", { exact: false })).toHaveLength(2);
     fireEvent.click(screen.getByLabelText("Folded"));
 
-    expect(within(nav).getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBe("folded");
   });
 

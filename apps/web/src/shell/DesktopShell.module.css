@@ -1,14 +1,16 @@
 /* The Desktop app's shell, from the "Nimbus Desktop v2" design (2a). Colours come only from the theme variables, so all
-   four themes work: the Sidebar is a card like the browser's navbar (frosted on Fog and Slate), and the page shows the
-   theme's background behind it as in a browser.
+   four themes work. The Sidebar and the title row are the window's frame, in the theme's surface colour; the page
+   beside them is see-through, showing the theme's background (and, on Fog and Slate, its glow) as in a browser, so it
+   reads as a sheet set into the frame.
 
    The window has no title bar of its own (apps/desktop/src/chrome.js), so the top 46px are the drag area: the
-   Sidebar's top row and the title row above the page. Buttons in them opt out. macOS draws its traffic lights in the
-   Sidebar's top row; Windows draws its buttons over the right end of the title row. */
+   Sidebar's top row and the title row above the page. Buttons in them opt out. macOS draws its traffic lights at the
+   left of the Sidebar's top row; Windows draws its buttons at the right end of the title row. */
 .shell {
   --title-row: 46px;
   --sidebar-open: 248px;
   --sidebar-rail: 68px;
+  position: relative;
   display: flex;
   height: 100vh;
   overflow: hidden;
@@ -21,10 +23,7 @@
   width: var(--sidebar-open);
   box-sizing: border-box;
   overflow: hidden auto;
-  background: var(--card);
-  border-right: 1px solid var(--line);
-  backdrop-filter: var(--panel-blur);
-  -webkit-backdrop-filter: var(--panel-blur);
+  background: var(--color-surface);
   transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -32,7 +31,7 @@
   width: var(--sidebar-rail);
 }
 
-.sidebarTitle,
+.sidebarTop,
 .titleRow {
   flex: none;
   height: var(--title-row);
@@ -40,15 +39,11 @@
   -webkit-app-region: drag;
 }
 
-.sidebarTitle {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 12px;
+.titleRow {
+  background: var(--color-surface);
 }
 
 /* Clickable controls in a drag area must opt out, or a click drags the window instead. */
-.sidebarTitle > *,
 .titleRow > * {
   app-region: no-drag;
   -webkit-app-region: no-drag;
@@ -59,7 +54,15 @@
   padding-right: 140px;
 }
 
+/* In one place whether the Sidebar is open or folded: over the Sidebar's top row, centred above the rail's icons, or
+   just right of the traffic lights on macOS (past the rail, over the title row, when folded). */
 .foldButton {
+  position: absolute;
+  z-index: 2;
+  top: calc((var(--title-row) - 30px) / 2);
+  left: calc((var(--sidebar-rail) - 30px) / 2);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -73,7 +76,11 @@
   background: var(--seg);
 }
 
-/* Open: the brand, the account, then the links in sections. */
+.shell[data-platform="darwin"] .foldButton {
+  left: 80px;
+}
+
+/* Open: the brand, the account, then the links. */
 .open {
   display: flex;
   flex-direction: column;
@@ -179,11 +186,7 @@
   background: var(--seg);
 }
 
-.rail > .foldButton {
-  margin-bottom: 8px;
-}
-
-/* The page, beside the Sidebar, scrolling on its own under the title row. */
+/* The page, beside the Sidebar and under the title row, scrolling on its own. */
 .main {
   flex: 1;
   min-width: 0;

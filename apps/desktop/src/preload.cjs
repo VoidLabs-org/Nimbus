@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld("nimbusDesktop", {
   platform: process.platform,
   /** Tells the window whether the page shows a light or a dark theme, so its own buttons (Windows) match. */
   setTheme: (mode) => ipcRenderer.send("nimbus:theme", mode),
+  /** Pops the app menu (Edit, View, Window) up at a point in the window; for Windows and Linux, which show no menu bar. */
+  showAppMenu: (x, y) => ipcRenderer.send("nimbus:app-menu", { x, y }),
 });

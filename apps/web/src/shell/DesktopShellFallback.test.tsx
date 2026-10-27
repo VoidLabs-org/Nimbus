@@ -58,7 +58,7 @@ beforeEach(() => {
   vi.spyOn(api, "myPlatformPermissions").mockResolvedValue([]);
   // The failure is logged; keep the test output quiet.
   vi.spyOn(console, "error").mockImplementation(() => {});
-  window.nimbusDesktop = { platform: "win32", setTheme: vi.fn() };
+  window.nimbusDesktop = { platform: "win32", setTheme: vi.fn(), showAppMenu: vi.fn() };
 });
 afterEach(() => {
   cleanup();

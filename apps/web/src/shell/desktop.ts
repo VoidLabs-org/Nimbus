@@ -3,6 +3,8 @@ export type NimbusDesktop = {
   platform: "darwin" | "win32" | "linux";
   /** Tells the window whether the page shows a light or a dark theme, so its own buttons match. */
   setTheme: (mode: "light" | "dark") => void;
+  /** Pops the app menu (Edit, View, Window) up at a point in the window; Windows and Linux show no menu bar. */
+  showAppMenu: (x: number, y: number) => void;
 };
 
 declare global {

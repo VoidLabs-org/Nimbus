@@ -43,7 +43,8 @@ export function windowChrome(platform, mode) {
 
 /**
  * The application menu. macOS shows a minimal one (the app, Edit, View with zoom and full screen, Window); Windows and
- * Linux get Edit and View too but never show them (main hides the bar), so their shortcuts still work. Reload and
+ * Linux get Edit, View and Window too but never show a menu bar (main hides it): their shortcuts still work, and the
+ * Nimbus icon at the top left of the page pops the menu up (nimbusDesktop.showAppMenu), like Notion's. Reload and
  * developer tools are there only for development.
  *
  * @param {NodeJS.Platform} platform
@@ -70,6 +71,23 @@ export function menuTemplate(platform, dev) {
     ],
   };
   const edit = { role: "editMenu" };
-  if (platform === "darwin") return [{ role: "appMenu" }, edit, view, { role: "windowMenu" }];
-  return [edit, view];
+  const window = { role: "windowMenu" };
+  if (platform === "darwin") return [{ role: "appMenu" }, edit, view, window];
+  return [edit, view, window];
+}
+
+/**
+ * Where the page asks the app menu to pop up (nimbusDesktop.showAppMenu): whole pixels inside the window, or null for
+ * anything else, so a bad message is ignored.
+ *
+ * @param {unknown} value
+ * @returns {{ x: number, y: number } | null}
+ */
+export function menuPosition(value) {
+  if (typeof value !== "object" || value === null) return null;
+  const { x, y } = /** @type {{ x?: unknown, y?: unknown }} */ (value);
+  if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y))
+    return null;
+  if (x < 0 || y < 0) return null;
+  return { x: Math.round(x), y: Math.round(y) };
 }

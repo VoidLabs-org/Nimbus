@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isDevLaunch, menuTemplate, overlayColors, windowChrome } from "./chrome.js";
+import { isDevLaunch, menuPosition, menuTemplate, overlayColors, windowChrome } from "./chrome.js";
 
 /** The roles in a menu template, nested menus as arrays, so a test reads like the menu. */
 function roles(items) {
@@ -62,9 +62,13 @@ describe("menuTemplate", () => {
     ]);
   });
 
-  it("has Edit and View on Windows and Linux, for their shortcuts", () => {
+  it("has Edit, View and Window on Windows and Linux, for their shortcuts and the Nimbus icon's menu", () => {
     for (const platform of ["win32", "linux"]) {
-      assert.deepEqual(roles(menuTemplate(platform, false)), ["editMenu", ["View", view]]);
+      assert.deepEqual(roles(menuTemplate(platform, false)), [
+        "editMenu",
+        ["View", view],
+        "windowMenu",
+      ]);
     }
   });
 
@@ -72,6 +76,27 @@ describe("menuTemplate", () => {
     for (const platform of ["darwin", "win32", "linux"]) {
       const viewMenu = menuTemplate(platform, true).find((item) => item.label === "View");
       assert.deepEqual(roles(viewMenu.submenu), [...view, ...devTools], platform);
+    }
+  });
+});
+
+describe("menuPosition", () => {
+  it("takes whole pixels inside the window", () => {
+    assert.deepEqual(menuPosition({ x: 12.4, y: 40.6 }), { x: 12, y: 41 });
+    assert.deepEqual(menuPosition({ x: 0, y: 0 }), { x: 0, y: 0 });
+  });
+
+  it("refuses anything else", () => {
+    for (const value of [
+      null,
+      undefined,
+      "12,40",
+      { x: 1 },
+      { x: "1", y: 2 },
+      { x: NaN, y: 2 },
+      { x: -1, y: 2 },
+    ]) {
+      assert.equal(menuPosition(value), null, JSON.stringify(value));
     }
   });
 });

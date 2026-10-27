@@ -1,7 +1,7 @@
 // Electron main process: a desktop shell around the web app (apps/web). It loads Nimbus from a URL (ADR 0007).
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from "electron";
 import { fileURLToPath } from "node:url";
-import { isDevLaunch, menuTemplate, overlayColors, windowChrome } from "./chrome.js";
+import { isDevLaunch, menuPosition, menuTemplate, overlayColors, windowChrome } from "./chrome.js";
 import { isNavigationAllowed, isNimbusPage, parseNimbusUrl } from "./nimbus-url.js";
 
 const dev = isDevLaunch(process.argv);
@@ -58,6 +58,14 @@ app.whenReady().then(() => {
       return;
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win && process.platform === "win32") win.setTitleBarOverlay(overlayColors(mode));
+  });
+
+  // The Nimbus icon at the top left of the page (Windows and Linux, which show no menu bar) pops the app menu up there.
+  ipcMain.on("nimbus:app-menu", (event, position) => {
+    const at = menuPosition(position);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!at || !win || !isNimbusPage(nimbusUrl, event.senderFrame?.url ?? "")) return;
+    Menu.getApplicationMenu()?.popup({ window: win, ...at });
   });
 
   createWindow(nimbusUrl);

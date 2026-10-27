@@ -9,6 +9,7 @@ import { createQueryClient } from "../api/queryClient";
 import { SessionContext, type Session } from "../auth/useSession";
 import { AppRoutes } from "../App";
 import type { NimbusDesktop } from "./desktop";
+import { PEEK_DELAY_MS } from "./DesktopShell";
 import { AUTO_FOLD_QUERY, resetSidebarState, SIDEBAR_KEY } from "./sidebarState";
 
 const alice: User = {
@@ -66,9 +67,12 @@ function stubWindowWidth(narrow: boolean) {
     }) as MediaQueryList;
 }
 
+let showAppMenu: ReturnType<typeof vi.fn<NimbusDesktop["showAppMenu"]>>;
+
 /** Runs as the Desktop app on `platform`, as the preload script would make it. */
 function asDesktop(platform: NimbusDesktop["platform"] = "win32") {
-  window.nimbusDesktop = { platform, setTheme: vi.fn() };
+  showAppMenu = vi.fn<NimbusDesktop["showAppMenu"]>();
+  window.nimbusDesktop = { platform, setTheme: vi.fn(), showAppMenu };
 }
 
 // Mantine's pill tabs (Appearance) measure themselves; jsdom has no ResizeObserver.
@@ -113,12 +117,16 @@ async function sidebar(): Promise<HTMLElement> {
   return screen.findByRole("navigation", { name: "Main" });
 }
 
-/** The names of the Sidebar's page links, in order (the rail names its icons with aria-label). */
+/** The Sidebar button, once the shell's chunk has loaded. */
+async function sidebarButton(name: "Open the Sidebar" | "Fold the Sidebar"): Promise<HTMLElement> {
+  return screen.findByRole("button", { name });
+}
+
+/** The names of the Sidebar's page links, in order. */
 function linkNames(nav: HTMLElement): string[] {
   return within(nav)
     .getAllByRole("link")
-    .map((link) => link.getAttribute("aria-label") ?? link.textContent ?? "")
-    .filter((name) => name !== "nimbus" && name !== "Nimbus home");
+    .map((link) => link.textContent ?? "");
 }
 
 describe("the Desktop app's Sidebar", () => {
@@ -146,6 +154,31 @@ describe("the Desktop app's Sidebar", () => {
     expect(current).toEqual(["Settings"]);
   });
 
+  it("has no brand row, as other desktop apps don't", async () => {
+    asDesktop();
+    renderAt("/");
+
+    const nav = await sidebar();
+    expect(within(nav).queryByText("nimbus")).toBeNull();
+  });
+
+  it("has the Nimbus icon at the top left on Windows, popping the app menu up under it", async () => {
+    asDesktop("win32");
+    renderAt("/");
+
+    await sidebar();
+    fireEvent.click(screen.getByRole("button", { name: "Nimbus menu" }));
+    expect(showAppMenu).toHaveBeenCalledOnce();
+  });
+
+  it("has no Nimbus icon on macOS, which has the menu bar", async () => {
+    asDesktop("darwin");
+    renderAt("/");
+
+    await sidebar();
+    expect(screen.queryByRole("button", { name: "Nimbus menu" })).toBeNull();
+  });
+
   it("has the account at its top, opening the account menu with Sign out", async () => {
     asDesktop();
     renderAt("/");
@@ -158,21 +191,18 @@ describe("the Desktop app's Sidebar", () => {
     expect(await screen.findByRole("menuitem", { name: "Sign out" })).toBeTruthy();
   });
 
-  it("is open by default, and folds into a rail of icons with the fold button, remembering it", async () => {
+  it("is open by default, and folds away completely with the Sidebar button, remembering it", async () => {
     asDesktop();
     renderAt("/");
 
-    const nav = await sidebar();
-    expect(within(nav).getByText("Projects")).toBeTruthy();
+    await sidebar();
     fireEvent.click(screen.getByRole("button", { name: "Fold the Sidebar" }));
 
-    // Folded, the names are only tooltips and labels.
-    expect(within(nav).queryByText("Projects")).toBeNull();
-    expect(linkNames(nav)).toEqual(["Home", "Projects", "Settings"]);
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBe("folded");
 
     fireEvent.click(screen.getByRole("button", { name: "Open the Sidebar" }));
-    expect(within(nav).getByText("Projects")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeTruthy();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBe("open");
   });
 
@@ -182,9 +212,9 @@ describe("the Desktop app's Sidebar", () => {
 
     await sidebar();
     fireEvent.keyDown(window, { key: "\\", code: "Backslash", ctrlKey: true });
-    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
     fireEvent.keyDown(window, { key: "\\", code: "Backslash", ctrlKey: true });
-    expect(screen.getByRole("button", { name: "Fold the Sidebar" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeTruthy();
   });
 
   it("folds with ⌘ \\ on macOS, not Ctrl \\", async () => {
@@ -193,9 +223,9 @@ describe("the Desktop app's Sidebar", () => {
 
     await sidebar();
     fireEvent.keyDown(window, { key: "\\", code: "Backslash", ctrlKey: true });
-    expect(screen.getByRole("button", { name: "Fold the Sidebar" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "\\", code: "Backslash", metaKey: true });
-    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
   });
 
   it("starts folded when that was chosen on this computer", async () => {
@@ -203,8 +233,8 @@ describe("the Desktop app's Sidebar", () => {
     asDesktop();
     renderAt("/");
 
-    await sidebar();
-    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    await sidebarButton("Open the Sidebar");
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
   });
 
   it("folds itself under 960px wide without changing the choice, and opens on request", async () => {
@@ -212,15 +242,82 @@ describe("the Desktop app's Sidebar", () => {
     asDesktop();
     renderAt("/");
 
-    const nav = await sidebar();
-    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
-    expect(localStorage.getItem(SIDEBAR_KEY)).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Open the Sidebar" }));
-    expect(within(nav).getByText("Projects")).toBeTruthy();
+    fireEvent.click(await sidebarButton("Open the Sidebar"));
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeTruthy();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBeNull();
   });
+});
 
+describe("peeking at the folded Sidebar", () => {
+  /** Folded, with the pointer resting on the Sidebar button until the Sidebar peeks out. */
+  async function peek(): Promise<HTMLElement> {
+    localStorage.setItem(SIDEBAR_KEY, "folded");
+    asDesktop();
+    renderAt("/");
+    fireEvent.mouseEnter(await sidebarButton("Open the Sidebar"));
+    return sidebar();
+  }
+
+  /** Somewhere on the page, beside the Sidebar. */
+  const page = () => screen.getByText("Welcome", { exact: false });
+
+  it("peeks out over the page while the pointer rests on the button, without opening for good", async () => {
+    const nav = await peek();
+
+    expect(nav.dataset.peek).toBeDefined();
+    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    expect(localStorage.getItem(SIDEBAR_KEY)).toBe("folded");
+  });
+
+  it("goes when the pointer moves onto the page", async () => {
+    const nav = await peek();
+    fireEvent.mouseLeave(nav, { relatedTarget: page() });
+
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+  });
+
+  it("stays while the pointer moves from the Sidebar back onto the button", async () => {
+    const nav = await peek();
+    fireEvent.mouseLeave(nav, {
+      relatedTarget: screen.getByRole("button", { name: "Open the Sidebar" }),
+    });
+
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeTruthy();
+  });
+
+  it("goes on Esc, and when a page is opened from it", async () => {
+    await peek();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Open the Sidebar" }));
+    const nav = await sidebar();
+    fireEvent.click(within(nav).getByRole("link", { name: "Settings" }));
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+  });
+
+  it("doesn't peek when the pointer only passes over the button", async () => {
+    localStorage.setItem(SIDEBAR_KEY, "folded");
+    asDesktop();
+    renderAt("/");
+    const button = await sidebarButton("Open the Sidebar");
+    fireEvent.mouseEnter(button);
+    fireEvent.mouseLeave(button, { relatedTarget: page() });
+
+    await new Promise((resolve) => setTimeout(resolve, PEEK_DELAY_MS + 100));
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+  });
+
+  it("opens for good when the button is clicked while peeking", async () => {
+    await peek();
+    fireEvent.click(screen.getByRole("button", { name: "Open the Sidebar" }));
+
+    expect(screen.getByRole("navigation", { name: "Main" }).dataset.peek).toBeUndefined();
+    expect(localStorage.getItem(SIDEBAR_KEY)).toBe("open");
+  });
+});
+
+describe("the Appearance page in the Desktop app", () => {
   it("offers Open or Folded on the Appearance page instead of the navbar position", async () => {
     asDesktop();
     renderAt("/settings/appearance");
@@ -231,7 +328,7 @@ describe("the Desktop app's Sidebar", () => {
     expect(screen.getAllByText("kept on this computer", { exact: false })).toHaveLength(2);
     fireEvent.click(screen.getByLabelText("Folded"));
 
-    expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBe("folded");
   });
 });

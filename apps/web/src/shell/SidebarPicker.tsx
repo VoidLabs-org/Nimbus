@@ -19,7 +19,7 @@ export function SidebarPicker() {
           Sidebar
         </Title>
         <Text size="sm" c="dimmed" mt={4}>
-          Open shows each page by name; folded keeps a narrow rail of icons.{" "}
+          Folded, the Sidebar is hidden and peeks out when you rest the pointer on its button.{" "}
           <Kbd>{modifierLabel(platform)}</Kbd> + <Kbd>\</Kbd> switches between them. Your choice is
           kept on this computer.
         </Text>

@@ -2,12 +2,12 @@ import { Container, Tooltip, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Glyph } from "@repo/ui/glyph";
 import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand } from "@tabler/icons-react";
-import { useEffect, useEffectEvent, useState } from "react";
-import { Link, NavLink } from "react-router";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { NavLink, useLocation } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
 import { PageContent } from "./AppShell";
-import { desktopPlatform, modifierLabel, type NimbusDesktop } from "./desktop";
+import { desktopPlatform, modifierLabel, nimbusDesktop, type NimbusDesktop } from "./desktop";
 import classes from "./DesktopShell.module.css";
 import { DESTINATIONS, type Destination } from "./navigation";
 import { NimbusLogo } from "./NimbusLogo";
@@ -49,17 +49,46 @@ function SidebarRow({ destination }: { destination: Destination }) {
 }
 
 /**
- * The fold button: folds the open Sidebar or opens the rail; its tooltip names the shortcut. It stays in one place at the
- * top left of the window whether the Sidebar is open or folded, so it is where the pointer left it.
+ * The Nimbus icon at the top left on Windows and Linux, which show no menu bar: it pops the app menu (Edit, View,
+ * Window) up under itself, as Notion's icon does. macOS has the menu bar, so it has no icon.
+ */
+function AppMenuButton() {
+  return (
+    <Tooltip label="Menu" position="bottom-start" withArrow>
+      <UnstyledButton
+        className={classes.appMenuButton}
+        aria-label="Nimbus menu"
+        onClick={(event) => {
+          const box = event.currentTarget.getBoundingClientRect();
+          nimbusDesktop()?.showAppMenu(box.left, box.bottom + 4);
+        }}
+      >
+        <NimbusLogo size={18} />
+      </UnstyledButton>
+    </Tooltip>
+  );
+}
+
+/** How long the pointer rests on the Sidebar button, while folded, before the Sidebar peeks out. */
+export const PEEK_DELAY_MS = 300;
+
+/**
+ * The Sidebar button: folds the open Sidebar away or opens it again; its tooltip names the shortcut. It stays in one
+ * place at the top left of the window whether the Sidebar is open or folded, so it is where the pointer left it. While
+ * folded, resting the pointer on it peeks the Sidebar out over the page.
  */
 function FoldButton({
   folded,
   platform,
   onClick,
+  onPointerIn,
+  onPointerOut,
 }: {
   folded: boolean;
   platform: Platform;
   onClick: () => void;
+  onPointerIn: () => void;
+  onPointerOut: (event: React.MouseEvent) => void;
 }) {
   const label = folded ? "Open the Sidebar" : "Fold the Sidebar";
   return (
@@ -67,6 +96,8 @@ function FoldButton({
       <UnstyledButton
         className={classes.foldButton}
         onClick={onClick}
+        onMouseEnter={onPointerIn}
+        onMouseLeave={onPointerOut}
         aria-label={label}
         aria-expanded={!folded}
       >
@@ -80,16 +111,22 @@ function FoldButton({
 }
 
 /**
- * The Desktop app's shell for every signed-in page (the browser gets AppShell's navbar instead), as in the "Nimbus
- * Desktop v2" design (2a): the Sidebar down the left, and beside it a title row (Tabs to come; the window's own buttons
- * at its right on Windows) over the page. The Sidebar and the title row are the window's frame, in the theme's surface
- * colour, and the window is dragged by their top 46px; the page shows the theme's background, so it stands apart. The
- * Sidebar is open (the account, then Home, Projects and Settings by name; Settings lists its own pages) or folded into a rail of icons with tooltips; the fold button and Ctrl or ⌘ \ switch between
- * them. The choice is kept on this computer. Under 960px wide the Sidebar folds itself without changing the choice,
- * and the button or shortcut opens it until the window is widened again.
+ * The Desktop app's shell for every signed-in page (the browser gets AppShell's navbar instead), laid out like the
+ * Claude app: the Sidebar down the left, and beside it a title row (Tabs to come; the window's own buttons at its right
+ * on Windows) over the page. The Sidebar and the title row are the window's frame, in the theme's surface colour, and
+ * the window is dragged by their top 46px; the page shows the theme's background, so it stands apart.
+ *
+ * There is no brand row, as in other desktop apps: on Windows and Linux the Nimbus icon at the top left opens the app
+ * menu instead. The Sidebar (the account, then Home, Projects and Settings by name; Settings lists its own pages) is open or folded
+ * away completely, giving the page the whole width; the Sidebar button at the top left and Ctrl or ⌘ \ switch between
+ * them. The choice is kept on this computer. While folded, resting the pointer on the button peeks the Sidebar out
+ * over the page, without opening it for good; it goes again when the pointer moves onto the page, on Esc, or when a
+ * page is opened from it. Under 960px wide the Sidebar folds itself without changing the choice, and the button or
+ * shortcut opens it until the window is widened again.
  */
 export default function DesktopShell() {
   const platform = desktopPlatform();
+  const location = useLocation();
   // Starts the request (and caches it) on every signed-in page, so Settings lists its groups at once.
   usePlatformPermissions();
   const [chosen, setChosen] = useSidebarState();
@@ -104,6 +141,33 @@ export default function DesktopShell() {
   };
   useFoldShortcut(platform, toggle);
 
+  // Peeking holds the page it started on, so opening another page from the Sidebar ends it.
+  const [peekedAt, setPeekedAt] = useState<string | null>(null);
+  const peeking = folded && peekedAt === location.key;
+  const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const startPeek = () => {
+    if (!folded) return;
+    clearTimeout(peekTimer.current);
+    peekTimer.current = setTimeout(() => setPeekedAt(location.key), PEEK_DELAY_MS);
+  };
+  // Ends the peek once the pointer is over the page; moving between the button and the Sidebar, or into the account
+  // menu (drawn outside both), keeps it.
+  const endPeekOnPage = (event: React.MouseEvent) => {
+    clearTimeout(peekTimer.current);
+    const to = event.relatedTarget;
+    if (to instanceof Node && mainRef.current?.contains(to)) setPeekedAt(null);
+  };
+  useEffect(() => () => clearTimeout(peekTimer.current), []);
+  useEffect(() => {
+    if (!peeking) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPeekedAt(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [peeking]);
+
   return (
     <div
       className={classes.shell}
@@ -111,48 +175,16 @@ export default function DesktopShell() {
       data-platform={platform}
       data-folded={folded || undefined}
     >
-      <nav className={classes.sidebar} aria-label="Main">
-        {/* Dragged by, like the title row; macOS draws its traffic lights at its left end, the fold button sits over it. */}
-        <div className={classes.sidebarTop} />
-        {folded ? (
-          <div className={classes.rail}>
-            <Tooltip label="Home" position="right" withArrow>
-              <UnstyledButton
-                component={Link}
-                to="/"
-                className={classes.railLogo}
-                aria-label="Nimbus home"
-              >
-                <NimbusLogo size={28} />
-              </UnstyledButton>
-            </Tooltip>
-            <UserMenu variant="avatar" placement="right-start" offset={14} />
-            {/* The Notification bell goes here once Notifications exist. */}
-            <div className={classes.bellSlot} data-slot="bell" />
-            {DESTINATIONS.map((destination) => (
-              <Tooltip key={destination.id} label={destination.label} position="right" withArrow>
-                {/* A span for the tooltip: its class would replace the NavLink's (see AppShell's RailLink). */}
-                <span className={classes.railItem}>
-                  <NavLink
-                    to={destination.to}
-                    end={destination.end}
-                    aria-label={destination.label}
-                    className={({ isActive }) =>
-                      isActive ? `${classes.railLink} ${classes.active}` : classes.railLink
-                    }
-                  >
-                    <Glyph icon={destination.icon} size={20} />
-                  </NavLink>
-                </span>
-              </Tooltip>
-            ))}
-          </div>
-        ) : (
+      {(!folded || peeking) && (
+        <nav
+          className={classes.sidebar}
+          aria-label="Main"
+          data-peek={peeking || undefined}
+          onMouseLeave={endPeekOnPage}
+        >
+          {/* Dragged by, like the title row; macOS draws its traffic lights at its left end, the button sits over it. */}
+          <div className={classes.sidebarTop} />
           <div className={classes.open}>
-            <UnstyledButton component={Link} to="/" className={classes.brand}>
-              <NimbusLogo size={24} />
-              nimbus
-            </UnstyledButton>
             <div className={classes.account}>
               <UserMenu variant="sidebar" placement="bottom-start" offset={8} />
               {/* The Notification bell goes here once Notifications exist. */}
@@ -162,9 +194,9 @@ export default function DesktopShell() {
               <SidebarRow key={destination.id} destination={destination} />
             ))}
           </div>
-        )}
-      </nav>
-      <div className={classes.main}>
+        </nav>
+      )}
+      <div className={classes.main} ref={mainRef}>
         {/* The window is dragged by this row; Tabs go here. */}
         <div className={classes.titleRow} />
         <div className={classes.content}>
@@ -173,9 +205,16 @@ export default function DesktopShell() {
           </Container>
         </div>
       </div>
-      {/* Last, on purpose: Electron applies drag and no-drag areas in page order, so a drag row after the button would
-          take its clicks. */}
-      <FoldButton folded={folded} platform={platform} onClick={toggle} />
+      {/* Last, on purpose: Electron applies drag and no-drag areas in page order, so a drag row after these buttons
+          would take their clicks. */}
+      {platform !== "darwin" && <AppMenuButton />}
+      <FoldButton
+        folded={folded}
+        platform={platform}
+        onClick={toggle}
+        onPointerIn={startPeek}
+        onPointerOut={endPeekOnPage}
+      />
     </div>
   );
 }

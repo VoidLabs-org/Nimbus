@@ -182,11 +182,6 @@ export default function DesktopShell() {
   // Opening it in a narrow window lasts until the window is widened; narrowing again folds it again.
   if (!narrow && openWhileNarrow) setOpenWhileNarrow(false);
   const folded = narrow ? !openWhileNarrow : chosen === "folded";
-  const toggle = () => {
-    if (narrow) setOpenWhileNarrow(!openWhileNarrow);
-    else setChosen(folded ? "open" : "folded");
-  };
-  useFoldShortcut(platform, toggle);
   const settingsOpen = useSettingsOverlay() === "behind";
   useSettingsShortcut(platform, settingsOpen);
 
@@ -196,6 +191,15 @@ export default function DesktopShell() {
   if (settingsOpen && peekedAt !== null) setPeekedAt(null);
   const peeking = folded && peekedAt === location.key;
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Opening or folding for good ends any peek, and one about to start: folding again must hide the Sidebar, not peek it.
+  const toggle = () => {
+    clearTimeout(peekTimer.current);
+    setPeekedAt(null);
+    if (narrow) setOpenWhileNarrow(!openWhileNarrow);
+    else setChosen(folded ? "open" : "folded");
+  };
+  useFoldShortcut(platform, toggle);
   const mainRef = useRef<HTMLDivElement>(null);
   const startPeek = () => {
     if (!folded) return;

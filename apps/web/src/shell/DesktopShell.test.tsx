@@ -317,6 +317,14 @@ describe("peeking at the folded Sidebar", () => {
     expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
   });
 
+  it("stays folded when folded again after opening from a peek", async () => {
+    await peek();
+    fireEvent.click(screen.getByRole("button", { name: "Open the Sidebar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fold the Sidebar" }));
+
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+  });
+
   it("opens for good when the button is clicked while peeking", async () => {
     await peek();
     fireEvent.click(screen.getByRole("button", { name: "Open the Sidebar" }));

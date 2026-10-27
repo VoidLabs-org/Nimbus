@@ -7,7 +7,7 @@
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 24px;
   max-width: 1600px;
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--window-frame, 0px));
   margin: 0 auto;
   padding: 24px;
   box-sizing: border-box;

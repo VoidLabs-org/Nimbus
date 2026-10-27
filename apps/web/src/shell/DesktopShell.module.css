@@ -49,6 +49,11 @@
   -webkit-app-region: no-drag;
 }
 
+/* Linux keeps its native frame, so an empty row would only waste room; the Tabs (#180) will bring it back. */
+.shell[data-platform="linux"] .titleRow {
+  display: none;
+}
+
 /* The window's own buttons sit at the right end of the title row on Windows; nothing of the page goes under them. */
 .shell[data-platform="win32"] .titleRow {
   padding-right: 140px;

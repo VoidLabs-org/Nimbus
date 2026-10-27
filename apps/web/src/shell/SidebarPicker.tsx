@@ -1,7 +1,7 @@
 import { Kbd, Stack, Text, Title } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { PillTabs } from "@repo/ui/pill-tabs";
-import { modifierLabel, nimbusDesktop } from "./desktop";
+import { desktopPlatform, modifierLabel } from "./desktop";
 import { AUTO_FOLD_QUERY, parseSidebarState, useSidebarState } from "./sidebarState";
 
 /**
@@ -9,7 +9,7 @@ import { AUTO_FOLD_QUERY, parseSidebarState, useSidebarState } from "./sidebarSt
  * the same choice as the fold button and its shortcut. Under 960px wide the Sidebar folds itself, which the note says.
  */
 export function SidebarPicker() {
-  const platform = nimbusDesktop()?.platform ?? "linux";
+  const platform = desktopPlatform();
   const [state, setState] = useSidebarState();
   const narrow = useMediaQuery(AUTO_FOLD_QUERY, false, { getInitialValueInEffect: false });
   return (

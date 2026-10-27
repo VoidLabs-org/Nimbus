@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { lazy, Suspense, useState } from "react";
+import { Component, lazy, Suspense, useState, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { createQueryClient } from "./api/queryClient";
 import { RequireUser, SessionProvider } from "./auth/session";
@@ -21,6 +21,7 @@ import SettingsOverview from "./settings/SettingsOverview";
 import { PASSWORD_WINDOW_PATH } from "./settings/sections";
 import { AppShell } from "./shell/AppShell";
 import { isDesktop } from "./shell/desktop";
+import { DesktopFrame } from "./shell/DesktopFrame";
 import { NotFoundPage, SessionExpiredPage } from "./shell/StatusPages";
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <SessionProvider>
+          <DesktopFrame />
           <AppRoutes />
         </SessionProvider>
       </BrowserRouter>
@@ -40,13 +42,35 @@ export default function App() {
 // The Desktop app's shell, in its own chunk so the browser never downloads it.
 const DesktopShell = lazy(() => import("./shell/DesktopShell"));
 
+/**
+ * If the Desktop app's shell can't load (a redeploy removed its chunk while the window stayed open, or the connection
+ * dropped), the browser's navbar shell takes its place, so the window is never left blank.
+ */
+class DesktopShellFallback extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("The Desktop app's shell couldn't load; showing the navbar instead", error);
+  }
+
+  render() {
+    return this.state.failed ? <AppShell /> : this.props.children;
+  }
+}
+
 /** The shell around every signed-in page: the Sidebar in the Desktop app, the navbar in a browser. */
 function SignedInShell() {
   if (!isDesktop()) return <AppShell />;
   return (
-    <Suspense fallback={null}>
-      <DesktopShell />
-    </Suspense>
+    <DesktopShellFallback>
+      <Suspense fallback={null}>
+        <DesktopShell />
+      </Suspense>
+    </DesktopShellFallback>
   );
 }
 

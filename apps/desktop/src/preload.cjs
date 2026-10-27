@@ -5,6 +5,6 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("nimbusDesktop", {
   /** "darwin" (macOS), "win32" or "linux". */
   platform: process.platform,
-  /** Tells the window whether the page shows a light or a dark theme, so its own buttons and menus match. */
+  /** Tells the window whether the page shows a light or a dark theme, so its own buttons (Windows) match. */
   setTheme: (mode) => ipcRenderer.send("nimbus:theme", mode),
 });

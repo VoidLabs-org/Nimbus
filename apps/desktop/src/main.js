@@ -48,14 +48,14 @@ app.whenReady().then(() => {
   }
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, dev)));
 
-  // The page's theme (nimbusDesktop.setTheme): native menus and dialogs follow it, and so do the Windows buttons.
+  // The page's theme (nimbusDesktop.setTheme), for the Windows buttons' colours. nativeTheme.themeSource is left alone:
+  // setting it would also fix the page's prefers-color-scheme, so the System theme would stop following the OS.
   ipcMain.on("nimbus:theme", (event, mode) => {
     if (
       (mode !== "light" && mode !== "dark") ||
       !isNimbusPage(nimbusUrl, event.senderFrame?.url ?? "")
     )
       return;
-    nativeTheme.themeSource = mode;
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win && process.platform === "win32") win.setTitleBarOverlay(overlayColors(mode));
   });

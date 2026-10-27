@@ -1,14 +1,13 @@
 import { Container, Tooltip, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Glyph } from "@repo/ui/glyph";
-import { useNimbusTheme } from "@repo/ui/nimbus-theme";
 import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { Link, NavLink } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
 import { PageContent } from "./AppShell";
-import { modifierLabel, nimbusDesktop, type NimbusDesktop } from "./desktop";
+import { desktopPlatform, modifierLabel, type NimbusDesktop } from "./desktop";
 import classes from "./DesktopShell.module.css";
 import { DESTINATIONS, type Destination } from "./navigation";
 import { NimbusLogo } from "./NimbusLogo";
@@ -16,25 +15,21 @@ import { AUTO_FOLD_QUERY, isFoldShortcut, useSidebarState } from "./sidebarState
 
 type Platform = NimbusDesktop["platform"];
 
-/** Ctrl or ⌘ \ folds or opens the Sidebar, as the fold button does. */
+/**
+ * Ctrl or ⌘ \ folds or opens the Sidebar, as the fold button does. The listener is added once; it always calls the
+ * latest `toggle`.
+ */
 function useFoldShortcut(platform: Platform, toggle: () => void) {
+  const onShortcut = useEffectEvent(toggle);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !isFoldShortcut(event, platform)) return;
       event.preventDefault();
-      toggle();
+      onShortcut();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform, toggle]);
-}
-
-/** Tells the window whether the theme is light or dark, so its own buttons (Windows) and menus match. */
-function useWindowTheme() {
-  const { mode } = useNimbusTheme();
-  useEffect(() => {
-    nimbusDesktop()?.setTheme(mode);
-  }, [mode]);
+  }, [platform]);
 }
 
 /** A link in the open Sidebar: icon and name, filled while its page is open (Settings on every page under it). */
@@ -94,7 +89,7 @@ function FoldButton({
  * and the button or shortcut opens it until the window is widened again.
  */
 export default function DesktopShell() {
-  const platform = nimbusDesktop()?.platform ?? "linux";
+  const platform = desktopPlatform();
   // Starts the request (and caches it) on every signed-in page, so Settings lists its groups at once.
   usePlatformPermissions();
   const [chosen, setChosen] = useSidebarState();
@@ -108,10 +103,14 @@ export default function DesktopShell() {
     else setChosen(folded ? "open" : "folded");
   };
   useFoldShortcut(platform, toggle);
-  useWindowTheme();
 
   return (
-    <div className={classes.shell} data-platform={platform} data-folded={folded || undefined}>
+    <div
+      className={classes.shell}
+      data-desktop-shell
+      data-platform={platform}
+      data-folded={folded || undefined}
+    >
       <nav className={classes.sidebar} aria-label="Main">
         {/* Dragged by, like the title row; macOS draws its traffic lights at its left end, the fold button sits over it. */}
         <div className={classes.sidebarTop} />

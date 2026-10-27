@@ -1,0 +1,28 @@
+/* The Desktop app's frame outside DesktopShell (see DesktopFrame.tsx). Global, keyed on data-desktop, which only the
+   Desktop app sets, so a browser is unaffected. --window-frame is the height the window's own controls take at the top:
+   46px where the title bar is hidden (Windows, macOS), none on Linux (native frame) or inside DesktopShell, which draws
+   its own frame. Full-height layouts subtract it (AuthLayout, SignInCheck, StatusPage), so nothing scrolls by it. */
+:root[data-desktop="win32"],
+:root[data-desktop="darwin"] {
+  --window-frame: 46px;
+}
+
+:root:has([data-desktop-shell]) {
+  --window-frame: 0px;
+}
+
+:root[data-desktop] body {
+  padding-top: var(--window-frame, 0px);
+}
+
+/* First in the page, so a control drawn later over it would still take its clicks (Electron applies drag areas in page
+   order); nothing is drawn over it, since the page starts below. */
+.nimbus-window-frame {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--window-frame, 0px);
+  app-region: drag;
+  -webkit-app-region: drag;
+}

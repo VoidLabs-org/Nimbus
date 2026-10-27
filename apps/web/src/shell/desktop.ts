@@ -22,6 +22,14 @@ export function isDesktop(): boolean {
   return nimbusDesktop() !== null;
 }
 
+/**
+ * The Desktop app's operating system. Only asked inside the Desktop app; "linux" (Ctrl shortcuts, the native frame)
+ * if the bridge is somehow missing.
+ */
+export function desktopPlatform(): NimbusDesktop["platform"] {
+  return nimbusDesktop()?.platform ?? "linux";
+}
+
 /** The fold shortcut's modifier as this computer names it: ⌘ on macOS, Ctrl elsewhere. */
 export function modifierLabel(platform: NimbusDesktop["platform"]): string {
   return platform === "darwin" ? "⌘" : "Ctrl";

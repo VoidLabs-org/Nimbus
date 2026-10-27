@@ -15,6 +15,11 @@ import {
 export function AppNotifications() {
   const [chosen] = useNavPosition();
   const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
-  const position = isDesktop() ? "top" : effectivePosition(chosen, narrow);
-  return <NimbusToasts position={notificationPosition(position)} />;
+  return (
+    <NimbusToasts
+      position={
+        isDesktop() ? "bottom-right" : notificationPosition(effectivePosition(chosen, narrow))
+      }
+    />
+  );
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type User } from "../api/client";
@@ -66,12 +66,9 @@ function stubWindowWidth(narrow: boolean) {
     }) as MediaQueryList;
 }
 
-let setTheme: ReturnType<typeof vi.fn<NimbusDesktop["setTheme"]>>;
-
 /** Runs as the Desktop app on `platform`, as the preload script would make it. */
 function asDesktop(platform: NimbusDesktop["platform"] = "win32") {
-  setTheme = vi.fn<NimbusDesktop["setTheme"]>();
-  window.nimbusDesktop = { platform, setTheme };
+  window.nimbusDesktop = { platform, setTheme: vi.fn() };
 }
 
 // Mantine's pill tabs (Appearance) measure themselves; jsdom has no ResizeObserver.
@@ -236,14 +233,6 @@ describe("the Desktop app's Sidebar", () => {
 
     expect(screen.getByRole("button", { name: "Open the Sidebar" })).toBeTruthy();
     expect(localStorage.getItem(SIDEBAR_KEY)).toBe("folded");
-  });
-
-  it("tells the window whether the theme is light or dark", async () => {
-    asDesktop();
-    renderAt("/");
-
-    await sidebar();
-    await waitFor(() => expect(setTheme).toHaveBeenCalledWith("light"));
   });
 });
 

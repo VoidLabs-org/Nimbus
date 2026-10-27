@@ -14,6 +14,12 @@
   color: var(--color-accent-2-700);
 }
 
+/* The panel holding a list and its column titles: they lay out by its width, not the window's (see the narrow
+   layout below). */
+.listPanel {
+  container-type: inline-size;
+}
+
 /* Role, Held by, Permissions and the arrow; the column titles share the rows' grid. */
 .columns,
 .row {
@@ -108,8 +114,9 @@ a.row:hover {
   color: var(--color-accent-2-500);
 }
 
-/* Narrow screens: Held by and Permissions go under the Role, and the column titles go. */
-@media (max-width: 48em) {
+/* A narrow list (a narrow window, or the Desktop app's Settings overlay): Held by and Permissions go under the Role,
+   and the column titles go. By the list's own width, not the window's. */
+@container (max-width: 720px) {
   .columns {
     display: none;
   }

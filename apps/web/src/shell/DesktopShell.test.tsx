@@ -142,16 +142,16 @@ describe("the Desktop app's Sidebar", () => {
     expect(linkNames(nav)).toEqual(["Home", "Projects", "Settings"]);
   });
 
-  it("highlights the open page, Settings on every page under it", async () => {
+  it("highlights the open page", async () => {
     asDesktop();
-    renderAt("/settings/security");
+    renderAt("/");
 
     const nav = await sidebar();
     const current = within(nav)
       .getAllByRole("link")
       .filter((link) => link.getAttribute("aria-current") === "page")
       .map((link) => link.textContent);
-    expect(current).toEqual(["Settings"]);
+    expect(current).toEqual(["Home"]);
   });
 
   it("has no brand row, as other desktop apps don't", async () => {
@@ -327,18 +327,14 @@ describe("peeking at the folded Sidebar", () => {
 });
 
 describe("the Appearance page in the Desktop app", () => {
-  it("offers Open or Folded on the Appearance page instead of the navbar position", async () => {
+  it("has only the theme, kept on this computer: no navbar position, and the Sidebar folds with its button", async () => {
     asDesktop();
     renderAt("/settings/appearance");
 
-    await sidebar();
+    expect(await screen.findByRole("heading", { name: "Appearance" })).toBeTruthy();
     expect(screen.queryByText("Navbar position")).toBeNull();
-    // The theme's note and the Sidebar's both say so.
-    expect(screen.getAllByText("kept on this computer", { exact: false })).toHaveLength(2);
-    fireEvent.click(screen.getByLabelText("Folded"));
-
-    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
-    expect(localStorage.getItem(SIDEBAR_KEY)).toBe("folded");
+    expect(screen.queryByText("Sidebar")).toBeNull();
+    expect(screen.getByText("kept on this computer", { exact: false })).toBeTruthy();
   });
 });
 

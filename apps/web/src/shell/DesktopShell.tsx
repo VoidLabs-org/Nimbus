@@ -3,11 +3,18 @@ import { useMediaQuery } from "@mantine/hooks";
 import { Glyph } from "@repo/ui/glyph";
 import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand } from "@tabler/icons-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
 import { PageContent } from "./AppShell";
-import { desktopPlatform, modifierLabel, nimbusDesktop, type NimbusDesktop } from "./desktop";
+import { useSettingsOverlay } from "../settings/settingsOverlay";
+import {
+  desktopPlatform,
+  isSettingsShortcut,
+  modifierLabel,
+  nimbusDesktop,
+  type NimbusDesktop,
+} from "./desktop";
 import classes from "./DesktopShell.module.css";
 import { DESTINATIONS, type Destination } from "./navigation";
 import { NimbusLogo } from "./NimbusLogo";
@@ -33,12 +40,26 @@ function useFoldShortcut(platform: Platform, toggle: () => void) {
 }
 
 /** A link in the open Sidebar: icon and name, filled while its page is open (Settings on every page under it). */
-function SidebarRow({ destination }: { destination: Destination }) {
+function SidebarRow({
+  destination,
+  active = false,
+  keyShortcuts,
+}: {
+  destination: Destination;
+  /** Highlighted whatever the address says (Settings, while its overlay is open over the page). */
+  active?: boolean;
+  /** The row's keyboard shortcut, for screen readers (aria-keyshortcuts); not shown. */
+  keyShortcuts?: string;
+}) {
   return (
     <NavLink
       to={destination.to}
       end={destination.end}
-      className={({ isActive }) => (isActive ? `${classes.row} ${classes.active}` : classes.row)}
+      data-active={active || undefined}
+      aria-keyshortcuts={keyShortcuts}
+      className={({ isActive }) =>
+        isActive || active ? `${classes.row} ${classes.active}` : classes.row
+      }
     >
       <span className={classes.rowIcon}>
         <Glyph icon={destination.icon} size={18} />
@@ -46,6 +67,21 @@ function SidebarRow({ destination }: { destination: Destination }) {
       {destination.label}
     </NavLink>
   );
+}
+
+/** Ctrl or ⌘ , opens Settings, in its overlay, from anywhere. */
+function useSettingsShortcut(platform: Platform) {
+  const navigate = useNavigate();
+  const open = useEffectEvent(() => navigate(SETTINGS.to));
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isSettingsShortcut(event, platform)) return;
+      event.preventDefault();
+      open();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [platform]);
 }
 
 /**
@@ -69,7 +105,10 @@ function AppMenuButton() {
   );
 }
 
-/** Settings, at the bottom of the Sidebar with the account, apart from the pages people work in. */
+/**
+ * Settings, at the bottom of the Sidebar with the account, apart from the pages people work in. It opens in the Settings
+ * overlay over the page (see AppRoutes).
+ */
 const SETTINGS = DESTINATIONS.find((destination) => destination.id === "settings")!;
 
 /** How long the pointer rests on the Sidebar button, while folded, before the Sidebar peeks out. */
@@ -143,9 +182,13 @@ export default function DesktopShell() {
     else setChosen(folded ? "open" : "folded");
   };
   useFoldShortcut(platform, toggle);
+  useSettingsShortcut(platform);
+  const settingsOpen = useSettingsOverlay() === "behind";
 
   // Peeking holds the page it started on, so opening another page from the Sidebar ends it.
   const [peekedAt, setPeekedAt] = useState<string | null>(null);
+  // Opening Settings from a peeking Sidebar ends it too: the page behind the overlay, which the peek holds, stays.
+  if (settingsOpen && peekedAt !== null) setPeekedAt(null);
   const peeking = folded && peekedAt === location.key;
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const mainRef = useRef<HTMLDivElement>(null);
@@ -194,7 +237,11 @@ export default function DesktopShell() {
               ),
             )}
             <div className={classes.bottom}>
-              <SidebarRow destination={SETTINGS} />
+              <SidebarRow
+                destination={SETTINGS}
+                active={settingsOpen}
+                keyShortcuts={platform === "darwin" ? "Meta+Comma" : "Control+Comma"}
+              />
               <div className={classes.account}>
                 <UserMenu variant="sidebar" placement="top-start" offset={8} />
                 {/* The Notification bell goes here once Notifications exist. */}

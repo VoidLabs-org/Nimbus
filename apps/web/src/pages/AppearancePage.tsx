@@ -3,13 +3,13 @@ import { Panel } from "@repo/ui/panel";
 import { ThemePicker } from "@repo/ui/theme-picker";
 import { isDesktop } from "../shell/desktop";
 import { NavPositionPicker } from "../shell/NavPositionPicker";
-import { SidebarPicker } from "../shell/SidebarPicker";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { settingsCrumbs } from "../settings/crumbs";
 
 /**
- * Settings → Appearance: pick Paper, Ink, Fog or Slate, and where the navbar sits (in the Desktop app, whether the
- * Sidebar is open or folded). The choices are kept in this browser, or on this computer in the Desktop app.
+ * Settings → Appearance: pick Paper, Ink, Fog or Slate, and in a browser where the navbar sits. The choices are kept in
+ * this browser, or on this computer in the Desktop app, which has no navbar (its Sidebar folds with its button or
+ * Ctrl/⌘ \).
  */
 export default function AppearancePage() {
   const desktop = isDesktop();
@@ -35,10 +35,8 @@ export default function AppearancePage() {
             </Text>
           </Stack>
         </Panel>
-        <Panel p="lg">
-          {desktop ? (
-            <SidebarPicker />
-          ) : (
+        {!desktop && (
+          <Panel p="lg">
             <Stack gap="md">
               <div>
                 <Title order={2} fz={20}>
@@ -51,8 +49,8 @@ export default function AppearancePage() {
               </div>
               <NavPositionPicker />
             </Stack>
-          )}
-        </Panel>
+          </Panel>
+        )}
       </Stack>
     </Container>
   );

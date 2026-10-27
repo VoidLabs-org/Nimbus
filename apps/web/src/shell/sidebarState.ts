@@ -1,5 +1,5 @@
 import { storedChoice } from "./storedChoice";
-import type { NimbusDesktop } from "./desktop";
+import { isModifierShortcut, type NimbusDesktop, type ShortcutKey } from "./desktop";
 
 /** Whether the Desktop app's Sidebar shows names (open) or only a rail of icons (folded). */
 export type SidebarState = "open" | "folded";
@@ -25,23 +25,7 @@ export function useSidebarState(): [SidebarState, (state: SidebarState) => void]
   return sidebarState.useChoice();
 }
 
-/**
- * Whether a key press is the fold shortcut: ⌘ \ on macOS, Ctrl \ elsewhere, with no other modifier. Matched on the key
- * (`\`) or, for keyboards where that key types something else, on its position (Backslash).
- */
-export function isFoldShortcut(
-  event: {
-    key: string;
-    code: string;
-    altKey: boolean;
-    shiftKey: boolean;
-    ctrlKey: boolean;
-    metaKey: boolean;
-  },
-  platform: NimbusDesktop["platform"],
-): boolean {
-  const mac = platform === "darwin";
-  if (event.altKey || event.shiftKey) return false;
-  if (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return false;
-  return event.key === "\\" || event.code === "Backslash";
+/** ⌘ \ on macOS, Ctrl \ elsewhere: folds or opens the Sidebar. */
+export function isFoldShortcut(event: ShortcutKey, platform: NimbusDesktop["platform"]): boolean {
+  return isModifierShortcut(event, platform, "\\", "Backslash");
 }

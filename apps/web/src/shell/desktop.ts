@@ -36,3 +36,37 @@ export function desktopPlatform(): NimbusDesktop["platform"] {
 export function modifierLabel(platform: NimbusDesktop["platform"]): string {
   return platform === "darwin" ? "⌘" : "Ctrl";
 }
+
+/** What a shortcut check needs from a key press. */
+export type ShortcutKey = {
+  key: string;
+  code: string;
+  altKey: boolean;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+};
+
+/**
+ * Whether a key press is ⌘ + `key` on macOS, Ctrl + `key` elsewhere, with no other modifier. Matched on the key or, for
+ * keyboards where that key types something else, on its position (`code`).
+ */
+export function isModifierShortcut(
+  event: ShortcutKey,
+  platform: NimbusDesktop["platform"],
+  key: string,
+  code: string,
+): boolean {
+  const mac = platform === "darwin";
+  if (event.altKey || event.shiftKey) return false;
+  if (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return false;
+  return event.key === key || event.code === code;
+}
+
+/** ⌘ , on macOS, Ctrl , elsewhere: opens Settings, as in most desktop apps. */
+export function isSettingsShortcut(
+  event: ShortcutKey,
+  platform: NimbusDesktop["platform"],
+): boolean {
+  return isModifierShortcut(event, platform, ",", "Comma");
+}

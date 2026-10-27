@@ -34,16 +34,28 @@ The preload script runs on every page the window shows, a provider's sign-in pag
 
 When `window.nimbusDesktop` is there, signed-in pages use `DesktopShell` (`apps/web/src/shell/DesktopShell.tsx`) instead of the browser's navbar (`AppShell`). It is loaded as its own chunk, so the browser never downloads it, and the browser's navbar is unchanged. If the chunk can't load (a redeploy removed it while the window stayed open, or the connection dropped), the navbar shell is shown instead of a blank window. `DesktopFrame`, on every page, sends the theme to the window (`setTheme`) and sets `data-desktop` on the root element for the frame's stylesheet.
 
-- **Sidebar.** On the left: Home and Projects at the top; Settings and the account (picture, name and email, opening the account menu with Sign out, upwards) at the bottom, with a place for the Notification bell beside the account once Notifications exist. The links are the same `DESTINATIONS` as the browser's navbar. There is no brand row, as in other desktop apps; on Windows and Linux the Nimbus icon at the top left opens the app menu. Settings' own pages are listed on the Settings overview, not in the Sidebar. The open page's link is highlighted; Settings is highlighted on every page under it.
+- **Sidebar.** On the left: Home and Projects at the top; Settings and the account (picture, name and email, opening the account menu with Sign out, upwards) at the bottom, with a place for the Notification bell beside the account once Notifications exist. The links are the same `DESTINATIONS` as the browser's navbar. There is no brand row, as in other desktop apps; on Windows and Linux the Nimbus icon at the top left opens the app menu. Settings opens the Settings overlay (below); it is highlighted while the overlay is open. The open page's link is highlighted.
 - **Folded.** Like the Claude app's, the Sidebar folds away completely and the page gets the whole width. The Sidebar button stays in one place at the top left, whether the Sidebar is open or folded (after the Nimbus icon on Windows and Linux, just right of the traffic lights on macOS); it and the shortcut switch between open and folded. The choice is kept on this computer (`localStorage` key `nimbus-sidebar`, default open). While folded, resting the pointer on the button for 300ms peeks the Sidebar out over the page without opening it for good; it goes when the pointer moves onto the page, on Esc, or when a page is opened from it, and clicking the button while peeking opens it. While the window is under 960px wide the Sidebar folds itself without changing the choice; the button or shortcut opens it until the window is widened.
-- **Appearance.** In the Desktop app the Appearance page offers "Sidebar: Open / Folded" in place of the navbar position.
+- **Appearance.** In the Desktop app the Appearance page has only the theme: there is no navbar to position, and the Sidebar folds with its button or the shortcut, which is remembered.
 - **Toasts** appear bottom right.
+
+## Settings overlay
+
+In the Desktop app, Settings opens over the page the User is on instead of as pages (`SettingsOverlay`, design "Nimbus Desktop v2" 2c). The browser keeps the Settings overview and its pages.
+
+- **Opening.** Settings at the bottom of the Sidebar, or Ctrl `,` (⌘ `,` on macOS) from anywhere, opens it on Profile.
+- **Inside.** A panel centred in the window over the dimmed, blurred app, laid out like the Claude app's Settings: a header row ("Settings" and the ✕) over two columns, each scrolling on its own. On the left the Settings pages, Account (Profile, Security, Appearance) for everyone and Workspace (Roles & access, Audit log) only for Users who may open them, from the same `settingsGroups` as the overview; on the right the open page. A page's breadcrumbs start inside the overlay (`overlayCrumbs`): a page the list opens has none, a Role starts at Roles & access.
+- **Closing.** Esc, the ✕ or a click on the dimmed app goes back to the page behind; so does Back. Esc closes a dialog open over the overlay first.
+- **Addresses.** The overlay is how the Desktop app shows any `/settings/...` address (`isSettingsPath`), so links, Back and a restored page keep working. `AppRoutes` keeps the page behind: the last address that wasn't Settings, or Home for a Settings address opened directly. `/settings` itself opens Profile, and `/settings/password` Profile's password window.
+- **Tabs (#180).** A Settings address is never a Tab of its own; Tabs hold the pages behind the overlay.
+- **Window.** The overlay is drawn after the window's drag areas and opts out of them, so its controls take clicks at the 800×560 minimum size too. Its chunk loads on first use; if it can't load, Settings does nothing rather than blanking the window.
 
 ## Shortcuts
 
 | Shortcut                         | Does                       |
 | -------------------------------- | -------------------------- |
 | Ctrl `\` (⌘ `\` on macOS)        | Folds or opens the Sidebar |
+| Ctrl `,` (⌘ `,` on macOS)        | Opens Settings             |
 | Ctrl `+`, Ctrl `-`, Ctrl `0` (⌘) | Zoom in, out, actual size  |
 | F11 (Ctrl ⌘ F on macOS)          | Full screen                |
 | Ctrl R, Ctrl Shift I (`--dev`)   | Reload, developer tools    |

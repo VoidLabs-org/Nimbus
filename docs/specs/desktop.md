@@ -42,15 +42,17 @@ When `window.nimbusDesktop` is there, signed-in pages use `DesktopShell` (`apps/
 
 ## Tabs
 
-Each page the User opens gets a Tab in the title row (design 2a), as in a browser, so they can go back to it (`useTabs` and `TabRow` in `apps/web/src/shell`, the rules in `tabs.ts`).
+The title row holds the User's Tabs (design 2a), as a browser does: each shows a page, and opening a page shows it in the selected Tab; a new Tab opens only when asked for (`useTabs` and `TabRow` in `apps/web/src/shell`, the rules in `tabs.ts`).
 
-- **Which pages.** Home, Projects and a project (`isTabPath`): the signed-in pages but Settings, which opens over a Tab's page. An address that is no page (Not found) gets no Tab and none is selected; signed-out pages are outside the shell, so they never get one.
-- **Opening.** A Tab is a path: opening a page that has a Tab selects it, and the query string doesn't count. A new Tab goes at the end of the row. Clicking a Tab opens its page.
-- **Names.** Like the page's breadcrumb: its last crumb (`tabTitle` in `crumbs.ts`), so a project shows its name. `BreadcrumbTrail` hands it to the shell (`TabTitleContext`); until it loads, a project's Tab shows its key and the others their Sidebar name. Long names are cut short, in full on hover.
-- **Closing.** Its ✕, a middle click, or Ctrl W (⌘ W on macOS) for the selected one. Closing the selected Tab opens the one after it, or else the one before; closing the last opens Home, which gets a Tab of its own. Closing another Tab leaves the page as it is.
-- **Switching** is a normal page change: no page is kept alive in the background, so a page's own state (a half-typed form) does not survive it; its data comes back from the TanStack Query cache.
-- **The row** is only as wide as its Tabs, so the rest of the title row (and the window buttons' area) stays the drag area. When they don't fit it scrolls sideways, keeping the selected Tab in view.
-- **Kept per User.** The Tabs and the selected one are kept on this computer under `nimbus-tabs:<User id>`, so another User signing in here never sees them, and are restored when the shell starts for that User: after a restart or a new sign-in. Starting on Home (the window's start address, or where signing in lands) goes back to the Tab the User was on; any other start address is opened as usual. A restored Tab whose address is no longer a page is dropped; a project the User may no longer open keeps its Tab and shows Not found, as that page decides.
+- **Opening a page** the usual way (a link, the Sidebar, Back) shows it in the selected Tab, which takes its name. The query string isn't kept. Clicking a Tab selects it and opens its page.
+- **A new Tab** opens with Ctrl click (⌘ click on macOS) or a middle click on a Nimbus link, "Open in new tab" in a link's right-click menu, or the + after the Tabs (Home). It goes right after the selected Tab and is selected. The same page may be open in more than one Tab. Those clicks on a Settings link open Settings, which is never a Tab; another site's link still opens in the default browser.
+- **Names.** Like the page's breadcrumb: its last crumb (`tabTitle` in `crumbs.ts`), so a project shows its name. `BreadcrumbTrail` hands it to the shell (`TabTitleContext`); until it loads, a project's Tab shows its key and the others their Sidebar name (an address that is no page, "Not found"). Long names are cut short, in full on hover.
+- **Closing.** Its ✕, a middle click, Ctrl W (⌘ W on macOS) for the selected one, or its right-click menu. Closing the selected Tab opens the one after it, or else the one before; closing the last opens Home in a new Tab. Closing another Tab leaves the page as it is. Ctrl Shift T (⌘ ⇧ T) reopens the last closed Tab where it was, for as long as the window is open.
+- **A Tab's right-click menu** (design "Nimbus Desktop v2", context menu): Close tab, Close other tabs, Close tabs to the right, Duplicate tab (a copy after it, selected) and Reopen closed tab. "Move to new window" waits for more than one app window.
+- **A Sidebar link's right-click menu** (Home, Projects): Open, Open in new tab and Copy link (the page's full address). Projects and Issues bring their own menus.
+- **Switching** is a normal page change: no page is kept alive in the background, so a page's own state (a half-typed form) does not survive it; its data comes back from the TanStack Query cache. Back and Forward go through the window's history, not a Tab's.
+- **The row** is only as wide as its Tabs and the +, so the rest of the title row (and the window buttons' area) stays the drag area. When they don't fit it scrolls sideways, keeping the selected Tab in view.
+- **Kept per User.** The Tabs (each with an id, its page and name) and the selected one are kept on this computer under `nimbus-tabs:<User id>`, so another User signing in here never sees them, and are restored when the shell starts for that User: after a restart or a new sign-in. Starting on Home (the window's start address, or where signing in lands) goes back to the Tab the User was on; any other start address opens in it as usual. A restored Tab whose address is no longer a page (`isTabPath`: Home, Projects, a project) is dropped; a project the User may no longer open keeps its Tab and shows Not found, as that page decides. Signed-out pages are outside the shell, so they are never in a Tab.
 
 ## Settings overlay
 
@@ -65,16 +67,18 @@ In the Desktop app, Settings opens over the page the User is on instead of as pa
 
 ## Shortcuts
 
-| Shortcut                         | Does                       |
-| -------------------------------- | -------------------------- |
-| Ctrl `\` (⌘ `\` on macOS)        | Folds or opens the Sidebar |
-| Ctrl `,` (⌘ `,` on macOS)        | Opens Settings             |
-| Ctrl W (⌘ W on macOS)            | Closes the selected Tab    |
-| Ctrl Tab, Ctrl Shift Tab         | Next, previous Tab         |
-| Ctrl Shift W (Windows, Linux)    | Closes the window          |
-| Ctrl `+`, Ctrl `-`, Ctrl `0` (⌘) | Zoom in, out, actual size  |
-| F11 (Ctrl ⌘ F on macOS)          | Full screen                |
-| Ctrl R, Ctrl Shift I (`--dev`)   | Reload, developer tools    |
+| Shortcut                                     | Does                        |
+| -------------------------------------------- | --------------------------- |
+| Ctrl `\` (⌘ `\` on macOS)                    | Folds or opens the Sidebar  |
+| Ctrl `,` (⌘ `,` on macOS)                    | Opens Settings              |
+| Ctrl W (⌘ W on macOS)                        | Closes the selected Tab     |
+| Ctrl Shift T (⌘ ⇧ T on macOS)                | Reopens the last closed Tab |
+| Ctrl Tab, Ctrl Shift Tab                     | Next, previous Tab          |
+| Ctrl click (⌘ click), middle click on a link | Opens it in a new Tab       |
+| Ctrl Shift W (Windows, Linux)                | Closes the window           |
+| Ctrl `+`, Ctrl `-`, Ctrl `0` (⌘)             | Zoom in, out, actual size   |
+| F11 (Ctrl ⌘ F on macOS)                      | Full screen                 |
+| Ctrl R, Ctrl Shift I (`--dev`)               | Reload, developer tools     |
 
 ## Tests
 

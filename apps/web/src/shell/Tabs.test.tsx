@@ -123,17 +123,29 @@ function renderAt(path: string, user: User | null = alice) {
   );
 }
 
-/** Stores Tabs for a User, as an earlier run of the app would have left them. */
-function storeTabs(userId: string, tabs: [path: string, title: string][], selected: string | null) {
+/** Stores Tabs for a User, as an earlier run of the app would have left them; the selected one by its index. */
+function storeTabs(userId: string, tabs: [path: string, title: string][], selected: number | null) {
   localStorage.setItem(
     `nimbus-tabs:${userId}`,
-    JSON.stringify({ tabs: tabs.map(([path, title]) => ({ path, title })), selected }),
+    JSON.stringify({
+      tabs: tabs.map(([path, title], index) => ({ id: `t${index}`, path, title })),
+      selected: selected === null ? null : `t${selected}`,
+    }),
   );
 }
 
-function storedTabs(userId: string): unknown {
+/** A User's stored Tabs, as [path, title] pairs, and the selected one's index. */
+function storedTabs(userId: string): { tabs: [string, string][]; selected: number } | null {
   const raw = localStorage.getItem(`nimbus-tabs:${userId}`);
-  return raw === null ? null : JSON.parse(raw);
+  if (raw === null) return null;
+  const stored = JSON.parse(raw) as {
+    tabs: { id: string; path: string; title: string }[];
+    selected: string | null;
+  };
+  return {
+    tabs: stored.tabs.map((tab) => [tab.path, tab.title]),
+    selected: stored.tabs.findIndex((tab) => tab.id === stored.selected),
+  };
 }
 
 function address(): string {
@@ -142,61 +154,129 @@ function address(): string {
 
 /** The Tab row, once the shell's chunk has loaded. */
 async function tabRow(): Promise<HTMLElement> {
-  return screen.findByRole("navigation", { name: "Tabs" });
+  return screen.findByRole("tablist", { name: "Tabs" });
 }
 
 /** The Tabs' names, in order. */
 function tabNames(row: HTMLElement): string[] {
   return within(row)
-    .getAllByRole("link")
-    .map((link) => link.textContent ?? "");
+    .queryAllByRole("tab")
+    .map((tab) => tab.textContent ?? "");
 }
 
-/** The selected Tab's name. */
-function selectedTab(row: HTMLElement): string | null {
-  return (
-    within(row)
-      .getAllByRole("link")
-      .find((link) => link.getAttribute("aria-current") === "page")?.textContent ?? null
-  );
+/** The selected Tab's place in the row, or -1. */
+function selectedIndex(row: HTMLElement): number {
+  return within(row)
+    .queryAllByRole("tab")
+    .findIndex((tab) => tab.getAttribute("aria-selected") === "true");
+}
+
+/** A link in the Sidebar. */
+function sidebarLink(name: string): HTMLElement {
+  return within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name });
+}
+
+function middleClick(element: HTMLElement) {
+  fireEvent(element, new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }));
+}
+
+/** Opens a right-click menu on `element` and picks `item` in it. */
+async function pickFromMenu(element: HTMLElement, item: string) {
+  fireEvent.contextMenu(element, { clientX: 40, clientY: 20 });
+  // The item's name is followed by its shortcut, so it is found by its exact label.
+  const label = await within(await screen.findByRole("menu")).findByText(item);
+  fireEvent.click(label.closest("[role=menuitem]")!);
 }
 
 describe("the Desktop app's Tabs", () => {
-  it("opens a Tab for the page, named like its breadcrumb", async () => {
+  it("shows the page in a Tab named like its breadcrumb", async () => {
     renderAt("/projects/APO");
 
     const row = await tabRow();
-    await within(row).findByRole("link", { name: "Apollo" });
+    await within(row).findByRole("tab", { name: "Apollo" });
     expect(tabNames(row)).toEqual(["Apollo"]);
-    expect(selectedTab(row)).toBe("Apollo");
+    expect(selectedIndex(row)).toBe(0);
   });
 
-  it("selects the page's own Tab when it has one, whatever its query string", async () => {
+  it("opens a page in the selected Tab, as a browser does", async () => {
+    storeTabs(
+      alice.id,
+      [
+        ["/", "Home"],
+        ["/projects/APO", "Apollo"],
+      ],
+      1,
+    );
+    renderAt("/projects/APO");
+
+    const row = await tabRow();
+    fireEvent.click(sidebarLink("Projects"));
+    expect(address()).toBe("/projects");
+    expect(tabNames(row)).toEqual(["Home", "Projects"]);
+    expect(selectedIndex(row)).toBe(1);
+  });
+
+  it("leaves the query string out of a Tab", async () => {
+    renderAt("/projects/APO?view=board");
+
+    const row = await tabRow();
+    await within(row).findByRole("tab", { name: "Apollo" });
+    expect(storedTabs(alice.id)?.tabs).toEqual([["/projects/APO", "Apollo"]]);
+  });
+
+  it("opens a link in a new Tab after the selected one with Ctrl click, the same page twice if asked", async () => {
     storeTabs(
       alice.id,
       [
         ["/projects", "Projects"],
-        ["/projects/APO", "Apollo"],
+        ["/", "Home"],
       ],
-      "/projects",
+      0,
     );
-    renderAt("/projects/APO?view=board");
+    renderAt("/projects");
 
     const row = await tabRow();
-    expect(tabNames(row)).toEqual(["Projects", "Apollo"]);
-    expect(selectedTab(row)).toBe("Apollo");
+    fireEvent.click(sidebarLink("Projects"), { ctrlKey: true });
+    expect(tabNames(row)).toEqual(["Projects", "Projects", "Home"]);
+    expect(selectedIndex(row)).toBe(1);
+    expect(address()).toBe("/projects");
   });
 
-  it("adds a Tab for each page opened, at the end", async () => {
-    renderAt("/projects/APO");
+  it("opens a link in a new Tab with ⌘ click on macOS", async () => {
+    asDesktop("darwin");
+    renderAt("/projects");
 
     const row = await tabRow();
-    await within(row).findByRole("link", { name: "Apollo" });
-    fireEvent.click(
-      within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Home" }),
-    );
-    expect(tabNames(row)).toEqual(["Apollo", "Home"]);
-    expect(selectedTab(row)).toBe("Home");
+    fireEvent.click(sidebarLink("Home"), { metaKey: true });
+    expect(tabNames(row)).toEqual(["Projects", "Home"]);
+    expect(address()).toBe("/");
+  });
+
+  it("opens a link in a new Tab with a middle click", async () => {
+    renderAt("/projects");
+
+    const row = await tabRow();
+    middleClick(sidebarLink("Home"));
+    expect(tabNames(row)).toEqual(["Projects", "Home"]);
+    expect(selectedIndex(row)).toBe(1);
+  });
+
+  it("opens Settings over the page on Ctrl click, never as a Tab", async () => {
+    renderAt("/projects");
+
+    const row = await tabRow();
+    fireEvent.click(sidebarLink("Settings"), { ctrlKey: true });
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
+    expect(tabNames(row)).toEqual(["Projects"]);
+  });
+
+  it("opens a new Tab on Home with +", async () => {
+    renderAt("/projects");
+
+    const row = await tabRow();
+    fireEvent.click(screen.getByRole("button", { name: "New Tab" }));
+    expect(tabNames(row)).toEqual(["Projects", "Home"]);
+    expect(address()).toBe("/");
   });
 
   it("opens a Tab's page when the Tab is clicked, as a normal page change", async () => {
@@ -206,15 +286,16 @@ describe("the Desktop app's Tabs", () => {
         ["/", "Home"],
         ["/projects/APO", "Apollo"],
       ],
-      "/projects/APO",
+      1,
     );
     renderAt("/projects/APO");
 
     const row = await tabRow();
-    fireEvent.click(within(row).getByRole("link", { name: "Home" }));
+    fireEvent.click(within(row).getByRole("tab", { name: "Home" }));
     expect(address()).toBe("/");
     expect(await screen.findByRole("heading", { name: "Welcome, Alice Example" })).toBeTruthy();
-    expect(selectedTab(row)).toBe("Home");
+    expect(tabNames(row)).toEqual(["Home", "Apollo"]);
+    expect(selectedIndex(row)).toBe(0);
   });
 
   it("closes a Tab with its ✕, selecting the one after it", async () => {
@@ -225,7 +306,7 @@ describe("the Desktop app's Tabs", () => {
         ["/projects", "Projects"],
         ["/projects/APO", "Apollo"],
       ],
-      "/projects",
+      1,
     );
     renderAt("/projects");
 
@@ -233,7 +314,7 @@ describe("the Desktop app's Tabs", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Close Projects" }));
     expect(tabNames(row)).toEqual(["Home", "Apollo"]);
     expect(address()).toBe("/projects/APO");
-    expect(selectedTab(row)).toBe("Apollo");
+    expect(selectedIndex(row)).toBe(1);
   });
 
   it("selects the one before when the last in the row closes", async () => {
@@ -243,7 +324,7 @@ describe("the Desktop app's Tabs", () => {
         ["/", "Home"],
         ["/projects", "Projects"],
       ],
-      "/projects",
+      1,
     );
     renderAt("/projects");
 
@@ -253,6 +334,24 @@ describe("the Desktop app's Tabs", () => {
     expect(tabNames(row)).toEqual(["Home"]);
   });
 
+  it("selects the neighbour even when it shows the same page", async () => {
+    storeTabs(
+      alice.id,
+      [
+        ["/projects", "Projects"],
+        ["/projects", "Projects"],
+      ],
+      0,
+    );
+    renderAt("/projects");
+
+    const row = await tabRow();
+    fireEvent.click(within(row).getAllByRole("button", { name: "Close Projects" })[0]!);
+    expect(tabNames(row)).toEqual(["Projects"]);
+    expect(selectedIndex(row)).toBe(0);
+    expect(address()).toBe("/projects");
+  });
+
   it("stays on the page when another Tab closes", async () => {
     storeTabs(
       alice.id,
@@ -260,7 +359,7 @@ describe("the Desktop app's Tabs", () => {
         ["/", "Home"],
         ["/projects", "Projects"],
       ],
-      "/projects",
+      1,
     );
     renderAt("/projects");
 
@@ -286,13 +385,12 @@ describe("the Desktop app's Tabs", () => {
         ["/", "Home"],
         ["/projects", "Projects"],
       ],
-      "/projects",
+      1,
     );
     renderAt("/projects");
 
     const row = await tabRow();
-    const home = within(row).getByRole("link", { name: "Home" });
-    fireEvent(home, new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }));
+    middleClick(within(row).getByRole("tab", { name: "Home" }));
     expect(tabNames(row)).toEqual(["Projects"]);
     expect(address()).toBe("/projects");
   });
@@ -304,7 +402,7 @@ describe("the Desktop app's Tabs", () => {
         ["/", "Home"],
         ["/projects", "Projects"],
       ],
-      "/projects",
+      1,
     );
     renderAt("/projects");
 
@@ -322,7 +420,7 @@ describe("the Desktop app's Tabs", () => {
         ["/", "Home"],
         ["/projects", "Projects"],
       ],
-      "/projects",
+      1,
     );
     renderAt("/projects");
 
@@ -341,7 +439,7 @@ describe("the Desktop app's Tabs", () => {
         ["/projects", "Projects"],
         ["/projects/APO", "Apollo"],
       ],
-      "/projects/APO",
+      2,
     );
     renderAt("/projects/APO");
 
@@ -352,7 +450,8 @@ describe("the Desktop app's Tabs", () => {
     expect(address()).toBe("/projects/APO");
     fireEvent.keyDown(window, { key: "Tab", code: "Tab", ctrlKey: true, shiftKey: true });
     expect(address()).toBe("/projects");
-    expect(selectedTab(row)).toBe("Projects");
+    expect(selectedIndex(row)).toBe(1);
+    expect(tabNames(row)).toEqual(["Home", "Projects", "Apollo"]);
   });
 
   it("keeps the selected Tab in view, and gives a long name in full on hover", async () => {
@@ -362,7 +461,7 @@ describe("the Desktop app's Tabs", () => {
       renderAt("/projects/GEM");
 
       const row = await tabRow();
-      const tab = await within(row).findByRole("link", { name: PROJECTS.GEM!.name });
+      const tab = await within(row).findByRole("tab", { name: PROJECTS.GEM!.name });
       expect(tab.getAttribute("title")).toBe(PROJECTS.GEM!.name);
       expect(scrolled.mock.contexts.some((element) => (element as Element).contains(tab))).toBe(
         true,
@@ -376,19 +475,112 @@ describe("the Desktop app's Tabs", () => {
     renderAt("/projects");
 
     const row = await tabRow();
-    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+    fireEvent.click(sidebarLink("Settings"));
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
     expect(tabNames(row)).toEqual(["Projects"]);
-    expect(selectedTab(row)).toBe("Projects");
+    expect(selectedIndex(row)).toBe(0);
   });
 
-  it("gives an address that is no page no Tab", async () => {
-    storeTabs(alice.id, [["/projects", "Projects"]], "/projects");
+  it("shows an address that is no page as Not found in the selected Tab", async () => {
     renderAt("/nowhere");
 
     const row = await tabRow();
-    expect(tabNames(row)).toEqual(["Projects"]);
-    expect(selectedTab(row)).toBeNull();
+    expect(tabNames(row)).toEqual(["Not found"]);
+  });
+});
+
+describe("a Tab's right-click menu", () => {
+  const three: [string, string][] = [
+    ["/", "Home"],
+    ["/projects", "Projects"],
+    ["/projects/APO", "Apollo"],
+  ];
+
+  it("closes the Tab", async () => {
+    storeTabs(alice.id, three, 1);
+    renderAt("/projects");
+
+    const row = await tabRow();
+    await pickFromMenu(within(row).getByRole("tab", { name: "Apollo" }), "Close tab");
+    expect(tabNames(row)).toEqual(["Home", "Projects"]);
+    expect(address()).toBe("/projects");
+  });
+
+  it("closes the other Tabs, opening that one's page", async () => {
+    storeTabs(alice.id, three, 1);
+    renderAt("/projects");
+
+    const row = await tabRow();
+    await pickFromMenu(within(row).getByRole("tab", { name: "Home" }), "Close other tabs");
+    expect(tabNames(row)).toEqual(["Home"]);
+    expect(address()).toBe("/");
+  });
+
+  it("closes the Tabs to its right", async () => {
+    storeTabs(alice.id, three, 2);
+    renderAt("/projects/APO");
+
+    const row = await tabRow();
+    await pickFromMenu(within(row).getByRole("tab", { name: "Home" }), "Close tabs to the right");
+    expect(tabNames(row)).toEqual(["Home"]);
+    expect(address()).toBe("/");
+  });
+
+  it("duplicates the Tab, selecting the copy", async () => {
+    storeTabs(alice.id, three, 0);
+    renderAt("/");
+
+    const row = await tabRow();
+    await pickFromMenu(within(row).getByRole("tab", { name: "Projects" }), "Duplicate tab");
+    expect(tabNames(row)).toEqual(["Home", "Projects", "Projects", "Apollo"]);
+    expect(selectedIndex(row)).toBe(2);
+    expect(address()).toBe("/projects");
+  });
+
+  it("reopens the last closed Tab where it was, as Ctrl Shift T does", async () => {
+    storeTabs(alice.id, three, 0);
+    renderAt("/");
+
+    const row = await tabRow();
+    fireEvent.click(within(row).getByRole("button", { name: "Close Projects" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Close Apollo" }));
+    expect(tabNames(row)).toEqual(["Home"]);
+    await pickFromMenu(within(row).getByRole("tab", { name: "Home" }), "Reopen closed tab");
+    expect(tabNames(row)).toEqual(["Home", "Apollo"]);
+    expect(address()).toBe("/projects/APO");
+    fireEvent.keyDown(window, { key: "T", code: "KeyT", ctrlKey: true, shiftKey: true });
+    expect(tabNames(row)).toEqual(["Home", "Projects", "Apollo"]);
+    expect(address()).toBe("/projects");
+  });
+});
+
+describe("a Sidebar link's right-click menu", () => {
+  it("opens the page in a new Tab", async () => {
+    renderAt("/projects");
+
+    const row = await tabRow();
+    await pickFromMenu(sidebarLink("Home"), "Open in new tab");
+    expect(tabNames(row)).toEqual(["Projects", "Home"]);
+    expect(address()).toBe("/");
+  });
+
+  it("opens the page in the selected Tab", async () => {
+    renderAt("/projects");
+
+    const row = await tabRow();
+    await pickFromMenu(sidebarLink("Home"), "Open");
+    expect(tabNames(row)).toEqual(["Home"]);
+    expect(address()).toBe("/");
+  });
+
+  it("copies the page's link", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    renderAt("/projects");
+
+    await tabRow();
+    await pickFromMenu(sidebarLink("Projects"), "Copy link");
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/projects`);
   });
 });
 
@@ -400,14 +592,14 @@ describe("the Desktop app's Tabs between starts", () => {
         ["/", "Home"],
         ["/projects/APO", "Apollo"],
       ],
-      "/projects/APO",
+      1,
     );
     renderAt("/");
 
     const row = await tabRow();
     expect(tabNames(row)).toEqual(["Home", "Apollo"]);
     expect(address()).toBe("/projects/APO");
-    expect(selectedTab(row)).toBe("Apollo");
+    expect(selectedIndex(row)).toBe(1);
   });
 
   it("show their saved names before their pages are opened", async () => {
@@ -417,7 +609,7 @@ describe("the Desktop app's Tabs between starts", () => {
         ["/projects", "Projects"],
         ["/projects/APO", "Apollo"],
       ],
-      "/projects",
+      0,
     );
     renderAt("/projects");
 
@@ -430,31 +622,24 @@ describe("the Desktop app's Tabs between starts", () => {
     renderAt("/projects/APO");
 
     const row = await tabRow();
-    await within(row).findByRole("link", { name: "Apollo" });
-    fireEvent.click(
-      within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", {
-        name: "Projects",
-      }),
-    );
+    await within(row).findByRole("tab", { name: "Apollo" });
+    fireEvent.click(sidebarLink("Projects"), { ctrlKey: true });
     expect(storedTabs(alice.id)).toEqual({
       tabs: [
-        { path: "/projects/APO", title: "Apollo" },
-        { path: "/projects", title: "Projects" },
+        ["/projects/APO", "Apollo"],
+        ["/projects", "Projects"],
       ],
-      selected: "/projects",
+      selected: 1,
     });
   });
 
   it("are the User's own: another User on this computer never sees them", async () => {
-    storeTabs(bob.id, [["/projects/APO", "Apollo"]], "/projects/APO");
+    storeTabs(bob.id, [["/projects/APO", "Apollo"]], 0);
     renderAt("/projects");
 
     const row = await tabRow();
     expect(tabNames(row)).toEqual(["Projects"]);
-    expect(storedTabs(bob.id)).toEqual({
-      tabs: [{ path: "/projects/APO", title: "Apollo" }],
-      selected: "/projects/APO",
-    });
+    expect(storedTabs(bob.id)).toEqual({ tabs: [["/projects/APO", "Apollo"]], selected: 0 });
   });
 
   it("drop a page that is no longer one, such as Settings or an old address", async () => {
@@ -465,7 +650,7 @@ describe("the Desktop app's Tabs between starts", () => {
         ["/nowhere", "Nowhere"],
         ["/projects", "Projects"],
       ],
-      "/settings/roles",
+      2,
     );
     renderAt("/projects");
 
@@ -474,7 +659,7 @@ describe("the Desktop app's Tabs between starts", () => {
   });
 
   it("keep a project the User may no longer open, which shows Not found", async () => {
-    storeTabs(alice.id, [["/projects/GONE", "Old project"]], "/projects/GONE");
+    storeTabs(alice.id, [["/projects/GONE", "Old project"]], 0);
     renderAt("/");
 
     const row = await tabRow();
@@ -486,7 +671,7 @@ describe("the Desktop app's Tabs between starts", () => {
     renderAt("/login", null);
 
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeTruthy();
-    expect(screen.queryByRole("navigation", { name: "Tabs" })).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "Tabs" })).toBeNull();
     expect(Object.keys(localStorage).filter((key) => key.startsWith("nimbus-tabs"))).toEqual([]);
   });
 });

@@ -17,12 +17,14 @@ import {
   type NimbusDesktop,
 } from "./desktop";
 import classes from "./DesktopShell.module.css";
+import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { TabRow } from "./TabRow";
 import { DESTINATIONS, type Destination } from "./navigation";
 import { NimbusLogo } from "./NimbusLogo";
 import { AUTO_FOLD_QUERY, isFoldShortcut, useSidebarState } from "./sidebarState";
 import { TabTitleContext } from "./tabTitle";
-import { useTabShortcuts, useTabs } from "./useTabs";
+import { linkMenu, tabMenu } from "./tabMenus";
+import { useNewTabClicks, useTabShortcuts, useTabs } from "./useTabs";
 
 type Platform = NimbusDesktop["platform"];
 
@@ -48,12 +50,15 @@ function SidebarRow({
   destination,
   active = false,
   keyShortcuts,
+  onMenu,
 }: {
   destination: Destination;
   /** Highlighted whatever the address says (Settings, while its overlay is open over the page). */
   active?: boolean;
   /** The row's keyboard shortcut, for screen readers (aria-keyshortcuts); not shown. */
   keyShortcuts?: string;
+  /** Opens the link's right-click menu at the pointer. */
+  onMenu?: (at: { x: number; y: number }) => void;
 }) {
   return (
     <NavLink
@@ -61,6 +66,13 @@ function SidebarRow({
       end={destination.end}
       data-active={active || undefined}
       aria-keyshortcuts={keyShortcuts}
+      onContextMenu={
+        onMenu &&
+        ((event) => {
+          event.preventDefault();
+          onMenu({ x: event.clientX, y: event.clientY });
+        })
+      }
       className={({ isActive }) =>
         isActive || active ? `${classes.row} ${classes.active}` : classes.row
       }
@@ -192,6 +204,10 @@ export default function DesktopShell() {
   const userId = useSession().user!.id;
   const tabs = useTabs(userId, settingsOpen);
   useTabShortcuts(platform, settingsOpen, tabs);
+  const navigate = useNavigate();
+  useNewTabClicks(platform, tabs.openNew, navigate);
+  // The right-click menu open now (a Tab's, a Sidebar link's), if any.
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
 
   // Peeking holds the page it started on, so opening another page from the Sidebar ends it.
   const [peekedAt, setPeekedAt] = useState<string | null>(null);
@@ -250,7 +266,17 @@ export default function DesktopShell() {
           <div className={classes.open}>
             {DESTINATIONS.filter((destination) => destination.id !== "settings").map(
               (destination) => (
-                <SidebarRow key={destination.id} destination={destination} />
+                <SidebarRow
+                  key={destination.id}
+                  destination={destination}
+                  onMenu={(at) =>
+                    setMenu({
+                      ...at,
+                      label: destination.label,
+                      items: linkMenu(destination.to, tabs, navigate, platform),
+                    })
+                  }
+                />
               ),
             )}
             <div className={classes.bottom}>
@@ -271,7 +297,15 @@ export default function DesktopShell() {
       <div className={classes.main} ref={mainRef}>
         {/* The window is dragged by this row, but for its Tabs. */}
         <div className={classes.titleRow}>
-          <TabRow tabs={tabs.tabs} onClose={tabs.close} />
+          <TabRow
+            tabs={tabs.tabs}
+            onSelect={tabs.select}
+            onClose={(id) => tabs.close([id])}
+            onNew={() => tabs.openNew("/")}
+            onMenu={(tab, at) =>
+              setMenu({ ...at, label: tab.title, items: tabMenu(tab, tabs, platform) })
+            }
+          />
         </div>
         <div className={classes.content}>
           <Container size="lg">
@@ -291,6 +325,7 @@ export default function DesktopShell() {
         onPointerIn={startPeek}
         onPointerOut={endPeekOnPage}
       />
+      <ContextMenu menu={menu} onClose={() => setMenu(null)} />
     </div>
   );
 }

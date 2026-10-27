@@ -97,7 +97,7 @@ export default function RolesPage() {
  */
 function RoleList({ label, roles }: { label: string; roles: RoleSummary[] }) {
   return (
-    <Panel p={8}>
+    <Panel p={8} className={classes.listPanel}>
       <RoleColumns />
       {roles.length === 0 ? (
         <p className={classes.empty}>No {label.toLowerCase()} yet.</p>

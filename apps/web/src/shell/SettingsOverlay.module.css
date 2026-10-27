@@ -1,0 +1,130 @@
+/* The Settings overlay, from the "Nimbus Desktop v2" design (2c), centred like the Claude app's Settings. Colours come
+   only from the theme variables, so all four themes work: the list is the frame's surface colour, the page the theme's
+   background, like the shell itself.
+
+   The window's top 46px are its drag area (DesktopShell, DesktopFrame); the layer is drawn after them, so marking it
+   no-drag gives its clicks back (Electron applies drag areas in page order), at the 800×560 minimum size too. Below
+   Mantine's modals (z-index 200), so a page's own dialogs open above it. */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/* A header row over two columns: the columns scroll under it, so no scrollbar runs into the rounded corners.
+   Positioned above the backdrop (Mantine's Overlay, itself positioned), or the backdrop's dim and blur cover it. */
+.panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  height: min(680px, 100%);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    var(--shadow-lg);
+}
+
+.header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 12px 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--color-text);
+}
+
+.close:hover {
+  background: var(--seg);
+}
+
+.columns {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.list,
+.page {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.list {
+  flex: none;
+  width: 220px;
+  box-sizing: border-box;
+  padding: 16px 12px;
+  border-right: 1px solid var(--line);
+}
+
+.group + .group {
+  margin-top: 14px;
+}
+
+.heading {
+  padding: 4px 14px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-2-700);
+}
+
+.item {
+  display: block;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.item:hover {
+  background: var(--row-hover);
+}
+
+/* The open page (a Role under Roles & access), with the Sidebar's soft "selected" colours. */
+.item.active,
+.item.active:hover {
+  background: var(--seg-on);
+  color: var(--seg-on-fg);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* A container, so a page lays out by its own width here rather than the window's (a Role's page). */
+.page {
+  container-type: inline-size;
+  flex: 1;
+  min-width: 0;
+  padding: 0 32px;
+}

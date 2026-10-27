@@ -9,7 +9,7 @@ export function RoleListSkeleton() {
   return (
     <Stack gap="lg">
       <Bone h={44} w={300} radius="xl" />
-      <Panel p={8}>
+      <Panel p={8} className={classes.listPanel}>
         <RoleColumns />
         {[0, 1, 2].map((row) => (
           <div key={row} className={classes.row}>

@@ -69,6 +69,9 @@ function AppMenuButton() {
   );
 }
 
+/** Settings, at the bottom of the Sidebar with the account, apart from the pages people work in. */
+const SETTINGS = DESTINATIONS.find((destination) => destination.id === "settings")!;
+
 /** How long the pointer rests on the Sidebar button, while folded, before the Sidebar peeks out. */
 export const PEEK_DELAY_MS = 300;
 
@@ -117,8 +120,8 @@ function FoldButton({
  * the window is dragged by their top 46px; the page shows the theme's background, so it stands apart.
  *
  * There is no brand row, as in other desktop apps: on Windows and Linux the Nimbus icon at the top left opens the app
- * menu instead. The Sidebar (the account, then Home, Projects and Settings by name; Settings lists its own pages) is open or folded
- * away completely, giving the page the whole width; the Sidebar button at the top left and Ctrl or ⌘ \ switch between
+ * menu instead. The Sidebar (Home and Projects at the top; Settings, which lists its own pages, and the account at the
+ * bottom, so the account menu opens upwards into free room) is open or folded away completely, giving the page the whole width; the Sidebar button at the top left and Ctrl or ⌘ \ switch between
  * them. The choice is kept on this computer. While folded, resting the pointer on the button peeks the Sidebar out
  * over the page, without opening it for good; it goes again when the pointer moves onto the page, on Esc, or when a
  * page is opened from it. Under 960px wide the Sidebar folds itself without changing the choice, and the button or
@@ -185,14 +188,19 @@ export default function DesktopShell() {
           {/* Dragged by, like the title row; macOS draws its traffic lights at its left end, the button sits over it. */}
           <div className={classes.sidebarTop} />
           <div className={classes.open}>
-            <div className={classes.account}>
-              <UserMenu variant="sidebar" placement="bottom-start" offset={8} />
-              {/* The Notification bell goes here once Notifications exist. */}
-              <div className={classes.bellSlot} data-slot="bell" />
+            {DESTINATIONS.filter((destination) => destination.id !== "settings").map(
+              (destination) => (
+                <SidebarRow key={destination.id} destination={destination} />
+              ),
+            )}
+            <div className={classes.bottom}>
+              <SidebarRow destination={SETTINGS} />
+              <div className={classes.account}>
+                <UserMenu variant="sidebar" placement="top-start" offset={8} />
+                {/* The Notification bell goes here once Notifications exist. */}
+                <div className={classes.bellSlot} data-slot="bell" />
+              </div>
             </div>
-            {DESTINATIONS.map((destination) => (
-              <SidebarRow key={destination.id} destination={destination} />
-            ))}
           </div>
         </nav>
       )}

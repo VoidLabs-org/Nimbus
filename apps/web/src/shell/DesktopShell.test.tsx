@@ -179,12 +179,21 @@ describe("the Desktop app's Sidebar", () => {
     expect(screen.queryByRole("button", { name: "Nimbus menu" })).toBeNull();
   });
 
-  it("has the account at its top, opening the account menu with Sign out", async () => {
+  it("has Settings and the account at its bottom, the account opening its menu with Sign out", async () => {
     asDesktop();
     renderAt("/");
 
     const nav = await sidebar();
+    const settings = within(nav).getByRole("link", { name: "Settings" });
     const account = within(nav).getByRole("button", { name: "Account menu for Alice Example" });
+    // Settings, then the account, after the other links.
+    expect(
+      within(nav).getByRole("link", { name: "Projects" }).compareDocumentPosition(settings) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      settings.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(account.textContent).toContain("Alice Example");
     expect(account.textContent).toContain("alice@example.com");
     fireEvent.click(account);

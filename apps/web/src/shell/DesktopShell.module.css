@@ -117,19 +117,28 @@
   --fold-left: 80px;
 }
 
-/* The account, then the links. */
+/* The links, then Settings and the account at the bottom. */
 .open {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 12px 14px;
+  padding: 6px 12px 14px;
+}
+
+/* Settings and the account, pushed to the bottom of the Sidebar. */
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 12px;
 }
 
 .account {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
 }
 
 .account > :first-child {
@@ -165,12 +174,15 @@
   justify-content: center;
 }
 
-/* The open page's link. Two classes, so it wins over .row and its hover wherever they are in this file. */
+/* The open page's link: a soft tint, as desktop apps mark it (the website navbar's ink pill is too loud in a Sidebar),
+   the same "selected" colours the pill tabs use in every theme. Two classes, so it wins over .row and its hover
+   wherever they are in this file. */
 .row.active,
 .row.active:hover {
-  background: var(--color-text);
-  color: var(--color-bg);
+  background: var(--seg-on);
+  color: var(--seg-on-fg);
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 /* The page, beside the Sidebar and under the title row, scrolling on its own. */

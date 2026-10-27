@@ -2,8 +2,8 @@
 .page {
   display: grid;
   place-items: center;
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: calc(100vh - var(--window-frame, 0px));
+  min-height: calc(100dvh - var(--window-frame, 0px));
 }
 
 .content {

@@ -13,7 +13,7 @@
 
 /* Without the navbar (session expired, the sign-in check on load): the page fills the window. */
 .standalone {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--window-frame, 0px));
 }
 
 .text {

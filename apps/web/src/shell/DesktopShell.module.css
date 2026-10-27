@@ -1,0 +1,201 @@
+/* The Desktop app's shell, from the "Nimbus Desktop v2" design (2a), its Sidebar folding away like the Claude app's.
+   Colours come only from the theme variables, so all four themes work. The Sidebar and the title row are the window's frame, in the theme's surface colour; the page
+   beside them is see-through, showing the theme's background (and, on Fog and Slate, its glow) as in a browser, so it
+   reads as a sheet set into the frame.
+
+   The window has no title bar of its own (apps/desktop/src/chrome.js), so the top 46px are the drag area: the
+   Sidebar's top row and the title row above the page. Buttons in them opt out. macOS draws its traffic lights at the
+   left of the Sidebar's top row; Windows draws its buttons at the right end of the title row. */
+.shell {
+  --title-row: 46px;
+  --sidebar-open: 248px;
+  /* The Sidebar button's left edge: after the Nimbus icon (Windows, Linux), or just right of the traffic lights (macOS). */
+  --fold-left: 48px;
+  position: relative;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-open);
+  box-sizing: border-box;
+  overflow: hidden auto;
+  background: var(--color-surface);
+}
+
+/* Peeking while folded: over the page, not beside it, so the page doesn't move. */
+.sidebar[data-peek] {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  border-radius: 0 16px 16px 0;
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--shadow-lg);
+}
+
+.sidebarTop,
+.titleRow {
+  flex: none;
+  height: var(--title-row);
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.titleRow {
+  background: var(--color-surface);
+}
+
+/* Clickable controls in a drag area must opt out, or a click drags the window instead. */
+.titleRow > * {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/* Linux keeps its native frame, so an empty row would only waste room while the Sidebar is open; folded, the row holds
+   the Sidebar button. The Tabs (#180) will bring it back for good. */
+.shell[data-platform="linux"]:not([data-folded]) .titleRow {
+  display: none;
+}
+
+/* Folded, the Sidebar button sits at the start of the title row; what the row holds starts after it. */
+.shell[data-folded] .titleRow {
+  padding-left: calc(var(--fold-left) + 30px + 12px);
+}
+
+/* The window's own buttons sit at the right end of the title row on Windows; nothing of the page goes under them. */
+.shell[data-platform="win32"] .titleRow {
+  padding-right: 140px;
+}
+
+/* In one place whether the Sidebar is open, folded or peeking: at the top left, over the Sidebar's top row or, folded,
+   the title row; above a peeking Sidebar. */
+.foldButton {
+  position: absolute;
+  z-index: 4;
+  top: calc((var(--title-row) - 30px) / 2);
+  left: var(--fold-left);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--color-accent-2-700);
+}
+
+.foldButton:hover,
+.appMenuButton:hover {
+  background: var(--seg);
+}
+
+/* The Nimbus icon that opens the app menu, at the very top left (not on macOS). */
+.appMenuButton {
+  position: absolute;
+  z-index: 4;
+  top: calc((var(--title-row) - 30px) / 2);
+  left: 12px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.shell[data-platform="darwin"] {
+  --fold-left: 80px;
+}
+
+/* The links, then Settings and the account at the bottom. */
+.open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px 14px;
+}
+
+/* Settings and the account, pushed to the bottom of the Sidebar. */
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.account > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Empty until the Notification bell exists. */
+.bellSlot:empty {
+  display: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.row:hover {
+  background: var(--row-hover);
+}
+
+.rowIcon {
+  display: flex;
+  width: 18px;
+  justify-content: center;
+}
+
+/* The open page's link: a soft tint, as desktop apps mark it (the website navbar's ink pill is too loud in a Sidebar),
+   the same "selected" colours the pill tabs use in every theme. Two classes, so it wins over .row and its hover
+   wherever they are in this file. */
+.row.active,
+.row.active:hover {
+  background: var(--seg-on);
+  color: var(--seg-on-fg);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* The page, beside the Sidebar and under the title row, scrolling on its own. */
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 16px;
+}

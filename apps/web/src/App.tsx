@@ -7,6 +7,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useNavigationType,
   type Location,
 } from "react-router";
 import { createQueryClient } from "./api/queryClient";
@@ -58,7 +59,7 @@ const DesktopShell = lazy(() => import("./shell/DesktopShell"));
  * the window is never left blank.
  */
 class ChunkFallback extends Component<
-  { what: string; fallback: ReactNode; children: ReactNode },
+  { what: string; fallback: ReactNode; onFail?: () => void; children: ReactNode },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -69,6 +70,7 @@ class ChunkFallback extends Component<
 
   componentDidCatch(error: unknown) {
     console.error(`${this.props.what} couldn't load`, error);
+    this.props.onFail?.();
   }
 
   render() {
@@ -108,19 +110,76 @@ const SETTINGS_PAGES = (
   </>
 );
 
+/** Signed-out pages: never the page behind the Settings overlay, even for a moment on the way back in. */
+const SIGNED_OUT_PATHS = [
+  "/auth/callback",
+  "/login",
+  "/login/two-step",
+  "/register",
+  "/forgot-password",
+  "/session-expired",
+];
+
 /**
- * Every page of the app, by address. In the Desktop app a Settings address, once the User is signed in, keeps the
- * page they were on (the last address that wasn't Settings; Home for a Settings address opened directly) and opens
- * the Settings overlay over it. Closing the overlay goes back to that page; Back does too.
+ * What AppRoutes remembers between addresses for the Desktop app's Settings overlay: the signed-in page it opens over
+ * (for the User it was theirs), and how many history entries Settings has added since it opened, so closing goes back
+ * through them rather than adding another.
+ */
+type OverlayHistory = {
+  key: string;
+  behind: Location | null;
+  userId: string | null;
+  steps: number;
+};
+
+/**
+ * Every page of the app, by address. In the Desktop app a Settings address, once the User is signed in and verified,
+ * keeps the page they were on (the last signed-in address that wasn't Settings; Home for a Settings address opened
+ * directly) and opens the Settings overlay over it. Closing the overlay goes back to that page, as Back would.
  */
 export function AppRoutes() {
   const location = useLocation();
+  const navigationType = useNavigationType();
   const navigate = useNavigate();
-  const { user } = useSession();
+  const { user, confirmingEmail } = useSession();
+  const userId = user?.id ?? null;
   const settings = isSettingsPath(location.pathname);
-  const [behind, setBehind] = useState<Location | null>(null);
-  if (!settings && behind?.key !== location.key) setBehind(location);
-  const background = isDesktop() && settings && user?.emailVerified ? (behind ?? "/") : null;
+  const signedInPage =
+    userId !== null && !settings && !SIGNED_OUT_PATHS.includes(location.pathname);
+  const [history, setHistory] = useState<OverlayHistory>(() => ({
+    key: location.key,
+    behind: signedInPage ? location : null,
+    userId,
+    steps: 0,
+  }));
+  // Once per address (state set while rendering, so only this component runs again, before any page renders).
+  if (history.key !== location.key || history.userId !== userId) {
+    const sameUser = history.userId === userId;
+    let steps = 0;
+    if (settings && sameUser && history.key !== location.key) {
+      if (navigationType === "PUSH") steps = history.steps + 1;
+      else if (navigationType === "POP") steps = Math.max(0, history.steps - 1);
+      else steps = history.steps;
+    }
+    setHistory({
+      key: location.key,
+      behind: signedInPage ? location : sameUser ? history.behind : null,
+      userId,
+      steps,
+    });
+  }
+  // A Settings chunk that couldn't load: Settings shows as pages instead, in the shell.
+  const [overlayFailed, setOverlayFailed] = useState(false);
+  const background =
+    isDesktop() && settings && user?.emailVerified && !confirmingEmail && !overlayFailed
+      ? (history.behind ?? "/")
+      : null;
+  // Back through what Settings added; a Settings address opened directly (a link, a restored page) is replaced by the
+  // page behind instead, so Back doesn't land on it again.
+  const closeSettings = () => {
+    if (history.steps > 0) navigate(-history.steps);
+    else navigate(background ?? "/", { replace: true });
+  };
 
   return (
     <>
@@ -153,9 +212,13 @@ export function AppRoutes() {
         </Routes>
       </SettingsOverlayContext>
       {background && (
-        <ChunkFallback what="The Settings overlay" fallback={null}>
+        <ChunkFallback
+          what="The Settings overlay"
+          fallback={null}
+          onFail={() => setOverlayFailed(true)}
+        >
           <Suspense fallback={null}>
-            <SettingsOverlay onClose={() => navigate(background)}>
+            <SettingsOverlay onClose={closeSettings}>
               <Routes>
                 {/* Its list stands in for the overview, so Settings itself opens on Profile. */}
                 <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />

@@ -69,10 +69,15 @@ function SidebarRow({
   );
 }
 
-/** Ctrl or ⌘ , opens Settings, in its overlay, from anywhere. */
-function useSettingsShortcut(platform: Platform) {
+/**
+ * Ctrl or ⌘ , opens Settings, in its overlay, from anywhere. While Settings is open it does nothing, so the page open
+ * in it (a Role being edited) stays.
+ */
+function useSettingsShortcut(platform: Platform, settingsOpen: boolean) {
   const navigate = useNavigate();
-  const open = useEffectEvent(() => navigate(SETTINGS.to));
+  const open = useEffectEvent(() => {
+    if (!settingsOpen) navigate(SETTINGS.to);
+  });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !isSettingsShortcut(event, platform)) return;
@@ -182,8 +187,8 @@ export default function DesktopShell() {
     else setChosen(folded ? "open" : "folded");
   };
   useFoldShortcut(platform, toggle);
-  useSettingsShortcut(platform);
   const settingsOpen = useSettingsOverlay() === "behind";
+  useSettingsShortcut(platform, settingsOpen);
 
   // Peeking holds the page it started on, so opening another page from the Sidebar ends it.
   const [peekedAt, setPeekedAt] = useState<string | null>(null);

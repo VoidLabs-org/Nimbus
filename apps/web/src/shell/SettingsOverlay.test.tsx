@@ -2,7 +2,7 @@
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
@@ -95,18 +95,39 @@ afterEach(() => {
   window.matchMedia = realMatchMedia;
 });
 
-function renderAt(path: string) {
+/** Moves around the app as a link elsewhere or the Back button would, from outside the pages. */
+function Moves() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button type="button" onClick={() => navigate("/settings/profile")}>
+        test: go to Profile
+      </button>
+      <button type="button" onClick={() => navigate(-1)}>
+        test: back
+      </button>
+    </>
+  );
+}
+
+function renderAt(path: string, overrides: Partial<Session> = {}) {
   return render(
     <NimbusThemeProvider>
       <MemoryRouter initialEntries={[path]}>
         <QueryClientProvider client={createQueryClient()}>
-          <SessionContext value={session}>
+          <SessionContext value={{ ...session, ...overrides }}>
             <AppRoutes />
+            <Moves />
           </SessionContext>
         </QueryClientProvider>
       </MemoryRouter>
     </NimbusThemeProvider>,
   );
+}
+
+/** Clicks one of Moves' buttons, which sit outside the overlay. */
+function move(name: "test: go to Profile" | "test: back") {
+  fireEvent.click(screen.getByText(name));
 }
 
 /** The Settings overlay, once it is open. */
@@ -215,6 +236,17 @@ describe("the Settings overlay in the Desktop app", () => {
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
   });
 
+  it("leaves Esc to what has focus outside it, such as a menu drawn outside the panel", async () => {
+    asDesktop();
+    renderAt("/settings/profile");
+    await overlay();
+    const outside = screen.getByText("test: back");
+    outside.focus();
+    fireEvent.keyDown(outside, { key: "Escape" });
+
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeTruthy();
+  });
+
   it("closes with a click on the dimmed app around it", async () => {
     asDesktop();
     renderAt("/settings/profile");
@@ -275,6 +307,63 @@ describe("the Settings overlay in the Desktop app", () => {
 
     const settings = await overlay();
     expect(within(settings).queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
+  });
+});
+
+describe("the page behind the Settings overlay", () => {
+  it("is never a signed-out page, such as the one a lost session left the User on", async () => {
+    asDesktop();
+    renderAt("/session-expired");
+    expect(await screen.findByText("Your session expired.")).toBeTruthy();
+    move("test: go to Profile");
+
+    await overlay();
+    expect(screen.queryByText("Your session expired.")).toBeNull();
+    expect(screen.getByText(HOME, { exact: false })).toBeTruthy();
+  });
+
+  it("is gone back to on closing, so Back doesn't open Settings again", async () => {
+    asDesktop();
+    renderAt("/");
+    fireEvent.click(
+      within(await screen.findByRole("navigation", { name: "Main" })).getByRole("link", {
+        name: "Settings",
+      }),
+    );
+    const settings = await overlay();
+    fireEvent.click(within(settings).getByRole("link", { name: "Appearance" }));
+    await within(settings).findByRole("heading", { name: "Appearance" });
+    fireEvent.click(within(settings).getByRole("button", { name: "Close Settings" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull());
+
+    // Home was the first page, so there is nothing further back: Settings stays closed.
+    move("test: back");
+    expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
+    expect(screen.getByText(HOME, { exact: false })).toBeTruthy();
+  });
+});
+
+describe("the Settings overlay and what is open in it", () => {
+  it("stays on the open page on Ctrl , rather than starting again at Profile", async () => {
+    asDesktop();
+    renderAt("/settings/appearance");
+    const settings = await overlay();
+    await within(settings).findByRole("heading", { name: "Appearance" });
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: ",",
+      code: "Comma",
+      ctrlKey: true,
+    });
+
+    expect(within(settings).getByRole("heading", { name: "Appearance" })).toBeTruthy();
+  });
+
+  it("waits while the User's new email is being confirmed", async () => {
+    asDesktop();
+    renderAt("/settings/profile", { confirmingEmail: true });
+
+    await screen.findByText("Email verified", { exact: false });
+    expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
   });
 });
 

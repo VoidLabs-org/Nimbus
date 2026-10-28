@@ -1,10 +1,6 @@
 // Where the app window was, kept between starts, as plain functions so they can be tested without starting Electron.
 // main.js applies them.
-import { TITLE_ROW_HEIGHT } from "./chrome.js";
-
-/** The app window's smallest size (see windowChrome); a saved size below it is not a real one. */
-const MIN_WIDTH = 800;
-const MIN_HEIGHT = 560;
+import { MIN_WINDOW } from "./chrome.js";
 
 /**
  * The app window's place as saved in the user data folder: its normal bounds (not maximized or full screen) and
@@ -35,26 +31,50 @@ export function parseWindowState(text) {
   if (typeof value !== "object" || value === null) return null;
   const { x, y, width, height, maximized } = value;
   if (![x, y, width, height].every(Number.isInteger)) return null;
-  if (width < MIN_WIDTH || height < MIN_HEIGHT) return null;
+  // Below the smallest window (see windowChrome) it is not a real size.
+  if (width < MIN_WINDOW.width || height < MIN_WINDOW.height) return null;
   return { x, y, width, height, maximized: maximized === true };
 }
 
-/** How much of the title row must be on a screen to drag the window by it. */
-const VISIBLE_ROW = 100;
+/** How much of `a` lies on `b`, in square pixels. */
+function overlap(a, b) {
+  const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return width > 0 && height > 0 ? width * height : 0;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
 
 /**
- * The saved place to open the app window at, or null (it opens centred) when its title row isn't on any of the
- * screens now, as when the screen it was on has been unplugged: a window there couldn't be dragged back.
+ * Where to open the window from its saved place and the screens there are now. It goes to the screen most of it was
+ * on, made no bigger than that screen and moved wholly onto it, so it can always be dragged and resized there (after
+ * undocking from a large monitor, say). On no screen at all (that screen was unplugged) it opens centred at its usual
+ * size (`bounds` null); either way it is maximized again if it was.
  *
  * @param {{ x: number, y: number, width: number, height: number, maximized: boolean }} state
  * @param {{ x: number, y: number, width: number, height: number }[]} workAreas
+ * @returns {{ bounds: { x: number, y: number, width: number, height: number } | null, maximized: boolean }}
  */
-export function restoredBounds(state, workAreas) {
-  const onScreen = workAreas.some((area) => {
-    const width = Math.min(state.x + state.width, area.x + area.width) - Math.max(state.x, area.x);
-    const height =
-      Math.min(state.y + TITLE_ROW_HEIGHT, area.y + area.height) - Math.max(state.y, area.y);
-    return width >= VISIBLE_ROW && height >= TITLE_ROW_HEIGHT / 2;
-  });
-  return onScreen ? state : null;
+export function restoredPlace(state, workAreas) {
+  const { maximized } = state;
+  let best = null;
+  let bestOverlap = 0;
+  for (const area of workAreas) {
+    const shared = overlap(state, area);
+    if (shared > bestOverlap) [best, bestOverlap] = [area, shared];
+  }
+  if (!best) return { bounds: null, maximized };
+  const width = Math.min(state.width, best.width);
+  const height = Math.min(state.height, best.height);
+  return {
+    bounds: {
+      x: clamp(state.x, best.x, best.x + best.width - width),
+      y: clamp(state.y, best.y, best.y + best.height - height),
+      width,
+      height,
+    },
+    maximized,
+  };
 }

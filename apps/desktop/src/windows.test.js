@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseWindowState, restoredBounds, windowState } from "./windows.js";
+import { parseWindowState, restoredPlace, windowState } from "./windows.js";
 
 describe("the app window's saved place", () => {
   const screens = [{ x: 0, y: 0, width: 1920, height: 1040 }];
@@ -26,15 +26,53 @@ describe("the app window's saved place", () => {
     );
   });
 
-  it("is restored when its title row is on a screen", () => {
+  it("is restored as it was when it fits on a screen", () => {
     const state = { x: 100, y: 80, width: 1280, height: 800, maximized: false };
-    assert.deepEqual(restoredBounds(state, screens), state);
+    assert.deepEqual(restoredPlace(state, screens), {
+      bounds: { x: 100, y: 80, width: 1280, height: 800 },
+      maximized: false,
+    });
   });
 
-  it("is not restored on a screen that is gone, so the window opens centred", () => {
-    const state = { x: 2400, y: 80, width: 1280, height: 800, maximized: false };
-    assert.equal(restoredBounds(state, screens), null);
+  it("shrinks to the screen it is on when it was bigger, as after undocking from a large monitor", () => {
+    const laptop = [{ x: 0, y: 0, width: 1366, height: 728 }];
+    const state = { x: 0, y: 0, width: 2400, height: 1300, maximized: false };
+    assert.deepEqual(restoredPlace(state, laptop).bounds, {
+      x: 0,
+      y: 0,
+      width: 1366,
+      height: 728,
+    });
+  });
+
+  it("moves fully onto the screen it was mostly off, so it can always be dragged", () => {
+    const state = { x: -1180, y: 80, width: 1280, height: 800, maximized: false };
+    assert.deepEqual(restoredPlace(state, screens).bounds, {
+      x: 0,
+      y: 80,
+      width: 1280,
+      height: 800,
+    });
+  });
+
+  it("goes to the screen it was mostly on, when it spans two", () => {
+    const two = [
+      { x: 0, y: 0, width: 1920, height: 1040 },
+      { x: 1920, y: 0, width: 1280, height: 984 },
+    ];
+    const state = { x: 1800, y: 40, width: 1200, height: 800, maximized: false };
+    assert.deepEqual(restoredPlace(state, two).bounds, {
+      x: 1920,
+      y: 40,
+      width: 1200,
+      height: 800,
+    });
+  });
+
+  it("opens centred on a screen that is gone, still maximized if it was", () => {
+    const state = { x: 2400, y: 80, width: 1280, height: 800, maximized: true };
+    assert.deepEqual(restoredPlace(state, screens), { bounds: null, maximized: true });
     const offTheTop = { x: 100, y: -900, width: 1280, height: 800, maximized: false };
-    assert.equal(restoredBounds(offTheTop, screens), null);
+    assert.deepEqual(restoredPlace(offTheTop, screens), { bounds: null, maximized: false });
   });
 });

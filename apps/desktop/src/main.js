@@ -26,7 +26,7 @@ import {
   windowsTaskbarMode,
 } from "./chrome.js";
 import { isNavigationAllowed, isNimbusPage, parseNimbusUrl } from "./nimbus-url.js";
-import { parseWindowState, restoredBounds, windowState } from "./windows.js";
+import { parseWindowState, restoredPlace, windowState } from "./windows.js";
 
 const dev = isDevLaunch(process.argv);
 
@@ -83,7 +83,7 @@ function windowStateFile() {
   return join(app.getPath("userData"), "window-state.json");
 }
 
-/** The window's saved place, if it is still on a screen; otherwise it opens centred at its usual size. */
+/** Where to open the window (restoredPlace), or null when no place was saved: centred at its usual size. */
 function savedPlace() {
   let text = null;
   try {
@@ -93,7 +93,7 @@ function savedPlace() {
   }
   const state = parseWindowState(text);
   if (!state) return null;
-  return restoredBounds(
+  return restoredPlace(
     state,
     screen.getAllDisplays().map((display) => display.workArea),
   );
@@ -107,15 +107,32 @@ function savePlace(win) {
   }
 }
 
+/** Windows to maximize as they are shown, having been left maximized. */
+const maximizeOnShow = new WeakSet();
+
+/** How long the window waits, hidden, for its page to draw before it is shown anyway (a slow or stalled server). */
+const SHOW_ANYWAY_MS = 3000;
+
+/** Chromium's code for a load that another navigation replaced: not a failure. */
+const ERR_ABORTED = -3;
+
+/** Shows a window that opened hidden, maximized if it was left so. */
+function reveal(win) {
+  if (win.isDestroyed() || win.isVisible()) return;
+  if (maximizeOnShow.has(win)) win.maximize();
+  win.show();
+}
+
 /**
  * Opens the window where the User left it (savedPlace), hidden until the page has drawn itself, so it never shows as
- * a blank rectangle first; a page that fails to load shows at once.
+ * a blank rectangle first. A page that fails to load shows at once, and one that is slow to draw after a few seconds,
+ * so starting Nimbus never seems to do nothing.
  */
 function createWindow(nimbusUrl) {
   const place = savedPlace();
   const win = new BrowserWindow({
     ...windowChrome(process.platform, osMode()),
-    ...(place ? { x: place.x, y: place.y, width: place.width, height: place.height } : {}),
+    ...place?.bounds,
     show: false,
     title: "Nimbus",
     ...(appIcon ? { icon: appIcon } : {}),
@@ -126,16 +143,17 @@ function createWindow(nimbusUrl) {
       devTools: dev,
     },
   });
-  const reveal = () => {
-    if (win.isDestroyed() || win.isVisible()) return;
-    if (place?.maximized) win.maximize();
-    win.show();
-  };
-  win.once("ready-to-show", reveal);
-  win.webContents.on("did-fail-load", (_event, _code, _description, _url, mainFrame) => {
-    if (mainFrame) reveal();
+  if (place?.maximized) maximizeOnShow.add(win);
+  win.once("ready-to-show", () => reveal(win));
+  win.webContents.on("did-fail-load", (_event, code, _description, _url, mainFrame) => {
+    if (mainFrame && code !== ERR_ABORTED) reveal(win);
   });
+  const showAnyway = setTimeout(() => reveal(win), SHOW_ANYWAY_MS);
+  win.once("show", () => clearTimeout(showAnyway));
+  win.on("closed", () => clearTimeout(showAnyway));
   win.on("close", () => savePlace(win));
+  // Windows shutting down or signing out may end the app without closing the window.
+  win.on("session-end", () => savePlace(win));
 
   // Windows and Linux keep the menu for its shortcuts but never show it (see menuTemplate).
   win.setMenuBarVisibility(false);
@@ -159,14 +177,21 @@ function createWindow(nimbusUrl) {
 
 // One Nimbus at a time: a second launch brings the first one's window forward and quits. Two would overwrite each
 // other's saved Tabs and window place.
+/** The address the window opens, once start has read it. */
+let startUrl = null;
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", () => {
     const [win] = BrowserWindow.getAllWindows();
-    if (!win) return;
+    // macOS keeps running with no window once the last is closed: a second launch opens one.
+    if (!win) {
+      if (startUrl) createWindow(startUrl);
+      return;
+    }
     if (win.isMinimized()) win.restore();
-    win.show();
+    reveal(win);
     win.focus();
   });
   app.whenReady().then(start);
@@ -181,6 +206,7 @@ async function start() {
     app.quit();
     return;
   }
+  startUrl = nimbusUrl;
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, dev)));
 
   // The page's theme (nimbusDesktop.setTheme), for the Windows buttons' colours. nativeTheme.themeSource is left alone:

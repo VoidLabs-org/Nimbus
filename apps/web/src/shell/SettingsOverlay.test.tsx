@@ -180,7 +180,7 @@ describe("the Settings overlay in the Desktop app", () => {
       within(within(settings).getByRole("navigation", { name: "Settings pages" }))
         .getAllByRole("link")
         .map((link) => link.textContent);
-    expect(pages()).toEqual(["Profile", "Security", "Appearance"]);
+    expect(pages()).toEqual(["Profile", "Security", "Notifications", "Appearance"]);
     cleanup();
 
     vi.spyOn(api, "myPlatformPermissions").mockResolvedValue([
@@ -194,7 +194,14 @@ describe("the Settings overlay in the Desktop app", () => {
       within(within(withWorkspace).getByRole("navigation", { name: "Settings pages" }))
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Profile", "Security", "Appearance", "Roles & access", "Audit log"]);
+    ).toEqual([
+      "Profile",
+      "Security",
+      "Notifications",
+      "Appearance",
+      "Roles & access",
+      "Audit log",
+    ]);
   });
 
   it("moves between pages inside, keeping the page behind", async () => {

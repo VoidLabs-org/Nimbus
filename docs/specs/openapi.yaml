@@ -197,6 +197,68 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/users/me/notification-settings:
+    get:
+      tags: [notifications]
+      summary: The caller's email switches for Issue Notification types
+      description: >-
+        Requires a verified User. Always lists the five Issue types in a fixed order. Email defaults to on except for
+        ISSUE_EDITED. In-app Notifications and Security alerts are always on and not listed.
+      responses:
+        "200":
+          description: One entry per Issue type
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationSetting"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Unverified User (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/users/me/notification-settings/{type}:
+    put:
+      tags: [notifications]
+      summary: Switch email on or off for one Issue Notification type
+      description: >-
+        Requires a verified User. Only switches that differ from the default are stored; saving the default removes the
+        stored switch. Security alert types and unknown types give 400.
+      parameters:
+        - in: path
+          name: type
+          required: true
+          schema:
+            $ref: "#/components/schemas/IssueNotificationType"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: boolean
+      responses:
+        "204":
+          description: Saved
+        "400":
+          description: Unknown type, a Security alert type, or a missing email
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Unverified User (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /api/auth/register:
     post:
       tags: [auth]
@@ -2134,6 +2196,19 @@ components:
         createdAt:
           type: string
           format: date-time
+    IssueNotificationType:
+      type: string
+      enum: [ISSUE_ASSIGNED, ISSUE_UNASSIGNED, ISSUE_STATUS_CHANGED, ISSUE_EDITED, ISSUE_DELETED]
+
+    NotificationSetting:
+      type: object
+      required: [type, email]
+      properties:
+        type:
+          $ref: "#/components/schemas/IssueNotificationType"
+        email:
+          type: boolean
+
     NotificationPage:
       type: object
       required: [items, nextCursor]

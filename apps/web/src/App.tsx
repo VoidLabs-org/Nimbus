@@ -27,6 +27,7 @@ import ProjectsPage from "./pages/ProjectsPage";
 import RolesPage from "./pages/RolesPage";
 import SecurityPage from "./pages/SecurityPage";
 import TwoStepSignInPage from "./pages/TwoStepSignInPage";
+import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import SettingsOverview from "./settings/SettingsOverview";
 import { PASSWORD_WINDOW_PATH } from "./settings/sections";
 import { isSettingsPath, SettingsOverlayContext } from "./settings/settingsOverlay";
@@ -103,6 +104,7 @@ const SETTINGS_PAGES = (
     {/* The password moved onto Profile; old links open its window there. */}
     <Route path="/settings/password" element={<Navigate to={PASSWORD_WINDOW_PATH} replace />} />
     <Route path="/settings/security" element={<SecurityPage />} />
+    <Route path="/settings/notifications" element={<NotificationSettingsPage />} />
     <Route path="/settings/appearance" element={<AppearancePage />} />
     <Route path="/settings/roles" element={<RolesPage />} />
     <Route path="/settings/roles/:key" element={<RolePage />} />

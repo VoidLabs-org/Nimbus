@@ -55,6 +55,7 @@ it("caps the bell badge and explains an empty inbox", async () => {
       <QueryClientProvider client={createQueryClient()}>
         <MemoryRouter>
           <NotificationBell position="bottom-end" />
+          <Location />
         </MemoryRouter>
       </QueryClientProvider>
     </MantineProvider>,
@@ -65,7 +66,8 @@ it("caps the bell badge and explains an empty inbox", async () => {
   expect(await screen.findByText("You're all caught up")).toBeTruthy();
   expect(screen.getByText(/an Issue you reported or are assigned to changes/)).toBeTruthy();
   expect(screen.getByText("Kept for 90 days")).toBeTruthy();
-  expect(screen.queryByRole("link", { name: "Email settings" })).toBeNull();
+  fireEvent.click(screen.getByRole("link", { name: "Email settings" }));
+  expect(screen.getByTestId("location").textContent).toBe("/settings/notifications");
 });
 
 it("groups Security alerts by day, loads older rows, and marks a row read before opening Security", async () => {

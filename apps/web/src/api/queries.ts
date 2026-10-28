@@ -15,6 +15,7 @@ export const queryKeys = {
   notifications: ["notifications"] as const,
   notificationList: ["notifications", "list"] as const,
   notificationUnreadCount: ["notifications", "unread-count"] as const,
+  notificationSettings: ["notificationSettings"] as const,
   sessions: ["sessions"] as const,
   linkedIdentities: ["linkedIdentities"] as const,
   twoStep: ["twoStep"] as const,
@@ -61,6 +62,14 @@ export function loadFailure(query: UseQueryResult): FailedLoad | null {
   return query.isError && !query.isFetching && query.data === undefined
     ? failedLoad(query.error)
     : null;
+}
+
+/** The signed-in User's email switches per Issue Notification type, for Settings › Notifications. */
+export function useNotificationSettings() {
+  return useQuery({
+    queryKey: queryKeys.notificationSettings,
+    queryFn: () => api.notificationSettings(),
+  });
 }
 
 /** The signed-in User's running sign-ins, for the Security page. */

@@ -61,6 +61,16 @@ export type NotificationItem = {
 
 export type NotificationPage = { items: NotificationItem[]; nextCursor: string | null };
 
+/** The Issue Notification types whose email can be switched. */
+export type IssueNotificationType =
+  | "ISSUE_ASSIGNED"
+  | "ISSUE_UNASSIGNED"
+  | "ISSUE_STATUS_CHANGED"
+  | "ISSUE_EDITED"
+  | "ISSUE_DELETED";
+
+export type NotificationSetting = { type: IssueNotificationType; email: boolean };
+
 /** A User with Two-step verification also sends a Sign-in code or a Recovery code (`two_step_required`). */
 export type ResetPasswordInput = {
   email: string;
@@ -672,6 +682,13 @@ export function createApiClient(
     readNotification: (id: string) =>
       request<void>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
     readAllNotifications: () => request<void>("/api/notifications/read-all", { method: "POST" }),
+    notificationSettings: () =>
+      request<NotificationSetting[]>("/api/users/me/notification-settings"),
+    saveNotificationSetting: (type: IssueNotificationType, email: boolean) =>
+      request<void>(`/api/users/me/notification-settings/${type}`, {
+        method: "PUT",
+        body: JSON.stringify({ email }),
+      }),
     /** Ends every session of the User except this one; 204 even when there are none. */
     endOtherSessions: () =>
       request<void>("/api/users/me/sessions/sign-out-others", { method: "POST" }),

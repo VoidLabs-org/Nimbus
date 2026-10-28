@@ -18,6 +18,11 @@ const ACCOUNT: SettingsItem[] = [
   { to: "/settings/profile", label: "Profile", description: "Your name, email and password" },
   { to: "/settings/security", label: "Security", description: "Where you're signed in" },
   {
+    to: "/settings/notifications",
+    label: "Notifications",
+    description: "Which Notifications are also emailed",
+  },
+  {
     to: "/settings/appearance",
     label: "Appearance",
     description: "Light or dark, flat or glass",

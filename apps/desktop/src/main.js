@@ -7,9 +7,12 @@ import {
   Menu,
   nativeImage,
   nativeTheme,
+  screen,
   shell,
 } from "electron";
 import { execFile } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
@@ -23,6 +26,7 @@ import {
   windowsTaskbarMode,
 } from "./chrome.js";
 import { isNavigationAllowed, isNimbusPage, parseNimbusUrl } from "./nimbus-url.js";
+import { parseWindowState, restoredBounds, windowState } from "./windows.js";
 
 const dev = isDevLaunch(process.argv);
 
@@ -74,9 +78,45 @@ async function updateAppIcon() {
   else for (const win of BrowserWindow.getAllWindows()) win.setIcon(appIcon);
 }
 
+/** Where the window's place (bounds, maximized) is kept between starts. */
+function windowStateFile() {
+  return join(app.getPath("userData"), "window-state.json");
+}
+
+/** The window's saved place, if it is still on a screen; otherwise it opens centred at its usual size. */
+function savedPlace() {
+  let text = null;
+  try {
+    text = readFileSync(windowStateFile(), "utf8");
+  } catch {
+    // Never saved yet.
+  }
+  const state = parseWindowState(text);
+  if (!state) return null;
+  return restoredBounds(
+    state,
+    screen.getAllDisplays().map((display) => display.workArea),
+  );
+}
+
+function savePlace(win) {
+  try {
+    writeFileSync(windowStateFile(), windowState(win.getNormalBounds(), win.isMaximized()));
+  } catch {
+    // The user data folder can't be written: the window opens at its usual place next time.
+  }
+}
+
+/**
+ * Opens the window where the User left it (savedPlace), hidden until the page has drawn itself, so it never shows as
+ * a blank rectangle first; a page that fails to load shows at once.
+ */
 function createWindow(nimbusUrl) {
+  const place = savedPlace();
   const win = new BrowserWindow({
     ...windowChrome(process.platform, osMode()),
+    ...(place ? { x: place.x, y: place.y, width: place.width, height: place.height } : {}),
+    show: false,
     title: "Nimbus",
     ...(appIcon ? { icon: appIcon } : {}),
     webPreferences: {
@@ -86,6 +126,17 @@ function createWindow(nimbusUrl) {
       devTools: dev,
     },
   });
+  const reveal = () => {
+    if (win.isDestroyed() || win.isVisible()) return;
+    if (place?.maximized) win.maximize();
+    win.show();
+  };
+  win.once("ready-to-show", reveal);
+  win.webContents.on("did-fail-load", (_event, _code, _description, _url, mainFrame) => {
+    if (mainFrame) reveal();
+  });
+  win.on("close", () => savePlace(win));
+
   // Windows and Linux keep the menu for its shortcuts but never show it (see menuTemplate).
   win.setMenuBarVisibility(false);
 
@@ -106,7 +157,22 @@ function createWindow(nimbusUrl) {
   win.loadURL(nimbusUrl.href);
 }
 
-app.whenReady().then(async () => {
+// One Nimbus at a time: a second launch brings the first one's window forward and quits. Two would overwrite each
+// other's saved Tabs and window place.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+  app.whenReady().then(start);
+}
+
+async function start() {
   let nimbusUrl;
   try {
     nimbusUrl = parseNimbusUrl(process.env.NIMBUS_URL);
@@ -148,7 +214,7 @@ app.whenReady().then(async () => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(nimbusUrl);
   });
-});
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

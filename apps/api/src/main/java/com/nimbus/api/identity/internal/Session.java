@@ -79,6 +79,10 @@ class Session {
 		return userId;
 	}
 
+	String userAgent() {
+		return userAgent;
+	}
+
 	/** When the session ends at the latest, however active it is. */
 	Instant expiresAt() {
 		return expiresAt;

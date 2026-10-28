@@ -157,7 +157,7 @@ class TwoStepSetupTests {
 	@Test
 	void anEndedSessionIs401() {
 		var user = userFor("ts9@example.com");
-		var token = accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		var token = accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 		sessions.endAll(user);
 
 		status(token).expectStatus().isUnauthorized();
@@ -287,7 +287,7 @@ class TwoStepSetupTests {
 
 	private String tokenFor(String email) {
 		var user = userFor(email);
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec status(String token) {

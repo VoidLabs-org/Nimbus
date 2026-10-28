@@ -50,7 +50,7 @@ class AuthController {
 	ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
 		var user = registration.register(request.displayName(), request.email(), request.password(),
 				http.getRemoteAddr());
-		return signedIn(HttpStatus.CREATED, user, http);
+		return signedIn(HttpStatus.CREATED, user, http, false);
 	}
 
 	/**
@@ -67,7 +67,7 @@ class AuthController {
 				.header(HttpHeaders.SET_COOKIE, pending.get().toString())
 				.body(new TwoStepRequiredResponse(true));
 		}
-		return signedIn(HttpStatus.OK, user, http);
+		return signedIn(HttpStatus.OK, user, http, true);
 	}
 
 	/**
@@ -108,10 +108,15 @@ class AuthController {
 			.build();
 	}
 
-	/** Starts a session: the access token goes in the body, the refresh token only in the cookie. */
+	/**
+	 * Starts a session: the access token goes in the body, the refresh token only in the cookie.
+	 *
+	 * @param announce whether to send a new-sign-in Security alert; registration's first session sends none
+	 */
 	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user, HttpServletRequest http,
-			ResponseCookie... alsoSet) {
-		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT)), alsoSet);
+			boolean announce, ResponseCookie... alsoSet) {
+		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT), announce),
+				alsoSet);
 	}
 
 	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken,

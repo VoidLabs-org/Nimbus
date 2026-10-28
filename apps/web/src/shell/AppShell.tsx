@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { UserMenu } from "../auth/UserMenu";
+import { NotificationBell } from "../notifications/NotificationBell";
 import classes from "./AppShell.module.css";
 import { NimbusLogo } from "./NimbusLogo";
 import { PageErrorBoundary } from "./PageErrorBoundary";
@@ -163,6 +164,7 @@ export function AppShell() {
               </div>
               <div className={classes.group}>
                 <ThemeToggles orientation="vertical" />
+                <NotificationBell position={menuPlacement(position)} />
                 <UserMenu variant="avatar" placement={menuPlacement(position)} />
               </div>
             </>
@@ -222,6 +224,7 @@ export function AppShell() {
                   </Group>
                 </>
               )}
+              <NotificationBell position={menuPlacement(position)} />
               <UserMenu placement={menuPlacement(position)} />
             </>
           )}

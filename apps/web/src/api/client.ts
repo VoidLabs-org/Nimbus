@@ -50,6 +50,17 @@ export type ChangePasswordInput = {
 
 export type LoginInput = { email: string; password: string };
 
+export type NotificationItem = {
+  id: string;
+  type: "SIGNED_IN";
+  createdAt: string;
+  read: boolean;
+  snapshot: { title: string; deviceLabel: string };
+  link: string;
+};
+
+export type NotificationPage = { items: NotificationItem[]; nextCursor: string | null };
+
 /** A User with Two-step verification also sends a Sign-in code or a Recovery code (`two_step_required`). */
 export type ResetPasswordInput = {
   email: string;
@@ -652,6 +663,15 @@ export function createApiClient(
 
     /** The User's running sign-ins, this browser's first. */
     sessions: () => request<SessionInfo[]>("/api/users/me/sessions"),
+
+    notifications: (before?: string) =>
+      request<NotificationPage>(
+        `/api/notifications${before ? `?before=${encodeURIComponent(before)}` : ""}`,
+      ),
+    notificationUnreadCount: () => request<{ count: number }>("/api/notifications/unread-count"),
+    readNotification: (id: string) =>
+      request<void>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+    readAllNotifications: () => request<void>("/api/notifications/read-all", { method: "POST" }),
     /** Ends every session of the User except this one; 204 even when there are none. */
     endOtherSessions: () =>
       request<void>("/api/users/me/sessions/sign-out-others", { method: "POST" }),

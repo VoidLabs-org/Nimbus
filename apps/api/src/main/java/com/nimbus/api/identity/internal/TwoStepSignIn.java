@@ -143,7 +143,7 @@ class TwoStepSignIn {
 			}
 			// Join this transaction, so they are stored with the used code or not at all.
 			var remembered = rememberBrowser ? rememberedBrowsers.remember(userId) : null;
-			return new SignedIn(user, sessions.start(user, userAgent), remembered);
+			return new SignedIn(user, sessions.start(user, userAgent, true), remembered);
 		});
 	}
 

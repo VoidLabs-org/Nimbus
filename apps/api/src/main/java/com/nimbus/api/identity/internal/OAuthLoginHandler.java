@@ -34,8 +34,6 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 
 	private final ExternalSignIn externalSignIn;
 
-	private final Sessions sessions;
-
 	private final LinkTickets tickets;
 
 	private final LinkedIdentities linkedIdentities;
@@ -45,10 +43,9 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 
 	private final TwoStepSignIn twoStepSignIn;
 
-	OAuthLoginHandler(ExternalSignIn externalSignIn, Sessions sessions, LinkTickets tickets,
+	OAuthLoginHandler(ExternalSignIn externalSignIn, LinkTickets tickets,
 			LinkedIdentities linkedIdentities, TwoStepSignIn twoStepSignIn, AuthProperties properties) {
 		this.externalSignIn = externalSignIn;
-		this.sessions = sessions;
 		this.tickets = tickets;
 		this.linkedIdentities = linkedIdentities;
 		this.twoStepSignIn = twoStepSignIn;
@@ -82,8 +79,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 				redirect(response, "/login/two-step", returnTo);
 				return;
 			}
-			var user = externalSignIn.signIn(profile);
-			var refreshToken = sessions.start(user, request.getHeader(HttpHeaders.USER_AGENT));
+			var refreshToken = externalSignIn.startSession(profile, request.getHeader(HttpHeaders.USER_AGENT));
 			response.addHeader(HttpHeaders.SET_COOKIE,
 					AuthController.refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
 			redirect(response, "/auth/callback", returnTo);

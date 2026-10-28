@@ -68,8 +68,8 @@ class DisconnectProviderTests {
 	void disconnectingKeepsEverySession() {
 		var user = externalSignIn.signIn(profile("google", "g-dc2", "dc2@example.com"));
 		externalSignIn.signIn(profile("github", "gh-dc2", "dc2@example.com"));
-		var thisBrowser = sessions.start(user, null);
-		var otherBrowser = sessions.start(user, null);
+		var thisBrowser = sessions.start(user, null, false);
+		var otherBrowser = sessions.start(user, null, false);
 
 		disconnect(accessTokens.issueFor(user, thisBrowser.sessionId()), "github").expectStatus().isNoContent();
 
@@ -172,7 +172,8 @@ class DisconnectProviderTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		// Completes this fixture's provider sign-up, whose first Session sends no sign-in alert.
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec disconnect(String accessToken, String provider) {

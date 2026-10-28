@@ -169,7 +169,7 @@ class TwoStepProviderSignInTests {
 	@Test
 	void disconnectingTheProviderWhileTheCodePageIsOpenEndsThePendingSignIn() throws Exception {
 		var user = googleUser("tsp9@example.com", "g-tsp-9");
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 		externalSignIn.connect(user.getId(), session.sessionId(),
 				new ExternalProfile("github", "4949", "tsp9@example.com", true, "Octo", null, "octo-4949"));
 		var key = turnOn(user);
@@ -189,7 +189,7 @@ class TwoStepProviderSignInTests {
 	void connectingAProviderStillLinksWithoutAsking() throws Exception {
 		var user = googleUser("tsp7@example.com", "g-tsp-7");
 		turnOn(user);
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 		var issued = tickets.issue(user.getId(), session.sessionId(), "github");
 		var request = new MockHttpServletRequest();
 		request.setSession(new MockHttpSession());
@@ -261,7 +261,7 @@ class TwoStepProviderSignInTests {
 
 	/** Turns on Two-step verification through the Security page's endpoints; returns the authenticator key. */
 	private String turnOn(User user) {
-		var token = accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		var token = accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 		String key = JsonPath.read(client.post().uri("/api/users/me/two-step/setup")
 			.header("Authorization", "Bearer " + token).exchange()
 			.expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody(), "$.key");

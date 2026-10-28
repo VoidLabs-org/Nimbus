@@ -69,8 +69,8 @@ class SetPasswordAfterLinkingTests {
 	@Test
 	void settingAFirstPasswordLeavesTheOtherSessionsRunning() {
 		var user = externalSignIn.signIn(profile("google", "g-first", "first@example.com"));
-		var thisBrowser = sessions.start(user, null);
-		var otherBrowser = sessions.start(user, null);
+		var thisBrowser = sessions.start(user, null, false);
+		var otherBrowser = sessions.start(user, null, false);
 
 		setPassword(accessTokens.issueFor(user, thisBrowser.sessionId()), Map.of("newPassword", "first password"))
 			.expectStatus().isNoContent();
@@ -136,7 +136,7 @@ class SetPasswordAfterLinkingTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec setPassword(String accessToken, Map<String, String> body) {

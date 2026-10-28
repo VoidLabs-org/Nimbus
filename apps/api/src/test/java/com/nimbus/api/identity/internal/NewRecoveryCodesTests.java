@@ -123,7 +123,7 @@ class NewRecoveryCodesTests {
 	@Test
 	void anEndedSessionIs401AndAnUnverifiedUserIs403() {
 		var user = googleUser("nrc7@example.com");
-		var token = accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		var token = accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 		sessions.endAll(user);
 		newCodes(token, "123456").expectStatus().isUnauthorized();
 
@@ -171,7 +171,7 @@ class NewRecoveryCodesTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	/** A Google sign-in by the User, finished with a Recovery code. */

@@ -49,7 +49,7 @@ function clamp(value, min, max) {
 
 /**
  * Where to open the window from its saved place and the screens there are now. It goes to the screen most of it was
- * on, made no bigger than that screen and moved wholly onto it, so it can always be dragged and resized there (after
+ * on, made no bigger than that screen (nor smaller than the smallest window) and moved onto it, so it can always be dragged and resized there (after
  * undocking from a large monitor, say). On no screen at all (that screen was unplugged) it opens centred at its usual
  * size (`bounds` null); either way it is maximized again if it was.
  *
@@ -66,12 +66,13 @@ export function restoredPlace(state, workAreas) {
     if (shared > bestOverlap) [best, bestOverlap] = [area, shared];
   }
   if (!best) return { bounds: null, maximized };
-  const width = Math.min(state.width, best.width);
-  const height = Math.min(state.height, best.height);
+  // Never below the smallest window, though: on a screen smaller than that it starts at the screen's corner instead.
+  const width = Math.max(MIN_WINDOW.width, Math.min(state.width, best.width));
+  const height = Math.max(MIN_WINDOW.height, Math.min(state.height, best.height));
   return {
     bounds: {
-      x: clamp(state.x, best.x, best.x + best.width - width),
-      y: clamp(state.y, best.y, best.y + best.height - height),
+      x: clamp(state.x, best.x, Math.max(best.x, best.x + best.width - width)),
+      y: clamp(state.y, best.y, Math.max(best.y, best.y + best.height - height)),
       width,
       height,
     },

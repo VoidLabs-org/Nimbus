@@ -17,15 +17,14 @@ const CHOICES: { value: Choice; label: string }[] = [
  * reaches the chosen tile, the arrow keys move between them.
  */
 export function ThemeTiles() {
-  const { theme, followsSystem, setTheme, followSystem } = useNimbusTheme();
-  // Shown flat in the Desktop app, a saved glass theme counts as its flat twin.
-  const flat: Choice = theme === "ink" || theme === "slate" ? "ink" : "paper";
-  const chosen: Choice = followsSystem ? "system" : flat;
+  const { mode, followsSystem, setMode, followSystem } = useNimbusTheme();
+  const chosen: Choice = followsSystem ? "system" : mode === "dark" ? "ink" : "paper";
   const tiles = useRef<(HTMLButtonElement | null)[]>([]);
 
+  // Paper and Ink set only light or dark: a glass surface saved earlier stays stored (see flatOnly).
   const choose = (value: Choice) => {
     if (value === "system") followSystem();
-    else setTheme(value);
+    else setMode(value === "ink" ? "dark" : "light");
   };
   const onKeyDown = (event: React.KeyboardEvent, index: number) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];

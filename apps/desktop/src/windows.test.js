@@ -45,6 +45,17 @@ describe("the app window's saved place", () => {
     });
   });
 
+  it("never shrinks below the smallest window, on a screen smaller than that: it starts at the screen's corner", () => {
+    const small = [{ x: 0, y: 0, width: 720, height: 1200 }];
+    const state = { x: 40, y: 100, width: 1280, height: 800, maximized: false };
+    assert.deepEqual(restoredPlace(state, small).bounds, {
+      x: 0,
+      y: 100,
+      width: 800,
+      height: 800,
+    });
+  });
+
   it("moves fully onto the screen it was mostly off, so it can always be dragged", () => {
     const state = { x: -1180, y: 80, width: 1280, height: 800, maximized: false };
     assert.deepEqual(restoredPlace(state, screens).bounds, {

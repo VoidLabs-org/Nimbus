@@ -99,16 +99,22 @@ function savedPlace() {
   );
 }
 
+/**
+ * Whether each window is maximized, as last seen while it was showing: closed while minimized (not maximized then) or
+ * before it was first shown, it still opens maximized next time if it was.
+ */
+const maximizedWindows = new WeakMap();
+
 function savePlace(win) {
   try {
-    writeFileSync(windowStateFile(), windowState(win.getNormalBounds(), win.isMaximized()));
+    writeFileSync(
+      windowStateFile(),
+      windowState(win.getNormalBounds(), maximizedWindows.get(win) === true),
+    );
   } catch {
     // The user data folder can't be written: the window opens at its usual place next time.
   }
 }
-
-/** Windows to maximize as they are shown, having been left maximized. */
-const maximizeOnShow = new WeakSet();
 
 /** How long the window waits, hidden, for its page to draw before it is shown anyway (a slow or stalled server). */
 const SHOW_ANYWAY_MS = 3000;
@@ -116,11 +122,20 @@ const SHOW_ANYWAY_MS = 3000;
 /** Chromium's code for a load that another navigation replaced: not a failure. */
 const ERR_ABORTED = -3;
 
-/** Shows a window that opened hidden, maximized if it was left so. */
+/**
+ * Shows a window that opened hidden, maximized if it was left so. Windows maximizes a hidden window as it shows it,
+ * in one step; Linux ignores maximizing a window that isn't on screen yet, so there it is shown first.
+ */
 function reveal(win) {
   if (win.isDestroyed() || win.isVisible()) return;
-  if (maximizeOnShow.has(win)) win.maximize();
-  win.show();
+  const maximized = maximizedWindows.get(win) === true;
+  if (process.platform === "linux") {
+    win.show();
+    if (maximized) win.maximize();
+    return;
+  }
+  if (maximized) win.maximize();
+  if (!win.isVisible()) win.show();
 }
 
 /**
@@ -143,13 +158,23 @@ function createWindow(nimbusUrl) {
       devTools: dev,
     },
   });
-  if (place?.maximized) maximizeOnShow.add(win);
-  win.once("ready-to-show", () => reveal(win));
-  win.webContents.on("did-fail-load", (_event, code, _description, _url, mainFrame) => {
-    if (mainFrame && code !== ERR_ABORTED) reveal(win);
+  maximizedWindows.set(win, place?.maximized === true);
+  win.on("maximize", () => maximizedWindows.set(win, true));
+  win.on("unmaximize", () => {
+    if (!win.isMinimized()) maximizedWindows.set(win, false);
   });
+
+  win.once("ready-to-show", () => reveal(win));
+  const onFailedLoad = (_event, code, _description, _url, mainFrame) => {
+    if (mainFrame && code !== ERR_ABORTED) reveal(win);
+  };
+  win.webContents.on("did-fail-load", onFailedLoad);
   const showAnyway = setTimeout(() => reveal(win), SHOW_ANYWAY_MS);
-  win.once("show", () => clearTimeout(showAnyway));
+  // Shown: nothing more to wait for.
+  win.once("show", () => {
+    clearTimeout(showAnyway);
+    win.webContents.off("did-fail-load", onFailedLoad);
+  });
   win.on("closed", () => clearTimeout(showAnyway));
   win.on("close", () => savePlace(win));
   // Windows shutting down or signing out may end the app without closing the window.

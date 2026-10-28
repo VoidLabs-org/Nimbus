@@ -14,7 +14,18 @@ import { settingsCrumbs } from "../settings/crumbs";
  */
 export default function AppearancePage() {
   const desktop = isDesktop();
-  const keptIn = desktop ? "on this computer" : "in this browser";
+  // The Desktop app has only the flat themes, as tiles; a browser has all four, with System, in the pill picker.
+  const copy = desktop
+    ? {
+        keptIn: "on this computer",
+        themes: "",
+        hint: "Paper is light and Ink is dark. System follows your computer's light or dark setting.",
+      }
+    : {
+        keptIn: "in this browser",
+        themes: " Paper and Ink are flat; Fog and Slate are glass.",
+        hint: "Paper and Fog are light; Ink and Slate are dark. System follows your device's light or dark setting, and keeps flat or glass as you last chose.",
+      };
   return (
     <Container size="md" px={0} py="xl">
       <Stack gap="lg">
@@ -22,34 +33,18 @@ export default function AppearancePage() {
         <div>
           <Title order={1}>Appearance</Title>
           <Text c="dimmed" mt={6}>
-            {desktop
-              ? "Choose how Nimbus looks."
-              : "Choose how Nimbus looks. Paper and Ink are flat; Fog and Slate are glass."}{" "}
-            Your choice is kept {keptIn}.
+            Choose how Nimbus looks.{copy.themes} Your choice is kept {copy.keptIn}.
           </Text>
         </div>
-        {desktop ? (
-          <Panel p="lg">
-            <Stack gap="md">
-              <ThemeTiles />
-              <Text size="sm" c="dimmed">
-                Paper is light and Ink is dark. System follows your computer&apos;s light or dark
-                setting.
-              </Text>
-            </Stack>
-          </Panel>
-        ) : (
-          <Panel p="lg">
-            {/* Left-aligned, so the picker keeps its own width instead of stretching across the panel. */}
-            <Stack gap="md" align="flex-start">
-              <ThemePicker />
-              <Text size="sm" c="dimmed">
-                Paper and Fog are light; Ink and Slate are dark. System follows your device&apos;s
-                light or dark setting, and keeps flat or glass as you last chose.
-              </Text>
-            </Stack>
-          </Panel>
-        )}
+        <Panel p="lg">
+          {/* Left-aligned, so the picker keeps its own width instead of stretching across the panel. */}
+          <Stack gap="md" align="flex-start">
+            {desktop ? <ThemeTiles /> : <ThemePicker />}
+            <Text size="sm" c="dimmed">
+              {copy.hint}
+            </Text>
+          </Stack>
+        </Panel>
         {!desktop && (
           <Panel p="lg">
             <Stack gap="md">

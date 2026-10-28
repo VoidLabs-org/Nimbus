@@ -1,14 +1,25 @@
 import { Container, Tooltip, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Glyph } from "@repo/ui/glyph";
-import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand } from "@tabler/icons-react";
+import { useNimbusTheme } from "@repo/ui/nimbus-theme";
+import {
+  IconFolderPlus,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
+  IconLogout,
+  IconSearch,
+  IconSettings,
+  IconSunMoon,
+} from "@tabler/icons-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
+import { SignOutDialog } from "../auth/SignOutDialog";
 import { UserMenu } from "../auth/UserMenu";
 import { useSession } from "../auth/useSession";
 import { PageContent } from "./AppShell";
-import { useSettingsOverlay } from "../settings/settingsOverlay";
+import { useSettingsGroups } from "../settings/sections";
+import { isSettingsPath, useSettingsOverlay } from "../settings/settingsOverlay";
 import {
   desktopPlatform,
   isSettingsShortcut,
@@ -18,6 +29,8 @@ import {
 } from "./desktop";
 import classes from "./DesktopShell.module.css";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
+import { Jump } from "./Jump";
+import { isJumpShortcut, jumpPages, type JumpAction, type JumpItem } from "./jumpTargets";
 import { TabRow } from "./TabRow";
 import { DESTINATIONS, type Destination } from "./navigation";
 import { NimbusLogo } from "./NimbusLogo";
@@ -151,6 +164,42 @@ function menuState(
   return tab ? { x, y, label: tab.title, items: tabMenu(tab, tabs, platform) } : null;
 }
 
+/**
+ * Ctrl or ⌘ K opens Jump from anywhere in the shell, as the box in the title row does. The listener is added once; it
+ * always calls the latest `open`.
+ */
+function useJumpShortcut(platform: Platform, open: () => void) {
+  const onShortcut = useEffectEvent(open);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isJumpShortcut(event, platform)) return;
+      event.preventDefault();
+      onShortcut();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [platform]);
+}
+
+/**
+ * The "Search or jump to…" box at the right end of the title row (design "Nimbus Desktop v2", 2a), naming its
+ * shortcut: it opens Jump.
+ */
+function JumpBox({ platform, onClick }: { platform: Platform; onClick: () => void }) {
+  const shortcut = `${modifierLabel(platform)} K`;
+  return (
+    <UnstyledButton
+      className={classes.jumpBox}
+      onClick={onClick}
+      aria-keyshortcuts={platform === "darwin" ? "Meta+K" : "Control+K"}
+    >
+      <Glyph icon={IconSearch} size={15} />
+      <span className={classes.jumpLabel}>Search or jump to…</span>
+      <span className={classes.jumpKeys}>{shortcut}</span>
+    </UnstyledButton>
+  );
+}
+
 /** How long the pointer rests on the Sidebar button, while folded, before the Sidebar peeks out. */
 export const PEEK_DELAY_MS = 300;
 
@@ -245,6 +294,76 @@ export default function DesktopShell() {
     else setChosen(folded ? "open" : "folded");
   };
   useFoldShortcut(platform, toggle);
+
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const openJump = () => setJumpOpen(true);
+  useJumpShortcut(platform, openJump);
+  const [signingOut, setSigningOut] = useState(false);
+  const { mode, setMode } = useNimbusTheme();
+  const jumpToPages = jumpPages(useSettingsGroups());
+  // Jump's commands (design "Nimbus Desktop v2", Search), with the shortcuts that do the same.
+  const jumpActions: JumpAction[] = [
+    {
+      kind: "action",
+      id: "new-project",
+      label: "New project",
+      icon: IconFolderPlus,
+      run: () => void navigate("/projects"),
+    },
+    {
+      kind: "action",
+      id: "theme",
+      label: mode === "dark" ? "Switch to Paper theme" : "Switch to Ink theme",
+      icon: IconSunMoon,
+      run: () => setMode(mode === "dark" ? "light" : "dark"),
+    },
+    {
+      kind: "action",
+      id: "sidebar",
+      label: folded ? "Open the Sidebar" : "Fold the Sidebar",
+      icon: folded ? IconLayoutSidebarLeftExpand : IconLayoutSidebarLeftCollapse,
+      shortcut: platform === "darwin" ? "⌘\\" : "Ctrl+\\",
+      run: toggle,
+    },
+    {
+      kind: "action",
+      id: "settings",
+      label: "Open Settings",
+      icon: IconSettings,
+      shortcut: platform === "darwin" ? "⌘," : "Ctrl+,",
+      run: () => void navigate(SETTINGS.to),
+    },
+    // Asks first, as the account menu does.
+    {
+      kind: "action",
+      id: "sign-out",
+      label: "Sign out",
+      icon: IconLogout,
+      run: () => setSigningOut(true),
+    },
+  ];
+  /**
+   * What picking an item in Jump does. An action runs. A page opens in the Tab already showing it, if another one does,
+   * else in the selected Tab, or in a new Tab when asked; a Settings page opens in the Settings overlay.
+   */
+  const jumpTo = (item: JumpItem, inNewTab: boolean) => {
+    setJumpOpen(false);
+    if (item.kind === "action") {
+      item.run();
+      return;
+    }
+    if (isSettingsPath(item.to)) {
+      void navigate(item.to);
+      return;
+    }
+    if (inNewTab) {
+      tabs.openNew(item.to);
+      return;
+    }
+    const shown = tabs.tabs.tabs.find((tab) => tab.path === item.to);
+    if (shown && shown.id !== tabs.tabs.selected) tabs.select(shown.id);
+    else void navigate(item.to);
+  };
   const mainRef = useRef<HTMLDivElement>(null);
   const startPeek = () => {
     if (!folded) return;
@@ -319,6 +438,7 @@ export default function DesktopShell() {
             onNew={() => tabs.openNew("/")}
             onMenu={(tab, at) => setMenuAt({ ...at, on: { tab: tab.id } })}
           />
+          <JumpBox platform={platform} onClick={openJump} />
         </div>
         <div className={classes.content}>
           <Container size="lg">
@@ -339,6 +459,15 @@ export default function DesktopShell() {
         onPointerOut={endPeekOnPage}
       />
       <ContextMenu menu={menu} onClose={() => setMenuAt(null)} />
+      <Jump
+        opened={jumpOpen}
+        platform={platform}
+        pages={jumpToPages}
+        actions={jumpActions}
+        onPick={jumpTo}
+        onClose={() => setJumpOpen(false)}
+      />
+      <SignOutDialog opened={signingOut} onClose={() => setSigningOut(false)} />
     </div>
   );
 }

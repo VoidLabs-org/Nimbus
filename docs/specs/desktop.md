@@ -58,6 +58,18 @@ The title row holds the User's Tabs (design 2a), as a browser does: each shows a
 - **The row** is only as wide as its Tabs and the +, so the rest of the title row (and the window buttons' area) stays the drag area. When they don't fit it scrolls sideways, keeping the selected Tab in view. The selected Tab is in the page's colour and curves out into the page at its bottom corners, as a browser's selected tab does.
 - **Kept per User.** The Tabs (each with an id, its page and name) and the selected one are kept on this computer under `nimbus-tabs:<User id>`, so another User signing in here never sees them, and are restored when the shell starts for that User: after a restart or a new sign-in. Starting on Home (the window's start address, or where signing in lands) goes back to the Tab the User was on; any other start address opens in it as usual. A restored Tab whose address is no longer a page (`isTabPath`: Home, Projects, a project) is dropped; a project the User may no longer open keeps its Tab and shows Not found, as that page decides. Signed-out pages are outside the shell, so they are never in a Tab.
 
+## Jump
+
+Jump opens a page or runs a command by name (`Jump` and `jumpTargets` in `apps/web/src/shell`, design "Nimbus Desktop v2", Search). The "Search or jump to…" box at the right end of the title row (design 2a, naming its shortcut) or Ctrl K (⌘ K on macOS), from anywhere, opens it: a panel near the top of the window, with the search field, the list in groups and a footer of keys (↑↓ Move, ↵ Open, Ctrl ↵ New tab, `>` commands).
+
+- **Nothing typed.** "Go to": Home, Projects and Profile; "Actions": the first four actions.
+- **Typing.** The pages, Settings pages and actions whose name holds what was typed, ignoring case, under the headings Pages, Settings and Actions, those starting with it first; the matching part of each name is marked. Nothing matching says "No results for …" and points to the commands.
+- **Commands.** Typing `>` first keeps only the actions, with a "Commands" pill in the field: New project (opens Projects), Switch to Paper or Ink theme, Fold or Open the Sidebar (Ctrl `\`), Open Settings (Ctrl `,`) and Sign out, which asks "Sign out?" first, as the account menu does (`SignOutDialog`).
+- **Pages.** The Sidebar's (Home, Projects) and the Settings pages the User may open, from the same `settingsGroups` as the Settings overlay: Roles & access and the Audit log only with their Permissions. Pages only for now; projects, Issues, recent items and an Issues (`#`) search come with their own tickets.
+- **Keyboard.** The arrow keys move the highlight, round the ends, while the focus stays in the search field (a combobox over a listbox in groups, for screen readers); Enter or a click opens the highlighted item, ↵ showing on it; Esc, the Esc badge or a click outside close it, and the focus goes back to where it was. Each opening starts empty.
+- **Where a page opens.** In the Tab already showing it, if another Tab does (it is selected); otherwise in the selected Tab, as a link would. Ctrl Enter or Ctrl click (⌘ on macOS) opens it in a new Tab. A Settings page opens in the Settings overlay over the page.
+- **The box** gives way to the Tabs in a narrow window, down to its icon and shortcut.
+
 ## Settings overlay
 
 In the Desktop app, Settings opens over the page the User is on instead of as pages (`SettingsOverlay`, design "Nimbus Desktop v2" 2c). The browser keeps the Settings overview and its pages.
@@ -77,6 +89,7 @@ In the Desktop app, Settings opens over the page the User is on instead of as pa
 | Ctrl `,` (⌘ `,` on macOS)                    | Opens Settings              |
 | Ctrl W (⌘ W on macOS)                        | Closes the selected Tab     |
 | Ctrl Shift T (⌘ ⇧ T on macOS)                | Reopens the last closed Tab |
+| Ctrl K (⌘ K on macOS)                        | Opens Jump                  |
 | Ctrl Tab, Ctrl Shift Tab                     | Next, previous Tab          |
 | Ctrl click (⌘ click), middle click on a link | Opens it in a new Tab       |
 | Ctrl Shift W (Windows, Linux)                | Closes the window           |
@@ -86,4 +99,4 @@ In the Desktop app, Settings opens over the page the User is on instead of as pa
 
 ## Tests
 
-`pnpm --filter desktop test` runs plain Node tests (`node --test`) for reading `NIMBUS_URL`, which navigations the window allows, which pages may call main, the window's frame and menu, and saving and restoring the window's place, without starting Electron. The Sidebar and the Tabs are tested in the web app (`DesktopShell.test.tsx`, `Tabs.test.tsx`) with `window.nimbusDesktop` faked.
+`pnpm --filter desktop test` runs plain Node tests (`node --test`) for reading `NIMBUS_URL`, which navigations the window allows, which pages may call main, the window's frame and menu, and saving and restoring the window's place, without starting Electron. The Sidebar, the Tabs and Jump are tested in the web app (`DesktopShell.test.tsx`, `Tabs.test.tsx`, `Jump.test.tsx`) with `window.nimbusDesktop` faked.

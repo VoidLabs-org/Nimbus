@@ -344,6 +344,33 @@ describe("the Appearance page in the Desktop app", () => {
     expect(screen.queryByText("Sidebar")).toBeNull();
     expect(screen.getByText("kept on this computer", { exact: false })).toBeTruthy();
   });
+
+  it("offers Paper, Ink and System as tiles, no glass themes", async () => {
+    asDesktop();
+    renderAt("/settings/appearance");
+
+    const themes = await screen.findByRole("radiogroup", { name: "Theme" });
+    expect(
+      within(themes)
+        .getAllByRole("radio")
+        .map((tile) => tile.textContent),
+    ).toEqual(["Paper", "Ink", "System"]);
+    expect(screen.queryByText("Fog")).toBeNull();
+    expect(screen.queryByText("Slate")).toBeNull();
+  });
+
+  it("switches the theme from its tile, marking the one chosen", async () => {
+    asDesktop();
+    renderAt("/settings/appearance");
+
+    const ink = await screen.findByRole("radio", { name: "Ink" });
+    fireEvent.click(ink);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("ink");
+    expect(ink.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("radio", { name: "Paper" }).getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("radio", { name: "System" }));
+    expect(screen.getByRole("radio", { name: "System" }).getAttribute("aria-checked")).toBe("true");
+  });
 });
 
 describe("in a browser", () => {

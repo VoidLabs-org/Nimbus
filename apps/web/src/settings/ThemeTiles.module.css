@@ -1,0 +1,61 @@
+/* The Desktop app's theme tiles (design "Nimbus Desktop v2", Settings → Appearance). Colours come only from the theme
+   variables; the previews use each theme's page colour from themes.css. */
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 116px;
+  padding: 6px 6px 10px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile:hover {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.tile[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.label {
+  padding: 0 4px;
+}
+
+.preview {
+  height: 46px;
+  border-radius: 11px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.preview[data-swatch="paper"] {
+  background: var(--theme-paper-bg);
+}
+
+.preview[data-swatch="ink"] {
+  background: var(--theme-ink-bg);
+}
+
+/* Half Paper, half Ink: whichever the computer says. */
+.preview[data-swatch="system"] {
+  background: linear-gradient(90deg, var(--theme-paper-bg) 50%, var(--theme-ink-bg) 50%);
+}

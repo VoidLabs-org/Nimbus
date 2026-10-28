@@ -150,6 +150,21 @@
   font-size: 16px;
 }
 
+/* In the Desktop app (every page with this layout): no panel, the form at the design's width in the middle of
+   the window, under the small logo. */
+.page.centred {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.centred .compactBrand {
+  display: flex;
+}
+
+.centred .form {
+  max-width: 464px;
+  padding: 40px 0;
+}
+
 /* Below about 900px only the form shows, full width. */
 @media (max-width: 900px) {
   .page {

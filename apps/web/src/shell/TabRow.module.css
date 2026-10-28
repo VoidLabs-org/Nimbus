@@ -2,6 +2,8 @@
    the selected one in the page's colour so it joins the page below. Colours come only from the theme variables. */
 /* The Tabs and the + after them; only as wide as they are, so the rest of the title row stays the drag area. */
 .row {
+  /* The curves where the selected Tab meets the page, and the room between Tabs that keeps them off a neighbour. */
+  --tab-curve: 10px;
   flex: 0 1 auto;
   min-width: 0;
   display: flex;
@@ -13,8 +15,10 @@
   min-width: 0;
   display: flex;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--tab-curve);
   align-self: stretch;
+  /* Room for the selected Tab's curves at either end, which the scrolling would otherwise cut off. */
+  padding-inline: var(--tab-curve);
   overflow: auto hidden;
   scrollbar-width: none;
 }
@@ -44,9 +48,40 @@
 
 .tab[data-selected],
 .tab[data-selected]:hover {
+  position: relative;
   background: var(--color-bg);
   color: var(--color-text);
   font-weight: 600;
+}
+
+/* Its bottom corners curve out into the page, as a browser's selected tab does, so Tab and page read as one shape:
+   a corner of page colour on each side, with a quarter circle cut out of it, in the gap before the next Tab. */
+.tab[data-selected]::before,
+.tab[data-selected]::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: var(--tab-curve);
+  height: var(--tab-curve);
+  pointer-events: none;
+}
+
+.tab[data-selected]::before {
+  left: calc(-1 * var(--tab-curve));
+  background: radial-gradient(
+    circle at 0 0,
+    transparent calc(var(--tab-curve) - 0.5px),
+    var(--color-bg) var(--tab-curve)
+  );
+}
+
+.tab[data-selected]::after {
+  right: calc(-1 * var(--tab-curve));
+  background: radial-gradient(
+    circle at 100% 0,
+    transparent calc(var(--tab-curve) - 0.5px),
+    var(--color-bg) var(--tab-curve)
+  );
 }
 
 .name {
@@ -81,22 +116,25 @@
   background: var(--seg);
 }
 
+/* A round button beside the Tabs, not one of them: centred on their text line, as the window's other round buttons
+   (the Sidebar button, a Tab's ✕) are. */
 .add {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 4px;
   padding: 0;
   border: 0;
-  border-radius: 14px 14px 0 0;
+  border-radius: 50%;
   background: none;
   color: var(--color-accent-2-700);
   cursor: pointer;
 }
 
 .add:hover {
-  background: var(--row-hover);
+  background: var(--seg);
   color: var(--color-text);
 }

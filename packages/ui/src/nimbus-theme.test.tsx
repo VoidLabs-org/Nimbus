@@ -181,3 +181,32 @@ describe("NimbusThemeProvider", () => {
     expect(root().getAttribute("data-theme")).toBe("ink");
   });
 });
+
+describe("NimbusThemeProvider with flatOnly (the Desktop app)", () => {
+  function renderFlatOnly() {
+    return render(
+      <NimbusThemeProvider flatOnly>
+        <Consumer label="appearance" />
+      </NimbusThemeProvider>,
+    );
+  }
+
+  it("shows a saved glass theme flat: Slate as Ink, Fog as Paper", () => {
+    systemPrefers("light");
+    localStorage.setItem("nimbus-theme", JSON.stringify({ mode: "dark", surface: "glass" }));
+
+    renderFlatOnly();
+
+    expect(root().getAttribute("data-theme")).toBe("ink");
+    expect(screen.getByTestId("appearance-settings").textContent).toBe("dark flat");
+  });
+
+  it("keeps light or dark from a glass pick, and stays flat", () => {
+    systemPrefers("dark");
+    renderFlatOnly();
+
+    act(() => screen.getByRole("button", { name: "appearance pick fog" }).click());
+
+    expect(root().getAttribute("data-theme")).toBe("paper");
+  });
+});

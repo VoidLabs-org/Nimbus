@@ -7,9 +7,12 @@ import {
   Menu,
   nativeImage,
   nativeTheme,
+  screen,
   shell,
 } from "electron";
 import { execFile } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
@@ -23,6 +26,7 @@ import {
   windowsTaskbarMode,
 } from "./chrome.js";
 import { isNavigationAllowed, isNimbusPage, parseNimbusUrl } from "./nimbus-url.js";
+import { parseWindowState, restoredPlace, windowState } from "./windows.js";
 
 const dev = isDevLaunch(process.argv);
 
@@ -74,9 +78,77 @@ async function updateAppIcon() {
   else for (const win of BrowserWindow.getAllWindows()) win.setIcon(appIcon);
 }
 
+/** Where the window's place (bounds, maximized) is kept between starts. */
+function windowStateFile() {
+  return join(app.getPath("userData"), "window-state.json");
+}
+
+/** Where to open the window (restoredPlace), or null when no place was saved: centred at its usual size. */
+function savedPlace() {
+  let text = null;
+  try {
+    text = readFileSync(windowStateFile(), "utf8");
+  } catch {
+    // Never saved yet.
+  }
+  const state = parseWindowState(text);
+  if (!state) return null;
+  return restoredPlace(
+    state,
+    screen.getAllDisplays().map((display) => display.workArea),
+  );
+}
+
+/**
+ * Whether each window is maximized, as last seen while it was showing: closed while minimized (not maximized then) or
+ * before it was first shown, it still opens maximized next time if it was.
+ */
+const maximizedWindows = new WeakMap();
+
+function savePlace(win) {
+  try {
+    writeFileSync(
+      windowStateFile(),
+      windowState(win.getNormalBounds(), maximizedWindows.get(win) === true),
+    );
+  } catch {
+    // The user data folder can't be written: the window opens at its usual place next time.
+  }
+}
+
+/** How long the window waits, hidden, for its page to draw before it is shown anyway (a slow or stalled server). */
+const SHOW_ANYWAY_MS = 3000;
+
+/** Chromium's code for a load that another navigation replaced: not a failure. */
+const ERR_ABORTED = -3;
+
+/**
+ * Shows a window that opened hidden, maximized if it was left so. Windows maximizes a hidden window as it shows it,
+ * in one step; Linux ignores maximizing a window that isn't on screen yet, so there it is shown first.
+ */
+function reveal(win) {
+  if (win.isDestroyed() || win.isVisible()) return;
+  const maximized = maximizedWindows.get(win) === true;
+  if (process.platform === "linux") {
+    win.show();
+    if (maximized) win.maximize();
+    return;
+  }
+  if (maximized) win.maximize();
+  if (!win.isVisible()) win.show();
+}
+
+/**
+ * Opens the window where the User left it (savedPlace), hidden until the page has drawn itself, so it never shows as
+ * a blank rectangle first. A page that fails to load shows at once, and one that is slow to draw after a few seconds,
+ * so starting Nimbus never seems to do nothing.
+ */
 function createWindow(nimbusUrl) {
+  const place = savedPlace();
   const win = new BrowserWindow({
     ...windowChrome(process.platform, osMode()),
+    ...place?.bounds,
+    show: false,
     title: "Nimbus",
     ...(appIcon ? { icon: appIcon } : {}),
     webPreferences: {
@@ -86,6 +158,28 @@ function createWindow(nimbusUrl) {
       devTools: dev,
     },
   });
+  maximizedWindows.set(win, place?.maximized === true);
+  win.on("maximize", () => maximizedWindows.set(win, true));
+  win.on("unmaximize", () => {
+    if (!win.isMinimized()) maximizedWindows.set(win, false);
+  });
+
+  win.once("ready-to-show", () => reveal(win));
+  const onFailedLoad = (_event, code, _description, _url, mainFrame) => {
+    if (mainFrame && code !== ERR_ABORTED) reveal(win);
+  };
+  win.webContents.on("did-fail-load", onFailedLoad);
+  const showAnyway = setTimeout(() => reveal(win), SHOW_ANYWAY_MS);
+  // Shown: nothing more to wait for.
+  win.once("show", () => {
+    clearTimeout(showAnyway);
+    win.webContents.off("did-fail-load", onFailedLoad);
+  });
+  win.on("closed", () => clearTimeout(showAnyway));
+  win.on("close", () => savePlace(win));
+  // Windows shutting down or signing out may end the app without closing the window.
+  win.on("session-end", () => savePlace(win));
+
   // Windows and Linux keep the menu for its shortcuts but never show it (see menuTemplate).
   win.setMenuBarVisibility(false);
 
@@ -106,7 +200,29 @@ function createWindow(nimbusUrl) {
   win.loadURL(nimbusUrl.href);
 }
 
-app.whenReady().then(async () => {
+// One Nimbus at a time: a second launch brings the first one's window forward and quits. Two would overwrite each
+// other's saved Tabs and window place.
+/** The address the window opens, once start has read it. */
+let startUrl = null;
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const [win] = BrowserWindow.getAllWindows();
+    // macOS keeps running with no window once the last is closed: a second launch opens one.
+    if (!win) {
+      if (startUrl) createWindow(startUrl);
+      return;
+    }
+    if (win.isMinimized()) win.restore();
+    reveal(win);
+    win.focus();
+  });
+  app.whenReady().then(start);
+}
+
+async function start() {
   let nimbusUrl;
   try {
     nimbusUrl = parseNimbusUrl(process.env.NIMBUS_URL);
@@ -115,6 +231,7 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+  startUrl = nimbusUrl;
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, dev)));
 
   // The page's theme (nimbusDesktop.setTheme), for the Windows buttons' colours. nativeTheme.themeSource is left alone:
@@ -148,7 +265,7 @@ app.whenReady().then(async () => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(nimbusUrl);
   });
-});
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

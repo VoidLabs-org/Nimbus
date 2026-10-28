@@ -21,7 +21,8 @@
     />
     <!--
       Applies the saved theme before the first paint, so a reload doesn't flash another one. NimbusThemeProvider
-      (packages/ui) decides the theme from then on; this must read the same storage key and give the same answer.
+      (packages/ui) decides the theme from then on; this must read the same storage key and give the same answer,
+      flat only in the Desktop app (flatOnly).
     -->
     <script>
       (function () {
@@ -35,7 +36,8 @@
             : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
               ? "dark"
               : "light";
-        var glass = saved.surface === "glass";
+        // The Desktop app (its preload script has run by now) shows only the flat themes, as flatOnly does.
+        var glass = saved.surface === "glass" && !window.nimbusDesktop;
         var theme = mode === "light" ? (glass ? "fog" : "paper") : glass ? "slate" : "ink";
         document.documentElement.setAttribute("data-theme", theme);
         document.documentElement.setAttribute("data-mantine-color-scheme", mode);

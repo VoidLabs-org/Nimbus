@@ -91,8 +91,18 @@ const NimbusThemeContext = createContext<NimbusTheme | null>(null);
  * The one place that decides the theme: it remembers the User's choices in the browser, sets `data-theme` on the
  * document (which selects the variables in themes.css) and makes Mantine's light/dark follow the mode. Until the
  * User picks a mode, it follows the system's setting, live.
+ *
+ * With `flatOnly` (the Desktop app, where the glass themes don't suit a window) the surface is always flat: a saved
+ * Fog shows as Paper and Slate as Ink, and picking one keeps only its light or dark. What is stored is left alone, so
+ * it isn't lost if glass returns.
  */
-export function NimbusThemeProvider({ children }: { children: ReactNode }) {
+export function NimbusThemeProvider({
+  flatOnly = false,
+  children,
+}: {
+  flatOnly?: boolean;
+  children: ReactNode;
+}) {
   const [chosen, setChosen] = useState<Chosen>(readChosen);
   const [system, setSystem] = useState<Mode>(systemMode);
 
@@ -105,7 +115,7 @@ export function NimbusThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const mode = chosen.mode ?? system;
-  const surface = chosen.surface ?? "flat";
+  const surface = flatOnly ? "flat" : (chosen.surface ?? "flat");
   const theme = themeOf(mode, surface);
 
   // Before paint, so a switch never shows the old theme's variables for a frame.

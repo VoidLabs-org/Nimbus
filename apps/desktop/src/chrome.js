@@ -49,6 +49,9 @@ export function windowsTaskbarMode(output) {
   return Number.parseInt(value, 16) === 0 ? "dark" : "light";
 }
 
+/** The smallest the window may be: below it the Sidebar and a page don't fit side by side. */
+export const MIN_WINDOW = { width: 800, height: 560 };
+
 /**
  * The app window's options apart from webPreferences: never smaller than 800×560, and a hidden title bar, so the page
  * draws its own frame (the Sidebar and a title row). Windows keeps its buttons drawn by the OS over the right end of
@@ -58,7 +61,12 @@ export function windowsTaskbarMode(output) {
  * @param {"light" | "dark"} mode the OS's, until the page says which theme it shows
  */
 export function windowChrome(platform, mode) {
-  const size = { width: 1280, height: 800, minWidth: 800, minHeight: 560 };
+  const size = {
+    width: 1280,
+    height: 800,
+    minWidth: MIN_WINDOW.width,
+    minHeight: MIN_WINDOW.height,
+  };
   if (platform === "darwin") {
     return { ...size, titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 17 } };
   }

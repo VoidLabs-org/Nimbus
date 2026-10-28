@@ -8,6 +8,7 @@ import {
   type TextInputProps,
 } from "@mantine/core";
 import type { ComponentPropsWithoutRef, CSSProperties, FormEventHandler, ReactNode } from "react";
+import { isDesktop } from "../shell/desktop";
 import { NimbusLogo } from "../shell/NimbusLogo";
 import classes from "./AuthLayout.module.css";
 
@@ -16,6 +17,11 @@ import classes from "./AuthLayout.module.css";
  * tagline) on the left, the heading and the page's form on the right. `gap` (pixels) spaces the right column and
  * the fields of its `AuthForm` alike. With `phoneFill`, a phone's form fills the screen: the content at the top and
  * the button (wrapped in `pinnedSubmit`) at the bottom, as the code pages do. The page's own min-height stretches it. An optional `icon` sits above the heading. Below about 900px only the form shows, under a small logo.
+ *
+ * The Desktop app shows the form alone, centred under the small logo, on every page with this layout (Login,
+ * Register, Forgot password, Two-step sign-in, Verify your email), as desktop apps such as Claude and Notion do
+ * (design "Nimbus Desktop v2", sign-in): someone who installed the app needn't be won over by the panel. The website
+ * keeps it.
  */
 export function AuthLayout({
   title,
@@ -32,22 +38,30 @@ export function AuthLayout({
   gap: number;
   children: ReactNode;
 }) {
+  const centred = isDesktop();
   return (
-    <div className={classes.page} style={{ "--auth-gap": `${gap}px` } as CSSProperties}>
-      <div className={classes.panel}>
-        <div className={classes.brand}>
-          <NimbusLogo size={30} />
-          nimbus
+    <div
+      className={centred ? `${classes.page} ${classes.centred}` : classes.page}
+      style={{ "--auth-gap": `${gap}px` } as CSSProperties}
+    >
+      {!centred && (
+        <div className={classes.panel}>
+          <div className={classes.brand}>
+            <NimbusLogo size={30} />
+            nimbus
+          </div>
+          <div className={classes.bars} aria-hidden>
+            <span className={`${classes.bar} ${classes.backlog}`}>Backlog</span>
+            <span className={`${classes.bar} ${classes.toDone}`}>to done,</span>
+            <span className={`${classes.bar} ${classes.littleAi}`}>with a little AI</span>
+          </div>
+          <div className={classes.tagline}>
+            Projects, issues, boards and sprints for small teams.
+          </div>
         </div>
-        <div className={classes.bars} aria-hidden>
-          <span className={`${classes.bar} ${classes.backlog}`}>Backlog</span>
-          <span className={`${classes.bar} ${classes.toDone}`}>to done,</span>
-          <span className={`${classes.bar} ${classes.littleAi}`}>with a little AI</span>
-        </div>
-        <div className={classes.tagline}>Projects, issues, boards and sprints for small teams.</div>
-      </div>
+      )}
       <main className={phoneFill ? `${classes.form} ${classes.phoneFill}` : classes.form}>
-        {/* The panel is hidden on narrow screens, so the brand moves above the heading there. */}
+        {/* The panel is hidden on narrow screens (and left out when centred), so the brand moves above the heading. */}
         <div className={`${classes.brand} ${classes.compactBrand}`}>
           <NimbusLogo size={24} />
           nimbus

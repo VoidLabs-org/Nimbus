@@ -32,11 +32,6 @@ export function desktopPlatform(): NimbusDesktop["platform"] {
   return nimbusDesktop()?.platform ?? "linux";
 }
 
-/** The fold shortcut's modifier as this computer names it: ⌘ on macOS, Ctrl elsewhere. */
-export function modifierLabel(platform: NimbusDesktop["platform"]): string {
-  return platform === "darwin" ? "⌘" : "Ctrl";
-}
-
 /** What a shortcut check needs from a key press. */
 export type ShortcutKey = {
   key: string;
@@ -70,4 +65,22 @@ export function isSettingsShortcut(
   platform: NimbusDesktop["platform"],
 ): boolean {
   return isModifierShortcut(event, platform, ",", "Comma");
+}
+
+/**
+ * A shortcut as this computer names it, for labels and badges: ⌘ (and ⇧) on macOS, Ctrl (and Shift) elsewhere, a
+ * space between, as in "Ctrl K" or "⌘ ⇧ T". The one place that spells shortcuts out.
+ */
+export function shortcutLabel(
+  platform: NimbusDesktop["platform"],
+  key: string,
+  { shift = false }: { shift?: boolean } = {},
+): string {
+  const mac = platform === "darwin";
+  return [mac ? "⌘" : "Ctrl", ...(shift ? [mac ? "⇧" : "Shift"] : []), key].join(" ");
+}
+
+/** The same shortcut for screen readers (aria-keyshortcuts): "Control+K", or "Meta+Comma" on macOS. */
+export function ariaShortcut(platform: NimbusDesktop["platform"], key: string): string {
+  return `${platform === "darwin" ? "Meta" : "Control"}+${key}`;
 }

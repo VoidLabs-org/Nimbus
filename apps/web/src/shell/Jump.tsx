@@ -2,7 +2,7 @@ import { Modal, UnstyledButton } from "@mantine/core";
 import { Glyph } from "@repo/ui/glyph";
 import { IconSearch } from "@tabler/icons-react";
 import { useEffect, useId, useRef, useState } from "react";
-import type { NimbusDesktop } from "./desktop";
+import { shortcutLabel, type NimbusDesktop } from "./desktop";
 import {
   jumpGroups,
   readSearch,
@@ -87,6 +87,8 @@ export function Jump({
       const step = event.key === "ArrowDown" ? 1 : -1;
       setActive((highlighted + step + items.length) % items.length);
     } else if (event.key === "Enter") {
+      // Enter that confirms what an input method (IME) is composing is typing, not a pick.
+      if (event.nativeEvent.isComposing) return;
       event.preventDefault();
       const item = items[highlighted];
       if (item) onPick(item, mac ? event.metaKey : event.ctrlKey);
@@ -178,7 +180,7 @@ export function Jump({
             <Keys>↵</Keys>Open
           </span>
           <span className={classes.hint}>
-            <Keys>{mac ? "⌘↵" : "Ctrl+↵"}</Keys>New tab
+            <Keys>{shortcutLabel(platform, "↵")}</Keys>New tab
           </span>
           <span className={classes.spacer} />
           <span>

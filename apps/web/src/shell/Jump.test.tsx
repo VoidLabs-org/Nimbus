@@ -302,9 +302,9 @@ describe("what Jump lists", () => {
 
     const dialog = await openJump();
     const fold = within(dialog).getByRole("option", { name: /Fold the Sidebar/ });
-    expect(fold.textContent).toContain("Ctrl+\\");
+    expect(fold.textContent).toContain("Ctrl \\");
     expect(within(dialog).getByText("New tab")).toBeTruthy();
-    expect(within(dialog).getByText("Ctrl+↵")).toBeTruthy();
+    expect(within(dialog).getByText("Ctrl ↵")).toBeTruthy();
   });
 });
 
@@ -393,6 +393,57 @@ describe("opening a page from Jump", () => {
 
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
     expect(address()).toBe("/settings/appearance");
+  });
+});
+
+describe("Jump while something else is open", () => {
+  it("leaves the Tabs alone while Settings is open: a page opens in place, never in a new Tab", async () => {
+    renderAt("/projects");
+    fireEvent.click(await screen.findByRole("link", { name: "Settings" }));
+    await screen.findByRole("dialog", { name: "Settings" });
+
+    fireEvent.keyDown(window, { key: "k", code: "KeyK", ctrlKey: true });
+    const dialog = await screen.findByRole("dialog", { name: "Jump" });
+    fireEvent.change(search(dialog), { target: { value: "home" } });
+    fireEvent.keyDown(search(dialog), { key: "Enter", ctrlKey: true });
+
+    expect(address()).toBe("/");
+    expect(tabNames()).toEqual(["Home"]);
+  });
+
+  it("keeps the Settings page open when Open Settings runs over it, as Ctrl , does", async () => {
+    renderAt("/settings/security");
+    await screen.findByRole("dialog", { name: "Settings" });
+
+    fireEvent.keyDown(window, { key: "k", code: "KeyK", ctrlKey: true });
+    const dialog = await screen.findByRole("dialog", { name: "Jump" });
+    fireEvent.change(search(dialog), { target: { value: ">open settings" } });
+    fireEvent.keyDown(search(dialog), { key: "Enter" });
+
+    expect(address()).toBe("/settings/security");
+  });
+
+  it("doesn't open over Sign out?", async () => {
+    renderAt("/");
+    const dialog = await openJump();
+    fireEvent.change(search(dialog), { target: { value: ">sign out" } });
+    fireEvent.keyDown(search(dialog), { key: "Enter" });
+    await screen.findByRole("dialog", { name: "Sign out?" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Jump" })).toBeNull());
+
+    fireEvent.keyDown(window, { key: "k", code: "KeyK", ctrlKey: true });
+    // Long enough for Jump to have opened, had it been going to.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.queryByRole("dialog", { name: "Jump" })).toBeNull();
+  });
+
+  it("takes Enter that ends typing with an input method (IME) as typing, not a pick", async () => {
+    renderAt("/projects");
+
+    const dialog = await openJump();
+    fireEvent.keyDown(search(dialog), { key: "Enter", isComposing: true });
+    expect(address()).toBe("/projects");
+    expect(screen.getByRole("dialog", { name: "Jump" })).toBeTruthy();
   });
 });
 

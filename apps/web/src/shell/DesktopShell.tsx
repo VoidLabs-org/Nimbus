@@ -11,7 +11,7 @@ import {
   IconSettings,
   IconSunMoon,
 } from "@tabler/icons-react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import { SignOutDialog } from "../auth/SignOutDialog";
@@ -23,7 +23,8 @@ import { isSettingsPath, useSettingsOverlay } from "../settings/settingsOverlay"
 import {
   desktopPlatform,
   isSettingsShortcut,
-  modifierLabel,
+  ariaShortcut,
+  shortcutLabel,
   nimbusDesktop,
   type NimbusDesktop,
 } from "./desktop";
@@ -38,25 +39,9 @@ import { AUTO_FOLD_QUERY, isFoldShortcut, useSidebarState } from "./sidebarState
 import { TabTitleContext } from "./tabTitle";
 import { linkMenu, tabMenu } from "./tabMenus";
 import { useNewTabClicks, useTabShortcuts, useTabs, type TabActions } from "./useTabs";
+import { useShortcut } from "./useShortcut";
 
 type Platform = NimbusDesktop["platform"];
-
-/**
- * Ctrl or ⌘ \ folds or opens the Sidebar, as the fold button does. The listener is added once; it always calls the
- * latest `toggle`.
- */
-function useFoldShortcut(platform: Platform, toggle: () => void) {
-  const onShortcut = useEffectEvent(toggle);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !isFoldShortcut(event, platform)) return;
-      event.preventDefault();
-      onShortcut();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform]);
-}
 
 /** A link in the open Sidebar: icon and name, filled while its page is open (Settings on every page under it). */
 function SidebarRow({
@@ -96,26 +81,6 @@ function SidebarRow({
       {destination.label}
     </NavLink>
   );
-}
-
-/**
- * Ctrl or ⌘ , opens Settings, in its overlay, from anywhere. While Settings is open it does nothing, so the page open
- * in it (a Role being edited) stays.
- */
-function useSettingsShortcut(platform: Platform, settingsOpen: boolean) {
-  const navigate = useNavigate();
-  const open = useEffectEvent(() => {
-    if (!settingsOpen) navigate(SETTINGS.to);
-  });
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !isSettingsShortcut(event, platform)) return;
-      event.preventDefault();
-      open();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform]);
 }
 
 /**
@@ -165,33 +130,16 @@ function menuState(
 }
 
 /**
- * Ctrl or ⌘ K opens Jump from anywhere in the shell, as the box in the title row does. The listener is added once; it
- * always calls the latest `open`.
- */
-function useJumpShortcut(platform: Platform, open: () => void) {
-  const onShortcut = useEffectEvent(open);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !isJumpShortcut(event, platform)) return;
-      event.preventDefault();
-      onShortcut();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform]);
-}
-
-/**
  * The "Search or jump to…" box at the right end of the title row (design "Nimbus Desktop v2", 2a), naming its
  * shortcut: it opens Jump.
  */
 function JumpBox({ platform, onClick }: { platform: Platform; onClick: () => void }) {
-  const shortcut = `${modifierLabel(platform)} K`;
+  const shortcut = shortcutLabel(platform, "K");
   return (
     <UnstyledButton
       className={classes.jumpBox}
       onClick={onClick}
-      aria-keyshortcuts={platform === "darwin" ? "Meta+K" : "Control+K"}
+      aria-keyshortcuts={ariaShortcut(platform, "K")}
     >
       <Glyph icon={IconSearch} size={15} />
       <span className={classes.jumpLabel}>Search or jump to…</span>
@@ -223,7 +171,11 @@ function FoldButton({
 }) {
   const label = folded ? "Open the Sidebar" : "Fold the Sidebar";
   return (
-    <Tooltip label={`${label} (${modifierLabel(platform)} \\)`} position="bottom-start" withArrow>
+    <Tooltip
+      label={`${label} (${shortcutLabel(platform, "\\")})`}
+      position="bottom-start"
+      withArrow
+    >
       <UnstyledButton
         className={classes.foldButton}
         onClick={onClick}
@@ -267,12 +219,18 @@ export default function DesktopShell() {
   if (!narrow && openWhileNarrow) setOpenWhileNarrow(false);
   const folded = narrow ? !openWhileNarrow : chosen === "folded";
   const settingsOpen = useSettingsOverlay() === "behind";
-  useSettingsShortcut(platform, settingsOpen);
   // RequireUser only shows the shell to a signed-in User.
   const userId = useSession().user!.id;
   const tabs = useTabs(userId, settingsOpen);
   useTabShortcuts(platform, settingsOpen, tabs);
   const navigate = useNavigate();
+  // Ctrl or ⌘ , opens Settings from anywhere; while Settings is open it does nothing, so the page open in it stays.
+  useShortcut(
+    (event) => isSettingsShortcut(event, platform),
+    () => {
+      if (!settingsOpen) void navigate(SETTINGS.to);
+    },
+  );
   useNewTabClicks(platform, tabs.openNew, navigate);
   // The right-click menu open now (a Tab's, a Sidebar link's), if any.
   const [menuAt, setMenuAt] = useState<MenuTarget | null>(null);
@@ -293,14 +251,37 @@ export default function DesktopShell() {
     if (narrow) setOpenWhileNarrow(!openWhileNarrow);
     else setChosen(folded ? "open" : "folded");
   };
-  useFoldShortcut(platform, toggle);
+  useShortcut((event) => isFoldShortcut(event, platform), toggle);
 
   const [jumpOpen, setJumpOpen] = useState(false);
-  const openJump = () => setJumpOpen(true);
-  useJumpShortcut(platform, openJump);
   const [signingOut, setSigningOut] = useState(false);
+  // Not over "Sign out?", which may be signing out; a right-click menu open underneath closes.
+  const openJump = () => {
+    if (signingOut) return;
+    setMenuAt(null);
+    setJumpOpen(true);
+  };
+  useShortcut((event) => isJumpShortcut(event, platform), openJump);
   const { mode, setMode } = useNimbusTheme();
   const jumpToPages = jumpPages(useSettingsGroups());
+  /**
+   * Opens a page from Jump: in the Tab already showing it, if another one does, else in the selected Tab, or in a new
+   * Tab when asked; a Settings page in the Settings overlay. While Settings is open over a Tab's page the Tabs stay as
+   * they are, as their shortcuts do: the page opens in place, leaving Settings as a link would.
+   */
+  const openPage = (to: string, inNewTab: boolean) => {
+    if (isSettingsPath(to) || settingsOpen) {
+      void navigate(to);
+      return;
+    }
+    if (inNewTab) {
+      tabs.openNew(to);
+      return;
+    }
+    const shown = tabs.tabs.tabs.find((tab) => tab.path === to);
+    if (shown && shown.id !== tabs.tabs.selected) tabs.select(shown.id);
+    else void navigate(to);
+  };
   // Jump's commands (design "Nimbus Desktop v2", Search), with the shortcuts that do the same.
   const jumpActions: JumpAction[] = [
     {
@@ -308,7 +289,8 @@ export default function DesktopShell() {
       id: "new-project",
       label: "New project",
       icon: IconFolderPlus,
-      run: () => void navigate("/projects"),
+      // Projects is where a project is created: opened the way the page is.
+      run: () => openPage("/projects", false),
     },
     {
       kind: "action",
@@ -322,7 +304,7 @@ export default function DesktopShell() {
       id: "sidebar",
       label: folded ? "Open the Sidebar" : "Fold the Sidebar",
       icon: folded ? IconLayoutSidebarLeftExpand : IconLayoutSidebarLeftCollapse,
-      shortcut: platform === "darwin" ? "⌘\\" : "Ctrl+\\",
+      shortcut: shortcutLabel(platform, "\\"),
       run: toggle,
     },
     {
@@ -330,8 +312,11 @@ export default function DesktopShell() {
       id: "settings",
       label: "Open Settings",
       icon: IconSettings,
-      shortcut: platform === "darwin" ? "⌘," : "Ctrl+,",
-      run: () => void navigate(SETTINGS.to),
+      shortcut: shortcutLabel(platform, ","),
+      // As its shortcut: while Settings is open, the page open in it stays.
+      run: () => {
+        if (!settingsOpen) void navigate(SETTINGS.to);
+      },
     },
     // Asks first, as the account menu does.
     {
@@ -342,27 +327,11 @@ export default function DesktopShell() {
       run: () => setSigningOut(true),
     },
   ];
-  /**
-   * What picking an item in Jump does. An action runs. A page opens in the Tab already showing it, if another one does,
-   * else in the selected Tab, or in a new Tab when asked; a Settings page opens in the Settings overlay.
-   */
+  /** What picking an item in Jump does: an action runs, a page opens (openPage). */
   const jumpTo = (item: JumpItem, inNewTab: boolean) => {
     setJumpOpen(false);
-    if (item.kind === "action") {
-      item.run();
-      return;
-    }
-    if (isSettingsPath(item.to)) {
-      void navigate(item.to);
-      return;
-    }
-    if (inNewTab) {
-      tabs.openNew(item.to);
-      return;
-    }
-    const shown = tabs.tabs.tabs.find((tab) => tab.path === item.to);
-    if (shown && shown.id !== tabs.tabs.selected) tabs.select(shown.id);
-    else void navigate(item.to);
+    if (item.kind === "action") item.run();
+    else openPage(item.to, inNewTab);
   };
   const mainRef = useRef<HTMLDivElement>(null);
   const startPeek = () => {
@@ -417,7 +386,7 @@ export default function DesktopShell() {
               <SidebarRow
                 destination={SETTINGS}
                 active={settingsOpen}
-                keyShortcuts={platform === "darwin" ? "Meta+Comma" : "Control+Comma"}
+                keyShortcuts={ariaShortcut(platform, "Comma")}
               />
               <div className={classes.account}>
                 <UserMenu variant="sidebar" placement="top-start" offset={8} />

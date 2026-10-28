@@ -115,12 +115,23 @@ export function jumpGroups(
   return groups.filter((group) => group.items.length > 0);
 }
 
-/** A name split around the first place `term` appears in it, ignoring case, so that part can be marked. */
+/**
+ * A name split around the first place `term` appears in it, ignoring case, so that part can be marked. Each stretch of
+ * the name is compared as it is, not the lowercased name as a whole, whose length can differ (a Turkish İ lowercases
+ * to two characters), so the marked part is always the one that matched.
+ */
 export function splitMatch(
   label: string,
   term: string,
 ): { before: string; hit: string; after: string } {
-  const at = term ? label.toLowerCase().indexOf(term.toLowerCase()) : -1;
+  const typed = term.toLowerCase();
+  let at = -1;
+  for (let start = 0; term && start + term.length <= label.length; start++) {
+    if (label.slice(start, start + term.length).toLowerCase() === typed) {
+      at = start;
+      break;
+    }
+  }
   if (at < 0) return { before: label, hit: "", after: "" };
   return {
     before: label.slice(0, at),

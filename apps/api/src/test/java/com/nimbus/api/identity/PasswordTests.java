@@ -1,5 +1,7 @@
 package com.nimbus.api.identity;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
@@ -11,13 +13,16 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
-@Import(TestcontainersConfiguration.class)
+@Import({ TestcontainersConfiguration.class, SecurityEvents.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
 class PasswordTests {
 
 	@Autowired
 	RestTestClient client;
+
+	@Autowired
+	SecurityEvents events;
 
 	@Test
 	void signedInUserCanChangeTheirPasswordAndSignInWithTheNewOne() {
@@ -28,6 +33,33 @@ class PasswordTests {
 
 		login("change@example.com", "battery staple").expectStatus().isOk();
 		login("change@example.com", "correct horse").expectStatus().isUnauthorized();
+	}
+
+	@Test
+	void changingThePasswordPublishesPasswordChangedAsAChangeNotAReset() {
+		var registered = register("change-event@example.com");
+		var accessToken = JsonPath.<String>read(registered, "$.accessToken");
+		var id = java.util.UUID.fromString(JsonPath.read(registered, "$.user.id"));
+
+		changePassword(accessToken, Map.of("currentPassword", "correct horse", "newPassword", "battery staple"))
+			.expectStatus().isNoContent();
+
+		assertThat(events.of(PasswordChanged.class, id)).singleElement().satisfies(event -> {
+				assertThat(event.reset()).isFalse();
+				assertThat(event.at()).isNotNull();
+			});
+	}
+
+	@Test
+	void aRefusedChangePublishesNothing() {
+		var registered = register("change-refused@example.com");
+		var accessToken = JsonPath.<String>read(registered, "$.accessToken");
+		var id = java.util.UUID.fromString(JsonPath.read(registered, "$.user.id"));
+
+		changePassword(accessToken, Map.of("currentPassword", "not it", "newPassword", "battery staple"))
+			.expectStatus().isBadRequest();
+
+		assertThat(events.of(PasswordChanged.class, id)).isEmpty();
 	}
 
 	@Test

@@ -15,7 +15,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class })
+@Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class, SecurityEvents.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
 class SessionSignOutOthersTests {
@@ -26,6 +26,9 @@ class SessionSignOutOthersTests {
 
 	@Autowired
 	RestTestClient client;
+
+	@Autowired
+	SecurityEvents events;
 
 	@Test
 	void endsEveryOtherSessionAndKeepsTheCurrentOne() {
@@ -40,6 +43,32 @@ class SessionSignOutOthersTests {
 		refresh(tablet.refreshToken()).expectStatus().isUnauthorized();
 		refresh(laptop.refreshToken()).expectStatus().isOk();
 		assertThat(devices(laptop.accessToken())).containsExactly("Chrome on Windows");
+	}
+
+	@Test
+	void publishesOtherSessionsSignedOutEachTimeItIsUsedEvenWithNothingToEnd() {
+		register("Gauss", "gauss-others@example.com");
+		var only = signIn("gauss-others@example.com", CHROME_ON_WINDOWS);
+		signIn("gauss-others@example.com", SAFARI_ON_IPHONE);
+		assertThat(events.of(OtherSessionsSignedOut.class, only.userId())).isEmpty();
+
+		signOutOthers(only.accessToken()).expectStatus().isNoContent();
+		signOutOthers(only.accessToken()).expectStatus().isNoContent();
+
+		assertThat(events.of(OtherSessionsSignedOut.class, only.userId())).hasSize(2)
+			.allSatisfy(event -> assertThat(event.at()).isNotNull());
+	}
+
+	@Test
+	void anEndedSessionPublishesNothing() {
+		register("Hilbert", "hilbert-others@example.com");
+		var phone = signIn("hilbert-others@example.com", SAFARI_ON_IPHONE);
+		var laptop = signIn("hilbert-others@example.com", CHROME_ON_WINDOWS);
+		signOutOthers(laptop.accessToken()).expectStatus().isNoContent();
+
+		signOutOthers(phone.accessToken()).expectStatus().isUnauthorized();
+
+		assertThat(events.of(OtherSessionsSignedOut.class, phone.userId())).hasSize(1);
 	}
 
 	@Test
@@ -95,7 +124,7 @@ class SessionSignOutOthersTests {
 		client.post().uri("/api/users/me/sessions/sign-out-others").exchange().expectStatus().isUnauthorized();
 	}
 
-	record SignedIn(String accessToken, String refreshToken) {
+	record SignedIn(String accessToken, String refreshToken, UUID userId) {
 	}
 
 	private void register(String displayName, String email) {
@@ -115,7 +144,7 @@ class SessionSignOutOthersTests {
 			.expectStatus().isOk()
 			.expectBody(String.class).returnResult();
 		return new SignedIn(JsonPath.read(result.getResponseBody(), "$.accessToken"),
-				RefreshCookies.of(result).getValue());
+				RefreshCookies.of(result).getValue(), UUID.fromString(JsonPath.read(result.getResponseBody(), "$.user.id")));
 	}
 
 	private RestTestClient.ResponseSpec signOutOthers(String accessToken) {

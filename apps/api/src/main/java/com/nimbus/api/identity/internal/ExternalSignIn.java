@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.nimbus.api.identity.EmailVerified;
+import com.nimbus.api.identity.LinkedIdentityConnected;
 import com.nimbus.api.identity.UserRegistered;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -144,6 +145,7 @@ class ExternalSignIn {
 				profile.accountName(), profile.avatarUrl(), clock.instant()));
 		refreshPicture(user, identity, profile, false);
 		disconnectedProviders.clear(userId, profile.provider());
+		events.publishEvent(new LinkedIdentityConnected(userId, profile.provider(), profile.accountName(), identity.createdAt()));
 		return true;
 	}
 

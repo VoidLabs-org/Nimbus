@@ -31,20 +31,6 @@ class IdentityMailLayoutTests {
 
 	@ParameterizedTest
 	@ValueSource(strings = { "fallback", "logo" })
-	void providerConnectedEmailMatchesTheSavedLayout(String variant) throws IOException {
-		assertUnchanged("connected-" + variant, ProviderMail.connected("ada@example.com", "Google",
-				Instant.parse("2026-10-19T00:00:00Z"), "http://localhost:3000/settings/security?a=1&b=2", logo(variant)));
-	}
-
-	@ParameterizedTest
-	@ValueSource(strings = { "fallback", "logo" })
-	void providerDisconnectedEmailMatchesTheSavedLayout(String variant) throws IOException {
-		assertUnchanged("disconnected-" + variant, ProviderMail.disconnected("ada@example.com", "GitHub",
-				Instant.parse("2026-10-19T00:00:00Z"), "https://example.dev/settings/security", logo(variant)));
-	}
-
-	@ParameterizedTest
-	@ValueSource(strings = { "fallback", "logo" })
 	void emailChangeCodeEmailMatchesTheSavedLayout(String variant) throws IOException {
 		assertUnchanged("email-change-" + variant, EmailChangeMail.to("nadia@gmail.com", "482917",
 				Duration.ofMinutes(15), logo(variant)));

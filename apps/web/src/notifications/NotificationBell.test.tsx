@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act } from "react";
-import { api } from "../api/client";
+import { api, type NotificationItem } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import { NotificationBell } from "./NotificationBell";
 
@@ -99,6 +99,57 @@ it("groups Security alerts by day, loads older rows, and marks a row read before
   expect(await screen.findByText("Firefox on Linux")).toBeTruthy();
   fireEvent.click(row);
   await waitFor(() => expect(read).toHaveBeenCalledWith("new"));
+  await waitFor(() =>
+    expect(screen.getByTestId("location").textContent).toBe("/settings/security"),
+  );
+});
+
+it("shows the other Security alerts with their detail and opens Security on click", async () => {
+  vi.spyOn(api, "notificationUnreadCount").mockResolvedValue({ count: 4 });
+  vi.spyOn(api, "readNotification").mockResolvedValue(undefined);
+  const at = new Date().toISOString();
+  const alert = (id: string, type: NotificationItem["type"], title: string, detail: string) => ({
+    id,
+    type,
+    createdAt: at,
+    read: false,
+    snapshot: { title, detail },
+    link: "/settings/security",
+  });
+  vi.spyOn(api, "notifications").mockResolvedValue({
+    items: [
+      alert("p", "PASSWORD_CHANGED", "Password changed", "If this wasn't you, reset it now."),
+      alert(
+        "c",
+        "LINKED_IDENTITY_CONNECTED",
+        "Google connected",
+        "ada@gmail.com can now be used to sign in.",
+      ),
+      alert(
+        "d",
+        "LINKED_IDENTITY_DISCONNECTED",
+        "GitHub disconnected",
+        "It can no longer be used to sign in.",
+      ),
+      alert(
+        "o",
+        "OTHER_SESSIONS_SIGNED_OUT",
+        "Signed out of other devices",
+        "If this wasn't you, change your password now.",
+      ),
+    ],
+    nextCursor: null,
+  });
+  drawBell();
+  fireEvent.click(await screen.findByRole("button", { name: "Notifications, 4 unread" }));
+
+  const row = await screen.findByRole("button", {
+    name: /Password changed.*If this wasn't you, reset it now\./,
+  });
+  expect(screen.getByText("ada@gmail.com can now be used to sign in.")).toBeTruthy();
+  expect(screen.getByText("It can no longer be used to sign in.")).toBeTruthy();
+  expect(screen.getByText("If this wasn't you, change your password now.")).toBeTruthy();
+  fireEvent.click(row);
   await waitFor(() =>
     expect(screen.getByTestId("location").textContent).toBe("/settings/security"),
   );

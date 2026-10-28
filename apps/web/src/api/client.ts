@@ -52,10 +52,16 @@ export type LoginInput = { email: string; password: string };
 
 export type NotificationItem = {
   id: string;
-  type: "SIGNED_IN";
+  type:
+    | "SIGNED_IN"
+    | "PASSWORD_CHANGED"
+    | "LINKED_IDENTITY_CONNECTED"
+    | "LINKED_IDENTITY_DISCONNECTED"
+    | "OTHER_SESSIONS_SIGNED_OUT";
   createdAt: string;
   read: boolean;
-  snapshot: { title: string; deviceLabel: string };
+  /** `deviceLabel` for a new sign-in; every other alert has a `detail` line. */
+  snapshot: { title: string; deviceLabel?: string; detail?: string };
   link: string;
 };
 

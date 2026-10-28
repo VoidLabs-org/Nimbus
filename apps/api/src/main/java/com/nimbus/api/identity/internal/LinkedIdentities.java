@@ -8,10 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.nimbus.api.mail.MailAssets;
-import com.nimbus.api.mail.Mailer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.nimbus.api.identity.LinkedIdentityDisconnected;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -25,8 +23,6 @@ class LinkedIdentities {
 	/** The order the "Continue with ..." buttons appear in. */
 	private static final List<String> ORDER = List.of(GoogleProfiles.PROVIDER, GithubProfiles.PROVIDER);
 
-	private static final Logger log = LoggerFactory.getLogger(LinkedIdentities.class);
-
 	static final Map<String, String> NAMES = Map.of(GoogleProfiles.PROVIDER, "Google",
 			GithubProfiles.PROVIDER, "GitHub");
 
@@ -38,40 +34,34 @@ class LinkedIdentities {
 
 	private final Sessions sessions;
 
-	private final Mailer mailer;
-
 	private final Clock clock;
 
 	private final EnabledProviders enabledProviders;
-
-	private final MailAssets mailAssets;
 
 	private final LinkTickets tickets;
 
 	private final Duration linkRecentSignIn;
 
-	private final String securityUrl;
-
 	private final TransactionTemplate transaction;
 
 	private final ProfilePictures pictures;
 
+	private final ApplicationEventPublisher events;
+
 	LinkedIdentities(LinkedIdentityRepository identities, DisconnectedProviders disconnectedProviders,
-			UserRepository users, Sessions sessions, Mailer mailer, Clock clock, AuthProperties properties,
-			PlatformTransactionManager transactionManager, EnabledProviders enabledProviders, MailAssets mailAssets,
-			LinkTickets tickets, ProfilePictures pictures) {
+			UserRepository users, Sessions sessions, Clock clock, AuthProperties properties,
+			PlatformTransactionManager transactionManager, EnabledProviders enabledProviders,
+			LinkTickets tickets, ProfilePictures pictures, ApplicationEventPublisher events) {
+		this.events = events;
 		this.pictures = pictures;
 		this.enabledProviders = enabledProviders;
-		this.mailAssets = mailAssets;
 		this.tickets = tickets;
 		this.linkRecentSignIn = properties.linkRecentSignIn();
 		this.identities = identities;
 		this.disconnectedProviders = disconnectedProviders;
 		this.users = users;
 		this.sessions = sessions;
-		this.mailer = mailer;
 		this.clock = clock;
-		this.securityUrl = properties.publicUrl() + "/settings/security";
 		this.transaction = new TransactionTemplate(transactionManager);
 	}
 
@@ -97,34 +87,19 @@ class LinkedIdentities {
 		return tickets.issue(userId, currentSessionId, provider);
 	}
 
-	/** Tells the User a provider was connected, after the commit; a failed send is only logged. */
-	void announceConnected(UUID userId, String provider) {
-		var user = users.findById(userId).orElse(null);
-		if (user == null) {
-			return;
-		}
-		try {
-			mailer.send(ProviderMail.connected(user.email(), NAMES.getOrDefault(provider, provider), clock.instant(),
-					securityUrl, mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
-		}
-		catch (RuntimeException e) {
-			log.warn("Could not tell user {} that {} was connected", userId, provider, e);
-		}
-	}
-
 	/**
 	 * Removes the provider from the User's way to sign in, and marks it so that a later sign-in on their email
 	 * doesn't link it again (only connecting it from the Security page does). Sessions stay. A provider that isn't
 	 * linked changes nothing. The check and the delete run under the User's row lock, so two disconnects at once
-	 * can't take away the last way to sign in. The User is told by email after the commit; a failed send is only logged.
+	 * can't take away the last way to sign in. Publishes {@link LinkedIdentityDisconnected} in the same transaction;
+	 * {@code notifications} tells the User.
 	 *
 	 * @throws UnknownProviderException when {@code provider} is none of the providers Nimbus knows
 	 * @throws LastSignInMethodException when this is the only way the User can sign in
 	 * @throws org.springframework.security.oauth2.server.resource.InvalidBearerTokenException when the session has ended
 	 */
 	void disconnect(UUID userId, UUID currentSessionId, String provider) {
-		var disconnectedAt = new Instant[1];
-		var email = transaction.execute(status -> {
+		transaction.executeWithoutResult(status -> {
 			var user = users.findLockedById(userId).orElseThrow(() -> new InvalidBearerTokenException(
 					"The User for this token no longer exists"));
 			// Before the provider is looked at, so an ended session is a 401 whatever was asked.
@@ -132,11 +107,11 @@ class LinkedIdentities {
 			if (!NAMES.containsKey(provider)) {
 				throw new UnknownProviderException();
 			}
-			disconnectedAt[0] = clock.instant();
+			var disconnectedAt = clock.instant();
 			var linked = identities.findByUserId(userId);
 			var removing = linked.stream().filter(identity -> identity.provider().equals(provider)).toList();
 			if (removing.isEmpty()) {
-				return null;
+				return;
 			}
 			if (user.passwordHash() == null && linked.size() == removing.size()) {
 				throw new LastSignInMethodException();
@@ -150,20 +125,9 @@ class LinkedIdentities {
 				user.clearFallbackAvatar();
 			}
 			identities.deleteAll(removing);
-			disconnectedProviders.mark(userId, provider, disconnectedAt[0]);
-			return user.email();
+			disconnectedProviders.mark(userId, provider, disconnectedAt);
+			events.publishEvent(new LinkedIdentityDisconnected(userId, provider, disconnectedAt));
 		});
-		if (email == null) {
-			return;
-		}
-		try {
-			mailer.send(ProviderMail.disconnected(email, NAMES.get(provider), disconnectedAt[0], securityUrl,
-					mailAssets.url(MailAssets.NIMBUS_ICON_DARK)));
-		}
-		catch (RuntimeException e) {
-			// Fire and forget, as the mail module promises: the disconnect has happened and stays.
-			log.warn("Could not tell user {} that {} was disconnected", userId, provider, e);
-		}
 	}
 
 	/**

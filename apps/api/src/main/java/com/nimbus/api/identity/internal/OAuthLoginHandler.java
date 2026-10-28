@@ -36,18 +36,15 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 
 	private final LinkTickets tickets;
 
-	private final LinkedIdentities linkedIdentities;
-
 	/** Where the browser sees Nimbus, without a trailing slash. */
 	private final String publicUrl;
 
 	private final TwoStepSignIn twoStepSignIn;
 
 	OAuthLoginHandler(ExternalSignIn externalSignIn, LinkTickets tickets,
-			LinkedIdentities linkedIdentities, TwoStepSignIn twoStepSignIn, AuthProperties properties) {
+			TwoStepSignIn twoStepSignIn, AuthProperties properties) {
 		this.externalSignIn = externalSignIn;
 		this.tickets = tickets;
-		this.linkedIdentities = linkedIdentities;
 		this.twoStepSignIn = twoStepSignIn;
 		this.publicUrl = properties.publicUrl();
 	}
@@ -133,9 +130,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 				redirect(response, securityError("expired", provider), Optional.empty());
 				return;
 			}
-			if (externalSignIn.connect(ticket.get().userId(), ticket.get().sessionId(), profileOf(login))) {
-				linkedIdentities.announceConnected(ticket.get().userId(), provider);
-			}
+			externalSignIn.connect(ticket.get().userId(), ticket.get().sessionId(), profileOf(login));
 			redirect(response, "/settings/security?connected=" + provider, Optional.empty());
 		}
 		catch (ExternalSignIn.EmailUnverifiedException e) {

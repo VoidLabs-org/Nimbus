@@ -7,6 +7,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.nimbus.api.identity.EmailVerified;
+import com.nimbus.api.identity.PasswordChanged;
 import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import org.slf4j.Logger;
@@ -208,7 +209,9 @@ class PasswordReset {
 				status.setRollbackOnly();
 				return secondCodeFailure;
 			}
-			user.changePassword(passwordHash, clock.instant());
+			var at = clock.instant();
+			user.changePassword(passwordHash, at);
+			events.publishEvent(new PasswordChanged(user.getId(), at, true));
 			if (!user.emailVerified()) {
 				user.verifyEmail();
 				// As entering it would: a pending Verification code has nothing left to prove.

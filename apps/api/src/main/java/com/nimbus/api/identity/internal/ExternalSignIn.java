@@ -45,25 +45,39 @@ class ExternalSignIn {
 	 */
 	@Transactional
 	User signIn(ExternalProfile profile) {
+		return resolve(profile).user();
+	}
+
+	/** Resolves the profile and starts its Session atomically, suppressing only a new User's first alert. */
+	@Transactional
+	Sessions.IssuedToken startSession(ExternalProfile profile, String userAgent) {
+		var result = resolve(profile);
+		return sessions.start(result.user(), userAgent, !result.created());
+	}
+
+	private record Resolved(User user, boolean created) {
+	}
+
+	private Resolved resolve(ExternalProfile profile) {
 		var linked = identities.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId());
 		if (linked.isPresent()) {
 			var user = users.findById(linked.get().userId()).orElseThrow();
 			linked.get().refreshAccountName(profile.accountName());
-			return refreshAvatar(user, profile);
+			return new Resolved(refreshAvatar(user, profile), false);
 		}
 		if (!profile.emailVerified() || profile.email() == null) {
 			throw new EmailUnverifiedException();
 		}
 		var user = users.findByEmail(profile.email()).orElse(null);
 		if (user == null) {
-			return create(profile);
+			return new Resolved(create(profile), true);
 		}
 		// Under the row lock a disconnect takes, so one that overlaps this sign-in is either seen here or waits.
 		users.findLockedById(user.getId()).orElseThrow();
 		if (disconnectedProviders.isMarked(user.getId(), profile.provider())) {
 			throw new ProviderDisconnectedException();
 		}
-		return link(user, profile);
+		return new Resolved(link(user, profile), false);
 	}
 
 	/**

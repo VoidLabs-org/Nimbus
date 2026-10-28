@@ -32,6 +32,7 @@ import org.springframework.security.core.authority.AuthorityUtils;
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
+@org.springframework.test.context.event.RecordApplicationEvents
 class OAuthLoginHandlerTests {
 
 	@Autowired
@@ -51,6 +52,37 @@ class OAuthLoginHandlerTests {
 
 	@Autowired
 	ExternalSignIn externalSignIn;
+
+	@Autowired
+	org.springframework.test.context.event.ApplicationEvents events;
+
+	@org.junit.jupiter.params.ParameterizedTest
+	@org.junit.jupiter.params.provider.ValueSource(strings = { "google", "github" })
+	void providerSignUpSendsNoAlertButReturningSignInDoes(String provider) throws Exception {
+		var email = "handler-signin-alert-" + provider + "@example.com";
+		var login = providerLogin(provider, email);
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), new MockHttpServletResponse(), login);
+		assertThat(events.stream(com.nimbus.api.identity.SignedIn.class)).isEmpty();
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), new MockHttpServletResponse(), login);
+		assertThat(events.stream(com.nimbus.api.identity.SignedIn.class)).hasSize(1);
+	}
+
+	@org.junit.jupiter.params.ParameterizedTest
+	@org.junit.jupiter.params.provider.ValueSource(strings = { "google", "github" })
+	void firstProviderSignInToAnExistingUserDoesPublishSignedIn(String provider) throws Exception {
+		var email = "handler-existing-signin-" + provider + "@example.com";
+		var user = registration.create("Existing", email, "correct horse");
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), new MockHttpServletResponse(), providerLogin(provider, email));
+		assertThat(events.stream(com.nimbus.api.identity.SignedIn.class)).singleElement()
+			.satisfies(event -> assertThat(event.userId()).isEqualTo(user.getId()));
+	}
+
+	private static OAuth2AuthenticationToken providerLogin(String provider, String email) {
+		if (provider.equals("google")) return google(claims(email, email, true));
+		var attributes = Map.<String, Object>of("id", email, "login", "ada-codes", "emails",
+			List.of(Map.of("email", email, "primary", true, "verified", true)));
+		return new OAuth2AuthenticationToken(new DefaultOAuth2User(AuthorityUtils.createAuthorityList("OAUTH2_USER"), attributes, "id"), List.of(), "github");
+	}
 
 	@Test
 	void successSetsARefreshCookieThatWorksAndRedirectsWithoutAnyTokenInTheUrl() throws Exception {

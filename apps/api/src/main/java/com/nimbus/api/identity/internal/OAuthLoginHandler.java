@@ -33,8 +33,6 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 
 	private final ExternalSignIn externalSignIn;
 
-	private final Sessions sessions;
-
 	private final LinkTickets tickets;
 
 	private final LinkedIdentities linkedIdentities;
@@ -42,10 +40,9 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	/** Where the browser sees Nimbus, without a trailing slash. */
 	private final String publicUrl;
 
-	OAuthLoginHandler(ExternalSignIn externalSignIn, Sessions sessions, LinkTickets tickets,
+	OAuthLoginHandler(ExternalSignIn externalSignIn, LinkTickets tickets,
 			LinkedIdentities linkedIdentities, AuthProperties properties) {
 		this.externalSignIn = externalSignIn;
-		this.sessions = sessions;
 		this.tickets = tickets;
 		this.linkedIdentities = linkedIdentities;
 		this.publicUrl = properties.publicUrl();
@@ -65,8 +62,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		try {
 			var login = (OAuth2AuthenticationToken) authentication;
 			provider = login.getAuthorizedClientRegistrationId();
-			var user = externalSignIn.signIn(profileOf(login));
-			var refreshToken = sessions.start(user, request.getHeader(HttpHeaders.USER_AGENT));
+			var refreshToken = externalSignIn.startSession(profileOf(login), request.getHeader(HttpHeaders.USER_AGENT));
 			response.addHeader(HttpHeaders.SET_COOKIE,
 					AuthController.refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
 			redirect(response, "/auth/callback", returnTo);

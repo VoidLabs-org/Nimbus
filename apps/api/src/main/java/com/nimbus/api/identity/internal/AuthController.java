@@ -93,7 +93,8 @@ class AuthController {
 
 	/** Starts a session: the access token goes in the body, the refresh token only in the cookie. */
 	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user, HttpServletRequest http) {
-		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT)));
+		return withSession(status, user,
+				sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT), status != HttpStatus.CREATED));
 	}
 
 	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken) {

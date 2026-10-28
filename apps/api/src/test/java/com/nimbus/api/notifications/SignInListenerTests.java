@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 @AutoConfigureRestTestClient
 class SignInListenerTests {
 	@Autowired RestTestClient client;
+	@Autowired org.springframework.jdbc.core.simple.JdbcClient jdbc;
 
 	@Test
 	void committedSignInIsDeliveredAndItsSnapshotSurvivesAUserRename(Scenario scenario) {
@@ -45,5 +46,31 @@ class SignInListenerTests {
 		client.get().uri("/api/notifications").headers(h -> h.setBearerAuth(token)).exchange().expectStatus().isOk()
 			.expectBody().jsonPath("$.items[0].snapshot.deviceLabel").isEqualTo("Safari on iPhone")
 			.jsonPath("$.items[0].createdAt").isEqualTo("2026-10-19T08:00:00Z");
+	}
+
+	@Test
+	void unverifiedUserGetsNoAlertEmailOrNotification(Scenario scenario) {
+		var email = "listener-unverified@example.com";
+		var registered = client.post().uri("/api/auth/register")
+			.body(Map.of("displayName", "Una", "email", email, "password", "correct horse"))
+			.exchange().expectStatus().isCreated().expectBody(String.class).returnResult().getResponseBody();
+		var user = UUID.fromString(JsonPath.read(registered, "$.user.id"));
+		var other = "listener-after-unverified@example.com";
+		var otherRegistered = client.post().uri("/api/auth/register")
+			.body(Map.of("displayName", "Vera", "email", other, "password", "correct horse"))
+			.exchange().expectStatus().isCreated().expectBody(String.class).returnResult().getResponseBody();
+		String otherToken = JsonPath.read(otherRegistered, "$.accessToken");
+		var otherUser = UUID.fromString(JsonPath.read(otherRegistered, "$.user.id"));
+		client.post().uri("/api/auth/verify-email").headers(h -> h.setBearerAuth(otherToken))
+			.body(Map.of("code", RecordingMailer.lastCodeFor(other))).exchange().expectStatus().isOk();
+		scenario.publish(new SignedIn(user, UUID.randomUUID(), "Safari on iPhone", Instant.parse("2026-10-19T08:00:00Z")));
+		// Once the later, verified User's alert has arrived, the earlier event has been handled too.
+		scenario.publish(new SignedIn(otherUser, UUID.randomUUID(), "Safari on iPhone", Instant.parse("2026-10-19T08:01:00Z")))
+			.andWaitForStateChange(() -> RecordingMailer.sentTo(other).stream()
+				.filter(m -> m.subject().equals("New sign-in to your account")).toList(), mails -> mails.size() == 1)
+			.andVerify(mails -> {
+				assertThat(RecordingMailer.sentTo(email).stream().filter(m -> m.subject().equals("New sign-in to your account"))).isEmpty();
+				assertThat(jdbc.sql("SELECT count(*) FROM notifications WHERE user_id = :user").param("user", user).query(Long.class).single()).isZero();
+			});
 	}
 }

@@ -64,13 +64,9 @@ class Sessions {
 	 * Starts a session for a User who just proved who they are, and returns its first refresh token.
 	 *
 	 * @param userAgent the browser's {@code User-Agent} header, kept to tell the User's sessions apart; may be null
+	 * @param announce whether to publish {@link SignedIn}; the first Session of a new User deliberately sends no
+	 * Security alert
 	 */
-	@Transactional
-	IssuedToken start(User user, String userAgent) {
-		return start(user, userAgent, true);
-	}
-
-	/** The first Session of a new User deliberately sends no Security alert. */
 	@Transactional
 	IssuedToken start(User user, String userAgent, boolean announce) {
 		var now = now();

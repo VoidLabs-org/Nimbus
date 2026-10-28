@@ -21,7 +21,7 @@ export type ChangePasswordInput = {
 
 export type LoginInput = { email: string; password: string };
 
-export type Notification = {
+export type NotificationItem = {
   id: string;
   type: "SIGNED_IN";
   createdAt: string;
@@ -30,7 +30,7 @@ export type Notification = {
   link: string;
 };
 
-export type NotificationPage = { items: Notification[]; nextCursor: string | null };
+export type NotificationPage = { items: NotificationItem[]; nextCursor: string | null };
 
 export type ResetPasswordInput = { email: string; code: string; newPassword: string };
 

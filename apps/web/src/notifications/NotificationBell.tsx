@@ -18,8 +18,8 @@ import {
   useQueryClient,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useState } from "react";
+import { useNavigate } from "react-router";
 import { api, type NotificationPage } from "../api/client";
 import { queryKeys } from "../api/queries";
 import classes from "./NotificationBell.module.css";
@@ -35,15 +35,6 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
     refetchInterval: 30_000,
     refetchOnWindowFocus: "always",
   });
-  const refetchCount = count.refetch;
-  useEffect(() => {
-    // Query also observes tab visibility; a window can regain focus without becoming visible again.
-    const refresh = () => {
-      void refetchCount({ cancelRefetch: false });
-    };
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
-  }, [refetchCount]);
   const list = useInfiniteQuery({
     queryKey: queryKeys.notificationList,
     queryFn: ({ pageParam }) => api.notifications(pageParam),
@@ -80,6 +71,8 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
     setOpened(!opened);
   }
   const unread = count.data?.count ?? 0;
+  // The list is fresher than the polled count, so either one can show something to mark.
+  const hasUnread = unread > 0 || items.some((item) => !item.read);
   const button = (
     <ActionIcon
       variant="subtle"
@@ -103,7 +96,7 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
         <Button
           variant="subtle"
           size="compact-xs"
-          disabled={unread === 0}
+          disabled={!hasUnread}
           loading={readAll.isPending}
           onClick={() => readAll.mutate()}
         >
@@ -155,15 +148,11 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
                   key={item.id}
                   className={classes.row}
                   data-unread={!item.read || undefined}
-                  disabled={read.isPending}
-                  onClick={() =>
-                    read.mutate(item.id, {
-                      onSuccess: () => {
-                        setOpened(false);
-                        navigate(item.link);
-                      },
-                    })
-                  }
+                  onClick={() => {
+                    if (!item.read) read.mutate(item.id);
+                    setOpened(false);
+                    navigate(item.link);
+                  }}
                 >
                   <span className={classes.securityIcon}>
                     <Glyph icon={IconShieldLock} size={20} />
@@ -207,9 +196,6 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
       </div>
       <Group justify="space-between" p="md" className={classes.footer}>
         <Text size="xs">Kept for 90 days</Text>
-        <Link to="/settings/notifications" data-autofocus onClick={() => setOpened(false)}>
-          Email settings
-        </Link>
       </Group>
     </div>
   );

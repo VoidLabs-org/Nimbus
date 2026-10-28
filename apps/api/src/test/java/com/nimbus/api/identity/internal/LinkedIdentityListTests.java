@@ -87,7 +87,7 @@ class LinkedIdentityListTests {
 	@Test
 	void aSignedOutBrowserCannotListEvenWhileItsAccessTokenStillWorks() {
 		var user = externalSignIn.signIn(profile("google", "g-out", "out@example.com", "out@example.com"));
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 		var token = accessTokens.issueFor(user, session.sessionId());
 		sessions.endAll(user);
 
@@ -112,7 +112,7 @@ class LinkedIdentityListTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec list(String accessToken) {

@@ -26,20 +26,23 @@ class NotificationInbox {
 		this.json = json;
 	}
 
+	/** Where a Security alert Notification takes the User. */
+	static final String SECURITY_LINK = "/settings/security";
+
 	record Item(UUID id, String type, Instant createdAt, boolean read, JsonNode snapshot, String link) {
 	}
 
 	record Page(List<Item> items, String nextCursor) {
 	}
 
-	boolean signedIn(UUID userId, UUID sessionId, String deviceLabel, Instant at) {
+	boolean signedIn(UUID userId, UUID sessionId, String title, String deviceLabel, Instant at) {
 		return jdbc.sql("""
 			INSERT INTO notifications(id, user_id, type, dedupe_key, snapshot, created_at)
 			VALUES (:id, :user, 'SIGNED_IN', :dedupe, CAST(:snapshot AS jsonb), :at)
 			ON CONFLICT (dedupe_key) DO NOTHING
 			""")
 			.param("id", UUID.randomUUID()).param("user", userId).param("dedupe", "SIGNED_IN:" + sessionId)
-			.param("snapshot", json.writeValueAsString(java.util.Map.of("title", "New sign-in to your account", "deviceLabel", deviceLabel)))
+			.param("snapshot", json.writeValueAsString(java.util.Map.of("title", title, "deviceLabel", deviceLabel)))
 			.param("at", Timestamp.from(at)).update() == 1;
 	}
 
@@ -56,7 +59,7 @@ class NotificationInbox {
 		}
 		var found = query.query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getString("type"),
 			rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("read_at") != null,
-			json.readTree(rs.getString("snapshot")), "/settings/security")).list();
+			json.readTree(rs.getString("snapshot")), SECURITY_LINK)).list();
 		var items = found.stream().limit(limit).toList();
 		var last = items.isEmpty() ? null : items.getLast();
 		return new Page(items, found.size() > limit ? new Cursor(last.createdAt(), last.id()).encode() : null);

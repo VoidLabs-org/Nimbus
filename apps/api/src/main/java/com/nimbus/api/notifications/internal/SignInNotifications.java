@@ -44,11 +44,13 @@ class SignInNotifications {
 	@ApplicationModuleListener
 	void on(SignedIn event) {
 		var recipient = users.findAllById(List.of(event.userId())).stream().findFirst();
-		if (recipient.isEmpty() || !inbox.signedIn(event.userId(), event.sessionId(), event.deviceLabel(), event.at())) return;
+		// An unverified address may belong to someone else, and they can't open the inbox anyway.
+		if (recipient.isEmpty() || !recipient.get().emailVerified()) return;
+		if (!inbox.signedIn(event.userId(), event.sessionId(), TITLE, event.deviceLabel(), event.at())) return;
 		var line = "Your Nimbus account was signed in on " + event.deviceLabel() + " on " + WHEN.format(event.at()) + ".";
 		var help = "If this wasn't you, review your sessions and change your password.";
-		var security = publicUrl + "/settings/security";
-		var footer = FOOTER + " Email settings: " + publicUrl + "/settings/notifications";
+		var security = publicUrl + NotificationInbox.SECURITY_LINK;
+		var footer = FOOTER;
 		var mail = new Mail(recipient.get().email(), TITLE,
 			NoticeMail.html(TITLE, TITLE, line, Optional.of(help), "Review security", security, footer, assets.url(MailAssets.NIMBUS_ICON_DARK)),
 			line + "\n\n" + help + "\nReview security: " + security + "\n\n" + footer);

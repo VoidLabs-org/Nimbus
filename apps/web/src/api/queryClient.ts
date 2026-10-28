@@ -1,4 +1,15 @@
-import { QueryClient } from "@tanstack/react-query";
+import { focusManager, QueryClient } from "@tanstack/react-query";
+
+// Query only listens for tab visibility; a window can also regain focus without becoming visible again.
+focusManager.setEventListener((handleFocus) => {
+  const onChange = () => handleFocus();
+  window.addEventListener("visibilitychange", onChange);
+  window.addEventListener("focus", onChange);
+  return () => {
+    window.removeEventListener("visibilitychange", onChange);
+    window.removeEventListener("focus", onChange);
+  };
+});
 
 /**
  * The app's cache of server data. Data is shown from the cache at once and refreshed when a page mounts. Failed loads

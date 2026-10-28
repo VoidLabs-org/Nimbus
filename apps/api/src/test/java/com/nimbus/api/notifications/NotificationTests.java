@@ -160,7 +160,7 @@ class NotificationTests {
 		assertThat(JsonPath.<Boolean>read(body, "$.items[0].read")).isFalse();
 		assertThat(JsonPath.<String>read(body, "$.items[0].link")).isEqualTo("/settings/security");
 		var mail = RecordingMailer.sentTo(email).getLast();
-		assertThat(mail.text()).contains("Safari on iPhone", "19 Oct 2026", "http://localhost:3000/settings/security", "always sent", "settings/notifications");
+		assertThat(mail.text()).contains("Safari on iPhone", "19 Oct 2026", "http://localhost:3000/settings/security", "always sent");
 		assertThat(mail.html()).contains("Review security", "Safari on iPhone");
 	}
 

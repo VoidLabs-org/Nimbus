@@ -1,5 +1,5 @@
 import type { FloatingPosition } from "@mantine/core";
-import { useSyncExternalStore } from "react";
+import { storedChoice } from "./storedChoice";
 
 /** Which edge of the window the navbar sits on. */
 export type NavPosition = "top" | "bottom" | "left" | "right";
@@ -34,59 +34,16 @@ export function menuPlacement(position: NavPosition): FloatingPosition {
   return placements[position];
 }
 
-export function readNavPosition(): NavPosition {
-  try {
-    return parseNavPosition(localStorage.getItem(NAV_POSITION_KEY));
-  } catch {
-    // Unreadable or blocked storage: the default edge.
-    return "top";
-  }
-}
+// Kept in this browser; a choice made on the Appearance page moves the bar at once.
+const navPosition = storedChoice(NAV_POSITION_KEY, parseNavPosition, "top");
 
-export function writeNavPosition(position: NavPosition) {
-  try {
-    localStorage.setItem(NAV_POSITION_KEY, position);
-  } catch {
-    // Blocked storage (private window, quota): the choice lasts until the page closes.
-  }
-}
+export const readNavPosition = navPosition.read;
 
-// What components subscribed to, so a choice made on the Appearance page moves the bar at once, even when storage is
-// blocked and the choice is only held here.
-const listeners = new Set<() => void>();
-let current: NavPosition | null = null;
-
-function snapshot(): NavPosition {
-  return (current ??= readNavPosition());
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  // Another tab changed it.
-  const onStorage = (event: StorageEvent) => {
-    if (event.key === NAV_POSITION_KEY || event.key === null) {
-      current = readNavPosition();
-      listener();
-    }
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
-  };
-}
+export const writeNavPosition = navPosition.write;
 
 /** The chosen navbar edge and a way to change it; kept in this browser, and read on the first render. */
 export function useNavPosition(): [NavPosition, (position: NavPosition) => void] {
-  const position = useSyncExternalStore(subscribe, snapshot, () => "top" as const);
-  return [
-    position,
-    (next) => {
-      current = next;
-      writeNavPosition(next);
-      listeners.forEach((listener) => listener());
-    },
-  ];
+  return navPosition.useChoice();
 }
 
 const SHORTCUT_KEYS: Record<string, NavPosition> = {

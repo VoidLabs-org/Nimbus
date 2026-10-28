@@ -17,6 +17,10 @@ const alice: User = {
   avatarUrl: null,
   hasPassword: true,
   emailVerified: true,
+  passwordChangedAt: null,
+  hasUploadedPicture: false,
+  pictureSource: "initials",
+  pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [] },
 };
 
 const unused = () => Promise.resolve();
@@ -28,10 +32,16 @@ function session(user: User | null): Session {
     restoring: false,
     unavailable: null,
     signedOutOnPurpose: false,
+    returnAfterSignOut: null,
     retry: () => {},
     register: unused,
-    login: unused,
+    login: () => Promise.resolve("signed-in"),
+    signInWithCode: unused,
     updateDisplayName: unused,
+    changeEmail: unused,
+    uploadProfilePicture: unused,
+    removeProfilePicture: unused,
+    choosePictureSource: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,
@@ -67,7 +77,7 @@ const NAVBAR = 'data-nav-focus="home"';
 
 describe("the app's routes", () => {
   it("shows the not-found page, inside the navbar, at an address that doesn't exist", () => {
-    const page = pageAt("/projects/nope", alice);
+    const page = pageAt("/unknown-page", alice);
 
     expect(page).toContain("This page isn’t here.");
     expect(page).toContain(NAVBAR);

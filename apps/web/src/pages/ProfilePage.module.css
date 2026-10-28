@@ -1,0 +1,6 @@
+/* Settings → Profile, from the "Nimbus Themes" design (39a). The card's rows share the Security page's styles. */
+
+/* The password's dots, spaced like the design's. */
+.dots {
+  letter-spacing: 0.1em;
+}

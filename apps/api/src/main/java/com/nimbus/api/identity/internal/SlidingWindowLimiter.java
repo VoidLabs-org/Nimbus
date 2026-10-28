@@ -66,6 +66,27 @@ class SlidingWindowLimiter {
 	}
 
 	/**
+	 * Refuses when {@code key} used up its attempts, like {@link #acquire}, but counts nothing: a cheap check before
+	 * work that would only be refused, whose real attempt {@link #acquire} still counts.
+	 *
+	 * @throws LimitExceededException when {@code key} used up its attempts
+	 */
+	void requireUnder(String key, String message) {
+		var now = clock.instant();
+		var wait = new Duration[1];
+		attempts.computeIfPresent(key, (k, times) -> {
+			dropExpired(times, now);
+			if (times.size() >= limit) {
+				wait[0] = Duration.between(now, times.peekFirst().plus(window));
+			}
+			return times.isEmpty() ? null : times;
+		});
+		if (wait[0] != null) {
+			throw new LimitExceededException(message, wait[0]);
+		}
+	}
+
+	/**
 	 * Takes back one attempt returned by {@link #acquire}, e.g. when it turned out to be a success. Other attempts
 	 * for the key, including other requests' failures, stay counted.
 	 */

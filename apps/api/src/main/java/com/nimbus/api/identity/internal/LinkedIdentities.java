@@ -27,7 +27,7 @@ class LinkedIdentities {
 
 	private static final Logger log = LoggerFactory.getLogger(LinkedIdentities.class);
 
-	private static final Map<String, String> NAMES = Map.of(GoogleProfiles.PROVIDER, "Google",
+	static final Map<String, String> NAMES = Map.of(GoogleProfiles.PROVIDER, "Google",
 			GithubProfiles.PROVIDER, "GitHub");
 
 	private final LinkedIdentityRepository identities;
@@ -54,10 +54,13 @@ class LinkedIdentities {
 
 	private final TransactionTemplate transaction;
 
+	private final ProfilePictures pictures;
+
 	LinkedIdentities(LinkedIdentityRepository identities, DisconnectedProviders disconnectedProviders,
 			UserRepository users, Sessions sessions, Mailer mailer, Clock clock, AuthProperties properties,
 			PlatformTransactionManager transactionManager, EnabledProviders enabledProviders, MailAssets mailAssets,
-			LinkTickets tickets) {
+			LinkTickets tickets, ProfilePictures pictures) {
+		this.pictures = pictures;
 		this.enabledProviders = enabledProviders;
 		this.mailAssets = mailAssets;
 		this.tickets = tickets;
@@ -137,6 +140,14 @@ class LinkedIdentities {
 			}
 			if (user.passwordHash() == null && linked.size() == removing.size()) {
 				throw new LastSignInMethodException();
+			}
+			// The picture goes with the identity; if it was the one shown, the User shows initials, not another one.
+			var shown = pictures.shown(user, linked);
+			// The old fallback picture belongs to no option, so it may be this provider's: it goes too.
+			if (shown.source() == null && shown.address() != null
+					|| shown.source() != null && shown.source().value().equals(provider)) {
+				user.choosePictureSource(PictureSource.INITIALS);
+				user.clearFallbackAvatar();
 			}
 			identities.deleteAll(removing);
 			disconnectedProviders.mark(userId, provider, disconnectedAt[0]);

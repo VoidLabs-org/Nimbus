@@ -14,9 +14,12 @@ class EmailedCodeKinds {
 
 	private final EmailedCodes reset;
 
+	private final EmailedCodes emailChange;
+
 	EmailedCodeKinds(SecretKey jwtKey, EmailedCodeRepository codes, Clock clock) {
 		this.verification = new EmailedCodes(EmailedCodes.Kind.VERIFICATION, jwtKey, codes, clock);
 		this.reset = new EmailedCodes(EmailedCodes.Kind.RESET, jwtKey, codes, clock);
+		this.emailChange = new EmailedCodes(EmailedCodes.Kind.EMAIL_CHANGE, jwtKey, codes, clock);
 	}
 
 	EmailedCodes verification() {
@@ -25,6 +28,10 @@ class EmailedCodeKinds {
 
 	EmailedCodes reset() {
 		return reset;
+	}
+
+	EmailedCodes emailChange() {
+		return emailChange;
 	}
 
 }

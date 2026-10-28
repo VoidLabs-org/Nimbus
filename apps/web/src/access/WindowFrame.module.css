@@ -15,6 +15,12 @@
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
 }
 
+/* Full screen on a phone (the photo window): no rounded corners or edge against the screen's. */
+.content[data-full-screen] {
+  border: 0;
+  border-radius: 0;
+}
+
 /* A slim rounded scrollbar in the theme's colours, with no arrow buttons, inset from the rounded corners. Chrome
    and Safari use the ::-webkit-scrollbar styles and ignore them if scrollbar-width is set, so the standard
    properties are only for browsers without them (Firefox). */
@@ -48,6 +54,7 @@
 .header {
   position: relative;
   align-items: flex-start;
+  min-height: 0;
   padding: 28px 28px 0;
   background: transparent;
 }
@@ -56,23 +63,32 @@
   padding: 0 28px 28px;
 }
 
-.title {
+/* `.header .title` outranks Mantine's own title style, whose line-height of 1 cramps a title that wraps. Clear of the
+   ✕, which is pinned in the corner (below), so a title of any length sets the header's height alone. */
+.header .title {
+  padding-right: 52px;
   font-weight: 600;
   font-size: 26px;
   line-height: 1.15;
   letter-spacing: -0.02em;
 }
 
-/* Under the title, in the body: Mantine's title is a heading and names the dialog, so it holds only "New Role". */
+/* Under the title, in the body: Mantine's title is a heading and names the dialog, so it holds only "New Role". Its
+   gap is from the title, however many lines the title takes. */
 .subtitle {
-  margin: -10px 0 20px;
+  margin: 2px 0 20px;
   font-size: 14px;
   font-weight: 400;
   letter-spacing: normal;
   color: var(--color-accent-2-700);
 }
 
+/* Pinned in the corner rather than in the header's row, so it doesn't decide the header's height: a one-line title and
+   a wrapped one keep the same gap to the line under them. */
 .close {
+  position: absolute;
+  top: 28px;
+  right: 28px;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -90,15 +106,18 @@
     padding: 0 24px 20px;
   }
 
-  .title {
+  .header .title {
+    padding-right: 48px;
     font-size: 22px;
   }
 
   .subtitle {
-    margin: -8px 0 12px;
+    margin: 4px 0 12px;
   }
 
   .close {
+    top: 20px;
+    right: 24px;
     width: 36px;
     height: 36px;
   }

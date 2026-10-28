@@ -29,8 +29,15 @@ class Passwords {
 	/** Wrong guesses at the current password, per User: a stolen access token mustn't allow unlimited tries. */
 	private final SlidingWindowLimiter failuresByUser;
 
+	private final RememberedBrowsers rememberedBrowsers;
+
+	private final Clock clock;
+
 	Passwords(UserRepository users, PasswordEncoder passwordEncoder, Sessions sessions, AuthProperties properties,
-			Clock clock, PlatformTransactionManager transactionManager) {
+			Clock clock, PlatformTransactionManager transactionManager,
+			RememberedBrowsers rememberedBrowsers) {
+		this.rememberedBrowsers = rememberedBrowsers;
+		this.clock = clock;
 		this.users = users;
 		this.passwordEncoder = passwordEncoder;
 		this.sessions = sessions;
@@ -54,14 +61,8 @@ class Passwords {
 		var user = users.require(userId);
 		// Fails fast, before a guess is counted or a hash is computed; the check that protects is the one below.
 		requireActive(sessionId, userId);
-		if (user.passwordHash() != null) {
-			// Counted before the slow check, so parallel guesses can't race past the limit; a success takes it back.
-			var key = userId.toString();
-			var attempt = failuresByUser.acquire(key, "Too many wrong passwords. Try again later.");
-			if (currentPassword == null || !passwordEncoder.matches(currentPassword, user.passwordHash())) {
-				throw new WrongPasswordException();
-			}
-			failuresByUser.release(key, attempt);
+		if (user.passwordHash() != null && !isCurrent(user, currentPassword)) {
+			throw new WrongPasswordException();
 		}
 		var hash = passwordEncoder.encode(newPassword);
 		transaction.executeWithoutResult(status -> {
@@ -71,11 +72,30 @@ class Passwords {
 					"The User for this token no longer exists"));
 			requireActive(sessionId, userId);
 			var changing = locked.passwordHash() != null;
-			locked.changePassword(hash);
+			locked.changePassword(hash, clock.instant());
 			if (changing) {
 				sessions.endAllExcept(userId, sessionId);
+				// This browser too: a security change starts from a clean slate.
+				rememberedBrowsers.forgetAll(userId);
 			}
 		});
+	}
+
+	/**
+	 * Whether {@code password} is the User's password, for changing it and for "Confirm it's you". Wrong ones are
+	 * counted per User, the same count for both; slow, so it must not run inside a transaction.
+	 *
+	 * @throws SlidingWindowLimiter.LimitExceededException after too many wrong ones, even for the right one
+	 */
+	boolean isCurrent(User user, String password) {
+		// Counted before the slow check, so parallel guesses can't race past the limit; a success takes it back.
+		var key = user.getId().toString();
+		var attempt = failuresByUser.acquire(key, "Too many wrong passwords. Try again later.");
+		if (password == null || !passwordEncoder.matches(password, user.passwordHash())) {
+			return false;
+		}
+		failuresByUser.release(key, attempt);
+		return true;
 	}
 
 	private void requireActive(UUID sessionId, UUID userId) {

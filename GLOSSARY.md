@@ -53,12 +53,24 @@ A User who hasn't yet proved they own their email address. They can sign in but 
 _Avoid_: Pending, inactive or unconfirmed user
 
 **Verification code**:
-A short-lived code emailed to a User to prove they own the address.
+A short-lived code emailed to a User to prove they own an address: the one they signed up with, or a new one they're changing their email to.
 _Avoid_: OTP, token, PIN
 
 **Reset code**:
 A short-lived code emailed to a User who forgot their password, which lets them set a new one. Entering it also proves they own the address.
-_Avoid_: Recovery code, password token, OTP
+_Avoid_: Password token, OTP
+
+**Two-step verification**:
+A setting a User turns on for themselves so that signing in also needs a Sign-in code from an authenticator app on their phone, not only a password or a Linked identity.
+_Avoid_: MFA, 2FA, two-factor authentication
+
+**Sign-in code**:
+The short code an authenticator app shows, which a User with Two-step verification types as the second step of signing in.
+_Avoid_: OTP, TOTP code, token, Verification code
+
+**Recovery code**:
+One of a set of single-use codes a User saves when turning on Two-step verification. Each one stands in for a Sign-in code once, for when they've lost their phone. Not a Reset code.
+_Avoid_: Backup code, Reset code
 
 **Member**:
 A User who has been added to a project. Only ever means project membership.
@@ -92,6 +104,10 @@ _Avoid_: Login, device
 A Google or GitHub login attached to a User, letting them sign in without a password. A User links one by connecting it on the Security page and unlinks it by disconnecting it. A disconnected one is not linked again until the User connects it.
 _Avoid_: Social account, external account, provider user, connected account (UI copy only)
 
+**Profile picture**:
+The image shown for a User next to their name: a photo they uploaded, the picture from one of their Linked identities, or their initials.
+_Avoid_: Avatar, photo, profile image
+
 **Notification**:
 A message to one User about something that happened to an Issue they're involved with or to their account, shown in Nimbus and sometimes emailed.
 _Avoid_: Alert (for Issue ones), message, activity
@@ -99,6 +115,22 @@ _Avoid_: Alert (for Issue ones), message, activity
 **Security alert**:
 A Notification about a change to a User's sign-in or account security, which they can't turn off.
 _Avoid_: Warning, security notification
+
+**Desktop app**:
+Nimbus run as its own application window, as opposed to Nimbus in a browser. It has its own shell: the Sidebar, Tabs and Jump.
+_Avoid_: Electron app (outside the code), native app
+
+**Sidebar**:
+The panel on the left of the Desktop app with Home, Projects and Settings. It is either open or folded away, when it can peek out over the page. The browser's equivalent is the navbar.
+_Avoid_: Navbar (that is the browser's), menu
+
+**Tab**:
+A page open in the Desktop app, kept in a row at the top of the window. It is not a browser tab.
+_Avoid_: Window, page (when the open page is meant)
+
+**Jump**:
+The Desktop app's quick "Search or jump to…" box, opened with Ctrl or ⌘ K, that opens a page by name.
+_Avoid_: Command palette, search
 
 ## Development workflow
 

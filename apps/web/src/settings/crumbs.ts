@@ -26,3 +26,13 @@ export function roleCrumbs(role: { kind: Kind; name: string } | null): Crumb[] {
     ];
   return [SETTINGS, ROLES, { label: "", pending: true }, { label: "", pending: true }];
 }
+
+/**
+ * A Settings page's path inside the Desktop app's Settings overlay, whose list stands in for the overview: the
+ * Settings crumb goes, and a path left with only the page itself goes too (the page's title says it). A Role keeps
+ * Roles & access › its tab › the Role.
+ */
+export function overlayCrumbs(crumbs: Crumb[]): Crumb[] {
+  const inside = crumbs.filter((crumb) => crumb.to !== SETTINGS.to);
+  return inside.length > 1 ? inside : [];
+}

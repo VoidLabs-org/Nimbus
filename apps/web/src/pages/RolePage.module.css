@@ -13,8 +13,15 @@
   min-width: 0;
 }
 
-/* The summary follows the Permissions in the page, so below about 900px it simply lands underneath them. */
+/* The summary follows the Permissions in the page, so below about 900px it simply lands underneath them: the
+   window's width in the browser, the page's inside the Desktop app's Settings overlay (a container). */
 @media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 900px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
   }

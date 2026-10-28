@@ -3,6 +3,14 @@ export function loginPath(returnTo: string): string {
   return returnTo === "/" ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
+/**
+ * The query for another step of signing in that carries only `returnTo` on, never what the page was told about an
+ * earlier attempt (a provider's `error`).
+ */
+export function returnToSearch(returnTo: string | null): string {
+  return returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+}
+
 /** The page saying the session expired, remembering where to go once signed in again. */
 export function sessionExpiredPath(returnTo: string): string {
   return returnTo === "/"

@@ -9,9 +9,38 @@ export type User = {
   hasPassword: boolean;
   /** False until the User enters the code emailed to them; until then the app shows only the verification screen. */
   emailVerified: boolean;
+  /** When the password was last set; null without one, or when it was set before Nimbus kept the time. */
+  passwordChangedAt: string | null;
+  /** True when the User has an uploaded photo, whether or not it is the picture shown. */
+  hasUploadedPicture: boolean;
+  /** What the User shows; null for a picture from before connected accounts kept their own, which is none of these. */
+  pictureSource: PictureSource | null;
+  /** What the User may pick from; `avatarUrl` is the picture of the one shown. */
+  pictureOptions: PictureOptions;
+};
+
+export type PictureSource = "uploaded" | "google" | "github" | "initials";
+
+export type PictureOptions = {
+  /** When the uploaded photo was added (ISO 8601), and its address for the thumbnail; null without an upload. */
+  uploadedAt: string | null;
+  uploadedUrl: string | null;
+  /** Each connected provider that has a picture, Google first. `label` is the Google email or the GitHub name. */
+  providers: { provider: "google" | "github"; pictureUrl: string; label: string }[];
 };
 
 export type RegisterInput = { displayName: string; email: string; password: string };
+
+export type Project = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  archived: boolean;
+  createdAt: string;
+};
+
+export type CreateProjectInput = { key: string; name: string; description?: string | null };
 
 export type ChangePasswordInput = {
   /** Required when the User has a password. */
@@ -32,7 +61,14 @@ export type NotificationItem = {
 
 export type NotificationPage = { items: NotificationItem[]; nextCursor: string | null };
 
-export type ResetPasswordInput = { email: string; code: string; newPassword: string };
+/** A User with Two-step verification also sends a Sign-in code or a Recovery code (`two_step_required`). */
+export type ResetPasswordInput = {
+  email: string;
+  code: string;
+  newPassword: string;
+  twoStepCode?: string;
+  recoveryCode?: string;
+};
 
 /** Where a Role is held and where a Permission applies: across Nimbus, or inside one project. */
 export type Kind = "platform" | "project";
@@ -158,10 +194,40 @@ export type LinkedIdentity = {
   connectedAt: string;
 };
 
+/** Whether the signed-in User has Two-step verification, for its card on the Security page. */
+export type TwoStepStatus = {
+  enabled: boolean;
+  /** When it was turned on (ISO 8601); null when off. */
+  enabledAt: string | null;
+  /** Recovery codes not used yet; null when off. */
+  recoveryCodesLeft: number | null;
+};
+
+/** What finishes a pending sign-in: a Sign-in code, or one of the User's Recovery codes when they lost their phone. */
+export type TwoStepAnswer = { code: string } | { recoveryCode: string };
+
+/** "Confirm it's you": the password, and with Two-step verification a Sign-in code or a Recovery code. */
+export type ConfirmAnswer =
+  | { password: string }
+  | { password: string; twoStepCode: string }
+  | { password: string; recoveryCode: string };
+
+/** A setup in progress: the key for the authenticator app, as text and as what the QR code holds. */
+export type TwoStepSetup = { key: string; otpauthUri: string };
+
 /** The `code` the server puts on the 403 it answers an Unverified User with. */
 export const EMAIL_UNVERIFIED = "email_unverified";
 
 type AuthResponse = { accessToken: string; user: User };
+
+/** The answer to a right password when the User has Two-step verification: no Session yet. */
+type TwoStepRequired = { twoStepRequired: true };
+
+/** For the calls that always start a session: an answer without one is a server bug, not a signed-in User. */
+function sessionStarted(user: User | null): User {
+  if (!user) throw new Error("The server started no session");
+  return user;
+}
 
 /** A failed API call, carrying the server's problem details (RFC 9457). */
 export class ApiError extends Error {
@@ -233,7 +299,10 @@ export function createApiClient(
 
   async function send<T>(path: string, init: RequestInit, authenticated: boolean): Promise<T> {
     const headers = new Headers(init.headers);
-    if (init.body !== undefined) headers.set("Content-Type", "application/json");
+    // A form sets its own multipart type, with the boundary.
+    if (init.body !== undefined && !(init.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
     if (authenticated && accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
     let response: Response;
@@ -335,20 +404,22 @@ export function createApiClient(
     }
   }
 
-  // Waits for a refresh under way, so it can't answer after this and replace the new session.
-  function startSession(path: string, input: RegisterInput | LoginInput): Promise<User> {
+  // Waits for a refresh under way, so it can't answer after this and replace the new session. Resolves to null when
+  // the server started none because a Sign-in code is still needed.
+  function startSession(path: string, input: object, headers?: HeadersInit): Promise<User | null> {
     return inFlight(
       (async () => {
         await refreshing?.catch(() => {});
-        const { accessToken: token, user } = await request<AuthResponse>(
+        const answer = await request<AuthResponse | TwoStepRequired>(
           path,
-          { method: "POST", body: JSON.stringify(input) },
+          { method: "POST", body: JSON.stringify(input), headers },
           { authenticated: false },
         );
-        accessToken = token;
+        if (!("accessToken" in answer)) return null;
+        accessToken = answer.accessToken;
         lostReported = false;
         credentialChanges++;
-        return user;
+        return answer.user;
       })(),
     );
   }
@@ -438,12 +509,37 @@ export function createApiClient(
       ),
 
     /** Creates a User and signs them in. Whoever was signed in stays so if it fails. */
-    register: (input: RegisterInput) => startSession("/api/auth/register", input),
+    register: (input: RegisterInput) =>
+      startSession("/api/auth/register", input).then(sessionStarted),
 
-    /** Signs in with email and password. Whoever was signed in stays so if it fails. */
+    /**
+     * Signs in with email and password. Whoever was signed in stays so if it fails. Resolves to null for a User with
+     * Two-step verification: the server keeps the sign-in pending, and {@link signInWithCode} finishes it.
+     */
     login: (input: LoginInput) => startSession("/api/auth/login", input),
 
+    /**
+     * Finishes a pending sign-in with a Sign-in code from the User's authenticator app, or a Recovery code. Rejects
+     * with an ApiError: "invalid_code" with `triesLeft` (a used Recovery code too), 401 "sign_in_expired" when the
+     * pending sign-in is over, or 429 with `retryAfterSeconds` while the User is locked out of code checks.
+     * `rememberBrowser` is "Don't ask again on this device for 30 days": the server then sets a cookie that lets
+     * this browser's next sign-ins skip the code.
+     */
+    signInWithCode: (answer: TwoStepAnswer, rememberBrowser = false) =>
+      startSession(
+        "/api/auth/two-step",
+        { ...answer, rememberBrowser },
+        { "X-Requested-With": "nimbus" },
+      ).then(sessionStarted),
+
     me: () => request<User>("/api/users/me"),
+
+    /** Creates a project and adds the signed-in User as its first Member. */
+    createProject: (input: CreateProjectInput) =>
+      request<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
+
+    /** Opens a project by key. Unknown and non-Member projects both return 404. */
+    project: (key: string) => request<Project>(`/api/projects/${encodeURIComponent(key)}`),
 
     /**
      * The ids of the "Continue with ..." providers the server has switched on, in the order to show them
@@ -457,6 +553,68 @@ export function createApiClient(
     /** Changes the display name and returns the updated User. */
     updateProfile: (input: { displayName: string }) =>
       request<User>("/api/users/me", { method: "PATCH", body: JSON.stringify(input) }),
+
+    /**
+     * Mails a Verification code to the new address, replacing any pending change; Resend is the same call. Rejects
+     * with an ApiError: 400 "same_email" or `fieldErrors.email`, 409 "email_taken", 403 "reauth_required" when the
+     * sign-in is too old, or 429 with `retryAfterSeconds` when the address was sent codes too fast.
+     */
+    requestEmailChange: async (email: string) => {
+      await request<void>("/api/users/me/email-change", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+    },
+
+    /**
+     * "Confirm it's you" for a sign-in too old to change the email: the password, and with Two-step verification a
+     * Sign-in code or a Recovery code. Rejects with an ApiError: `fieldErrors.password`, "two_step_required",
+     * "invalid_two_step_code", 409 "no_password" (sign in again instead), or 429 with `retryAfterSeconds`.
+     */
+    confirmItsYou: async (answer: ConfirmAnswer) => {
+      await request<void>("/api/users/me/confirm", {
+        method: "POST",
+        body: JSON.stringify(answer),
+      });
+    },
+
+    /**
+     * Uploads `picture` as the signed-in User's Profile picture and shows it; returns the User, whose `avatarUrl` is its
+     * new address. A 400 says why it was refused: `code` "file_too_large", "unsupported_type" or "unreadable_image"; a 429
+     * means 10 uploads in the last hour, and `retryAfterSeconds` says how long to wait.
+     */
+    uploadProfilePicture: (picture: Blob) => {
+      const form = new FormData();
+      form.append("file", picture, "profile-picture.jpg");
+      return request<User>("/api/users/me/profile-picture", { method: "PUT", body: form });
+    },
+
+    /**
+     * Sets what the signed-in User's Profile picture shows and returns the User. 400 `source_unavailable` when they
+     * have no such upload, the provider isn't connected, or it sent no picture.
+     */
+    chooseProfilePictureSource: (source: PictureSource) =>
+      request<User>("/api/users/me/profile-picture/source", {
+        method: "PUT",
+        body: JSON.stringify({ source }),
+      }),
+
+    /**
+     * Removes the signed-in User's uploaded Profile picture (also fine without one). Read the User again for what
+     * they show now.
+     */
+    removeProfilePicture: () =>
+      request<void>("/api/users/me/profile-picture", { method: "DELETE" }),
+
+    /**
+     * Changes the email to the pending address and returns the updated User. Rejects with an ApiError:
+     * "invalid_code" with `triesLeft`, "code_expired", or 409 "email_taken" when someone took the address meanwhile.
+     */
+    confirmEmailChange: (code: string) =>
+      request<User>("/api/users/me/email-change/confirm", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
 
     /**
      * Sets the signed-in User's first password, or changes it (the current one is then required). The
@@ -539,6 +697,47 @@ export function createApiClient(
         `/api/users/me/linked-identities/${encodeURIComponent(provider)}/link-ticket`,
         { method: "POST" },
       ),
+
+    /** Whether the User has Two-step verification, since when, and how many Recovery codes are left. */
+    twoStep: () => request<TwoStepStatus>("/api/users/me/two-step"),
+
+    /**
+     * Starts setting up Two-step verification with a new key, replacing any setup in progress. 403
+     * `reauth_required` when this sign-in is too old; 409 `already_on`.
+     */
+    startTwoStepSetup: () =>
+      request<TwoStepSetup>("/api/users/me/two-step/setup", { method: "POST" }),
+
+    /** Proves the app has the key with a Sign-in code; answers with the Recovery codes to save. 400 `invalid_code`, 409 `setup_expired`. */
+    verifyTwoStepSetup: (code: string) =>
+      request<{ recoveryCodes: string[] }>("/api/users/me/two-step/setup/verify", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+
+    /** Throws away this sign-in's setup in progress, because the User closed the window; 204 also when there is none. */
+    discardTwoStepSetup: () => request<void>("/api/users/me/two-step/setup", { method: "DELETE" }),
+
+    /** Turns Two-step verification on with the setup just proved. 409 `setup_expired` or `already_on`. */
+    turnOnTwoStep: () => request<void>("/api/users/me/two-step", { method: "POST" }),
+
+    /**
+     * View new codes: a Sign-in code from the app replaces the Recovery codes, and the old set stops working. 400
+     * `invalid_code`, 409 `not_on`, 429 with `retryAfterSeconds` while the User is locked out of code checks.
+     */
+    newRecoveryCodes: (code: string) =>
+      request<{ recoveryCodes: string[] }>("/api/users/me/two-step/recovery-codes", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+
+    /**
+     * Remove: a Sign-in code, or a Recovery code, turns Two-step verification off and deletes the key and the
+     * Recovery codes. 400 `invalid_code`, 409 `not_on`, 429 with `retryAfterSeconds` while the User is locked out of
+     * code checks.
+     */
+    turnOffTwoStep: (answer: TwoStepAnswer) =>
+      request<void>("/api/users/me/two-step", { method: "DELETE", body: JSON.stringify(answer) }),
 
     /** The audit log, newest first. Needs access:audit:view. */
     auditLog: (page: number, size: number, asOf?: number) =>

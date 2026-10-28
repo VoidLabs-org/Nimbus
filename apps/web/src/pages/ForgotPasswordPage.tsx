@@ -1,10 +1,16 @@
 import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
 import { useMutation } from "@tanstack/react-query";
-import { useState, type ReactNode, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { api, ApiError } from "../api/client";
-import { tooManyAttemptsIn, tooManyAttemptsMessage } from "../api/messages";
+import {
+  GENERIC_ERROR,
+  tooManyAttemptsIn,
+  tooManyAttemptsMessage,
+  WRONG_RECOVERY_CODE,
+  WRONG_SIGN_IN_CODE,
+} from "../api/messages";
 import {
   AuthForm,
   AuthLayout,
@@ -13,32 +19,19 @@ import {
   AuthTextInput,
 } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
-import { CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
+import { CodeAlert as Alert, CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
 import { clock, RESEND_WAIT_SECONDS, useCountdown } from "../auth/countdown";
 import { passwordError } from "../auth/password";
+import { recoveryCodeInputProps } from "../auth/recoveryCode";
 import { useSession } from "../auth/useSession";
-
-const GENERIC_ERROR = "Something went wrong. Please try again.";
-
-/** A red message under the form; step 2's carry the "!" mark. */
-function Alert({ marked, children }: { marked?: boolean; children: ReactNode }) {
-  return (
-    <div className={classes.codeError} role="alert">
-      {marked && (
-        <span className={classes.codeErrorMark} aria-hidden>
-          !
-        </span>
-      )}
-      {children}
-    </div>
-  );
-}
 
 /**
  * Forgot password, in two steps on one page. Step 1 asks for the email and has a Reset code emailed to it (the
  * server answers the same for every address, so this never says whether one is registered). Step 2 takes the
  * code and the new password together. The email lives in memory only, so a reload starts again at step 1. A
- * right code sets the password; the User then goes to the sign-in page with the email filled in.
+ * right code sets the password; the User then goes to the sign-in page with the email filled in. A User with
+ * Two-step verification is asked for a Sign-in code too, or a Recovery code, once the Reset code is right
+ * (`two_step_required`); the Reset code and the password stay as typed.
  */
 export default function ForgotPasswordPage() {
   const { user } = useSession();
@@ -57,6 +50,17 @@ export default function ForgotPasswordPage() {
   // The code is gone (expired, or cancelled after too many wrong tries): only a new one helps.
   const [expired, setExpired] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // The second code, asked for once the server said this User has Two-step verification.
+  const [twoStep, setTwoStep] = useState(false);
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [twoStepCode, setTwoStepCode] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [twoStepMessage, setTwoStepMessage] = useState<string | null>(null);
+  // A refused second code can't be sent again as it is: the message goes when it is changed.
+  const twoStepReady = !twoStep
+    ? true
+    : twoStepMessage === null &&
+      (useRecoveryCode ? recoveryCode.trim() !== "" : twoStepCode.length === CODE_LENGTH);
   // One for each button, so a resend still under way doesn't show on the email step.
   const askForCode = (address: string) => api.requestPasswordReset(address);
   const sendCode = useMutation({ mutationFn: askForCode });
@@ -92,11 +96,21 @@ export default function ForgotPasswordPage() {
     setExpired(false);
   }
 
+  /** Swaps the Sign-in code boxes for the Recovery code box, or back; what was typed and said about it goes. */
+  function switchSecondCode(recovery: boolean) {
+    setUseRecoveryCode(recovery);
+    setTwoStepCode("");
+    setRecoveryCode("");
+    setTwoStepMessage(null);
+  }
+
   /** Back to an empty form, for another address. */
   function clearCodeState() {
     clearCode();
     setPassword("");
     setPasswordMessage(null);
+    setTwoStep(false);
+    switchSecondCode(false);
   }
 
   function startCountdown(address: string, seconds: number) {
@@ -174,7 +188,7 @@ export default function ForgotPasswordPage() {
   async function submitReset(event: SyntheticEvent) {
     event.preventDefault();
     // Nothing to send once the code is gone: that would only spend a try on a dead code.
-    if (code.length < CODE_LENGTH || checking || expired) return;
+    if (code.length < CODE_LENGTH || !twoStepReady || checking || expired) return;
     const tooShort = passwordError(password);
     setPasswordMessage(tooShort);
     if (tooShort) return;
@@ -182,8 +196,10 @@ export default function ForgotPasswordPage() {
     setNotice(null);
     setCodeMessage(null);
     setCodeRejected(false);
+    setTwoStepMessage(null);
+    const secondCode = !twoStep ? {} : useRecoveryCode ? { recoveryCode } : { twoStepCode };
     try {
-      await resetPassword.mutateAsync({ email, code, newPassword: password });
+      await resetPassword.mutateAsync({ email, code, newPassword: password, ...secondCode });
       toast.success("Password updated. You were signed out on other devices.");
       void navigate("/login", { replace: true, state: { email } });
     } catch (failure) {
@@ -202,6 +218,11 @@ export default function ForgotPasswordPage() {
           : `That code isn’t right. ${left} ${left === 1 ? "try" : "tries"} left.`,
       );
       setCodeRejected(true);
+    } else if (failure.code === "two_step_required") {
+      setTwoStep(true);
+    } else if (failure.code === "invalid_two_step_code") {
+      setTwoStepMessage(useRecoveryCode ? WRONG_RECOVERY_CODE : WRONG_SIGN_IN_CODE);
+      setTwoStepCode("");
     } else if (failure.code === "code_expired") {
       setCodeMessage("This code has expired.");
       setExpired(true);
@@ -279,8 +300,14 @@ export default function ForgotPasswordPage() {
         />
         {codeMessage && <Alert marked>{codeMessage}</Alert>}
         {rateLimited && <Alert marked>{tooManyAttemptsIn(limitSeconds)}</Alert>}
-        {/* Always in the page, so a screen reader announces the text when it appears in it. */}
-        <VisuallyHidden role="status">{shownNotice}</VisuallyHidden>
+        {/* Always in the page, so a screen reader announces the text when it appears in it. The second code appears
+            under the password, maybe off a phone's screen: its boxes take the focus, and this says why. */}
+        <VisuallyHidden role="status">
+          {shownNotice ??
+            (twoStep
+              ? "Two-step verification is on. Enter the code from your authenticator app, or a recovery code."
+              : null)}
+        </VisuallyHidden>
         {shownNotice && !codeMessage && (
           <div className={classes.codeNotice} aria-hidden>
             <span className={classes.codeNoticeMark}>✓</span>
@@ -311,8 +338,60 @@ export default function ForgotPasswordPage() {
               error={passwordMessage}
               disabled={rateLimited}
             />
+            {twoStep && (
+              <div className={classes.secondCode}>
+                {useRecoveryCode ? (
+                  <AuthTextInput
+                    {...recoveryCodeInputProps}
+                    description="Two-step verification is on. Enter one of the recovery codes you saved."
+                    autoFocus
+                    value={recoveryCode}
+                    onChange={(event) => {
+                      setRecoveryCode(event.currentTarget.value);
+                      setTwoStepMessage(null);
+                    }}
+                    disabled={checking || rateLimited}
+                    error={twoStepMessage !== null}
+                  />
+                ) : (
+                  <>
+                    <span className={classes.secondCodeLabel}>
+                      Two-step verification is on. Enter the 6-digit code from your authenticator
+                      app.
+                    </span>
+                    <CodePinInput
+                      value={twoStepCode}
+                      onChange={(value) => {
+                        setTwoStepCode(value);
+                        if (value !== twoStepCode) setTwoStepMessage(null);
+                      }}
+                      disabled={checking || rateLimited}
+                      error={twoStepMessage !== null}
+                      ariaLabel="Sign-in code digit"
+                    />
+                  </>
+                )}
+                {twoStepMessage && <Alert marked>{twoStepMessage}</Alert>}
+                {/* Off while a code is checked, so its answer can't land under the other kind of box. */}
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    if (!checking) switchSecondCode(!useRecoveryCode);
+                  }}
+                  aria-disabled={checking}
+                  c={checking ? "dimmed" : undefined}
+                >
+                  {useRecoveryCode ? "Use your authenticator app" : "Use a recovery code"}
+                </Anchor>
+              </div>
+            )}
             <PinnedSubmit>
-              <AuthSubmit loading={checking} disabled={code.length < CODE_LENGTH || rateLimited}>
+              <AuthSubmit
+                loading={checking}
+                disabled={code.length < CODE_LENGTH || !twoStepReady || rateLimited}
+              >
                 Reset password
               </AuthSubmit>
             </PinnedSubmit>

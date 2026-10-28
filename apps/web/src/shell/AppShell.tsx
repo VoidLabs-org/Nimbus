@@ -78,10 +78,10 @@ export function RailLink({
 
 /**
  * The open page, with the offline page over it while the browser has no connection, and the crashed page in its place
- * if it crashes while drawing. Either way the navbar stays. Offline, the page is hidden rather than removed, so
+ * if it crashes while drawing. Either way the navbar (or the Desktop app's Sidebar) stays. Offline, the page is hidden rather than removed, so
  * unsaved work on it (ticked Permissions, a half-filled window) is still there when the connection comes back.
  */
-function PageContent() {
+export function PageContent() {
   const online = useOnline();
   const location = useLocation();
   return (
@@ -165,7 +165,7 @@ export function AppShell() {
               <div className={classes.group}>
                 <ThemeToggles orientation="vertical" />
                 <NotificationBell position={menuPlacement(position)} />
-                <UserMenu compact placement={menuPlacement(position)} />
+                <UserMenu variant="avatar" placement={menuPlacement(position)} />
               </div>
             </>
           ) : (

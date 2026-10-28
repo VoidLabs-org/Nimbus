@@ -35,6 +35,53 @@ const json = (status: number, body: unknown) =>
 const authorization = (call: Call) => new Headers(call.init.headers).get("Authorization");
 
 describe("api client", () => {
+  it("creates a project and opens it using the signed-in User's token", async () => {
+    const project = {
+      id: "p1",
+      key: "NIM",
+      name: "Nimbus",
+      description: null,
+      archived: false,
+      createdAt: "2026-10-18T00:00:00Z",
+    };
+    const server = fakeServer(
+      json(200, { accessToken: "token-1", user: alice }),
+      json(201, project),
+      json(200, project),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.login({ email: alice.email, password: "correct horse" });
+
+    expect(await api.createProject({ key: "nim", name: "Nimbus" })).toEqual(project);
+    expect(await api.project("NIM")).toEqual(project);
+    expect(server.calls[1].url).toBe("/api/projects");
+    expect(server.calls[1].init.method).toBe("POST");
+    expect(JSON.parse(server.calls[1].init.body as string)).toEqual({ key: "nim", name: "Nimbus" });
+    expect(authorization(server.calls[1])).toBe("Bearer token-1");
+    expect(server.calls[2].url).toBe("/api/projects/NIM");
+    expect(authorization(server.calls[2])).toBe("Bearer token-1");
+  });
+
+  it("uploads a Profile picture as a multipart form, leaving its content type to the browser", async () => {
+    const updated = { ...alice, avatarUrl: "/api/profile-pictures/abc" };
+    const server = fakeServer(
+      json(200, { accessToken: "token-1", user: alice }),
+      json(200, updated),
+    );
+    const api = createApiClient(server.fetchFn);
+    await api.login({ email: alice.email, password: "correct horse" });
+    const picture = new Blob(["jpeg bytes"], { type: "image/jpeg" });
+
+    expect(await api.uploadProfilePicture(picture)).toEqual(updated);
+    const upload = server.calls[1];
+    expect(upload.url).toBe("/api/users/me/profile-picture");
+    expect(upload.init.method).toBe("PUT");
+    expect(authorization(upload)).toBe("Bearer token-1");
+    expect(new Headers(upload.init.headers).has("Content-Type")).toBe(false);
+    const file = (upload.init.body as FormData).get("file") as File;
+    expect(await file.text()).toBe("jpeg bytes");
+  });
+
   it("sends no access token before the User is signed in", async () => {
     const server = fakeServer(json(401, { status: 401 }), json(401, { status: 401 }));
     const api = createApiClient(server.fetchFn, {
@@ -129,6 +176,29 @@ describe("api client", () => {
     });
     expect(authorization(server.calls[1])).toBeNull();
     expect(authorization(server.calls[2])).toBe("Bearer token-2");
+  });
+
+  it("starts no session for a password alone when a Sign-in code is needed, and the code finishes it", async () => {
+    const server = fakeServer(
+      json(200, { twoStepRequired: true }),
+      json(200, { accessToken: "token-1", user: alice }),
+      json(200, alice),
+    );
+    const api = createApiClient(server.fetchFn);
+
+    expect(await api.login({ email: "alice@example.com", password: "correct horse" })).toBeNull();
+    expect(await api.signInWithCode({ code: "123456" })).toEqual(alice);
+    await api.me();
+
+    expect(server.calls[1].url).toBe("/api/auth/two-step");
+    expect(server.calls[1].init.method).toBe("POST");
+    expect(new Headers(server.calls[1].init.headers).get("X-Requested-With")).toBe("nimbus");
+    expect(JSON.parse(String(server.calls[1].init.body))).toEqual({
+      code: "123456",
+      rememberBrowser: false,
+    });
+    expect(authorization(server.calls[1])).toBeNull();
+    expect(authorization(server.calls[2])).toBe("Bearer token-1");
   });
 
   it("tells how long to wait when the server is limiting attempts", async () => {

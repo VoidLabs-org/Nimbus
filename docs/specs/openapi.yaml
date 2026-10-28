@@ -11,6 +11,8 @@ security:
   - bearerAuth: []
 
 tags:
+  - name: projects
+    description: Projects and project membership
   - name: auth
     description: Registration, sign-in and sessions (identity module)
   - name: users
@@ -21,6 +23,72 @@ tags:
     description: The signed-in User's Notification inbox
 
 paths:
+  /api/projects:
+    post:
+      tags: [projects]
+      summary: Create a project and become its first Member
+      description: Requires a verified email. The project and membership are saved together.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Email not verified (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Project key is already taken, including by an Archived project; errors.key explains the conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}:
+    get:
+      tags: [projects]
+      summary: Open a project the User is a Member of
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Email not verified (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Project not found (also returned for a non-Member)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/notifications:
     get:
       tags: [notifications]
@@ -165,6 +233,11 @@ paths:
     post:
       tags: [auth]
       summary: Sign in with email and password
+      description: >-
+        For a User with Two-step verification a right password starts no session: the answer is
+        `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that
+        `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code. A `two_step_remembered` cookie that
+        remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code.
       security: []
       requestBody:
         required: true
@@ -174,14 +247,25 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: Signed in
+          description: Signed in, or (with Two-step verification) a Sign-in code is needed
           headers:
             Set-Cookie:
-              $ref: "#/components/headers/RefreshCookie"
+              description: >-
+                The refresh cookie when signed in (see `RefreshCookie`); otherwise the pending cookie (see the
+                `twoStepPendingCookie` scheme)
+              schema:
+                type: string
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/AuthResponse"
+                  - type: object
+                    required: [twoStepRequired]
+                    properties:
+                      twoStepRequired:
+                        type: boolean
+                        const: true
         "400":
           $ref: "#/components/responses/InvalidFields"
         "401":
@@ -192,6 +276,101 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "429":
           $ref: "#/components/responses/TooManyAttempts"
+
+  /api/auth/two-step:
+    post:
+      tags: [auth]
+      summary: Finish a password sign-in with a Sign-in code or a Recovery code
+      description: >-
+        Checks a Sign-in code from the User's authenticator app, or one of their Recovery codes, for the pending
+        sign-in in the `two_step_pending` cookie. One 30-second step either side of now is accepted, but never the step
+        that last signed the User in or an older one. A Recovery code is compared with capitals, spaces and the dash
+        ignored, works once, and publishes `RecoveryCodeUsed` when used. A right code starts the session as `POST /api/auth/login` does and ends the pending sign-in. A
+        pending sign-in lasts 5 minutes and allows 5 wrong codes. A refresh never comes here. With
+        `rememberBrowser: true` a right code also sets `two_step_remembered` (HttpOnly; Secure; SameSite=Lax;
+        Path=/api; Max-Age 30 days): password and Google/GitHub sign-ins of this User on this browser skip the code for
+        a fixed 30 days, until a password change or reset, Remove, or "Sign out all other devices" elsewhere.
+      security:
+        - twoStepPendingCookie: []
+      parameters:
+        - name: X-Requested-With
+          in: header
+          required: true
+          description: Must be `nimbus`. Cross-site forms can't set it, so other sites can't use the cookie.
+          schema:
+            type: string
+            const: nimbus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Either `code` or `recoveryCode`; with `recoveryCode`, `code` is ignored.
+              properties:
+                code:
+                  type: string
+                  maxLength: 64
+                  example: "123456"
+                recoveryCode:
+                  type: string
+                  maxLength: 64
+                  example: k7qx-2m9d
+                rememberBrowser:
+                  type: boolean
+                  default: false
+                  description: Don't ask again on this device for 30 days.
+      responses:
+        "200":
+          description: >-
+            Signed in; the pending cookie is cleared, and with `rememberBrowser` the `two_step_remembered` cookie is
+            set too
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: >-
+            The code is wrong or isn't 6 digits, or the Recovery code is wrong or used already (`code: invalid_code`,
+            with `triesLeft`), or either is over 64 characters (`errors.code`, `errors.recoveryCode`)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      triesLeft:
+                        type: integer
+        "401":
+          description: >-
+            `code: sign_in_expired`: the pending sign-in is missing, unknown, used or older than 5 minutes, or this was
+            its 5th wrong code. Clears the pending cookie; the User signs in again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The X-Requested-With header is missing or not `nimbus`
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: >-
+            The User got `nimbus.auth.wrong-sign-in-codes-per-hour` (default 10) codes wrong in the last hour, across
+            sign-ins, setup and View new codes; every code check is refused until `Retry-After` seconds have passed
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /api/auth/oauth2/google:
     get:
@@ -216,8 +395,10 @@ paths:
       description: >-
         Signs the User in or creates them, linking the Google login (see the identity module spec for the rules).
         On success it sets the refresh cookie and redirects to `/auth/callback` on the public URL (`PUBLIC_URL`), where the web app calls
-        `POST /api/auth/refresh` for an access token; no token is ever in a URL. A `returnTo` kept when the sign-in
-        started is added to either redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
+        `POST /api/auth/refresh` for an access token; no token is ever in a URL. A User with Two-step verification
+        gets no session and no refresh cookie yet: the `two_step_pending` cookie and a redirect to `/login/two-step`,
+        where `POST /api/auth/two-step` finishes the sign-in. A `returnTo` kept when the sign-in started is added to
+        every redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=google` on the public URL with `email_unverified` (Google did not verify the email),
         `disconnected` (the User on that email disconnected Google), `cancelled` (the person declined at Google) or `failed` (anything else).
       security: []
@@ -238,10 +419,14 @@ paths:
             type: string
       responses:
         "302":
-          description: Redirect to `/auth/callback` (with the refresh cookie set) or to `/login?error=<code>`
+          description: >-
+            Redirect to `/auth/callback` (with the refresh cookie set), to `/login/two-step` (with the pending cookie
+            set) or to `/login?error=<code>`
           headers:
             Set-Cookie:
-              $ref: "#/components/headers/RefreshCookie"
+              description: The refresh cookie (see `RefreshCookie`), or the pending cookie (see the `twoStepPendingCookie` scheme)
+              schema:
+                type: string
 
   /api/auth/oauth2/github:
     get:
@@ -266,8 +451,10 @@ paths:
       description: >-
         Signs the User in or creates them, linking the GitHub login (see the identity module spec for the rules).
         On success it sets the refresh cookie and redirects to `/auth/callback` on the public URL (`PUBLIC_URL`), where the web app calls
-        `POST /api/auth/refresh` for an access token; no token is ever in a URL. A `returnTo` kept when the sign-in
-        started is added to either redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
+        `POST /api/auth/refresh` for an access token; no token is ever in a URL. A User with Two-step verification
+        gets no session and no refresh cookie yet: the `two_step_pending` cookie and a redirect to `/login/two-step`,
+        where `POST /api/auth/two-step` finishes the sign-in. A `returnTo` kept when the sign-in started is added to
+        every redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=github` on the public URL with `email_unverified` (the GitHub account has no verified primary email),
         `disconnected` (the User on that email disconnected GitHub), `cancelled` (the person declined at GitHub) or `failed` (anything else).
       security: []
@@ -288,10 +475,14 @@ paths:
             type: string
       responses:
         "302":
-          description: Redirect to `/auth/callback` (with the refresh cookie set) or to `/login?error=<code>`
+          description: >-
+            Redirect to `/auth/callback` (with the refresh cookie set), to `/login/two-step` (with the pending cookie
+            set) or to `/login?error=<code>`
           headers:
             Set-Cookie:
-              $ref: "#/components/headers/RefreshCookie"
+              description: The refresh cookie (see `RefreshCookie`), or the pending cookie (see the `twoStepPendingCookie` scheme)
+              schema:
+                type: string
 
   /api/auth/refresh:
     post:
@@ -500,7 +691,11 @@ paths:
         A right code sets the password, deletes the code, marks the email verified (publishing `EmailVerified` if it
         wasn't), ends every session of the User and clears the failed sign-ins for the email. The User is not signed
         in. A wrong try is counted; the fifth cancels the code. An unknown email gets the same answer as an expired
-        code. A new password that breaks the rule, or a malformed code, is refused without counting a try.
+        code. A new password that breaks the rule, or a malformed code, is refused without counting a try. A User with
+        Two-step verification also needs `twoStepCode` (a Sign-in code) or `recoveryCode` (ADR 0005): only once the
+        Reset code is right, a missing one answers `two_step_required` and a wrong one `invalid_two_step_code`, and
+        either way nothing changes and the Reset code stays usable with its tries. A right Recovery code is used up and
+        publishes `RecoveryCodeUsed`. Two-step verification stays on.
       requestBody:
         required: true
         content:
@@ -520,6 +715,20 @@ paths:
                   type: string
                   minLength: 8
                   maxLength: 128
+                twoStepCode:
+                  type: string
+                  maxLength: 64
+                  description: >-
+                    For a User with Two-step verification, a Sign-in code from their authenticator app; ignored when
+                    `recoveryCode` is given, and for Users without Two-step verification.
+                  example: "123456"
+                recoveryCode:
+                  type: string
+                  maxLength: 64
+                  description: >-
+                    For a User with Two-step verification who lost their phone, one of their Recovery codes (capitals,
+                    spaces and dashes ignored). A blank one counts as none.
+                  example: k7qx-2m9d
       responses:
         "204":
           description: The password was changed; sign in with it
@@ -527,7 +736,9 @@ paths:
           description: >-
             A field is invalid (`errors.newPassword`, `errors.code`, `errors.email`), the code is wrong (`code` is
             `invalid_code`, with `triesLeft`), or there is no live code for the email (`code` is `code_expired`:
-            expired, cancelled after 5 wrong tries, never issued, or no User has the email)
+            expired, cancelled after 5 wrong tries, never issued, or no User has the email). With a right Reset code, a
+            User with Two-step verification gets `two_step_required` without a second code, or
+            `invalid_two_step_code` for a wrong one (which counts toward the hourly lock on code checks)
           content:
             application/problem+json:
               schema:
@@ -537,7 +748,7 @@ paths:
                     properties:
                       code:
                         type: string
-                        enum: [invalid_code, code_expired]
+                        enum: [invalid_code, code_expired, two_step_required, invalid_two_step_code]
                       triesLeft:
                         type: integer
                       errors:
@@ -631,6 +842,311 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyAttempts"
+  /api/users/me/confirm:
+    post:
+      tags: [users]
+      summary: Confirm it's you, so an old sign-in can change the email
+      description: >-
+        The password and, for a User with Two-step verification, a Sign-in code or an unused Recovery code. A right
+        answer lets this session change the email (`/api/users/me/email-change`) for the next
+        `nimbus.auth.link-recent-sign-in` (default 10 minutes), as a fresh sign-in would. Connecting a provider and
+        setting up Two-step verification still need a recent sign-in. The password is checked first, so a wrong one
+        never says whether the User has Two-step verification. The session must be still running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  maxLength: 128
+                twoStepCode:
+                  type: string
+                  description: The 6 digits from the authenticator app; only with Two-step verification.
+                recoveryCode:
+                  type: string
+                  description: One of the User's Recovery codes, instead of `twoStepCode`.
+      responses:
+        "204":
+          description: Confirmed
+        "400":
+          description: >-
+            The password is wrong or missing (`errors.password`), or with Two-step verification the second code is
+            missing (`code: two_step_required`) or wrong or used (`code: invalid_two_step_code`)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "The User has no password (`code: no_password`): they sign in again instead"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
+  /api/users/me/email-change:
+    post:
+      tags: [users]
+      summary: Email a Verification code to the address the signed-in User wants as their email
+      description: >-
+        Starts an email change, or replaces the pending one and its code: a 6-digit code goes to the new address after
+        commit, and the email changes only once it is entered (`/api/users/me/email-change/confirm`). Resend is the same
+        call. The session must have started, or been confirmed (`/api/users/me/confirm`), within
+        `nimbus.auth.link-recent-sign-in` (default 10 minutes) and be still running. Sends spend the new address's send budget (60 seconds apart, 5 an hour). A pending change doesn't hold
+        the address. Unverified Users get `403 email_unverified`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                  description: Surrounding whitespace is ignored; compared and stored lower-cased.
+      responses:
+        "204":
+          description: A code was issued and emailed to the new address
+        "400":
+          description: >-
+            The email is invalid (`errors.email`), or it is already the User's email (`code: same_email`)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >-
+            Not allowed: the sign-in is too old (`code: reauth_required`), or the User is Unverified
+            (`code: email_unverified`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "Another User has this email (`code: email_taken`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many emails to this address; nothing is issued and a pending change is unchanged
+          headers:
+            Retry-After:
+              description: Seconds until a send is allowed
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/me/email-change/confirm:
+    post:
+      tags: [users]
+      summary: Change the signed-in User's email with the code emailed to the new address
+      description: >-
+        A right code changes the email to the pending address (it stays verified) and uses the code up. Sessions, the
+        password, Two-step verification and Linked identities don't change. A wrong try is counted; the fifth cancels
+        the change. The recent sign-in is not checked again. The session must be still running. Unverified Users get
+        `403 email_unverified`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                  description: The 6 digits from the email. Spaces are ignored.
+      responses:
+        "200":
+          description: The User, with the new email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: >-
+            The code is missing or malformed (`errors.code`), wrong (`code` is `invalid_code`, with `triesLeft`), or no
+            change is pending (`code` is `code_expired`: expired, cancelled after 5 wrong tries, or never asked for)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      triesLeft:
+                        type: integer
+                      errors:
+                        type: object
+                        additionalProperties:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >-
+            Another User took the address since the code was sent (`code: email_taken`); the email is unchanged and the
+            code is not used up
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/me/profile-picture:
+    put:
+      tags: [users]
+      summary: Upload the signed-in User's Profile picture
+      description: >-
+        Stores a JPEG, PNG or WebP of at most 5 MB as the User's uploaded photo, cropped to its centred square,
+        resized to 256x256 and re-encoded as JPEG without metadata, and shows it. The photo gets a new address on
+        every upload. Needs a running Session and a verified email. A User may upload 10 photos in an hour.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: The User, whose `avatarUrl` is now the uploaded photo's address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: >-
+            The file is over 5 MB (`code: file_too_large`), isn't a JPEG, PNG or WebP (`code: unsupported_type`), or
+            can't be read (`code: unreadable_image`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          description: 10 uploads in the last hour; `Retry-After` says how many seconds until another is allowed
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags: [users]
+      summary: Remove the signed-in User's uploaded Profile picture
+      description: >-
+        Deletes the uploaded photo. If it was the picture shown, the User shows initials. Needs a running Session and a
+        verified email.
+      responses:
+        "204":
+          description: Removed, or there was no uploaded photo (nothing changes then)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/users/me/profile-picture/source:
+    put:
+      tags: [users]
+      summary: Choose what the signed-in User's Profile picture shows
+      description: Needs a running Session and a verified email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                source:
+                  type: string
+                  enum: [uploaded, google, github, initials]
+      responses:
+        "200":
+          description: The User, whose `avatarUrl` is the chosen picture's address (null for initials)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: >-
+            The option isn't available: no uploaded photo, a provider that isn't connected or sent no picture, or any
+            other word (`code: source_unavailable`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/profile-pictures/{key}:
+    get:
+      tags: [users]
+      summary: An uploaded Profile picture
+      description: >-
+        Public, for `<img>` tags, which send no access token; keys are unguessable and change with every upload, so a
+        response may be cached for a year.
+      security: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The photo
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=31536000, immutable
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No photo has this key
   /api/users/me/linked-identities:
     get:
       tags: [users]
@@ -766,7 +1282,9 @@ paths:
       description: >-
         Ends every session of the User except the one of this request, without a password; their refresh tokens stop
         working. Their access tokens keep working for up to 15 minutes. Also `204` when there are no other sessions.
-        The request must come from a session that is still running.
+        Every remembered browser of the User asks for the Sign-in code again, except the one whose
+        `two_step_remembered` cookie comes with this request. The request must come from a session that is still
+        running.
       responses:
         "204":
           description: Every other session is over
@@ -803,6 +1321,262 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/users/me/two-step:
+    get:
+      tags: [users]
+      summary: Whether the signed-in User has Two-step verification
+      description: The request must come from a session that is still running.
+      responses:
+        "200":
+          description: Its state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TwoStepStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [users]
+      summary: Turn on Two-step verification
+      description: >-
+        Stores the setup the User just proved with `POST /api/users/me/two-step/setup/verify`: the authenticator key
+        and the Recovery codes they were shown. Publishes `TwoStepEnabled`. Ends no session. The request must come from
+        a session that is still running.
+      responses:
+        "204":
+          description: Two-step verification is on
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >-
+            No proved setup in progress (`code: setup_expired`: never verified, closed, expired after 10 minutes, or
+            restarted), or Two-step verification is on already (`code: already_on`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags: [users]
+      summary: Remove Two-step verification
+      description: >-
+        Turns Two-step verification off after a Sign-in code from the User's authenticator app (one 30-second step
+        either side of now, never a step already used) or one of their Recovery codes (capitals, spaces and dashes
+        ignored). Deletes the authenticator key and every Recovery code, so a later setup starts fresh, and sign-ins
+        stop asking for a code. Publishes `TwoStepDisabled`. Ends no session. The request must come from a session that
+        is still running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: A Recovery code, when given and not blank, is checked instead of the Sign-in code.
+              properties:
+                code:
+                  type: string
+                  maxLength: 64
+                  example: "123456"
+                recoveryCode:
+                  type: string
+                  maxLength: 64
+                  example: k7qx-2m9d
+      responses:
+        "204":
+          description: Two-step verification is off
+        "400":
+          description: >-
+            The code is wrong, used already or isn't 6 digits, or the Recovery code is wrong or used (`code:
+            invalid_code`, which counts toward the hourly lock), or a field is over 64 characters (`errors.code`,
+            `errors.recoveryCode`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "Two-step verification is not on (`code: not_on`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
+  /api/users/me/two-step/setup:
+    delete:
+      tags: [users]
+      summary: Throw away the setup in progress
+      description: >-
+        The User closed the setup window: this session's setup in progress, proved or not, is thrown away, so it can't
+        be turned on later. The request must come from a session that is still running.
+      responses:
+        "204":
+          description: Thrown away, or there was none
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [users]
+      summary: Start setting up Two-step verification
+      description: >-
+        Makes a new authenticator key, replacing any setup in progress. Nothing is stored until the User turns it on;
+        the setup lasts 10 minutes, in memory. The session must have started within `nimbus.auth.link-recent-sign-in`
+        (default 10 minutes) and be still running.
+      responses:
+        "200":
+          description: The key, for typing, and the address the QR code holds
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key, otpauthUri]
+                properties:
+                  key:
+                    type: string
+                    description: Base32, 32 characters; the web app shows it in groups of four
+                    example: JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP
+                  otpauthUri:
+                    type: string
+                    example: otpauth://totp/Nimbus:alice%40example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Nimbus
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >-
+            Not allowed: the sign-in is too old (`code: reauth_required`), or the User is Unverified
+            (`code: email_unverified`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "Two-step verification is on already (`code: already_on`), checked before the recent sign-in"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/me/two-step/setup/verify:
+    post:
+      tags: [users]
+      summary: Prove the authenticator app has the key
+      description: >-
+        Checks a Sign-in code against the key being set up (one 30-second step either side of now is accepted) and
+        answers with the 10 Recovery codes the User must save. A setup that is proved already answers with the same
+        codes, so a second tab or a double click never replaces them. Only the session that started the setup can prove
+        it, and 5 wrong codes throw it away. Wrong codes also count toward the User's hourly lock on Sign-in codes.
+        Turns nothing on. The request must come from a session that is still running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: The Recovery codes, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recoveryCodes]
+                properties:
+                  recoveryCodes:
+                    type: array
+                    minItems: 10
+                    maxItems: 10
+                    items:
+                      type: string
+                      pattern: "^[a-z0-9]{4}-[a-z0-9]{4}$"
+                      example: k7qx-2m9d
+        "400":
+          description: >-
+            The code doesn't fit the key or isn't 6 digits (`code: invalid_code`), or it is over 64 characters
+            (`errors.code`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >-
+            No setup in progress for this session (`code: setup_expired`): never started, started by another session,
+            expired, discarded, replaced, or thrown away by this, the 5th wrong code
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
+  /api/users/me/two-step/recovery-codes:
+    post:
+      tags: [users]
+      summary: View new codes
+      description: >-
+        Replaces the User's Recovery codes with a new set of 10, after a Sign-in code from their authenticator app (one
+        30-second step either side of now, never a step already used; a Recovery code is not accepted). The old set
+        stops working at once and the new codes are shown only in this answer. Publishes `RecoveryCodesRegenerated`.
+        The request must come from a session that is still running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  maxLength: 64
+                  example: "123456"
+      responses:
+        "200":
+          description: The new Recovery codes, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recoveryCodes]
+                properties:
+                  recoveryCodes:
+                    type: array
+                    minItems: 10
+                    maxItems: 10
+                    items:
+                      type: string
+                      pattern: "^[a-z0-9]{4}-[a-z0-9]{4}$"
+                      example: k7qx-2m9d
+        "400":
+          description: >-
+            The code is wrong, used already or isn't 6 digits (`code: invalid_code`, which counts toward the hourly
+            lock), or it is over 64 characters (`errors.code`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "Two-step verification is not on (`code: not_on`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyAttempts"
   /api/access/permissions:
     get:
       tags: [access]
@@ -1287,6 +2061,13 @@ components:
       type: apiKey
       in: cookie
       name: refresh_token
+    twoStepPendingCookie:
+      type: apiKey
+      in: cookie
+      name: two_step_pending
+      description: >-
+        Set by `POST /api/auth/login` and the Google and GitHub callbacks for a User with Two-step verification: `two_step_pending=<random id>; HttpOnly;
+        Secure; SameSite=Strict; Path=/api/auth/two-step; Max-Age=300`. Single use.
 
   parameters:
     LinkTicket:
@@ -1319,6 +2100,40 @@ components:
         type: string
 
   schemas:
+    CreateProjectRequest:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+          pattern: "^[A-Za-z][A-Za-z0-9]{1,9}$"
+          description: Stored uppercase; cannot be changed or reused
+        name:
+          type: string
+          description: Trimmed, 1–100 Unicode code points, no ISO control characters; need not be unique
+        description:
+          type: [string, "null"]
+          maxLength: 1000
+          description: Optional plain text; line breaks and tabs allowed, other control characters rejected
+    Project:
+      type: object
+      required: [id, key, name, description, archived, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          pattern: "^[A-Z][A-Z0-9]{1,9}$"
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        archived:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
     NotificationPage:
       type: object
       required: [items, nextCursor]
@@ -1326,12 +2141,12 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/Notification"
+            $ref: "#/components/schemas/NotificationItem"
         nextCursor:
           type: [string, "null"]
           description: Pass as before to fetch older Notifications; null at the end
 
-    Notification:
+    NotificationItem:
       type: object
       required: [id, type, createdAt, read, snapshot, link]
       properties:
@@ -1427,7 +2242,19 @@ components:
 
     User:
       type: object
-      required: [id, email, displayName, avatarUrl, hasPassword, emailVerified]
+      required:
+        [
+          id,
+          email,
+          displayName,
+          avatarUrl,
+          hasPassword,
+          emailVerified,
+          passwordChangedAt,
+          hasUploadedPicture,
+          pictureSource,
+          pictureOptions,
+        ]
       properties:
         id:
           type: string
@@ -1439,7 +2266,10 @@ components:
           type: string
         avatarUrl:
           type: [string, "null"]
-          format: uri
+          format: uri-reference
+          description: >-
+            The Profile picture the User shows: their uploaded photo (by default an address under
+            `/api/profile-pictures/`), or the picture their last Google or GitHub sign-in brought; null for initials
         hasPassword:
           type: boolean
           description: False for Users who only sign in with Google or GitHub; the app asks for a current password only when true
@@ -1449,6 +2279,50 @@ components:
             False until the User has entered the emailed code or signed in with Google or GitHub on the email.
             An Unverified User gets `403` with `code` `email_unverified` from every endpoint except
             `GET /api/users/me` and those under `/api/auth/`.
+        passwordChangedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            When the password was last set (sign-up, change, first password, forgot password). Null without a password,
+            and for passwords set before Nimbus kept the time.
+        hasUploadedPicture:
+          type: boolean
+          description: Whether the User has an uploaded photo, whether or not it is the picture shown
+        pictureSource:
+          type: [string, "null"]
+          enum: [uploaded, google, github, initials, null]
+          description: >-
+            What the User shows. Null for a picture from before Linked identities kept their own, which belongs to none
+            of the options.
+        pictureOptions:
+          type: object
+          required: [uploadedAt, uploadedUrl, providers]
+          description: What the User may pick from with `PUT /api/users/me/profile-picture/source`
+          properties:
+            uploadedAt:
+              type: [string, "null"]
+              format: date-time
+            uploadedUrl:
+              type: [string, "null"]
+              format: uri-reference
+              description: The uploaded photo's address, shown or not; null without an upload
+            providers:
+              type: array
+              description: Each connected provider that sent a picture, Google first
+              items:
+                type: object
+                required: [provider, pictureUrl, label]
+                properties:
+                  provider:
+                    type: string
+                    enum: [google, github]
+                  pictureUrl:
+                    type: string
+                    format: uri
+                  label:
+                    type: string
+                    description: The Google email or the GitHub username
 
     SessionInfo:
       type: object
@@ -1490,6 +2364,21 @@ components:
         connectedAt:
           type: string
           format: date-time
+
+    TwoStepStatus:
+      type: object
+      required: [enabled, enabledAt, recoveryCodesLeft]
+      properties:
+        enabled:
+          type: boolean
+        enabledAt:
+          type: [string, "null"]
+          format: date-time
+          description: When it was turned on; null when off
+        recoveryCodesLeft:
+          type: [integer, "null"]
+          description: Recovery codes not used yet; null when off
+          example: 10
 
     CatalogPermission:
       type: object
@@ -1778,7 +2667,7 @@ components:
                     additionalProperties:
                       type: string
     TooManyAttempts:
-      description: Rate limited (failed sign-ins per email or IP address, registrations, refreshes, forgot-password requests or reset attempts per IP address, or wrong current passwords per User)
+      description: Rate limited (failed sign-ins per email or IP address, registrations, refreshes, forgot-password requests or reset attempts per IP address, wrong current passwords per User, or wrong Sign-in codes per User)
       headers:
         Retry-After:
           description: Seconds until another attempt may succeed

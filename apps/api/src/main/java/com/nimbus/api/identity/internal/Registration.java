@@ -97,7 +97,7 @@ class Registration {
 	}
 
 	// The reported name may be schema-qualified or quoted, e.g. "public.users_email_key".
-	private static boolean violates(DataIntegrityViolationException e, String constraint) {
+	static boolean violates(DataIntegrityViolationException e, String constraint) {
 		return e.getCause() instanceof ConstraintViolationException violation
 				&& violation.getConstraintName() != null
 				&& violation.getConstraintName().toLowerCase(Locale.ROOT).contains(constraint);

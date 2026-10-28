@@ -22,7 +22,8 @@ import org.springframework.web.util.WebUtils;
 /**
  * Ends the OAuth handshake. On success it signs the User in like any other sign-in: a session, and its refresh
  * token in the cookie only. The browser is then sent to {@code /auth/callback}, where the web app trades the
- * cookie for an access token, so no token ever appears in a URL. On failure the browser goes back to the sign-in
+ * cookie for an access token, so no token ever appears in a URL. A User with Two-step verification gets no session
+ * yet: a pending sign-in cookie, and {@code /login/two-step} for the code. On failure the browser goes back to the sign-in
  * page with a short code. Either way the page the sign-in started from ({@link ReturnPath}) is passed on as
  * {@code returnTo}, and the handshake's short-lived HTTP session is dropped; nothing else in the API uses one.
  */
@@ -40,11 +41,14 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	/** Where the browser sees Nimbus, without a trailing slash. */
 	private final String publicUrl;
 
+	private final TwoStepSignIn twoStepSignIn;
+
 	OAuthLoginHandler(ExternalSignIn externalSignIn, LinkTickets tickets,
-			LinkedIdentities linkedIdentities, AuthProperties properties) {
+			LinkedIdentities linkedIdentities, TwoStepSignIn twoStepSignIn, AuthProperties properties) {
 		this.externalSignIn = externalSignIn;
 		this.tickets = tickets;
 		this.linkedIdentities = linkedIdentities;
+		this.twoStepSignIn = twoStepSignIn;
 		this.publicUrl = properties.publicUrl();
 	}
 
@@ -62,7 +66,20 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		try {
 			var login = (OAuth2AuthenticationToken) authentication;
 			provider = login.getAuthorizedClientRegistrationId();
-			var refreshToken = externalSignIn.startSession(profileOf(login), request.getHeader(HttpHeaders.USER_AGENT));
+			var profile = profileOf(login);
+			// The provider's consent alone is not enough for a User with Two-step verification (ADR 0005): nothing is
+			// stored (no link, no Session), and the code page finishes the sign-in.
+			// The remembered cookie is SameSite=Lax, so it comes along on this redirect back from the provider.
+			var remembered = WebUtils.getCookie(request, RememberedBrowsers.COOKIE);
+			var pending = externalSignIn.whoSignsIn(profile)
+				.flatMap(existing -> twoStepSignIn.begin(existing, profile,
+						remembered == null ? null : remembered.getValue()));
+			if (pending.isPresent()) {
+				response.addHeader(HttpHeaders.SET_COOKIE, pending.get().toString());
+				redirect(response, "/login/two-step", returnTo);
+				return;
+			}
+			var refreshToken = externalSignIn.startSession(profile, request.getHeader(HttpHeaders.USER_AGENT));
 			response.addHeader(HttpHeaders.SET_COOKIE,
 					AuthController.refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
 			redirect(response, "/auth/callback", returnTo);

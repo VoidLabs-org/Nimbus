@@ -25,8 +25,9 @@ A project management app where teams create projects, issues, boards and sprints
 1. `pnpm install`
 2. **Database:** copy `apps/api/.env.example` to `apps/api/.env` and fill in the shared dev database values (ask the team). Never commit `.env`.
    To use a local database instead, skip the `.env` and run `docker compose up -d`.
+   **Uploads** (Profile pictures) go to a bucket: with the shared dev database, add the shared R2 bucket's `STORAGE_*` values to `.env` (ask the team); with a local database, `docker compose up -d` also starts MinIO, which the API uses by default.
 3. `pnpm dev` to start the API and website.
-   To have the API restart by itself when you change Java code, also run `pnpm --filter api dev:watch` in a second terminal (see below).
+   It also restarts the API by itself when you change Java code (see below).
 
 | What       | Where                                 |
 | ---------- | ------------------------------------- |
@@ -38,23 +39,29 @@ Backend tests (`pnpm test`) start their own throwaway database with Docker, so D
 
 The website forwards `/api/*` calls to the API, so the browser only talks to port 3000.
 
-**API auto-restart.** `pnpm dev` starts the API once and does not watch your Java files. `pnpm --filter api dev:watch` runs Gradle's `compileJava --continuous`: it recompiles whenever you save a `.java` file, and Spring DevTools (development only, not in the deployed jar) sees the new classes and restarts the API, which is much faster than stopping and starting `pnpm dev`. Leave it running in a second terminal. Changes to `apps/api/.env` are not picked up this way; restart `pnpm dev` for those. Each restart resets in-memory state such as rate-limit counters.
+**API auto-restart.** `pnpm dev` also runs `pnpm --filter api dev:watch` (set up in `apps/api/turbo.json`), which is Gradle's `classes --continuous`: it recompiles whenever you save a `.java` file and copies changed resources such as new migrations, and Spring DevTools (development only, not in the deployed jar) sees the change and restarts the API, which is much faster than stopping and starting `pnpm dev`. Changes to `apps/api/.env` are not picked up this way; restart `pnpm dev` for those. Each restart resets in-memory state such as rate-limit counters.
+
+## Desktop app
+
+`pnpm dev:desktop` opens the Electron window on the dev server, so it works like the website. The window loads Nimbus from `NIMBUS_URL` (default `http://localhost:3000`), so once Nimbus is hosted, pointing it there is a setting, not a rebuild.
+
+In the window, Nimbus has its own shell: a Sidebar instead of the navbar, which folds away with its button or Ctrl `\` (⌘ `\` on macOS) and peeks out when you rest the pointer on the button, and a hidden title bar. There is no menu bar on Windows and Linux (the Nimbus icon at the top left opens the menu; macOS has a minimal menu bar); `pnpm dev:desktop` starts it with `--dev`, which adds reload and developer tools (Ctrl R, Ctrl Shift I). Details: [docs/specs/desktop.md](docs/specs/desktop.md) and ADR 0007.
 
 ## Commands
 
 Run from the repo root.
 
-| Command                       | Does                                                                    |
-| ----------------------------- | ----------------------------------------------------------------------- |
-| `pnpm dev`                    | Start the API and website                                               |
-| `pnpm dev:desktop`            | Same, plus the Electron desktop window                                  |
-| `pnpm --filter api dev:watch` | Recompile the API on every save so it restarts (run next to `pnpm dev`) |
-| `pnpm build`                  | Build everything                                                        |
-| `pnpm test`                   | Run backend tests (needs Docker)                                        |
-| `pnpm lint`                   | Lint with oxlint                                                        |
-| `pnpm check-types`            | Type-check the TypeScript code                                          |
-| `pnpm format`                 | Format with oxfmt (`pnpm format:check` to only check)                   |
-| `docker compose down`         | Stop the database (data is kept in a Docker volume)                     |
+| Command                       | Does                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| `pnpm dev`                    | Start the API and website                                                   |
+| `pnpm dev:desktop`            | Same, plus the Electron desktop window                                      |
+| `pnpm --filter api dev:watch` | Recompile the API on every save so it restarts (`pnpm dev` already runs it) |
+| `pnpm build`                  | Build everything                                                            |
+| `pnpm test`                   | Run backend tests (needs Docker)                                            |
+| `pnpm lint`                   | Lint with oxlint                                                            |
+| `pnpm check-types`            | Type-check the TypeScript code                                              |
+| `pnpm format`                 | Format with oxfmt (`pnpm format:check` to only check)                       |
+| `docker compose down`         | Stop the database and MinIO (data is kept in Docker volumes)                |
 
 ## Repository layout
 

@@ -32,6 +32,9 @@ class ExternalSignInTests {
 	LinkedIdentities linkedIdentities;
 
 	@Autowired
+	ProfilePictures pictures;
+
+	@Autowired
 	Recorder recorder;
 
 	@Autowired
@@ -55,7 +58,7 @@ class ExternalSignInTests {
 
 		assertThat(user.email()).isEqualTo("ada@example.com");
 		assertThat(user.displayName()).isEqualTo("Ada Lovelace");
-		assertThat(user.avatarUrl()).isEqualTo("https://img/ada");
+		assertThat(pictures.addressOf(user)).isEqualTo("https://img/ada");
 		assertThat(user.emailVerified()).isTrue();
 		assertThat(user.passwordHash()).isNull();
 		assertThat(recorder.registered).filteredOn(event -> event.email().equals("ada@example.com"))
@@ -79,7 +82,7 @@ class ExternalSignInTests {
 
 		assertThat(again.getId()).isEqualTo(first.getId());
 		assertThat(again.displayName()).isEqualTo("Bea Renamed");
-		assertThat(again.avatarUrl()).isEqualTo("https://img/bea-2");
+		assertThat(pictures.addressOf(again)).isEqualTo("https://img/bea-2");
 		assertThat(again.email()).isEqualTo("bea@example.com");
 		assertThat(recorder.registered).filteredOn(event -> event.userId().equals(first.getId())).hasSize(1);
 	}
@@ -148,7 +151,7 @@ class ExternalSignInTests {
 
 		assertThat(signedIn.getId()).isEqualTo(existing.getId());
 		assertThat(signedIn.displayName()).isEqualTo("Dee");
-		assertThat(signedIn.avatarUrl()).isEqualTo("https://img/dee");
+		assertThat(pictures.addressOf(signedIn)).isEqualTo("https://img/dee");
 		assertThat(signIn.signIn("dee@example.com", "correct horse", "client-dee").getId()).isEqualTo(existing.getId());
 		assertThat(sessions.refresh(token.value(), "client-dee").user().getId()).isEqualTo(existing.getId());
 		assertThat(externalSignIn.signIn(google("g-dee", "other@example.com", true, null, null)).getId())

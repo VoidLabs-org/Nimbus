@@ -1,6 +1,7 @@
 import { Button } from "@mantine/core";
 import { Link } from "react-router";
 import { WindowFrame } from "../access/WindowFrame";
+import { PASSWORD_WINDOW_PATH } from "../settings/sections";
 import classes from "./DisconnectDialogs.module.css";
 
 /**
@@ -64,7 +65,7 @@ export function SetPasswordFirstDialog({
         <Button variant="default" onClick={onClose}>
           Not now
         </Button>
-        <Button component={Link} to="/settings/password">
+        <Button component={Link} to={PASSWORD_WINDOW_PATH}>
           Set a password
         </Button>
       </div>

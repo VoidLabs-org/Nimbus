@@ -42,6 +42,9 @@ class Session {
 	/** When it last got a new refresh token: its start, then every refresh. */
 	private Instant lastActiveAt;
 
+	/** When the User last confirmed it was them here ("Confirm it's you"); null until they do. */
+	private Instant confirmedAt;
+
 	protected Session() {
 	}
 
@@ -92,6 +95,15 @@ class Session {
 
 	void markActive(Instant now) {
 		lastActiveAt = now;
+	}
+
+	void markConfirmed(Instant now) {
+		confirmedAt = now;
+	}
+
+	/** When the User last proved it was them here: the sign-in, or a later "Confirm it's you". */
+	Instant provedAt() {
+		return confirmedAt != null && confirmedAt.isAfter(startedAt) ? confirmedAt : startedAt;
 	}
 
 	boolean isRevoked() {

@@ -33,7 +33,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * other module here. Users are random ids: {@code access} stores ids and never looks Users up for these.
  */
 @Import({ TestcontainersConfiguration.class, RecordingMailer.class, ProjectChecksTests.WidgetPermissions.class })
-@ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.DIRECT_DEPENDENCIES,
+// identity needs storage for Profile pictures, which DIRECT_DEPENDENCIES of access leaves out.
+@ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.DIRECT_DEPENDENCIES, extraIncludes = "storage",
 		webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
 @TestPropertySource(properties = { "nimbus.admin.email=root@example.com", "nimbus.admin.password=seeded password" })

@@ -16,6 +16,10 @@ const unverified: User = {
   avatarUrl: null,
   hasPassword: true,
   emailVerified: false,
+  passwordChangedAt: null,
+  hasUploadedPicture: false,
+  pictureSource: "initials",
+  pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [] },
 };
 const verified: User = { ...unverified, emailVerified: true };
 

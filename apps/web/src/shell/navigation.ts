@@ -1,5 +1,5 @@
 import type { Icon } from "@tabler/icons-react";
-import { IconHome, IconSettings } from "@tabler/icons-react";
+import { IconFolder, IconHome, IconSettings } from "@tabler/icons-react";
 
 /**
  * A page a signed-in User can open from the navbar. `end` matches the path exactly (Home only), so Settings, which has
@@ -27,5 +27,6 @@ export const OTHER_FOCUS_KEYS = ["brand", "account", "dark", "glass"] as const;
  */
 export const DESTINATIONS: Destination[] = [
   { id: "home", to: "/", label: "Home", icon: IconHome, end: true },
+  { id: "projects", to: "/projects", label: "Projects", icon: IconFolder },
   { id: "settings", to: "/settings", label: "Settings", icon: IconSettings },
 ];

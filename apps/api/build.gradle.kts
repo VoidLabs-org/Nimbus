@@ -32,6 +32,18 @@ dependencies {
 	// Argon2id password hashing (Spring Security's Argon2PasswordEncoder needs it).
 	implementation("org.bouncycastle:bcprov-jdk18on:1.83")
 	implementation("com.github.ua-parser:uap-java:1.6.1")
+	// The storage module talks to Cloudflare R2 (MinIO locally and in tests) through the S3 API.
+	implementation(platform("software.amazon.awssdk:bom:2.57.3"))
+	implementation("software.amazon.awssdk:s3") {
+		// Its default HTTP clients. Apache HttpClient 5 on the classpath would also become Spring's default for
+		// RestClient and the test client, and it waits out a 429's Retry-After by itself. The JDK's client instead.
+		exclude(group = "software.amazon.awssdk", module = "apache5-client")
+		exclude(group = "software.amazon.awssdk", module = "apache-client")
+		exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+	}
+	implementation("software.amazon.awssdk:url-connection-client")
+	// Lets ImageIO read WebP uploads; JPEG and PNG are built in.
+	implementation("com.twelvemonkeys.imageio:imageio-webp:3.15.3")
 	implementation("org.springframework.modulith:spring-modulith-observability-api")
 	implementation("org.springframework.modulith:spring-modulith-starter-core")
 	implementation("org.springframework.modulith:spring-modulith-starter-jpa")
@@ -51,6 +63,7 @@ dependencies {
 	testImplementation("org.springframework.boot:spring-boot-testcontainers")
 	testImplementation("org.springframework.modulith:spring-modulith-starter-test")
 	testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+	testImplementation("org.testcontainers:testcontainers-minio")
 	testImplementation("org.testcontainers:testcontainers-postgresql")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

@@ -29,7 +29,10 @@ final class EmailedCodes {
 
 	enum Kind {
 
-		VERIFICATION("nimbus:verification-code"), RESET("nimbus:reset-code");
+		VERIFICATION("nimbus:verification-code"), RESET("nimbus:reset-code"),
+
+		/** A Verification code mailed to a new address, which becomes the User's email once it is entered. */
+		EMAIL_CHANGE("nimbus:email-change-code");
 
 		private final String hashPurpose;
 
@@ -67,6 +70,14 @@ final class EmailedCodes {
 
 	/** Stores a new code for the User, replacing any live one, and returns it, to be mailed after the commit. */
 	String issue(UUID userId) {
+		return issue(userId, null);
+	}
+
+	/**
+	 * Like {@link #issue(UUID)}, for an email change: the code is kept with the address it was mailed to, which a
+	 * right {@link #check} returns.
+	 */
+	String issue(UUID userId, String newEmail) {
 		var code = String.format("%06d", RANDOM.nextInt(1_000_000));
 		var hash = hash(userId, code);
 		// Postgres keeps microseconds and rounds anything finer, which could push a stored expiry past the instant
@@ -74,10 +85,10 @@ final class EmailedCodes {
 		var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 		var existing = codes.findLocked(userId, kind);
 		if (existing.isPresent()) {
-			existing.get().replaceWith(hash, now, now.plus(LIFETIME));
+			existing.get().replaceWith(hash, now, now.plus(LIFETIME), newEmail);
 		}
 		else {
-			codes.save(new EmailedCode(userId, kind, hash, now, now.plus(LIFETIME)));
+			codes.save(new EmailedCode(userId, kind, hash, now, now.plus(LIFETIME), newEmail));
 		}
 		return code;
 	}
@@ -94,7 +105,7 @@ final class EmailedCodes {
 		}
 		if (matches(stored.codeHash(), hash(userId, code))) {
 			codes.delete(stored);
-			return Check.RIGHT;
+			return new Check.Right(stored.newEmail());
 		}
 		stored.countWrongTry();
 		var left = MAX_WRONG_TRIES - stored.wrongTries();
@@ -113,7 +124,8 @@ final class EmailedCodes {
 	/** What {@link #check} found: a right code, no live code, or a wrong one with some tries left. */
 	sealed interface Check {
 
-		Check RIGHT = new Right();
+		/** A right code of a kind that carries no address. */
+		Check RIGHT = new Right(null);
 
 		/** Expired, never issued, or cancelled, which the fifth wrong try itself does. */
 		Check NONE = new None();
@@ -131,7 +143,8 @@ final class EmailedCodes {
 			};
 		}
 
-		record Right() implements Check {
+		/** @param newEmail for an email change, the address the code was mailed to; null for the other kinds */
+		record Right(String newEmail) implements Check {
 		}
 
 		record None() implements Check {

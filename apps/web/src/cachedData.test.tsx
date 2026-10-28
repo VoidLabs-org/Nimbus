@@ -112,6 +112,10 @@ describe("a different User", () => {
     avatarUrl: null,
     hasPassword: true,
     emailVerified: true,
+    passwordChangedAt: null,
+    hasUploadedPicture: false,
+    pictureSource: "initials",
+    pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [] },
   });
 
   /** Signs out and in as the other User, with the Roles page up for whoever is signed in. */

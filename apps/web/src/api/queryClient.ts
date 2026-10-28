@@ -2,6 +2,7 @@ import { focusManager, QueryClient } from "@tanstack/react-query";
 
 // Query only listens for tab visibility; a window can also regain focus without becoming visible again.
 focusManager.setEventListener((handleFocus) => {
+  if (typeof window === "undefined") return () => {};
   const onChange = () => handleFocus();
   window.addEventListener("visibilitychange", onChange);
   window.addEventListener("focus", onChange);

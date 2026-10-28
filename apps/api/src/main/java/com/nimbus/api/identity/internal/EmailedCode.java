@@ -14,7 +14,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import org.springframework.data.domain.Persistable;
 
-/** The one live code of a kind (Verification, Reset) of a User, kept only as a keyed hash. */
+/** The one live code of a kind (Verification, Reset, email change) of a User, kept only as a keyed hash. */
 @Entity
 @Table(name = "emailed_codes")
 class EmailedCode implements Persistable<EmailedCode.Key> {
@@ -34,14 +34,19 @@ class EmailedCode implements Persistable<EmailedCode.Key> {
 
 	private int wrongTries;
 
+	// The address an email change moves to; null for the other kinds.
+	private String newEmail;
+
 	protected EmailedCode() {
 	}
 
-	EmailedCode(UUID userId, EmailedCodes.Kind kind, String codeHash, Instant createdAt, Instant expiresAt) {
+	EmailedCode(UUID userId, EmailedCodes.Kind kind, String codeHash, Instant createdAt, Instant expiresAt,
+			String newEmail) {
 		this.id = new Key(userId, kind);
 		this.codeHash = codeHash;
 		this.createdAt = createdAt;
 		this.expiresAt = expiresAt;
+		this.newEmail = newEmail;
 		this.isNew = true;
 	}
 
@@ -62,10 +67,11 @@ class EmailedCode implements Persistable<EmailedCode.Key> {
 	}
 
 	/** A new code replaces the old one, and starts with no wrong tries. */
-	void replaceWith(String codeHash, Instant createdAt, Instant expiresAt) {
+	void replaceWith(String codeHash, Instant createdAt, Instant expiresAt, String newEmail) {
 		this.codeHash = codeHash;
 		this.createdAt = createdAt;
 		this.expiresAt = expiresAt;
+		this.newEmail = newEmail;
 		this.wrongTries = 0;
 	}
 
@@ -83,6 +89,10 @@ class EmailedCode implements Persistable<EmailedCode.Key> {
 
 	int wrongTries() {
 		return wrongTries;
+	}
+
+	String newEmail() {
+		return newEmail;
 	}
 
 	@Embeddable

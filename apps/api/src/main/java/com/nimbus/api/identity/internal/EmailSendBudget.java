@@ -8,9 +8,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * How often Nimbus may email one address: at least {@code emailSendInterval} between sends and at most
- * {@code emailSendsPerHour} an hour, counted per address however many Users or flows asked. Verification codes
- * spend it today; forgot-password and email change are meant to spend the same budget, so one address can't be
- * flooded by combining them.
+ * {@code emailSendsPerHour} an hour, counted per address however many Users or flows asked. Verification codes,
+ * Reset codes and email change codes (for the new address) all spend it, so one address can't be flooded by
+ * combining them.
  */
 @Component
 class EmailSendBudget {

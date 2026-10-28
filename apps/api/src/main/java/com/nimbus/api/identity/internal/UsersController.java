@@ -12,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -36,8 +37,18 @@ class UsersController {
 
 	private final LinkedIdentities linkedIdentities;
 
+	private final RememberedBrowsers rememberedBrowsers;
+
+	private final ConfirmItsYou confirmItsYou;
+
+	private final ProfilePictures pictures;
+
 	UsersController(UserRepository users, CurrentUser currentUser, Passwords passwords, Sessions sessions,
-			LinkedIdentities linkedIdentities) {
+			LinkedIdentities linkedIdentities, RememberedBrowsers rememberedBrowsers, ConfirmItsYou confirmItsYou,
+			ProfilePictures pictures) {
+		this.pictures = pictures;
+		this.rememberedBrowsers = rememberedBrowsers;
+		this.confirmItsYou = confirmItsYou;
 		this.users = users;
 		this.currentUser = currentUser;
 		this.passwords = passwords;
@@ -48,16 +59,16 @@ class UsersController {
 	/** The signed-in User's profile; an invalid-token 401 if their token outlived the User. */
 	@GetMapping("/me")
 	UserResponse me() {
-		return UserResponse.from(users.require(currentUser.id()));
+		return UserResponse.from(users.require(currentUser.id()), pictures);
 	}
 
-	/** Changes the display name only; email, password and avatar are not editable here. */
+	/** Changes the display name only; email, password and Profile picture are not editable here. */
 	@PatchMapping("/me")
 	@Transactional
 	UserResponse updateMe(@Valid @RequestBody UpdateProfileRequest request) {
 		var user = users.require(currentUser.id());
 		user.rename(request.displayName());
-		return UserResponse.from(user);
+		return UserResponse.from(user, pictures);
 	}
 
 	/** Sets the first password of a User who has none, or changes the existing one (which must be given). */
@@ -65,6 +76,14 @@ class UsersController {
 	ResponseEntity<Void> changePassword(@AuthenticationPrincipal Jwt token,
 			@Valid @RequestBody ChangePasswordRequest request) {
 		passwords.change(currentUser.id(), sessionOf(token), request.currentPassword(), request.newPassword());
+		return ResponseEntity.noContent().build();
+	}
+
+	/** "Confirm it's you": the password, and the second code with Two-step verification, renew this Session's proof. */
+	@PostMapping("/me/confirm")
+	ResponseEntity<Void> confirm(@AuthenticationPrincipal Jwt token, @Valid @RequestBody ConfirmRequest request) {
+		confirmItsYou.confirm(currentUser.id(), sessionOf(token), request.password(), request.twoStepCode(),
+				request.recoveryCode());
 		return ResponseEntity.noContent().build();
 	}
 
@@ -76,8 +95,11 @@ class UsersController {
 
 	/** Ends every session of the User except this one, without asking for a password; 204 even when there are none. */
 	@PostMapping("/me/sessions/sign-out-others")
-	ResponseEntity<Void> endOtherSessions(@AuthenticationPrincipal Jwt token) {
+	ResponseEntity<Void> endOtherSessions(@AuthenticationPrincipal Jwt token,
+			@CookieValue(name = RememberedBrowsers.COOKIE, required = false) String remembered) {
 		sessions.endOthers(currentUser.id(), sessionOf(token));
+		// The other devices ask for the code again; this browser stays remembered.
+		rememberedBrowsers.forgetAllExcept(currentUser.id(), remembered);
 		return ResponseEntity.noContent().build();
 	}
 
@@ -114,7 +136,7 @@ class UsersController {
 	record LinkTicketResponse(String ticket) {
 	}
 
-	private static UUID sessionOf(Jwt token) {
+	static UUID sessionOf(Jwt token) {
 		var sessionId = token.getClaimAsString(AccessTokens.SESSION_CLAIM);
 		if (sessionId == null) {
 			throw new InvalidBearerTokenException("This token belongs to no session. Sign in again.");
@@ -131,6 +153,11 @@ class UsersController {
 	record ChangePasswordRequest(
 			@Size(max = ValidPassword.MAX_LENGTH) String currentPassword,
 			@ValidPassword String newPassword) {
+	}
+
+	/** A password kept exactly as typed; at most one of the two codes is needed, and only with Two-step verification. */
+	record ConfirmRequest(@Size(max = ValidPassword.MAX_LENGTH) String password,
+			@Size(max = 64) String twoStepCode, @Size(max = 64) String recoveryCode) {
 	}
 
 	/** The same display name rule as at registration. */

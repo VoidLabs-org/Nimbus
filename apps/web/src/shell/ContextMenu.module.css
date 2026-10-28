@@ -1,0 +1,44 @@
+/* The Desktop app's right-click menu, from the "Nimbus Desktop v2" design: a 280px card in the page's colour with pill
+   rows. Colours come only from the theme variables, so all four themes work. */
+.point {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.dropdown {
+  width: 280px;
+  padding: 6px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    var(--shadow-lg);
+}
+
+.item {
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.item[data-hovered] {
+  background: var(--seg);
+}
+
+.divider {
+  margin: 4px 12px;
+  border-color: var(--line-strong);
+}
+
+.shortcut {
+  font-size: 11px;
+  color: var(--color-accent-2-700);
+}

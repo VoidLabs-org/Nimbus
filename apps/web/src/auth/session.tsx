@@ -6,10 +6,13 @@ import {
   ApiError,
   type ChangePasswordInput,
   type LoginInput,
+  type PictureSource,
   type RegisterInput,
+  type TwoStepAnswer,
   type User,
 } from "../api/client";
 import { failedLoad } from "../api/failure";
+import { queryKeys } from "../api/queries";
 import { SignInCheck } from "../shell/SignInCheck";
 import { OfflinePage, ServerErrorPage } from "../shell/StatusPages";
 import { loginPath } from "./returnPath";
@@ -23,6 +26,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [restoring, setRestoring] = useState(true);
   const [unavailable, setUnavailable] = useState<"offline" | "server" | null>(null);
   const [signedOutOnPurpose, setSignedOutOnPurpose] = useState(false);
+  const [returnAfterSignOut, setReturnAfterSignOut] = useState<string | null>(null);
   // Right after a correct code the screen stays up to say so, before the app opens.
   const [confirmingFor, setConfirmingFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -64,19 +68,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   async function register(input: RegisterInput) {
-    const registered = await api.register(input);
+    signedInAs(await api.register(input));
+  }
+
+  function signedInAs(signedIn: User) {
     queryClient.clear();
     setConfirmingFor(null);
-    setUser(registered);
+    setUser(signedIn);
     setSignedOutOnPurpose(false);
   }
 
   async function login(input: LoginInput) {
     const signedIn = await api.login(input);
-    queryClient.clear();
-    setConfirmingFor(null);
-    setUser(signedIn);
-    setSignedOutOnPurpose(false);
+    if (!signedIn) return "two-step" as const;
+    signedInAs(signedIn);
+    return "signed-in" as const;
+  }
+
+  async function signInWithCode(answer: TwoStepAnswer, rememberBrowser?: boolean) {
+    signedInAs(await api.signInWithCode(answer, rememberBrowser));
   }
 
   async function updateDisplayName(displayName: string) {
@@ -85,12 +95,71 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser((current) => (current?.id === updated.id ? updated : current));
   }
 
+  async function changeEmail(code: string) {
+    const updated = await api.confirmEmailChange(code);
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower check.
+    setUser((current) => (current?.id === updated.id ? updated : current));
+  }
+
+  async function uploadProfilePicture(picture: Blob) {
+    const updated = await api.uploadProfilePicture(picture);
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower upload.
+    setUser((current) => (current?.id === updated.id ? updated : current));
+    refreshPictures();
+  }
+
+  async function removeProfilePicture() {
+    const signedIn = user?.id;
+    await api.removeProfilePicture();
+    // What they show now is the server's call (initials if the photo was shown), so read the User again. The photo
+    // is gone whatever happens to this read, so if it fails the User is shown without one.
+    const fresh = await api.me().catch(() => null);
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower request.
+    setUser((current) =>
+      current && current.id === signedIn
+        ? (fresh ?? { ...current, avatarUrl: null, hasUploadedPicture: false })
+        : current,
+    );
+    refreshPictures();
+  }
+
+  async function choosePictureSource(source: PictureSource) {
+    const signedIn = user?.id;
+    let updated: User;
+    try {
+      updated = await api.chooseProfilePictureSource(source);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "source_unavailable") {
+        // The options on screen are out of date (a provider was disconnected elsewhere): read them again.
+        const fresh = await api.me().catch(() => null);
+        if (fresh) setUser((current) => (current && current.id === signedIn ? fresh : current));
+      }
+      throw error;
+    }
+    // A sign-out, or another User signing in, meanwhile must not be overwritten by the slower request.
+    setUser((current) => (current?.id === updated.id ? updated : current));
+    refreshPictures();
+  }
+
+  // Role holders and the Audit log show pictures too; only they load again.
+  function refreshPictures() {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.audit });
+    void queryClient.invalidateQueries({
+      predicate: ({ queryKey }) => queryKey[0] === "roles" && queryKey[2] === "holders",
+    });
+  }
+
   async function changePassword(input: ChangePasswordInput) {
     const signedIn = user?.id;
     await api.changePassword(input);
+    // The server's record of when it was set, not this computer's clock. The password is set whatever happens to
+    // this read, so if it fails the User is still marked as having one, with the time left unknown.
+    const fresh = await api.me().catch(() => null);
     // A sign-out, or another User signing in, meanwhile must not be marked by the slower request.
     setUser((current) =>
-      current && current.id === signedIn ? { ...current, hasPassword: true } : current,
+      current && current.id === signedIn
+        ? (fresh ?? { ...current, hasPassword: true, passwordChangedAt: null })
+        : current,
     );
   }
 
@@ -109,10 +178,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const finishVerifying = useCallback(() => setConfirmingFor(null), []);
   const confirmingEmail = confirmingFor !== null && confirmingFor === user?.id;
 
-  async function logout() {
+  async function logout(returnTo?: string) {
     await api.logout();
     queryClient.clear();
     setSignedOutOnPurpose(true);
+    setReturnAfterSignOut(returnTo ?? null);
     setConfirmingFor(null);
     setUser(null);
   }
@@ -124,10 +194,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         restoring,
         unavailable,
         signedOutOnPurpose,
+        returnAfterSignOut,
         retry,
         register,
         login,
+        signInWithCode,
         updateDisplayName,
+        changeEmail,
+        uploadProfilePicture,
+        removeProfilePicture,
+        choosePictureSource,
         changePassword,
         verifyEmail,
         confirmingEmail,
@@ -145,7 +221,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
  * them back here afterwards.
  */
 export function RequireUser({ children }: { children: ReactNode }) {
-  const { user, restoring, unavailable, signedOutOnPurpose, confirmingEmail, retry } = useSession();
+  const {
+    user,
+    restoring,
+    unavailable,
+    signedOutOnPurpose,
+    returnAfterSignOut,
+    confirmingEmail,
+    retry,
+  } = useSession();
   const location = useLocation();
 
   if (restoring) {
@@ -161,6 +245,11 @@ export function RequireUser({ children }: { children: ReactNode }) {
   }
   if (user && (!user.emailVerified || confirmingEmail)) return <VerifyEmailScreen />;
   if (user) return children;
-  const to = signedOutOnPurpose ? "/login" : loginPath(location.pathname + location.search);
+  // A plain sign-out goes to a plain sign-in page; "Sign in again" asked to come back to a page, so it does.
+  const to = signedOutOnPurpose
+    ? returnAfterSignOut
+      ? loginPath(returnAfterSignOut)
+      : "/login"
+    : loginPath(location.pathname + location.search);
   return <Navigate to={to} replace />;
 }

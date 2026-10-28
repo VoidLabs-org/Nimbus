@@ -1,4 +1,5 @@
 import { Modal } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import type { ReactNode } from "react";
 import classes from "./WindowFrame.module.css";
 
@@ -12,14 +13,21 @@ export function WindowFrame({
   onClose,
   title,
   subtitle,
+  withCloseButton = true,
+  fullScreenOnPhone = false,
   children,
 }: {
   opened: boolean;
   onClose: () => void;
   title: ReactNode;
   subtitle?: string;
+  /** False hides the ✕, for a window the User must finish before it can close. */
+  withCloseButton?: boolean;
+  /** Fills a phone's screen, for a window that needs the room (positioning a photo). */
+  fullScreenOnPhone?: boolean;
   children: ReactNode;
 }) {
+  const phone = useMediaQuery("(max-width: 36em)", false, { getInitialValueInEffect: false });
   return (
     <Modal
       opened={opened}
@@ -27,6 +35,8 @@ export function WindowFrame({
       size={560}
       yOffset={24}
       title={title}
+      withCloseButton={withCloseButton}
+      fullScreen={fullScreenOnPhone && phone}
       classNames={{
         overlay: classes.overlay,
         content: classes.content,

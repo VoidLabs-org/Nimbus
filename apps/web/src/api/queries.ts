@@ -4,7 +4,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { api, type Role } from "./client";
+import { api, type Project, type Role } from "./client";
 import { failedLoad, type FailedLoad } from "./failure";
 
 /**
@@ -17,7 +17,9 @@ export const queryKeys = {
   notificationUnreadCount: ["notifications", "unread-count"] as const,
   sessions: ["sessions"] as const,
   linkedIdentities: ["linkedIdentities"] as const,
+  twoStep: ["twoStep"] as const,
   providers: ["providers"] as const,
+  project: (key: string) => ["projects", key.toUpperCase()] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -27,6 +29,24 @@ export const queryKeys = {
   permissions: ["permissions"] as const,
   myPermissions: (userId: string) => ["permissions", userId] as const,
 };
+
+/** Project reads share the app's session-scoped cache. */
+export function useProject(key: string) {
+  return useQuery({ queryKey: queryKeys.project(key), queryFn: () => api.project(key) });
+}
+
+/**
+ * Keep the server's created project, so opening it right after shows it at once, without a skeleton (it is then
+ * refreshed, as every cached page is: stale time 0). Creating one changes no other project, so nothing else is
+ * invalidated (the projects list, #39, will be).
+ */
+export function useProjectCreated() {
+  const client = useQueryClient();
+  return async (project: Project) => {
+    await client.cancelQueries({ queryKey: queryKeys.project(project.key), exact: true });
+    client.setQueryData(queryKeys.project(project.key), project);
+  };
+}
 
 /** A refresh failed while older data is still on screen: say so, since the data may be out of date. */
 export function refreshFailed(query: UseQueryResult): boolean {
@@ -51,6 +71,11 @@ export function useSessions() {
 /** The Google and GitHub accounts connected to the signed-in User, for the Security page. */
 export function useLinkedIdentities() {
   return useQuery({ queryKey: queryKeys.linkedIdentities, queryFn: () => api.linkedIdentities() });
+}
+
+/** Whether the User has Two-step verification, for its card on the Security page. */
+export function useTwoStep() {
+  return useQuery({ queryKey: queryKeys.twoStep, queryFn: () => api.twoStep() });
 }
 
 /** The ids of the sign-in providers the server has switched on, for the Security page. */

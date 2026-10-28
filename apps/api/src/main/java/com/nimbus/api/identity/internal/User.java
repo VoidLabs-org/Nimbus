@@ -1,8 +1,10 @@
 package com.nimbus.api.identity.internal;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.PostLoad;
@@ -29,9 +31,23 @@ class User implements Persistable<UUID> {
 
 	private String passwordHash;
 
+	// Only the fallback of a User who never chose and whose Linked identities have no picture yet: before each identity
+	// kept its own, this was the picture the last Google or GitHub sign-in brought. Cleared once an identity gets one.
 	private String avatarUrl;
 
+	// What the User chose to show as their Profile picture; null until they choose.
+	@Convert(converter = PictureSource.Column.class)
+	private PictureSource pictureSource;
+
+	// The photo they uploaded: its key in the bucket and when it was uploaded. Null without one.
+	private String uploadedPictureKey;
+
+	private Instant uploadedPictureAt;
+
 	private boolean emailVerified;
+
+	// When the password was last set; null without one, and for passwords set before this was kept.
+	private Instant passwordChangedAt;
 
 	private Instant createdAt;
 
@@ -45,6 +61,7 @@ class User implements Persistable<UUID> {
 		user.email = email;
 		user.displayName = displayName;
 		user.passwordHash = passwordHash;
+		user.passwordChangedAt = micros(now);
 		user.createdAt = now;
 		user.isNew = true;
 		return user;
@@ -58,12 +75,11 @@ class User implements Persistable<UUID> {
 	}
 
 	/** A User created from a provider login. The provider vouched for the email, so it starts verified. */
-	static User fromProvider(String email, String displayName, String avatarUrl, Instant now) {
+	static User fromProvider(String email, String displayName, Instant now) {
 		var user = new User();
 		user.id = UUID.randomUUID();
 		user.email = email;
 		user.displayName = displayName;
-		user.avatarUrl = avatarUrl;
 		user.emailVerified = true;
 		user.createdAt = now;
 		user.isNew = true;
@@ -90,8 +106,52 @@ class User implements Persistable<UUID> {
 		this.displayName = displayName;
 	}
 
-	void changeAvatar(String avatarUrl) {
-		this.avatarUrl = avatarUrl;
+	/** A Linked identity has its own picture now, so the one from before they were kept is not needed any more. */
+	void clearFallbackAvatar() {
+		this.avatarUrl = null;
+	}
+
+	/** Shows this, which the caller has checked is available. */
+	void choosePictureSource(PictureSource source) {
+		this.pictureSource = source;
+	}
+
+	/**
+	 * Makes the photo stored under {@code key} the User's uploaded photo, and shows it.
+	 *
+	 * @return the key of the photo it replaces, or null
+	 */
+	String useUploadedPicture(String key, Instant now) {
+		var replaced = uploadedPictureKey;
+		this.uploadedPictureKey = key;
+		this.uploadedPictureAt = micros(now);
+		this.pictureSource = PictureSource.UPLOADED;
+		return replaced;
+	}
+
+	/**
+	 * Forgets the uploaded photo. If it was the one shown, the User shows initials: not the provider's picture they
+	 * had before, which they replaced by choosing a photo.
+	 *
+	 * @return the key of the photo removed, or null when there was none (nothing changes then)
+	 */
+	String removeUploadedPicture() {
+		var removed = uploadedPictureKey;
+		if (removed == null) {
+			return null;
+		}
+		this.uploadedPictureKey = null;
+		this.uploadedPictureAt = null;
+		if (pictureSource == PictureSource.UPLOADED) {
+			this.pictureSource = PictureSource.INITIALS;
+		}
+		return removed;
+	}
+
+	/** The User proved they own {@code email} (lower-cased) with the code mailed there, so it stays verified. */
+	void changeEmail(String email) {
+		this.email = email;
+		this.emailVerified = true;
 	}
 
 	/** A provider proved the User owns the email. */
@@ -100,13 +160,15 @@ class User implements Persistable<UUID> {
 	}
 
 	/** @param passwordHash an already hashed password */
-	void changePassword(String passwordHash) {
+	void changePassword(String passwordHash, Instant now) {
 		this.passwordHash = passwordHash;
+		this.passwordChangedAt = micros(now);
 	}
 
 	/** After this the User can only sign in with a Linked identity, until a password is set again. */
 	void removePassword() {
 		this.passwordHash = null;
+		this.passwordChangedAt = null;
 	}
 
 	String email() {
@@ -121,8 +183,33 @@ class User implements Persistable<UUID> {
 		return avatarUrl;
 	}
 
+	/** Null while the User has never chosen what to show. */
+	PictureSource pictureSource() {
+		return pictureSource;
+	}
+
+	/** Null without an uploaded photo. */
+	String uploadedPictureKey() {
+		return uploadedPictureKey;
+	}
+
+	/** Null without an uploaded photo. */
+	Instant uploadedPictureAt() {
+		return uploadedPictureAt;
+	}
+
 	boolean emailVerified() {
 		return emailVerified;
+	}
+
+	/** Null without a password, and for one set before Nimbus kept the time. */
+	Instant passwordChangedAt() {
+		return passwordChangedAt;
+	}
+
+	// Postgres keeps microseconds and rounds anything finer, so what is read back equals what was set.
+	private static Instant micros(Instant instant) {
+		return instant.truncatedTo(ChronoUnit.MICROS);
 	}
 
 	/** Null for Users who only sign in with a Linked identity. */

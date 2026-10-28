@@ -18,6 +18,10 @@ const alice: User = {
   avatarUrl: null,
   hasPassword: true,
   emailVerified: true,
+  passwordChangedAt: null,
+  hasUploadedPicture: false,
+  pictureSource: "initials",
+  pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [] },
 };
 
 const unused = () => Promise.resolve();
@@ -29,10 +33,16 @@ function session(user: User | null): Session {
     restoring: false,
     unavailable: null,
     signedOutOnPurpose: false,
+    returnAfterSignOut: null,
     retry: () => {},
     register: unused,
-    login: unused,
+    login: () => Promise.resolve("signed-in"),
+    signInWithCode: unused,
     updateDisplayName: unused,
+    changeEmail: unused,
+    uploadProfilePicture: unused,
+    removeProfilePicture: unused,
+    choosePictureSource: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,
@@ -539,5 +549,132 @@ describe("Resend on the forgot-password page", () => {
     expect(screen.getByRole("button", { name: "Resend paused" })).toBeTruthy();
     await wait(42);
     await screen.findByRole("button", { name: "Resend code" });
+  });
+});
+
+describe("the forgot-password page, with two-step verification", () => {
+  beforeEach(() => {
+    vi.spyOn(api, "requestPasswordReset").mockResolvedValue(undefined);
+  });
+
+  const twoStepRequired = () => new ApiError(400, "Enter the code", {}, null, "two_step_required");
+
+  /** Step 2 filled in and sent once: the server answered that a second code is needed. */
+  async function reachSecondCode() {
+    await reachStepTwo();
+    paste("123456");
+    typePassword("a new password");
+    fireEvent.click(screen.getByRole("button", { name: /Reset password/ }));
+    await screen.findByText(
+      "Two-step verification is on. Enter the 6-digit code from your authenticator app.",
+    );
+  }
+
+  function pasteSignInCode(code: string) {
+    const [first] = screen.getAllByLabelText("Sign-in code digit");
+    fireEvent.paste(first!, { clipboardData: { getData: () => code } });
+  }
+
+  it("asks for a Sign-in code, keeps the Reset code and the password, and sends all three", async () => {
+    const reset = vi
+      .spyOn(api, "resetPassword")
+      .mockRejectedValueOnce(twoStepRequired())
+      .mockResolvedValue(undefined);
+    await reachSecondCode();
+
+    expect(
+      screen.getAllByLabelText("Reset code digit").map((box) => (box as HTMLInputElement).value),
+    ).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect((screen.getByLabelText("New password") as HTMLInputElement).value).toBe(
+      "a new password",
+    );
+    const button = screen.getByRole("button", { name: /Reset password/ }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    // The new boxes take the focus, and a screen reader hears why.
+    expect(document.activeElement).toBe(screen.getAllByLabelText("Sign-in code digit")[0]);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Two-step verification is on. Enter the code from your authenticator app, or a recovery code.",
+    );
+
+    pasteSignInCode("654321");
+    fireEvent.click(button);
+
+    await screen.findByRole("heading", { name: "Welcome back" });
+    expect(reset).toHaveBeenLastCalledWith({
+      email: "alice@example.com",
+      code: "123456",
+      newPassword: "a new password",
+      twoStepCode: "654321",
+    });
+  });
+
+  it("takes a Recovery code instead for a User who lost their phone", async () => {
+    const reset = vi
+      .spyOn(api, "resetPassword")
+      .mockRejectedValueOnce(twoStepRequired())
+      .mockResolvedValue(undefined);
+    await reachSecondCode();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use a recovery code" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Recovery code" }), {
+      target: { value: "abcd-efgh" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Reset password/ }));
+
+    await screen.findByRole("heading", { name: "Welcome back" });
+    expect(reset).toHaveBeenLastCalledWith({
+      email: "alice@example.com",
+      code: "123456",
+      newPassword: "a new password",
+      recoveryCode: "abcd-efgh",
+    });
+  });
+
+  it("says a wrong second code didn't work and keeps the Reset code", async () => {
+    vi.spyOn(api, "resetPassword")
+      .mockRejectedValueOnce(twoStepRequired())
+      .mockRejectedValue(new ApiError(400, "Wrong", {}, null, "invalid_two_step_code"));
+    await reachSecondCode();
+
+    pasteSignInCode("654321");
+    fireEvent.click(screen.getByRole("button", { name: /Reset password/ }));
+
+    await screen.findByText("That code didn’t work. Check your authenticator app and try again.");
+    expect(
+      screen.getAllByLabelText("Sign-in code digit").map((box) => (box as HTMLInputElement).value),
+    ).toEqual(["", "", "", "", "", ""]);
+    expect(
+      screen.getAllByLabelText("Reset code digit").map((box) => (box as HTMLInputElement).value),
+    ).toEqual(["1", "2", "3", "4", "5", "6"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use a recovery code" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Recovery code" }), {
+      target: { value: "abcd-efgh" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Reset password/ }));
+    await screen.findByText("That recovery code isn’t right, or it was used already.");
+    // Kept to be fixed, but not sent again as it is.
+    const resetButton = () =>
+      screen.getByRole("button", { name: /Reset password/ }) as HTMLButtonElement;
+    expect(resetButton().disabled).toBe(true);
+    fireEvent.change(screen.getByRole("textbox", { name: "Recovery code" }), {
+      target: { value: "abcd-efgx" },
+    });
+    expect(resetButton().disabled).toBe(false);
+  });
+
+  it("counts the wait down while the User is locked out of code checks", async () => {
+    vi.spyOn(api, "resetPassword")
+      .mockRejectedValueOnce(twoStepRequired())
+      .mockRejectedValue(new ApiError(429, "Too many wrong codes", {}, 65));
+    await reachSecondCode();
+
+    pasteSignInCode("654321");
+    fireEvent.click(screen.getByRole("button", { name: /Reset password/ }));
+
+    expect(await screen.findByText("Too many attempts. Try again in 1:05.")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: /Reset password/ }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });

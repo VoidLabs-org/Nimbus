@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError, type LinkedIdentity, type SessionInfo, type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import { goTo } from "../auth/redirect";
+import { SessionProvider } from "../auth/session";
 import { SessionContext, type Session } from "../auth/useSession";
 import { AppRoutes } from "../App";
 
@@ -21,6 +22,10 @@ const alice: User = {
   avatarUrl: null,
   hasPassword: true,
   emailVerified: true,
+  passwordChangedAt: null,
+  hasUploadedPicture: false,
+  pictureSource: "initials",
+  pictureOptions: { uploadedAt: null, uploadedUrl: null, providers: [] },
 };
 
 const unused = () => Promise.resolve();
@@ -32,10 +37,16 @@ function session(user: User | null, logout: () => Promise<void> = unused): Sessi
     restoring: false,
     unavailable: null,
     signedOutOnPurpose: false,
+    returnAfterSignOut: null,
     retry: () => {},
     register: unused,
-    login: unused,
+    login: () => Promise.resolve("signed-in"),
+    signInWithCode: unused,
     updateDisplayName: unused,
+    changeEmail: unused,
+    uploadProfilePicture: unused,
+    removeProfilePicture: unused,
+    choosePictureSource: unused,
     changePassword: unused,
     verifyEmail: unused,
     confirmingEmail: false,
@@ -50,6 +61,12 @@ beforeEach(() => {
   // The Connected accounts card asks for these on every visit; tests about it say otherwise.
   vi.spyOn(api, "providers").mockResolvedValue([]);
   vi.spyOn(api, "linkedIdentities").mockResolvedValue([]);
+  // So does the Two-step verification card; its own tests are in TwoStepCard.test.tsx.
+  vi.spyOn(api, "twoStep").mockResolvedValue({
+    enabled: false,
+    enabledAt: null,
+    recoveryCodesLeft: null,
+  });
 });
 afterEach(() => {
   cleanup();
@@ -165,15 +182,13 @@ describe("the Security page", () => {
     expect(sessions).toHaveBeenCalledTimes(2);
   });
 
-  it("is listed on the Settings overview after Password", async () => {
+  it("is listed on the Settings overview after Profile", async () => {
     show("/settings");
 
     const links = (await screen.findAllByRole("link")).map((link) => link.getAttribute("href"));
 
     expect(links).toContain("/settings/security");
-    expect(links.indexOf("/settings/security")).toBeGreaterThan(
-      links.indexOf("/settings/password"),
-    );
+    expect(links.indexOf("/settings/security")).toBeGreaterThan(links.indexOf("/settings/profile"));
   });
 });
 
@@ -581,7 +596,7 @@ describe("disconnecting a provider", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Set a password first")).toBeTruthy();
     expect(within(dialog).getByRole("link", { name: "Set a password" }).getAttribute("href")).toBe(
-      "/settings/password",
+      "/settings/profile?password",
     );
     expect(disconnect).not.toHaveBeenCalled();
   });
@@ -760,5 +775,44 @@ describe("connecting a provider", () => {
     const message = error.mock.calls[0]![0] as string;
     expect(message).toMatch(/went wrong/);
     expect(message).not.toContain("<");
+  });
+});
+
+describe("signing in again before connecting, with the app's real sign-in state", () => {
+  function Where() {
+    const location = useLocation();
+    return <output aria-label="location">{location.pathname + location.search}</output>;
+  }
+
+  it("lands on the sign-in page that brings the User back to the Security page", async () => {
+    vi.spyOn(api, "refresh").mockResolvedValue(alice);
+    vi.spyOn(api, "logout").mockResolvedValue();
+    vi.spyOn(api, "sessions").mockResolvedValue([]);
+    vi.spyOn(api, "providers").mockResolvedValue(["google", "github"]);
+    vi.spyOn(api, "linkTicket").mockRejectedValue(
+      new ApiError(403, "Sign in again to do this", {}, null, "reauth_required"),
+    );
+    render(
+      <NimbusThemeProvider>
+        <MemoryRouter initialEntries={["/settings/security"]}>
+          <QueryClientProvider client={createQueryClient()}>
+            <SessionProvider>
+              <AppRoutes />
+              <Where />
+            </SessionProvider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      </NimbusThemeProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Connect GitHub" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sign in again" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("location").textContent).toBe(
+        "/login?returnTo=%2Fsettings%2Fsecurity",
+      ),
+    );
   });
 });

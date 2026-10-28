@@ -81,6 +81,22 @@ li:first-child.row {
   color: var(--color-accent-700);
 }
 
+/* Two-step verification is off: a grey badge where "On" uses the accent one (`.badge`). */
+.offBadge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--seg);
+  color: var(--color-accent-2-700);
+}
+
+/* Set up is the page's main button (32a), so it keeps the filled look and the taller size. */
+.setUp {
+  flex: none;
+  min-height: 44px;
+}
+
 .detail {
   margin-top: 2px;
   font-size: 13px;
@@ -109,11 +125,8 @@ li:first-child.row {
   color: var(--color-accent-2-700);
 }
 
-.signOut {
-  flex: none;
-}
-
-.disconnect {
+/* A row's own button: Sign out, Disconnect, View new codes. */
+.rowAction {
   flex: none;
 }
 
@@ -123,8 +136,8 @@ li:first-child.row {
     flex-wrap: wrap;
   }
 
-  .signOut,
-  .disconnect {
+  .rowAction,
+  .setUp {
     flex: 1 1 100%;
     min-height: 44px;
   }

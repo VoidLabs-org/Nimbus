@@ -3,8 +3,11 @@ import { Glyph } from "@repo/ui/glyph";
 import { Menu, Skeleton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Link } from "react-router";
+import { overlayCrumbs } from "../settings/crumbs";
+import { useSettingsOverlay } from "../settings/settingsOverlay";
 import classes from "./BreadcrumbTrail.module.css";
 import { collapseCrumbs, type Crumb } from "./crumbs";
+import { useTabTitle } from "./tabTitle";
 
 /** Below this a long path folds its middle into a menu (variant 21d of the design). */
 const NARROW = "(max-width: 36em)";
@@ -15,8 +18,11 @@ const NARROW = "(max-width: 36em)";
  * dots menu and adds an "up" button to the parent. Built by hand rather than on Mantine's Breadcrumbs, which is a
  * plain div: this one is a nav with an ordered list and marks the current page.
  */
-export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
+export function BreadcrumbTrail({ crumbs: path }: { crumbs: Crumb[] }) {
   const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
+  // Inside the Desktop app's Settings overlay, its list stands in for the Settings overview (see overlayCrumbs).
+  const crumbs = useSettingsOverlay() === "inside" ? overlayCrumbs(path) : path;
+  useTabTitle(path);
   const loading = crumbs.some((crumb) => crumb.pending);
   const { shown, hidden, up } = collapseCrumbs(crumbs, narrow);
   // The menu lists the folded steps that go somewhere, once each: a placeholder or the page itself has no link, and
@@ -31,6 +37,7 @@ export function BreadcrumbTrail({ crumbs }: { crumbs: Crumb[] }) {
     ...shown.slice(1).map((crumb) => ({ crumb })),
   ];
 
+  if (crumbs.length === 0) return null;
   return (
     <nav aria-label="Breadcrumb" className={classes.nav} aria-busy={loading || undefined}>
       {up?.to && (

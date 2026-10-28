@@ -23,6 +23,8 @@ Migration V16 creates `notifications`:
 | `project_id`, `issue_key`, `actor_id`                  | Nullable context columns; unused by `SIGNED_IN`                                       |
 | `email_due_at`, `email_group_started_at`, `emailed_at` | Nullable delivery columns reserved for Issue email grouping; unused by `SIGNED_IN`    |
 
+Migration V24 creates `notification_settings(user_id, type, email)`, keyed by `(user_id, type)` with `user_id` cascading on User delete. Only email switches that differ from the type's default are stored; saving the default deletes the row. Defaults: email on for `ISSUE_ASSIGNED`, `ISSUE_UNASSIGNED`, `ISSUE_STATUS_CHANGED` and `ISSUE_DELETED`, off for `ISSUE_EDITED`. The Issue Notification tickets read the switches through this table's module-internal store; nothing sends Issue email yet.
+
 Indexes serve recipient paging (`user_id, created_at DESC, id DESC`), unread count (`user_id` where unread), pending email (`email_due_at` where not emailed) and retention (`created_at`).
 
 The nightly cleanup runs at **03:00 UTC** (`nimbus.notifications.cleanup-cron`, default `0 0 3 * * *`). It deletes rows whose `created_at` is strictly older than 90 days, in batches of at most 1000. The shared `Clock` supplies the cutoff, truncated to database microseconds. Rows exactly at the cutoff remain.
@@ -37,6 +39,8 @@ All require a Bearer token and a verified User: `401` without authentication and
 | `GET /api/notifications/unread-count`             | `{count}`                                                                                                                                                                                                 |
 | `POST /api/notifications/{id}/read`               | `204`, also when already read; `404` when absent or another User's.                                                                                                                                       |
 | `POST /api/notifications/read-all`                | `204`, marking only the caller's unread Notifications.                                                                                                                                                    |
+| `GET /api/users/me/notification-settings`         | `[{type, email}]` for the five Issue types, in a fixed order: Assigned, Unassigned, Status changed, Edited, Deleted.                                                                                      |
+| `PUT /api/users/me/notification-settings/{type}`  | Body `{email}`; `204`. `400` for a Security alert type, an unknown type (types are case-sensitive) or a missing `email`.                                                                                  |
 
 The opaque cursor encodes the last row's time and id, so equal timestamps and new arrivals do not shift later pages. Malformed cursors and limits outside 1–100 give `400`. Read actions never change whether an email is sent.
 
@@ -46,4 +50,6 @@ The bell appears in all navbar positions. Its badge shows the unread count, capp
 
 The panel is a popover on larger screens and a full-width bottom sheet on phones. Opening it refreshes the first page. The infinite list groups rows by local day (Today, Yesterday, or date), tints unread rows, and loads older rows near the bottom on scroll; a button offers the same action for keyboard users. Clicking a row marks it read before opening Security. Both read actions invalidate the list and count, and failures stay visible for retry.
 
-The empty state says "an Issue you reported or are assigned to changes". The footer says "Kept for 90 days". A row shows its `snapshot.detail`, or the device for a new sign-in, with no location. Surfaces and colors use the shared theme variables. Email preference controls are a separate ticket (#135).
+The empty state says "an Issue you reported or are assigned to changes". The footer says "Kept for 90 days" and links to Email settings, which opens Settings › Notifications. A row shows its `snapshot.detail`, or the device for a new sign-in, with no location. Surfaces and colors use the shared theme variables.
+
+Settings › Notifications (`/settings/notifications`, design 38e), listed on the Settings overview, shows a row per Issue type with a locked "Always on" in-app column and an email switch. Descriptions: Assigned "Sent right away.", Edited "Several changes in one save count once.". Each switch saves as it changes with an optimistic update; on an error it rolls back and shows a toast. A read-only Security alerts block reads "Always on, in app and email".

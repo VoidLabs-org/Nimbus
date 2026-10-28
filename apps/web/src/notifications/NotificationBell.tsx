@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Anchor,
   Button,
   Drawer,
   Group,
@@ -19,7 +20,7 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { api, type NotificationPage } from "../api/client";
 import { queryKeys } from "../api/queries";
 import classes from "./NotificationBell.module.css";
@@ -196,6 +197,14 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
       </div>
       <Group justify="space-between" p="md" className={classes.footer}>
         <Text size="xs">Kept for 90 days</Text>
+        <Anchor
+          component={Link}
+          to="/settings/notifications"
+          size="xs"
+          onClick={() => setOpened(false)}
+        >
+          Email settings
+        </Anchor>
       </Group>
     </div>
   );

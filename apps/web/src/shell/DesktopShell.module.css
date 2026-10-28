@@ -69,6 +69,47 @@
   padding-right: 140px;
 }
 
+/* The "Search or jump to…" box at the right end of the title row (design 2a): a pill in the page's colour naming its
+   shortcut. It gives way to the Tabs in a narrow window, down to its icon and shortcut. */
+.jumpBox {
+  flex: 0 1 240px;
+  min-width: 0;
+  margin-left: auto;
+  margin-right: 10px;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px 0 14px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-accent-2-700);
+  font-size: 13px;
+}
+
+.jumpBox:hover {
+  color: var(--color-text);
+}
+
+.jumpLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jumpKeys {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--seg);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 /* In one place whether the Sidebar is open, folded or peeking: at the top left, over the Sidebar's top row or, folded,
    the title row; above a peeking Sidebar. */
 .foldButton {

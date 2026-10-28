@@ -1,9 +1,9 @@
 import { IconChevronDown } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import { Button, Group, Menu, Modal, Text, type FloatingPosition } from "@mantine/core";
+import { Menu, type FloatingPosition } from "@mantine/core";
 import { ProfilePicture } from "@repo/ui/profile-picture";
-import { toast } from "@repo/ui/toast";
 import { useState } from "react";
+import { SignOutDialog } from "./SignOutDialog";
 import classes from "./UserMenu.module.css";
 import { useSession } from "./useSession";
 
@@ -26,21 +26,8 @@ export function UserMenu({
   /** The gap between the chip and the menu. From the navbar's rail the menu must clear the bar itself, not just the avatar. */
   offset?: number;
 }) {
-  const { user, logout } = useSession();
+  const { user } = useSession();
   const [confirming, setConfirming] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-
-  async function signOut() {
-    setSigningOut(true);
-    try {
-      await logout();
-    } catch {
-      toast.error("Couldn't sign out. Check your connection and try again.");
-      setConfirming(false);
-      setSigningOut(false);
-    }
-  }
-
   if (!user) return null;
 
   return (
@@ -89,29 +76,7 @@ export function UserMenu({
           <Menu.Item onClick={() => setConfirming(true)}>Sign out</Menu.Item>
         </Menu.Dropdown>
       </Menu>
-      <Modal
-        opened={confirming}
-        onClose={() => setConfirming(false)}
-        title="Sign out?"
-        size={420}
-        closeOnEscape={!signingOut}
-        closeOnClickOutside={!signingOut}
-        withCloseButton={!signingOut}
-      >
-        <Text size="sm" c="dimmed" mb="lg">
-          {user.hasPassword
-            ? "You'll need your email and password to sign back in."
-            : "You'll sign back in with Google or GitHub."}
-        </Text>
-        <Group justify="flex-end">
-          <Button variant="default" onClick={() => setConfirming(false)} disabled={signingOut}>
-            Cancel
-          </Button>
-          <Button onClick={signOut} loading={signingOut}>
-            Sign out
-          </Button>
-        </Group>
-      </Modal>
+      <SignOutDialog opened={confirming} onClose={() => setConfirming(false)} />
     </>
   );
 }

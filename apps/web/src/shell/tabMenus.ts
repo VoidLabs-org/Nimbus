@@ -10,16 +10,11 @@ import {
 } from "@tabler/icons-react";
 import { copy } from "../pages/copy";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { NimbusDesktop } from "./desktop";
+import { shortcutLabel, type NimbusDesktop } from "./desktop";
 import type { Tab } from "./tabs";
 import type { TabActions } from "./useTabs";
 
 type Platform = NimbusDesktop["platform"];
-
-/** A shortcut as this computer names it: ⌘ and ⇧ on macOS, Ctrl and Shift elsewhere. */
-function keys(platform: Platform, mac: string, other: string): string {
-  return platform === "darwin" ? mac : other;
-}
 
 /**
  * A Tab's right-click menu (design "Nimbus Desktop v2"): close it, the others or those to its right, duplicate it, or
@@ -32,7 +27,7 @@ export function tabMenu(tab: Tab, actions: TabActions, platform: Platform): Cont
     {
       icon: IconX,
       label: "Close tab",
-      shortcut: keys(platform, "⌘W", "Ctrl+W"),
+      shortcut: shortcutLabel(platform, "W"),
       onClick: () => actions.close([tab.id]),
     },
     {
@@ -53,7 +48,7 @@ export function tabMenu(tab: Tab, actions: TabActions, platform: Platform): Cont
     {
       icon: IconArrowBackUp,
       label: "Reopen closed tab",
-      shortcut: keys(platform, "⌘⇧T", "Ctrl+Shift+T"),
+      shortcut: shortcutLabel(platform, "T", { shift: true }),
       disabled: !actions.canReopen,
       onClick: actions.reopen,
     },
@@ -75,7 +70,7 @@ export function linkMenu(
     {
       icon: IconSquarePlus,
       label: "Open in new tab",
-      shortcut: keys(platform, "⌘ Click", "Ctrl+Click"),
+      shortcut: shortcutLabel(platform, "Click"),
       onClick: () => actions.openNew(path),
     },
     "divider",

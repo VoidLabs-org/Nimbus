@@ -1,6 +1,9 @@
 package com.nimbus.api.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+import java.time.Duration;
 
 import java.util.List;
 import java.util.Map;
@@ -54,6 +57,8 @@ class DisconnectProviderTests {
 			.expectBody(String.class).returnResult().getResponseBody();
 		assertThat(JsonPath.<List<String>>read(listed, "$[*].provider")).containsExactly("github");
 		assertThat(marks(user, "google")).isEqualTo(1);
+		// notifications sends it after the commit, so it arrives a moment later.
+		await().atMost(Duration.ofSeconds(10)).until(() -> RecordingMailer.sentTo("dc1@example.com").size() == 1);
 		var mails = RecordingMailer.sentTo("dc1@example.com");
 		assertThat(mails).hasSize(1);
 		assertThat(mails.get(0).subject()).isEqualTo("Google was disconnected from your Nimbus account");
@@ -152,6 +157,8 @@ class DisconnectProviderTests {
 		RecordingMailer.failing(true);
 		try {
 			disconnect(token, "google").expectStatus().isNoContent();
+			// The send is notifications' and comes after the commit; it must still fail while the mailer does.
+			await().atMost(Duration.ofSeconds(10)).until(() -> RecordingMailer.attemptedTo("dc7@example.com").size() == 1);
 		}
 		finally {
 			RecordingMailer.failing(false);

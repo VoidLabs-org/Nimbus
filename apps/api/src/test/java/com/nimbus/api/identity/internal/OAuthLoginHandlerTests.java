@@ -1,6 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import java.io.IOException;
 import java.util.List;
@@ -49,6 +50,9 @@ class OAuthLoginHandlerTests {
 
 	@Autowired
 	Registration registration;
+
+	@Autowired
+	UserRepository users;
 
 	@Autowired
 	ExternalSignIn externalSignIn;
@@ -190,6 +194,9 @@ class OAuthLoginHandlerTests {
 	@Test
 	void withATicketSuccessLinksTheAccountAndGoesBackToSecurityWithNoCookie() throws Exception {
 		var user = registration.create("Con", "handler-con@example.com", "correct horse");
+		// Only a User with a verified email gets Security alerts.
+		user.verifyEmail();
+		users.save(user);
 		var session = sessions.start(user, null, false);
 		var response = new MockHttpServletResponse();
 
@@ -199,6 +206,9 @@ class OAuthLoginHandlerTests {
 		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/settings/security?connected=google");
 		assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
 		assertThat(linkedIdentities.listFor(user.getId())).hasSize(1);
+		// notifications sends it after the commit, so it arrives a moment later.
+		await().atMost(java.time.Duration.ofSeconds(10)).until(() -> RecordingMailer.sentTo("handler-con@example.com").stream()
+			.anyMatch(mail -> mail.subject().equals("Google was connected to your Nimbus account")));
 		var mails = RecordingMailer.sentTo("handler-con@example.com");
 		assertThat(mails).extracting(Mail::subject).contains("Google was connected to your Nimbus account");
 		assertThat(mails).filteredOn(mail -> mail.subject().contains("connected")).singleElement().satisfies(mail -> {

@@ -2230,7 +2230,12 @@ components:
           format: uuid
         type:
           type: string
-          enum: [SIGNED_IN]
+          enum:
+            - SIGNED_IN
+            - PASSWORD_CHANGED
+            - LINKED_IDENTITY_CONNECTED
+            - LINKED_IDENTITY_DISCONNECTED
+            - OTHER_SESSIONS_SIGNED_OUT
         createdAt:
           type: string
           format: date-time
@@ -2238,14 +2243,19 @@ components:
           type: boolean
         snapshot:
           type: object
-          required: [title, deviceLabel]
+          required: [title]
           properties:
             title:
               type: string
               example: New sign-in to your account
             deviceLabel:
               type: string
+              description: Only for SIGNED_IN
               example: Safari on iPhone
+            detail:
+              type: string
+              description: The line under the title for every other type
+              example: If this wasn't you, reset it now.
         link:
           type: string
           const: /settings/security

@@ -5,6 +5,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -35,14 +36,20 @@ class NotificationInbox {
 	record Page(List<Item> items, String nextCursor) {
 	}
 
-	boolean signedIn(UUID userId, UUID sessionId, String title, String deviceLabel, Instant at) {
+	/**
+	 * Stores a Notification unless one with the same dedupe key exists, so repeated or concurrent delivery of an
+	 * event creates one.
+	 *
+	 * @return whether this call created it
+	 */
+	boolean add(UUID userId, String type, String dedupeKey, Map<String, String> snapshot, Instant at) {
 		return jdbc.sql("""
 			INSERT INTO notifications(id, user_id, type, dedupe_key, snapshot, created_at)
-			VALUES (:id, :user, 'SIGNED_IN', :dedupe, CAST(:snapshot AS jsonb), :at)
+			VALUES (:id, :user, :type, :dedupe, CAST(:snapshot AS jsonb), :at)
 			ON CONFLICT (dedupe_key) DO NOTHING
 			""")
-			.param("id", UUID.randomUUID()).param("user", userId).param("dedupe", "SIGNED_IN:" + sessionId)
-			.param("snapshot", json.writeValueAsString(java.util.Map.of("title", title, "deviceLabel", deviceLabel)))
+			.param("id", UUID.randomUUID()).param("user", userId).param("type", type).param("dedupe", dedupeKey)
+			.param("snapshot", json.writeValueAsString(snapshot))
 			.param("at", Timestamp.from(at)).update() == 1;
 	}
 

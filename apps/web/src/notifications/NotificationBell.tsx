@@ -160,7 +160,7 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
                   </span>
                   <span className={classes.rowText}>
                     <strong>{item.snapshot.title}</strong>
-                    <span>{item.snapshot.deviceLabel}</span>
+                    <span>{item.snapshot.detail ?? item.snapshot.deviceLabel}</span>
                     <time
                       dateTime={item.createdAt}
                       title={new Date(item.createdAt).toLocaleString()}

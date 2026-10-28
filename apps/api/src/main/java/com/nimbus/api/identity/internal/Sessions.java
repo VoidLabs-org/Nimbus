@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.nimbus.api.identity.OtherSessionsSignedOut;
 import com.nimbus.api.identity.SignedIn;
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
 import org.springframework.context.ApplicationEventPublisher;
@@ -276,7 +277,8 @@ class Sessions {
 	}
 
 	/**
-	 * Ends every running session of the User except the one making the request. Does nothing when there are none.
+	 * Ends every running session of the User except the one making the request. Ends nothing when there are none, but
+	 * still publishes {@link OtherSessionsSignedOut}: the User used it.
 	 *
 	 * @param currentSessionId the session of the access token making the request
 	 * @throws InvalidBearerTokenException when that session has ended, so a signed-out browser whose access token
@@ -284,8 +286,10 @@ class Sessions {
 	 */
 	@Transactional
 	void endOthers(UUID userId, UUID currentSessionId) {
-		requireActive(currentSessionId, userId, now());
+		var now = now();
+		requireActive(currentSessionId, userId, now);
 		endAllExcept(userId, currentSessionId);
+		events.publishEvent(new OtherSessionsSignedOut(userId, now));
 	}
 
 	/** Ends every session of a User except one, on every other browser. */

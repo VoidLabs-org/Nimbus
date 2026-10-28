@@ -123,6 +123,9 @@ class RememberedBrowserTests {
 		var remembered = signInWithCode(user, PASSWORD, true).remembered();
 		// The address's send budget allows the Reset code mail.
 		clock.advance(Duration.ofSeconds(61));
+		// The new-sign-in Security alert is sent after the commit; wait for it so it isn't mistaken for the Reset code mail.
+		await().atMost(Duration.ofSeconds(10)).until(() -> RecordingMailer.sentTo(user.email()).stream()
+			.anyMatch(m -> m.subject().equals("New sign-in to your account")));
 		var before = RecordingMailer.sentTo(user.email()).size();
 		client.post().uri("/api/auth/password-reset").body(Map.of("email", user.email())).exchange().expectStatus()
 			.isNoContent();

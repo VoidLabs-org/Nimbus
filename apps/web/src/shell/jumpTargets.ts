@@ -19,6 +19,8 @@ export type JumpAction = {
   label: string;
   icon: Icon;
   shortcut?: string;
+  /** True when doing it opens Settings: Jump then stays until Settings has drawn (see DesktopShell). */
+  opensSettings?: boolean;
   run: () => void;
 };
 
@@ -77,8 +79,9 @@ const FIRST_ACTIONS = 4;
 
 /**
  * Jump's list for a search, in groups (design "Nimbus Desktop v2", Search). Nothing typed: "Go to" (Home, Projects;
- * Settings is the Open Settings action, not a second way to the same overlay) and the first few actions. Typed: the matching pages, Settings pages and actions, each
- * under its heading. After `>`, only the actions. Empty groups are left out.
+ * Settings is the Open Settings action, not a second way to the same overlay) and the first few actions. Typed: the
+ * matching pages, Settings pages and actions, each under its heading. After `>`, only the actions. Empty groups are
+ * left out.
  */
 export function jumpGroups(
   search: JumpSearch,

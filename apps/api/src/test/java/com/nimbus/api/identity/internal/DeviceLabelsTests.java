@@ -2,7 +2,6 @@ package com.nimbus.api.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -45,10 +44,12 @@ class DeviceLabelsTests {
 		assertThat(labels.of(userAgent)).isEqualTo(expected);
 	}
 
-	@Test
-	void namesJustNimbusWhenTheDesktopAppsSystemIsUnknown() {
-		assertThat(labels.of("Mozilla/5.0 (Unknown) AppleWebKit/537.36 (KHTML, like Gecko) Nimbus/0.0.0"))
-			.isEqualTo("Nimbus");
+	@ParameterizedTest
+	@ValueSource(strings = {
+			"Mozilla/5.0 (Unknown) AppleWebKit/537.36 (KHTML, like Gecko) Nimbus/0.0.0",
+			"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 Nimbus/1.0" })
+	void namesJustNimbusWhenTheDesktopAppsSystemIsUnknownOrNotADesktopOne(String userAgent) {
+		assertThat(labels.of(userAgent)).isEqualTo("Nimbus");
 	}
 
 	@ParameterizedTest(name = "{0}")

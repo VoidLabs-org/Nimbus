@@ -16,3 +16,15 @@ export function useSettingsOverlay(): SettingsOverlayPlace {
 export function isSettingsPath(pathname: string): boolean {
   return pathname === "/settings" || pathname.startsWith("/settings/");
 }
+
+/** The Settings overlay's chunk: what App.tsx's `lazy` loads, and what the shell loads ahead of it. */
+export const loadSettingsOverlay = () => import("../shell/SettingsOverlay");
+
+/**
+ * Starts loading the overlay's chunk before anyone opens Settings, so opening waits for nothing. A chunk that can't
+ * load (a redeploy removed it) is not this call's to report: App.tsx's own load of it fails the same way and shows
+ * Settings as pages.
+ */
+export function preloadSettingsOverlay(): void {
+  loadSettingsOverlay().catch(() => {});
+}

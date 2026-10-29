@@ -68,7 +68,8 @@ class DeviceLabels {
 
 	/**
 	 * The Desktop app runs on Mac, Windows or Linux. The parser names some Linux distributions ("Ubuntu"), so any other
-	 * system whose header says Linux is Linux too.
+	 * system whose header says Linux is Linux too, except Android, whose headers say Linux as well: a phone is none
+	 * of the three.
 	 */
 	private static String desktopSystem(String family, String userAgent) {
 		if ("Mac OS X".equals(family)) {
@@ -77,7 +78,7 @@ class DeviceLabels {
 		if (family != null && family.startsWith("Windows")) {
 			return "Windows";
 		}
-		return userAgent.contains("Linux") ? "Linux" : null;
+		return userAgent.contains("Linux") && !"Android".equals(family) ? "Linux" : null;
 	}
 
 	private static String systemName(String family) {

@@ -16,6 +16,7 @@ import { useSession } from "./auth/useSession";
 import AppearancePage from "./pages/AppearancePage";
 import AuditLogPage from "./pages/AuditLogPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
+import DesktopDonePage from "./pages/DesktopDonePage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -119,6 +120,7 @@ const SETTINGS_PAGES = (
 /** Signed-out pages: never the page behind the Settings overlay, even for a moment on the way back in. */
 const SIGNED_OUT_PATHS = [
   "/auth/callback",
+  "/auth/desktop-done",
   "/login",
   "/login/two-step",
   "/register",
@@ -209,6 +211,8 @@ export function AppRoutes() {
             <Route path="*" element={<NotFoundPage />} />
           </Route>
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          {/* In the browser, after a Desktop app sign-in handed back to the app. */}
+          <Route path="/auth/desktop-done" element={<DesktopDonePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/login/two-step" element={<TwoStepSignInPage />} />
           <Route path="/register" element={<RegisterPage />} />

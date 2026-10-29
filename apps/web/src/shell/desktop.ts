@@ -5,7 +5,28 @@ export type NimbusDesktop = {
   setTheme: (mode: "light" | "dark") => void;
   /** Pops the app menu (Edit, View, Window) up at a point in the window; Windows and Linux show no menu bar. */
   showAppMenu: (x: number, y: number) => void;
+  /**
+   * Opens Google's or GitHub's sign-in in the system browser (with `linkTicket`, a connect from Security) and resolves
+   * with what the browser handed back (ADR 0008). Missing in Desktop apps from before it, which sign in in the window.
+   */
+  signInWithProvider?: (request: {
+    provider: string;
+    linkTicket?: string | null;
+  }) => Promise<BrowserSignInResult>;
+  /** Opens the sign-in under way in the browser again. */
+  reopenProviderSignIn?: () => void;
+  /** Gives up the sign-in under way; `signInWithProvider` then resolves as cancelled. */
+  cancelProviderSignIn?: () => void;
 };
+
+/**
+ * What a sign-in in the system browser came back with: a one-time code and the verifier to trade it in with, the short
+ * error the sign-in page shows (`cancelled`, `failed`), or nothing because the User cancelled or started again.
+ */
+export type BrowserSignInResult =
+  | { outcome: "code"; code: string; verifier: string }
+  | { outcome: "error"; error: string; provider: string | null }
+  | { outcome: "cancelled" };
 
 declare global {
   interface Window {

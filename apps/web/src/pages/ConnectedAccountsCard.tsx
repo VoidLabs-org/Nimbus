@@ -7,6 +7,8 @@ import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { ApiError, api } from "../api/client";
 import { connectErrorMessage } from "../api/messages";
+import { BrowserSignInWait } from "../auth/BrowserSignInWait";
+import { browserSignInBridge, useBrowserSignIn } from "../auth/useBrowserSignIn";
 import { PROVIDERS } from "../auth/providers";
 import { useSignInAgain } from "../auth/useSignInAgain";
 import { goTo } from "../auth/redirect";
@@ -20,7 +22,8 @@ import classes from "./SecurityPage.module.css";
  * Security → Connected accounts: which of Google and GitHub can sign in as the User ("Connected as ..."), and the
  * ones that could. Its own card, so a failure here leaves the sessions above it alone. The rows are the providers the
  * server has switched on plus any connected one that has since been switched off, Google first; the card is gone
- * when there are none. If the server can't say which providers are on, the connected ones still show.
+ * when there are none. If the server can't say which providers are on, the connected ones still show. In the Desktop
+ * app Connect opens the provider in the system browser and finishes here (ADR 0008).
  */
 export function ConnectedAccountsCard() {
   const providers = useProviders();
@@ -59,9 +62,14 @@ export function ConnectedAccountsCard() {
     );
   }, [connectedParam, errorParam, providerParam, client, setSearchParams]);
 
+  const browser = useBrowserSignIn();
   const connect = useMutation({
     mutationFn: (id: string) => api.linkTicket(id),
     onSuccess: ({ ticket }, id) => {
+      if (browserSignInBridge()) {
+        void connectThroughBrowser(id, ticket);
+        return;
+      }
       // A full page load: the API starts the handshake and hands the browser on to the provider.
       goTo(`/api/auth/oauth2/${encodeURIComponent(id)}?link=${encodeURIComponent(ticket)}`);
     },
@@ -81,6 +89,35 @@ export function ConnectedAccountsCard() {
       toast.error(`Couldn’t start connecting ${nameOf(id)}. Please try again.`);
     },
   });
+
+  // The Desktop app: the browser comes back with a code, which connects the provider here, in the app's Session.
+  async function connectThroughBrowser(id: string, ticket: string) {
+    try {
+      const result = await browser.run(id, ticket);
+      if (result.outcome === "cancelled") return;
+      if (result.outcome === "error") {
+        toast.error(connectErrorMessage(result.error, id));
+        return;
+      }
+      try {
+        const { provider } = await api.desktopConnect(result.code, result.verifier);
+        toast.success(`Connected ${nameOf(provider)}.`);
+      } catch (failure) {
+        // A 401 means this session ended: the app is already sending the User to sign in again.
+        if (failure instanceof ApiError && failure.status === 401) return;
+        toast.error(
+          connectErrorMessage(
+            failure instanceof ApiError && failure.code ? failure.code : "failed",
+            id,
+          ),
+        );
+      }
+    } finally {
+      connect.reset();
+      void client.invalidateQueries({ queryKey: queryKeys.linkedIdentities });
+    }
+  }
+
   const signInAgain = useSignInAgain("/settings/security");
   // The provider the open dialog is about, and which one: the question, or the "set a password first" answer.
   const [dialog, setDialog] = useState<{
@@ -229,6 +266,7 @@ export function ConnectedAccountsCard() {
         onConfirm={() => signInAgain.mutate()}
         onClose={closeReauth}
       />
+      <BrowserSignInWait provider={browser.waitingFor} connecting />
       <SetPasswordFirstDialog
         opened={dialog?.step === "password" && dialog.open}
         provider={nameOf(dialog?.id ?? "")}

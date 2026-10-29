@@ -348,6 +348,48 @@
   font-weight: 700;
 }
 
+/* The Desktop app's browser tab when the sign-in didn't finish. */
+.failedMark {
+  background: color-mix(in srgb, var(--mantine-color-red-6) 16%, transparent);
+  color: var(--mantine-color-red-6);
+}
+
+/* The provider the User signed in with, on the Desktop app's browser tab (design "Desktop Sign-in Handoff"). */
+.handoffStep {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: var(--color-surface);
+}
+
+.handoffIcon {
+  display: flex;
+  flex: none;
+}
+
+.handoffLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.handoffCheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 /* Fills over the time the screen waits before opening the app. */
 .progress {
   height: 6px;

@@ -3,12 +3,13 @@ import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { toast } from "@repo/ui/toast";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError, type LinkedIdentity, type SessionInfo, type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import { goTo } from "../auth/redirect";
+import type { BrowserSignInResult, NimbusDesktop } from "../shell/desktop";
 import { SessionProvider } from "../auth/session";
 import { SessionContext, type Session } from "../auth/useSession";
 import { AppRoutes } from "../App";
@@ -682,6 +683,97 @@ describe("connecting a provider", () => {
 
     await waitFor(() => expect(goTo).toHaveBeenCalledWith("/api/auth/oauth2/github?link=t-1"));
     expect(linkTicket).toHaveBeenCalledWith("github");
+  });
+
+  describe("in the Desktop app", () => {
+    let settle: (result: BrowserSignInResult) => void;
+    let bridge: Required<NimbusDesktop>;
+
+    beforeEach(() => {
+      bridge = {
+        platform: "win32",
+        setTheme: vi.fn(),
+        showAppMenu: vi.fn(),
+        signInWithProvider: vi.fn(
+          () =>
+            new Promise<BrowserSignInResult>((resolve) => {
+              settle = resolve;
+            }),
+        ),
+        reopenProviderSignIn: vi.fn(),
+        cancelProviderSignIn: vi.fn(() => settle({ outcome: "cancelled" })),
+      };
+      window.nimbusDesktop = bridge;
+    });
+    afterEach(() => {
+      delete window.nimbusDesktop;
+    });
+
+    async function connectGithub() {
+      vi.spyOn(api, "linkTicket").mockResolvedValue({ ticket: "t-3" });
+      const linked = setUp();
+      fireEvent.click(await screen.findByRole("button", { name: "Connect GitHub" }));
+      await waitingDialog();
+      expect(bridge.signInWithProvider).toHaveBeenCalledWith({
+        provider: "github",
+        linkTicket: "t-3",
+      });
+      return linked;
+    }
+
+    const waitingDialog = () =>
+      screen.findByRole("dialog", { name: "Finish connecting in your browser" });
+
+    it("connects in the browser and finishes in the app", async () => {
+      const connect = vi.spyOn(api, "desktopConnect").mockResolvedValue({ provider: "github" });
+      const success = vi.spyOn(toast, "success");
+      const linked = await connectGithub();
+      const loadsBefore = linked.mock.calls.length;
+
+      act(() => settle({ outcome: "code", code: "c-4", verifier: "v-4" }));
+
+      await waitFor(() => expect(success).toHaveBeenCalledWith("Connected GitHub."));
+      expect(connect).toHaveBeenCalledWith("c-4", "v-4");
+      expect(goTo).not.toHaveBeenCalled();
+      await waitFor(() => expect(linked.mock.calls.length).toBeGreaterThan(loadsBefore));
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Connect GitHub" }).hasAttribute("disabled"),
+        ).toBe(false),
+      );
+    });
+
+    it("says why when the connect didn't work", async () => {
+      vi.spyOn(api, "desktopConnect").mockRejectedValue(
+        new ApiError(400, "Signing in didn't finish", {}, null, "already_linked"),
+      );
+      const error = vi.spyOn(toast, "error");
+      await connectGithub();
+
+      act(() => settle({ outcome: "code", code: "c-5", verifier: "v-5" }));
+
+      await waitFor(() =>
+        expect(error).toHaveBeenCalledWith(
+          "That GitHub account is already connected to another Nimbus account.",
+        ),
+      );
+    });
+
+    it("says it was cancelled at the provider, and nothing when Cancel was pressed", async () => {
+      const error = vi.spyOn(toast, "error");
+      await connectGithub();
+      act(() => settle({ outcome: "error", error: "cancelled", provider: "github" }));
+      await waitFor(() => expect(error).toHaveBeenCalledWith("Connecting GitHub was cancelled."));
+
+      fireEvent.click(await screen.findByRole("button", { name: "Connect GitHub" }));
+      fireEvent.click(within(await waitingDialog()).getByRole("button", { name: "Cancel" }));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", { name: "Finish connecting in your browser" }),
+        ).toBeNull(),
+      );
+      expect(error).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("asks the User to sign in again when the sign-in is too old", async () => {

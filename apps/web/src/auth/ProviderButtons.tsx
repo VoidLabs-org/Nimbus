@@ -1,10 +1,14 @@
 import { Button, Group, Loader, VisuallyHidden } from "@mantine/core";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import { ApiError, api } from "../api/client";
 import { useProviders } from "../api/queries";
+import { BrowserSignInWait } from "./BrowserSignInWait";
+import { browserSignInBridge, useBrowserSignIn } from "./useBrowserSignIn";
 import classes from "./ProviderButtons.module.css";
 import { PROVIDERS } from "./providers";
-import { safeReturnPath } from "./returnPath";
+import { goTo } from "./redirect";
+import { returnToSearch, safeReturnPath } from "./returnPath";
 
 // How long the buttons stay busy if the browser hasn't left by then.
 const GIVE_UP_AFTER_MS = 10_000;
@@ -21,6 +25,9 @@ const GIVE_UP_AFTER_MS = 10_000;
  * for screen readers too, through a region that is always there. A click that opens the provider in a new tab changes
  * nothing. If the browser never leaves (the User pressed Stop, or it stalled), or comes back with the Back button, the
  * buttons start again.
+ * In the Desktop app the provider opens in the system browser instead (ADR 0008): the window waits with
+ * {@link BrowserSignInWait}, then trades the code the browser handed back for the sign-in and carries on as the
+ * browser would have, at `/auth/callback`, `/login/two-step` or the sign-in page with the error.
  */
 export function ProviderButtons() {
   // Undefined until the server answers; a failure counts as none (the form below still works).
@@ -31,6 +38,36 @@ export function ProviderButtons() {
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnPath(searchParams.get("returnTo"));
   const query = returnTo === "/" ? "" : `?returnTo=${encodeURIComponent(returnTo)}`;
+  const navigate = useNavigate();
+  const browser = useBrowserSignIn();
+  // The provider whose code the Desktop app is trading in, after the browser came back.
+  const [finishing, setFinishing] = useState<{ id: string; name: string } | null>(null);
+  const busy = going ?? finishing;
+
+  async function signInThroughBrowser(provider: { id: string; name: string }) {
+    const result = await browser.run(provider.id);
+    if (result.outcome === "cancelled") return;
+    // As the server does in a browser: back to the sign-in page, saying why, with the page to return to kept.
+    const failed = (error: string) => {
+      const params = new URLSearchParams({ error, provider: provider.id });
+      if (returnTo !== "/") params.set("returnTo", returnTo);
+      void navigate(`/login?${params}`, { replace: true });
+    };
+    if (result.outcome === "error") return failed(result.error);
+    setFinishing(provider);
+    try {
+      const { twoStepRequired } = await api.desktopExchange(result.code, result.verifier);
+      if (twoStepRequired) {
+        void navigate({ pathname: "/login/two-step", search: returnToSearch(returnTo) });
+        return;
+      }
+      // The refresh cookie is set: a fresh load turns it into the session, as after a browser's callback.
+      goTo(`/auth/callback${query}`);
+    } catch (error) {
+      setFinishing(null);
+      failed(error instanceof ApiError && error.code ? error.code : "failed");
+    }
+  }
 
   // The browser may restore this page as it was left when the User comes back: the chosen button must not stay busy.
   useEffect(() => {
@@ -72,11 +109,16 @@ export function ProviderButtons() {
             className={classes.provider}
             leftSection={provider.icon}
             aria-label={`Continue with ${provider.name}`}
-            loading={going?.id === provider.id}
-            disabled={going !== null && going.id !== provider.id}
+            loading={busy?.id === provider.id}
+            disabled={busy !== null && busy.id !== provider.id}
             onClick={(event) => {
               // Disabled doesn't stop a link: while one provider is under way, the others (and a second click) do nothing.
-              if (going !== null) return event.preventDefault();
+              if (busy !== null || browser.waitingFor !== null) return event.preventDefault();
+              if (browserSignInBridge()) {
+                event.preventDefault();
+                void signInThroughBrowser(provider);
+                return;
+              }
               // A click that opens the provider in a new tab leaves this page where it is.
               if (
                 event.button !== 0 ||
@@ -93,16 +135,19 @@ export function ProviderButtons() {
           </Button>
         ))}
       </Group>
-      {going === null ? (
+      {busy === null ? (
         <div className={classes.or}>or</div>
       ) : (
         <div className={`${classes.or} ${classes.going}`} aria-hidden>
           <Loader size={14} />
-          Taking you to {going.name}…
+          {going ? `Taking you to ${going.name}…` : "Signing you in…"}
         </div>
       )}
       {/* Always there, so a change to its text is announced (a region that appears with its text often isn't). */}
-      <VisuallyHidden role="status">{going && `Taking you to ${going.name}`}</VisuallyHidden>
+      <VisuallyHidden role="status">
+        {going ? `Taking you to ${going.name}` : finishing ? "Signing you in" : ""}
+      </VisuallyHidden>
+      <BrowserSignInWait provider={browser.waitingFor} />
     </>
   );
 }

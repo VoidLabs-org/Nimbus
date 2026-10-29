@@ -90,8 +90,14 @@ describe("readHandback", () => {
 
 describe("doneAddress", () => {
   it("is the web app's done page, marked when nothing came back", () => {
-    assert.equal(doneAddress(nimbus, true), "http://localhost:3000/auth/desktop-done");
-    assert.equal(doneAddress(nimbus, false), "http://localhost:3000/auth/desktop-done?failed=1");
+    assert.equal(
+      doneAddress(nimbus, true, "google"),
+      "http://localhost:3000/auth/desktop-done?provider=google",
+    );
+    assert.equal(
+      doneAddress(nimbus, false, "github"),
+      "http://localhost:3000/auth/desktop-done?provider=github&failed=1",
+    );
   });
 });
 
@@ -126,7 +132,10 @@ describe("browserSignIns", () => {
       redirect: "manual",
     });
     assert.equal(response.status, 302);
-    assert.equal(response.headers.get("location"), "http://localhost:3000/auth/desktop-done");
+    assert.equal(
+      response.headers.get("location"),
+      "http://localhost:3000/auth/desktop-done?provider=google",
+    );
 
     const outcome = await result;
     assert.equal(outcome.outcome, "code");
@@ -147,7 +156,7 @@ describe("browserSignIns", () => {
     );
     assert.equal(
       response.headers.get("location"),
-      "http://localhost:3000/auth/desktop-done?failed=1",
+      "http://localhost:3000/auth/desktop-done?provider=github&failed=1",
     );
     assert.deepEqual(await result, { outcome: "error", error: "cancelled", provider: "github" });
   });

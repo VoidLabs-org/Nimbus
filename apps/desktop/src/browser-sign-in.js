@@ -81,13 +81,15 @@ export function readHandback(method, path, nonce) {
 }
 
 /**
- * Where the browser tab ends: a Nimbus page saying the app took over, or that it didn't work.
+ * Where the browser tab ends: a Nimbus page saying the app took over, naming the provider, or that it didn't work.
  *
  * @param {URL} nimbusUrl
  * @param {boolean} handedBack whether a code came back
+ * @param {string} provider the attempt's provider
  */
-export function doneAddress(nimbusUrl, handedBack) {
+export function doneAddress(nimbusUrl, handedBack, provider) {
   const url = new URL("/auth/desktop-done", nimbusUrl.origin);
+  url.searchParams.set("provider", provider);
   if (!handedBack) url.searchParams.set("failed", "1");
   return url.href;
 }
@@ -162,7 +164,7 @@ export function browserSignIns({ nimbusUrl, openExternal, onHandback = () => {} 
           return;
         }
         res.writeHead(302, {
-          Location: doneAddress(nimbusUrl, "code" in handback),
+          Location: doneAddress(nimbusUrl, "code" in handback, request.provider),
           Connection: "close",
         });
         res.end();

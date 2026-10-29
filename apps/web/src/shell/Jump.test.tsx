@@ -222,7 +222,7 @@ describe("what Jump lists", () => {
 
     const dialog = await openJump();
     expect(groups(dialog)).toEqual({
-      "Go to": ["Home", "Projects", "Profile"],
+      "Go to": ["Home", "Projects"],
       Actions: ["New project", "Switch to Ink theme", "Fold the Sidebar", "Open Settings"],
     });
   });
@@ -420,6 +420,28 @@ describe("Jump while something else is open", () => {
     fireEvent.change(search(dialog), { target: { value: ">open settings" } });
     fireEvent.keyDown(search(dialog), { key: "Enter" });
 
+    expect(address()).toBe("/settings/security");
+  });
+
+  it("closes when Ctrl , opens Settings, as picking Open Settings does", async () => {
+    renderAt("/projects");
+    const dialog = await openJump();
+
+    fireEvent.keyDown(search(dialog), { key: ",", code: "Comma", ctrlKey: true });
+
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Jump" })).toBeNull());
+  });
+
+  it("closes when Ctrl , is pressed over Settings, leaving its page open", async () => {
+    renderAt("/settings/security");
+    await screen.findByRole("dialog", { name: "Settings" });
+    fireEvent.keyDown(window, { key: "k", code: "KeyK", ctrlKey: true });
+    const dialog = await screen.findByRole("dialog", { name: "Jump" });
+
+    fireEvent.keyDown(search(dialog), { key: ",", code: "Comma", ctrlKey: true });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Jump" })).toBeNull());
     expect(address()).toBe("/settings/security");
   });
 

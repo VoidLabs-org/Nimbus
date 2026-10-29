@@ -6,8 +6,9 @@ import classes from "./StatusPage.module.css";
 
 /**
  * An error or status page (design 27): the eyebrow, headline, text, an optional note and any buttons on the left;
- * the three bars from sign-in on the right, naming what happened (`code`, then `name`). `standalone` fills the
- * window, for the pages shown without the navbar.
+ * the three bars from sign-in on the right, naming what happened (`code`, then `name`). It lays itself out by its
+ * own width, not the window's, so it also fits the Settings overlay. `standalone` fills the window, for the pages
+ * shown without the navbar.
  */
 export function StatusPage({
   eyebrow,
@@ -29,20 +30,22 @@ export function StatusPage({
   standalone?: boolean;
 }>) {
   return (
-    <div className={standalone ? `${classes.page} ${classes.standalone}` : classes.page}>
-      <div className={classes.text}>
-        <div className={classes.eyebrow}>{eyebrow}</div>
-        <Title order={1} className={classes.title}>
-          {title}
-        </Title>
-        <div className={classes.body}>{body}</div>
-        {note}
-        {actions && <div className={classes.actions}>{actions}</div>}
-      </div>
-      <div className={classes.bars} aria-hidden>
-        <span className={`${classes.bar} ${classes.code}`}>{code}</span>
-        <span className={`${classes.bar} ${classes.name}`}>{name}</span>
-        <span className={`${classes.bar} ${classes.empty}`} />
+    <div className={classes.frame}>
+      <div className={standalone ? `${classes.page} ${classes.standalone}` : classes.page}>
+        <div className={classes.text}>
+          <div className={classes.eyebrow}>{eyebrow}</div>
+          <Title order={1} className={classes.title}>
+            {title}
+          </Title>
+          <div className={classes.body}>{body}</div>
+          {note}
+          {actions && <div className={classes.actions}>{actions}</div>}
+        </div>
+        <div className={classes.bars} aria-hidden>
+          <span className={`${classes.bar} ${classes.code}`}>{code}</span>
+          <span className={`${classes.bar} ${classes.name}`}>{name}</span>
+          <span className={`${classes.bar} ${classes.empty}`} />
+        </div>
       </div>
     </div>
   );

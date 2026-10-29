@@ -213,13 +213,15 @@ export function AppRoutes() {
           <Route path="/session-expired" element={<SessionExpiredPage />} />
         </Routes>
       </SettingsOverlayContext>
-      {background && (
-        <ChunkFallback
-          what="The Settings overlay"
-          fallback={null}
-          onFail={() => setOverlayFailed(true)}
-        >
-          <Suspense fallback={null}>
+      {/* Mounted whether or not Settings is open: a Suspense already on screen lets an opening in a transition wait
+          for the overlay's chunk with the window as it was, where a new one would show its empty fallback first. */}
+      <Suspense fallback={null}>
+        {background && (
+          <ChunkFallback
+            what="The Settings overlay"
+            fallback={null}
+            onFail={() => setOverlayFailed(true)}
+          >
             <SettingsOverlay onClose={closeSettings}>
               <Routes>
                 {/* Its list stands in for the overview, so Settings itself opens on Profile. */}
@@ -228,9 +230,9 @@ export function AppRoutes() {
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </SettingsOverlay>
-          </Suspense>
-        </ChunkFallback>
-      )}
+          </ChunkFallback>
+        )}
+      </Suspense>
     </>
   );
 }

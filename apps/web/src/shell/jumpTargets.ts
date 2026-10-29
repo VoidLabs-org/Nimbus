@@ -76,8 +76,8 @@ function matching<T extends JumpItem>(items: T[], term: string): T[] {
 const FIRST_ACTIONS = 4;
 
 /**
- * Jump's list for a search, in groups (design "Nimbus Desktop v2", Search). Nothing typed: "Go to" (Home, Projects
- * and the first Settings page) and the first few actions. Typed: the matching pages, Settings pages and actions, each
+ * Jump's list for a search, in groups (design "Nimbus Desktop v2", Search). Nothing typed: "Go to" (Home, Projects;
+ * Settings is the Open Settings action, not a second way to the same overlay) and the first few actions. Typed: the matching pages, Settings pages and actions, each
  * under its heading. After `>`, only the actions. Empty groups are left out.
  */
 export function jumpGroups(
@@ -89,12 +89,10 @@ export function jumpGroups(
   if (search.commands) {
     groups.push({ label: "Actions", items: matching(actions, search.term) });
   } else if (!search.term) {
-    const settings = pages.find((page) => page.group === "Settings");
-    groups.push({
-      label: "Go to",
-      items: [...pages.filter((page) => page.group === "Pages"), ...(settings ? [settings] : [])],
-    });
-    groups.push({ label: "Actions", items: actions.slice(0, FIRST_ACTIONS) });
+    groups.push(
+      { label: "Go to", items: pages.filter((page) => page.group === "Pages") },
+      { label: "Actions", items: actions.slice(0, FIRST_ACTIONS) },
+    );
   } else {
     groups.push({
       label: "Pages",

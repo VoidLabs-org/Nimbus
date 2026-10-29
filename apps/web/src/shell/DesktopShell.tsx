@@ -110,6 +110,10 @@ function AppMenuButton() {
  */
 const SETTINGS = DESTINATIONS.find((destination) => destination.id === "settings")!;
 
+// The Settings overlay's chunk (App.tsx), loaded with the shell rather than on first use: opening Settings waits for it
+// with the window as it was (Jump, a peeking Sidebar), so it opens at once.
+void import("./SettingsOverlay");
+
 /** Where a right-click menu opened, and on what: a Tab (by id) or a Sidebar link. */
 type MenuTarget = { x: number; y: number; on: { tab: string } | { link: Destination } };
 
@@ -224,13 +228,6 @@ export default function DesktopShell() {
   const tabs = useTabs(userId, settingsOpen);
   useTabShortcuts(platform, settingsOpen, tabs);
   const navigate = useNavigate();
-  // Ctrl or ⌘ , opens Settings from anywhere; while Settings is open it does nothing, so the page open in it stays.
-  useShortcut(
-    (event) => isSettingsShortcut(event, platform),
-    () => {
-      if (!settingsOpen) void navigate(SETTINGS.to);
-    },
-  );
   useNewTabClicks(platform, tabs.openNew, navigate);
   // The right-click menu open now (a Tab's, a Sidebar link's), if any.
   const [menuAt, setMenuAt] = useState<MenuTarget | null>(null);
@@ -254,14 +251,39 @@ export default function DesktopShell() {
   useShortcut((event) => isFoldShortcut(event, platform), toggle);
 
   const [jumpOpen, setJumpOpen] = useState(false);
+  // Jump stays while Settings opens from it, then goes without fading as Settings shows: they share a backdrop, so the
+  // dim never lifts and drops again in between.
+  const [jumpLeavingForSettings, setJumpLeavingForSettings] = useState(false);
+  const [jumpExitInstant, setJumpExitInstant] = useState(false);
+  if (jumpLeavingForSettings && settingsOpen) {
+    setJumpLeavingForSettings(false);
+    setJumpOpen(false);
+    setJumpExitInstant(true);
+  }
+  /** Closes Jump, or, when what was picked opens Settings, lets Settings take its place. */
+  const closeJump = (opensSettings: boolean) => {
+    if (opensSettings && jumpOpen && !settingsOpen) setJumpLeavingForSettings(true);
+    else setJumpOpen(false);
+  };
   const [signingOut, setSigningOut] = useState(false);
   // Not over "Sign out?", which may be signing out; a right-click menu open underneath closes.
   const openJump = () => {
     if (signingOut) return;
     setMenuAt(null);
+    setJumpExitInstant(false);
     setJumpOpen(true);
   };
   useShortcut((event) => isJumpShortcut(event, platform), openJump);
+  /**
+   * Opens Settings, closing Jump if it is open (Settings is where the User went). While Settings is open it stays as
+   * it is, so the page open in it stays.
+   */
+  const openSettings = () => {
+    closeJump(true);
+    if (!settingsOpen) void navigate(SETTINGS.to);
+  };
+  // Ctrl or ⌘ , opens Settings from anywhere, from Jump too.
+  useShortcut((event) => isSettingsShortcut(event, platform), openSettings);
   const { mode, setMode } = useNimbusTheme();
   const jumpToPages = jumpPages(useSettingsGroups());
   /**
@@ -313,10 +335,7 @@ export default function DesktopShell() {
       label: "Open Settings",
       icon: IconSettings,
       shortcut: shortcutLabel(platform, ","),
-      // As its shortcut: while Settings is open, the page open in it stays.
-      run: () => {
-        if (!settingsOpen) void navigate(SETTINGS.to);
-      },
+      run: openSettings,
     },
     // Asks first, as the account menu does.
     {
@@ -329,9 +348,14 @@ export default function DesktopShell() {
   ];
   /** What picking an item in Jump does: an action runs, a page opens (openPage). */
   const jumpTo = (item: JumpItem, inNewTab: boolean) => {
-    setJumpOpen(false);
-    if (item.kind === "action") item.run();
-    else openPage(item.to, inNewTab);
+    if (item.kind === "action") {
+      // Open Settings closes Jump itself (openSettings).
+      if (item.id !== "settings") closeJump(false);
+      item.run();
+      return;
+    }
+    closeJump(isSettingsPath(item.to));
+    openPage(item.to, inNewTab);
   };
   const mainRef = useRef<HTMLDivElement>(null);
   const startPeek = () => {
@@ -435,6 +459,7 @@ export default function DesktopShell() {
         actions={jumpActions}
         onPick={jumpTo}
         onClose={() => setJumpOpen(false)}
+        instantExit={jumpExitInstant}
       />
       <SignOutDialog opened={signingOut} onClose={() => setSigningOut(false)} />
     </div>

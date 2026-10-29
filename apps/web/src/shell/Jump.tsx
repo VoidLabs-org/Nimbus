@@ -36,7 +36,8 @@ function Keys({ children }: { children: string }) {
  * each name marked. Typing `>` keeps only the actions, and says so. The arrow keys move the highlight round the list
  * (the focus stays in the field, as a combobox's does); Enter or a click picks it (`onPick`), with Ctrl (⌘ on macOS) a
  * page in a new Tab; Esc, its Esc badge or a click outside close it (`onClose`), giving the focus back to where it
- * was. Each opening starts empty.
+ * was. Each opening starts empty. With `instantExit` it goes without fading, for when Settings takes its place: the two
+ * share a backdrop, so only the panel changes.
  */
 export function Jump({
   opened,
@@ -45,6 +46,7 @@ export function Jump({
   actions,
   onPick,
   onClose,
+  instantExit = false,
 }: {
   opened: boolean;
   platform: NimbusDesktop["platform"];
@@ -52,6 +54,7 @@ export function Jump({
   actions: JumpAction[];
   onPick: (item: JumpItem, inNewTab: boolean) => void;
   onClose: () => void;
+  instantExit?: boolean;
 }) {
   const [typed, setTyped] = useState("");
   const [active, setActive] = useState(0);
@@ -97,7 +100,14 @@ export function Jump({
 
   let index = 0;
   return (
-    <Modal.Root opened={opened} onClose={onClose} size={640} yOffset={84} returnFocus>
+    <Modal.Root
+      opened={opened}
+      onClose={onClose}
+      size={640}
+      yOffset={84}
+      returnFocus
+      transitionProps={instantExit ? { duration: 0 } : undefined}
+    >
       <Modal.Overlay backgroundOpacity={0.45} blur={4} />
       <Modal.Content className={classes.panel}>
         <Modal.Title className={classes.hidden}>Jump</Modal.Title>

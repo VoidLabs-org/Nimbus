@@ -2,6 +2,7 @@ package com.nimbus.api.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -30,6 +31,33 @@ class DeviceLabelsTests {
 			In-app browser on iOS | Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148
 			""")
 	void namesTheBrowserAndTheSystem(String expected, String userAgent) {
+		assertThat(labels.of(userAgent)).isEqualTo(expected);
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+			Nimbus for Windows | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) desktop/0.0.0 Chrome/138.0.7204.35 Electron/44.7.0 Safari/537.36 Nimbus/0.0.0
+			Nimbus for Mac | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) desktop/0.0.0 Chrome/138.0.7204.35 Electron/44.7.0 Safari/537.36 Nimbus/0.0.0
+			Nimbus for Linux | Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) desktop/0.0.0 Chrome/138.0.7204.35 Electron/44.7.0 Safari/537.36 Nimbus/0.0.0
+			Nimbus for Linux | Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.35 Electron/44.7.0 Safari/537.36 Nimbus/1.2.0
+			""")
+	void namesTheDesktopAppAndItsSystem(String expected, String userAgent) {
+		assertThat(labels.of(userAgent)).isEqualTo(expected);
+	}
+
+	@Test
+	void namesJustNimbusWhenTheDesktopAppsSystemIsUnknown() {
+		assertThat(labels.of("Mozilla/5.0 (Unknown) AppleWebKit/537.36 (KHTML, like Gecko) Nimbus/0.0.0"))
+			.isEqualTo("Nimbus");
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+			Chrome on Windows | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 NimbusHelper/2.0
+			Chrome on Windows | Mozilla/5.0 (Windows NT 10.0; Win64; x64; Nimbus/1.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
+			Firefox on Linux | Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0 MyNimbus/3
+			""")
+	void namesTheBrowserWhenItMerelyMentionsNimbus(String expected, String userAgent) {
 		assertThat(labels.of(userAgent)).isEqualTo(expected);
 	}
 

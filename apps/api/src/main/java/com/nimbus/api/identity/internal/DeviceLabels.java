@@ -1,12 +1,15 @@
 package com.nimbus.api.identity.internal;
 
+import java.util.regex.Pattern;
+
 import org.springframework.stereotype.Component;
 import ua_parser.Parser;
 
 /**
  * Names a browser for the list of a User's sessions: "Chrome on Windows". Built from the {@code User-Agent} header
  * when the list is read, not when the session starts, so a newer list of browsers also names old sessions. The raw
- * header never leaves the API.
+ * header never leaves the API. The Desktop app adds a {@code Nimbus/<version>} product token to its header and is
+ * named after the system it runs on: "Nimbus for Mac".
  */
 @Component
 class DeviceLabels {
@@ -14,6 +17,11 @@ class DeviceLabels {
 	static final String UNKNOWN = "Unknown browser";
 
 	static final String IN_APP = "In-app browser";
+
+	static final String DESKTOP_APP = "Nimbus";
+
+	/** The Desktop app's product token: a word of its own, not part of another ("MyNimbus/3") or of a comment. */
+	private static final Pattern DESKTOP_TOKEN = Pattern.compile("(^|\\s)Nimbus/[^\\s()]+($|\\s)");
 
 	private final Parser parser;
 
@@ -30,6 +38,10 @@ class DeviceLabels {
 			return UNKNOWN;
 		}
 		var client = parser.parse(userAgent);
+		if (DESKTOP_TOKEN.matcher(userAgent).find()) {
+			var desktop = desktopSystem(known(client.os == null ? null : client.os.family), userAgent);
+			return desktop == null ? DESKTOP_APP : DESKTOP_APP + " for " + desktop;
+		}
 		var browser = browserName(known(client.userAgent == null ? null : client.userAgent.family));
 		var system = systemName(known(client.os == null ? null : client.os.family));
 		if (browser == null && system == null) {
@@ -52,6 +64,20 @@ class DeviceLabels {
 		}
 		var name = family.replace(" Mobile iOS", "").replace(" Mobile", "").replace("Mobile ", "").strip();
 		return name.isEmpty() ? family : name;
+	}
+
+	/**
+	 * The Desktop app runs on Mac, Windows or Linux. The parser names some Linux distributions ("Ubuntu"), so any other
+	 * system whose header says Linux is Linux too.
+	 */
+	private static String desktopSystem(String family, String userAgent) {
+		if ("Mac OS X".equals(family)) {
+			return "Mac";
+		}
+		if (family != null && family.startsWith("Windows")) {
+			return "Windows";
+		}
+		return userAgent.contains("Linux") ? "Linux" : null;
 	}
 
 	private static String systemName(String family) {

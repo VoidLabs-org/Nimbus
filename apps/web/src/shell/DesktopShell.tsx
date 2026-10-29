@@ -19,7 +19,11 @@ import { UserMenu } from "../auth/UserMenu";
 import { useSession } from "../auth/useSession";
 import { PageContent } from "./AppShell";
 import { useSettingsGroups } from "../settings/sections";
-import { isSettingsPath, useSettingsOverlay } from "../settings/settingsOverlay";
+import {
+  isSettingsPath,
+  preloadSettingsOverlay,
+  useSettingsOverlay,
+} from "../settings/settingsOverlay";
 import {
   desktopPlatform,
   isSettingsShortcut,
@@ -109,6 +113,10 @@ function AppMenuButton() {
  * overlay over the page (see AppRoutes).
  */
 const SETTINGS = DESTINATIONS.find((destination) => destination.id === "settings")!;
+
+// The Settings overlay's chunk, loaded with the shell rather than on first use: opening Settings waits for it with the
+// window as it was (Jump, a peeking Sidebar), so it opens at once.
+preloadSettingsOverlay();
 
 /** Where a right-click menu opened, and on what: a Tab (by id) or a Sidebar link. */
 type MenuTarget = { x: number; y: number; on: { tab: string } | { link: Destination } };
@@ -224,13 +232,6 @@ export default function DesktopShell() {
   const tabs = useTabs(userId, settingsOpen);
   useTabShortcuts(platform, settingsOpen, tabs);
   const navigate = useNavigate();
-  // Ctrl or ⌘ , opens Settings from anywhere; while Settings is open it does nothing, so the page open in it stays.
-  useShortcut(
-    (event) => isSettingsShortcut(event, platform),
-    () => {
-      if (!settingsOpen) void navigate(SETTINGS.to);
-    },
-  );
   useNewTabClicks(platform, tabs.openNew, navigate);
   // The right-click menu open now (a Tab's, a Sidebar link's), if any.
   const [menuAt, setMenuAt] = useState<MenuTarget | null>(null);
@@ -253,15 +254,43 @@ export default function DesktopShell() {
   };
   useShortcut((event) => isFoldShortcut(event, platform), toggle);
 
-  const [jumpOpen, setJumpOpen] = useState(false);
+  /**
+   * Jump's place. Picking something that opens Settings leaves it "leaving": still on screen while Settings loads, then
+   * "handedOver" once Settings has drawn, gone without fading in that same frame (they share a backdrop, so the dim
+   * never lifts and drops again in between).
+   */
+  const [jump, setJump] = useState<"closed" | "open" | "leaving" | "handedOver">("closed");
+  // Inside the overlay's routes `location` is the page behind it, so Settings is open either way: as the overlay, or
+  // as pages when the overlay couldn't load.
+  const onSettings = settingsOpen || isSettingsPath(location.pathname);
+  if (jump === "leaving" && onSettings) setJump("handedOver");
+  /** Closes Jump, or, when what was picked opens Settings, lets Settings take its place. */
+  const closeJump = (opensSettings: boolean) => {
+    if (jump === "open") setJump(opensSettings && !onSettings ? "leaving" : "closed");
+  };
   const [signingOut, setSigningOut] = useState(false);
   // Not over "Sign out?", which may be signing out; a right-click menu open underneath closes.
   const openJump = () => {
     if (signingOut) return;
     setMenuAt(null);
-    setJumpOpen(true);
+    setJump("open");
   };
   useShortcut((event) => isJumpShortcut(event, platform), openJump);
+  /**
+   * Opens Settings, closing Jump if it is open (Settings is where the User went). While Settings is open it stays as
+   * it is, so the page open in it stays.
+   */
+  const goToSettings = () => {
+    if (!onSettings) void navigate(SETTINGS.to);
+  };
+  const openSettings = () => {
+    // Waiting for Settings to draw: another press would navigate again.
+    if (jump === "leaving") return;
+    closeJump(true);
+    goToSettings();
+  };
+  // Ctrl or ⌘ , opens Settings from anywhere, from Jump too.
+  useShortcut((event) => isSettingsShortcut(event, platform), openSettings);
   const { mode, setMode } = useNimbusTheme();
   const jumpToPages = jumpPages(useSettingsGroups());
   /**
@@ -313,10 +342,8 @@ export default function DesktopShell() {
       label: "Open Settings",
       icon: IconSettings,
       shortcut: shortcutLabel(platform, ","),
-      // As its shortcut: while Settings is open, the page open in it stays.
-      run: () => {
-        if (!settingsOpen) void navigate(SETTINGS.to);
-      },
+      opensSettings: true,
+      run: goToSettings,
     },
     // Asks first, as the account menu does.
     {
@@ -329,7 +356,9 @@ export default function DesktopShell() {
   ];
   /** What picking an item in Jump does: an action runs, a page opens (openPage). */
   const jumpTo = (item: JumpItem, inNewTab: boolean) => {
-    setJumpOpen(false);
+    // Waiting for Settings to draw: another pick would navigate again.
+    if (jump === "leaving") return;
+    closeJump(item.kind === "action" ? item.opensSettings === true : isSettingsPath(item.to));
     if (item.kind === "action") item.run();
     else openPage(item.to, inNewTab);
   };
@@ -429,12 +458,13 @@ export default function DesktopShell() {
       />
       <ContextMenu menu={menu} onClose={() => setMenuAt(null)} />
       <Jump
-        opened={jumpOpen}
+        opened={jump === "open" || jump === "leaving"}
         platform={platform}
         pages={jumpToPages}
         actions={jumpActions}
         onPick={jumpTo}
-        onClose={() => setJumpOpen(false)}
+        onClose={() => setJump("closed")}
+        instantExit={jump === "handedOver"}
       />
       <SignOutDialog opened={signingOut} onClose={() => setSigningOut(false)} />
     </div>

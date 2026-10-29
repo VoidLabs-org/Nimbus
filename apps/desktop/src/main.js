@@ -26,9 +26,13 @@ import {
   windowsTaskbarMode,
 } from "./chrome.js";
 import { isNavigationAllowed, isNimbusPage, parseNimbusUrl } from "./nimbus-url.js";
+import { nimbusUserAgent } from "./user-agent.js";
 import { parseWindowState, restoredPlace, windowState } from "./windows.js";
 
 const dev = isDevLaunch(process.argv);
+
+// Every request from the window, the API's included, says it comes from the Desktop app, in --dev too.
+app.userAgentFallback = nimbusUserAgent(app.userAgentFallback, app.getVersion());
 
 const execFileAsync = promisify(execFile);
 

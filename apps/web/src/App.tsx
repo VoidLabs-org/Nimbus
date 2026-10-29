@@ -30,7 +30,11 @@ import TwoStepSignInPage from "./pages/TwoStepSignInPage";
 import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import SettingsOverview from "./settings/SettingsOverview";
 import { PASSWORD_WINDOW_PATH } from "./settings/sections";
-import { isSettingsPath, SettingsOverlayContext } from "./settings/settingsOverlay";
+import {
+  isSettingsPath,
+  loadSettingsOverlay,
+  SettingsOverlayContext,
+} from "./settings/settingsOverlay";
 import { AppShell } from "./shell/AppShell";
 import { isDesktop } from "./shell/desktop";
 import { DesktopFrame } from "./shell/DesktopFrame";
@@ -80,7 +84,7 @@ class ChunkFallback extends Component<
 }
 
 // The Desktop app's Settings overlay, in its own chunk like its shell.
-const SettingsOverlay = lazy(() => import("./shell/SettingsOverlay"));
+const SettingsOverlay = lazy(loadSettingsOverlay);
 
 /** The shell around every signed-in page: the Sidebar in the Desktop app, the navbar in a browser. */
 function SignedInShell() {
@@ -213,13 +217,15 @@ export function AppRoutes() {
           <Route path="/session-expired" element={<SessionExpiredPage />} />
         </Routes>
       </SettingsOverlayContext>
-      {background && (
-        <ChunkFallback
-          what="The Settings overlay"
-          fallback={null}
-          onFail={() => setOverlayFailed(true)}
-        >
-          <Suspense fallback={null}>
+      {/* Mounted whether or not Settings is open: a Suspense already on screen lets an opening in a transition wait
+          for the overlay's chunk with the window as it was, where a new one would show its empty fallback first. */}
+      <Suspense fallback={null}>
+        {background && (
+          <ChunkFallback
+            what="The Settings overlay"
+            fallback={null}
+            onFail={() => setOverlayFailed(true)}
+          >
             <SettingsOverlay onClose={closeSettings}>
               <Routes>
                 {/* Its list stands in for the overview, so Settings itself opens on Profile. */}
@@ -228,9 +234,9 @@ export function AppRoutes() {
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </SettingsOverlay>
-          </Suspense>
-        </ChunkFallback>
-      )}
+          </ChunkFallback>
+        )}
+      </Suspense>
     </>
   );
 }

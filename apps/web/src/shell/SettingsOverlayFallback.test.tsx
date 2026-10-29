@@ -2,7 +2,7 @@
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type User } from "../api/client";
@@ -84,6 +84,58 @@ describe("the Desktop app, when its Settings overlay can't load", () => {
     expect(await screen.findByRole("heading", { name: "Profile" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
+  });
+
+  it("closes Jump when it opens Settings as a page, which never waits for an overlay", async () => {
+    render(
+      <NimbusThemeProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <QueryClientProvider client={createQueryClient()}>
+            <SessionContext value={session}>
+              <AppRoutes />
+            </SessionContext>
+          </QueryClientProvider>
+        </MemoryRouter>
+      </NimbusThemeProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /Search or jump to/ }));
+    const jump = await screen.findByRole("dialog", { name: "Jump" });
+
+    fireEvent.keyDown(within(jump).getByRole("combobox"), {
+      key: ",",
+      code: "Comma",
+      ctrlKey: true,
+    });
+
+    // The overview: the overlay's redirect to Profile is not there.
+    expect(await screen.findByRole("heading", { name: "Account" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Jump" })).toBeNull());
+  });
+
+  it("closes Jump over Settings shown as a page: it never turns into the overlay Jump would wait for", async () => {
+    render(
+      <NimbusThemeProvider>
+        <MemoryRouter initialEntries={["/settings/profile"]}>
+          <QueryClientProvider client={createQueryClient()}>
+            <SessionContext value={session}>
+              <AppRoutes />
+            </SessionContext>
+          </QueryClientProvider>
+        </MemoryRouter>
+      </NimbusThemeProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /Search or jump to/ }));
+    const jump = await screen.findByRole("dialog", { name: "Jump" });
+
+    fireEvent.keyDown(within(jump).getByRole("combobox"), {
+      key: ",",
+      code: "Comma",
+      ctrlKey: true,
+    });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Jump" })).toBeNull());
+    // Settings is open already: the page stays.
+    expect(await screen.findByRole("heading", { name: "Profile" })).toBeTruthy();
   });
 
   it("leaves Settings, shown as a page, out of the Tabs", async () => {

@@ -48,6 +48,19 @@ describe("the browser tab after a Desktop app sign-in", () => {
     expect(document.body.textContent).not.toContain("Signed in with");
   });
 
+  it("speaks of a connect when it was one", () => {
+    show("/auth/desktop-done?provider=github&connect=1");
+
+    expect(document.body.textContent).toContain("Nimbus is finishing connecting GitHub there.");
+  });
+
+  it("sends a tab left behind by Open the browser again to the newer one", () => {
+    show("/auth/desktop-done?outdated=1");
+
+    expect(screen.getByRole("heading", { name: "Use the newer tab" })).toBeTruthy();
+    expect(document.body.textContent).toContain("Finish it there.");
+  });
+
   it("says when it didn't finish", () => {
     show("/auth/desktop-done?provider=github&failed=1");
 

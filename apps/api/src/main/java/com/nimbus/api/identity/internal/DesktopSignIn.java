@@ -2,6 +2,8 @@ package com.nimbus.api.identity.internal;
 
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +15,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 class DesktopSignIn {
+
+	private static final Logger log = LoggerFactory.getLogger(DesktopSignIn.class);
 
 	private final DesktopCodes codes;
 
@@ -36,7 +40,8 @@ class DesktopSignIn {
 	 * @param rememberedToken the app's {@link RememberedBrowsers#COOKIE}, or null
 	 * @param userAgent the app's {@code User-Agent}, kept with the Session; may be null
 	 * @throws FailedException {@code expired} for a code that is unknown, used, expired, a connect's, or given with
-	 * the wrong verifier; {@code email_unverified} and {@code disconnected} as on the sign-in page
+	 * the wrong verifier; {@code email_unverified} and {@code disconnected} as on the sign-in page; {@code failed} for
+	 * anything else
 	 */
 	Outcome signIn(String code, String verifier, String rememberedToken, String userAgent) {
 		var handoff = codes.take(code, verifier).filter(found -> found.linkTicket() == null)
@@ -56,6 +61,11 @@ class DesktopSignIn {
 		catch (ExternalSignIn.ProviderDisconnectedException e) {
 			throw new FailedException("disconnected");
 		}
+		catch (RuntimeException e) {
+			// As the callback does in a browser: anything else is a failed sign-in, logged, with the code used up.
+			log.warn("Sign-in with a provider for the Desktop app failed", e);
+			throw new FailedException("failed");
+		}
 	}
 
 	/**
@@ -66,7 +76,7 @@ class DesktopSignIn {
 	 * @return the provider connected
 	 * @throws FailedException {@code expired} for a code as in {@link #signIn}, a sign-in's code, or a ticket that is
 	 * used, expired or another Session's; {@code email_unverified}, {@code already_linked} and
-	 * {@code already_connected} as on the Security page
+	 * {@code already_connected} as on the Security page; {@code failed} for anything else
 	 */
 	String connect(String code, String verifier, UUID userId, UUID sessionId) {
 		var handoff = codes.take(code, verifier).filter(found -> found.linkTicket() != null)
@@ -89,6 +99,10 @@ class DesktopSignIn {
 		}
 		catch (ExternalSignIn.ConnectExpiredException e) {
 			throw new FailedException("expired");
+		}
+		catch (RuntimeException e) {
+			log.warn("Connecting a provider for the Desktop app failed", e);
+			throw new FailedException("failed");
 		}
 	}
 

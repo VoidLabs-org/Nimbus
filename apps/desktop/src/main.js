@@ -202,6 +202,12 @@ function createWindow(nimbusUrl) {
     if (!isNavigationAllowed(nimbusUrl, win.webContents.getURL(), url)) event.preventDefault();
   });
 
+  // A reload or a full page load leaves no page waiting for a sign-in in the browser: it is given up, and its port
+  // closes, rather than handing a result to nobody. Route changes inside the app are the same document.
+  win.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) signIns?.cancel();
+  });
+
   win.loadURL(nimbusUrl.href);
 }
 
@@ -209,6 +215,9 @@ function createWindow(nimbusUrl) {
 // other's saved Tabs and window place.
 /** The address the window opens, once start has read it. */
 let startUrl = null;
+
+/** Google and GitHub sign-ins through the system browser (browserSignIns), once start has set them up. */
+let signIns = null;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -274,9 +283,9 @@ async function start() {
 
   // "Continue with Google or GitHub", and Connect on Security, in the system browser (ADR 0008). The page gets back
   // the one-time code and the verifier and trades them in itself, so the cookies land in the window.
-  const signIns = browserSignIns({
+  signIns = browserSignIns({
     nimbusUrl,
-    openExternal: (address) => void shell.openExternal(address),
+    openExternal: (address) => shell.openExternal(address),
     onHandback: bringForward,
   });
   ipcMain.handle("nimbus:browser-sign-in", (event, request) => {

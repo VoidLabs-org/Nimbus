@@ -86,30 +86,46 @@ export function readHandback(method, path, nonce) {
  * @param {URL} nimbusUrl
  * @param {boolean} handedBack whether a code came back
  * @param {string} provider the attempt's provider
+ * @param {boolean} connecting whether it was a connect from Security rather than a sign-in
  */
-export function doneAddress(nimbusUrl, handedBack, provider) {
+export function doneAddress(nimbusUrl, handedBack, provider, connecting) {
   const url = new URL("/auth/desktop-done", nimbusUrl.origin);
   url.searchParams.set("provider", provider);
+  if (connecting) url.searchParams.set("connect", "1");
   if (!handedBack) url.searchParams.set("failed", "1");
   return url.href;
 }
 
 /**
+ * How long the window waits for the browser. The API keeps a handshake for 5 minutes after it was last used, so past
+ * this nothing can come back (the User left the tab, or the server restarted and the browser ended on its own sign-in
+ * page): the attempt ends as expired instead of waiting for a Cancel.
+ */
+const GIVE_UP_AFTER_MS = 10 * 60_000;
+
+/**
  * One sign-in through the browser at a time. `start` opens the port and the browser and settles with what came back,
- * or "cancelled" when the User pressed Cancel or started again; `reopen` opens the same address in the browser again.
+ * "expired" after a long wait, "failed" when the browser can't be opened, or "cancelled" when the User pressed Cancel
+ * or started again; `reopen` opens the same address in the browser again.
  *
- * @param {{ nimbusUrl: URL, openExternal: (address: string) => unknown, onHandback?: () => void }} options
+ * @param {{ nimbusUrl: URL, openExternal: (address: string) => unknown, onHandback?: () => void,
+ *   giveUpAfterMs?: number }} options `openExternal` may return a promise, whose rejection ends the attempt;
  *   `onHandback` runs when the browser brings a result, to bring the window forward
  */
-export function browserSignIns({ nimbusUrl, openExternal, onHandback = () => {} }) {
-  /** @type {{ address: string, finish: (result: object) => void } | null} */
+export function browserSignIns({
+  nimbusUrl,
+  openExternal,
+  onHandback = () => {},
+  giveUpAfterMs = GIVE_UP_AFTER_MS,
+}) {
+  /** @type {{ open: () => void, finish: (result: object, abort?: boolean) => void } | null} */
   let current = null;
   // Counts starts and cancels, so a Cancel while the port is still opening ends that attempt too.
   let latest = 0;
 
   function cancel() {
     latest++;
-    current?.finish({ outcome: "cancelled" });
+    current?.finish({ outcome: "cancelled" }, true);
   }
 
   /**
@@ -144,18 +160,34 @@ export function browserSignIns({ nimbusUrl, openExternal, onHandback = () => {} 
       server.close();
       throw error;
     }
+    const connecting = request.linkTicket != null;
     return new Promise((resolve) => {
       const attempt = {
-        address,
-        finish(result) {
+        open() {
+          // No default browser (or no xdg-open on Linux): say so now rather than wait for a browser that never opens.
+          const failed = () =>
+            attempt.finish({ outcome: "error", error: "failed", provider: request.provider }, true);
+          try {
+            Promise.resolve(openExternal(address)).catch(failed);
+          } catch {
+            failed();
+          }
+        },
+        /** @param {boolean} abort also drop open connections; not for a hand-back, whose redirect is still being sent */
+        finish(result, abort = false) {
           if (current !== attempt) return;
           current = null;
+          clearTimeout(giveUp);
           server.close();
-          // A browser may hold the connection open; nothing more is served on this port.
-          server.closeAllConnections?.();
+          if (abort) server.closeAllConnections?.();
           resolve(result);
         },
       };
+      const giveUp = setTimeout(
+        () =>
+          attempt.finish({ outcome: "error", error: "expired", provider: request.provider }, true),
+        giveUpAfterMs,
+      );
       current = attempt;
       server.on("request", (req, res) => {
         const handback = current === attempt ? readHandback(req.method, req.url, nonce) : null;
@@ -163,8 +195,9 @@ export function browserSignIns({ nimbusUrl, openExternal, onHandback = () => {} 
           res.writeHead(404).end();
           return;
         }
+        // Connection: close, so the port is free once this redirect has gone out.
         res.writeHead(302, {
-          Location: doneAddress(nimbusUrl, "code" in handback, request.provider),
+          Location: doneAddress(nimbusUrl, "code" in handback, request.provider, connecting),
           Connection: "close",
         });
         res.end();
@@ -175,12 +208,12 @@ export function browserSignIns({ nimbusUrl, openExternal, onHandback = () => {} 
         );
         onHandback();
       });
-      openExternal(address);
+      attempt.open();
     });
   }
 
   function reopen() {
-    if (current) openExternal(current.address);
+    current?.open();
   }
 
   return { start, reopen, cancel };

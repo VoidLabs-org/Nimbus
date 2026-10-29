@@ -108,6 +108,12 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 		var returnTo = ReturnPath.recall(request);
 		var ticket = LinkTicket.recall(request);
 		var desktop = DesktopReturn.recall(request);
+		if (desktop.isPresent() && isOutdatedTab(exception)) {
+			// "Open the browser again" started a newer handshake in this session, and this tab is the older one. The
+			// newer one is still under way, so neither it nor the app's attempt is ended; this tab only says to use it.
+			response.sendRedirect(publicUrl + "/auth/desktop-done?outdated=1");
+			return;
+		}
 		endHandshake(request);
 		// The provider reports "access_denied" when the person declines on its consent screen.
 		var declined = exception instanceof OAuth2AuthenticationException oauth
@@ -189,15 +195,31 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	}
 
 	private static String securityError(String code, String provider) {
+		return "/settings/security?error=" + code + providerParameter(provider);
+	}
+
+	/**
+	 * {@code &provider=<provider>} for Google or GitHub, so a page can name the provider an error is about; nothing for
+	 * anything else, which is never echoed back.
+	 */
+	static String providerParameter(String provider) {
 		var known = GoogleProfiles.PROVIDER.equals(provider) || GithubProfiles.PROVIDER.equals(provider);
-		return "/settings/security?error=" + code + (known ? "&provider=" + provider : "");
+		return known ? "&provider=" + provider : "";
+	}
+
+	/**
+	 * Whether the callback came from a tab whose handshake is no longer the session's: Spring keeps one authorization
+	 * request per session, and its state no longer matches this one.
+	 */
+	private static boolean isOutdatedTab(AuthenticationException exception) {
+		return exception instanceof OAuth2AuthenticationException oauth
+				&& "authorization_request_not_found".equals(oauth.getError().getErrorCode());
 	}
 
 	// Tells the login page which provider the error is about, so it can say "Google" or "GitHub". The failure
 	// handler only has the callback URL (/api/auth/oauth2/callback/<provider>) to tell; anything unknown is left out.
 	private static String loginError(String code, String provider) {
-		var known = GoogleProfiles.PROVIDER.equals(provider) || GithubProfiles.PROVIDER.equals(provider);
-		return "/login?error=" + code + (known ? "&provider=" + provider : "");
+		return "/login?error=" + code + providerParameter(provider);
 	}
 
 	private static String providerOf(HttpServletRequest request) {

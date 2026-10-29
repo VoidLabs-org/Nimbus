@@ -80,8 +80,7 @@ record DesktopReturn(String challenge, int port, String nonce) implements Serial
 	 * @param provider left out when unknown
 	 */
 	String withError(String error, String provider) {
-		var known = GoogleProfiles.PROVIDER.equals(provider) || GithubProfiles.PROVIDER.equals(provider);
-		return base() + "?error=" + error + (known ? "&provider=" + provider : "");
+		return base() + "?error=" + error + OAuthLoginHandler.providerParameter(provider);
 	}
 
 	private String base() {

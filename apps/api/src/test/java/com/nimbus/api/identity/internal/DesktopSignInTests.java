@@ -205,6 +205,22 @@ class DesktopSignInTests {
 		assertThat(response.getRedirectedUrl()).isEqualTo(RETURN + "?error=cancelled&provider=github");
 	}
 
+	// "Open the browser again" started a newer handshake in the same browser; finishing in the older tab must not end it.
+	@Test
+	void anOlderTabOfAnAttemptOpenedAgainLeavesTheNewerOneGoing() throws Exception {
+		var request = startedForDesktop();
+		var handshake = (MockHttpSession) request.getSession();
+		request.setRequestURI("/api/auth/oauth2/callback/google");
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationFailure(request, response,
+				new OAuth2AuthenticationException(new OAuth2Error("authorization_request_not_found")));
+
+		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/auth/desktop-done?outdated=1");
+		assertThat(handshake.isInvalid()).isFalse();
+		assertThat(DesktopReturn.recall(request)).isPresent();
+	}
+
 	@Test
 	void aConnectFromTheAppLinksTheProviderToTheUserWhoAsked() throws Exception {
 		var user = googleUser("ds10@example.com", "g-ds-10");

@@ -89,13 +89,20 @@ describe("readHandback", () => {
 });
 
 describe("doneAddress", () => {
+  it("says when it was a connect", () => {
+    assert.equal(
+      doneAddress(nimbus, true, "github", true),
+      "http://localhost:3000/auth/desktop-done?provider=github&connect=1",
+    );
+  });
+
   it("is the web app's done page, marked when nothing came back", () => {
     assert.equal(
-      doneAddress(nimbus, true, "google"),
+      doneAddress(nimbus, true, "google", false),
       "http://localhost:3000/auth/desktop-done?provider=google",
     );
     assert.equal(
-      doneAddress(nimbus, false, "github"),
+      doneAddress(nimbus, false, "github", false),
       "http://localhost:3000/auth/desktop-done?provider=github&failed=1",
     );
   });
@@ -185,6 +192,48 @@ describe("browserSignIns", () => {
     assert.deepEqual(await first, { outcome: "cancelled" });
     signIns.cancel();
     assert.deepEqual(await second, { outcome: "cancelled" });
+  });
+
+  it("tells the done page when it was a connect", async () => {
+    const { result, opened } = started({ provider: "github", linkTicket: "t-1" });
+    const { port, nonce } = await portOf(opened);
+
+    const response = await fetch(`http://127.0.0.1:${port}/${nonce}?code=c`, {
+      redirect: "manual",
+    });
+
+    assert.equal(
+      response.headers.get("location"),
+      "http://localhost:3000/auth/desktop-done?provider=github&connect=1",
+    );
+    assert.equal((await result).outcome, "code");
+  });
+
+  it("ends as failed when the browser can't be opened", async () => {
+    const signIns = browserSignIns({
+      nimbusUrl: nimbus,
+      openExternal: () => Promise.reject(new Error("no browser")),
+    });
+
+    assert.deepEqual(await signIns.start({ provider: "google" }), {
+      outcome: "error",
+      error: "failed",
+      provider: "google",
+    });
+  });
+
+  it("ends as expired when nothing comes back in time", async () => {
+    const opened = [];
+    const signIns = browserSignIns({
+      nimbusUrl: nimbus,
+      openExternal: (a) => opened.push(a),
+      giveUpAfterMs: 20,
+    });
+    const result = signIns.start({ provider: "github" });
+    const { port } = await portOf(opened);
+
+    assert.deepEqual(await result, { outcome: "error", error: "expired", provider: "github" });
+    await assert.rejects(fetch(`http://127.0.0.1:${port}/`));
   });
 
   it("refuses a request that isn't a provider, opening nothing", async () => {

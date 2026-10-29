@@ -87,6 +87,8 @@ export function providerSignInErrorMessage(
       return `You disconnected ${name ?? "this provider"} from your Nimbus account. Sign in another way, then connect it again from Security.`;
     case "cancelled":
       return `Sign-in with ${name ?? "your provider"} was cancelled.`;
+    case "expired":
+      return `That took too long. Try signing in with ${name ?? "your provider"} again.`;
     default:
       return `Something went wrong signing in with ${name ?? "your provider"}. Please try again.`;
   }

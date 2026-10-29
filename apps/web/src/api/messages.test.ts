@@ -30,6 +30,10 @@ describe("providerSignInErrorMessage", () => {
       /disconnected Google.+Security/,
     );
     expect(providerSignInErrorMessage("failed")).toMatch(/went wrong/i);
+    // From the Desktop app, when the code from the browser came too late or twice.
+    expect(providerSignInErrorMessage("expired", "github")).toBe(
+      "That took too long. Try signing in with GitHub again.",
+    );
   });
 
   it("names the provider the error is about", () => {

@@ -434,6 +434,101 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/auth/desktop/exchange:
+    post:
+      tags: [auth]
+      summary: The Desktop app trades a one-time code from the browser for the sign-in
+      description: >-
+        After "Continue with Google or GitHub" in the system browser (ADR 0008), the Desktop app's page sends the code
+        the browser handed back and the verifier whose hash started the handshake. A code lasts 60 seconds and works
+        once; a wrong verifier also ends it. It signs in as the browser's callback would, but with this request's
+        `User-Agent` (the Session's device) and `two_step_remembered` cookie: either the refresh cookie (then load
+        `/auth/callback`) or, for a User with Two-step verification, the `two_step_pending` cookie (then
+        `/login/two-step`).
+      security: []
+      parameters:
+        - name: X-Requested-With
+          in: header
+          required: true
+          description: Must be `nimbus`. It sets cookies, so cross-site forms must not reach it.
+          schema:
+            type: string
+            const: nimbus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DesktopCode"
+      responses:
+        "200":
+          description: >-
+            `twoStepRequired: false` with the refresh cookie set, or `true` with the `two_step_pending` cookie set
+          headers:
+            Set-Cookie:
+              description: The refresh cookie (see `RefreshCookie`), or the pending cookie (see the `twoStepPendingCookie` scheme)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [twoStepRequired]
+                properties:
+                  twoStepRequired:
+                    type: boolean
+        "400":
+          description: >-
+            `code: expired` (unknown, used, older than 60 seconds, a connect's code, or the wrong verifier),
+            `email_unverified` or `disconnected`, as on the sign-in page; or a field over 256 characters (`errors`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The X-Requested-With header is missing or not `nimbus`
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/auth/desktop/connect:
+    post:
+      tags: [auth]
+      summary: The Desktop app finishes connecting a provider from Security
+      description: >-
+        For a connect started in the system browser with a link ticket (ADR 0008). The ticket must have been issued to
+        this access token's Session (instead of the `link_binder` cookie, which stays in the app); then the provider
+        account is connected as on the callback in a browser.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DesktopCode"
+      responses:
+        "200":
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider]
+                properties:
+                  provider:
+                    type: string
+                    example: github
+        "400":
+          description: >-
+            `code: expired` (the code as for the exchange, a sign-in's code, or a ticket that is used, expired or
+            another Session's), `email_unverified`, `already_linked` or `already_connected`, as on the Security page
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: No valid access token, or its Session has ended
+
   /api/auth/oauth2/google:
     get:
       tags: [auth]
@@ -446,6 +541,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ReturnTo"
         - $ref: "#/components/parameters/LinkTicket"
+        - $ref: "#/components/parameters/DesktopChallenge"
+        - $ref: "#/components/parameters/DesktopPort"
+        - $ref: "#/components/parameters/DesktopNonce"
       responses:
         "302":
           description: Redirect to Google's sign-in page
@@ -463,6 +561,9 @@ paths:
         every redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=google` on the public URL with `email_unverified` (Google did not verify the email),
         `disconnected` (the User on that email disconnected Google), `cancelled` (the person declined at Google) or `failed` (anything else).
+        A handshake the Desktop app started (`desktop`, `port`, `nonce`) signs nobody in here and sets no cookie: it
+        redirects to `http://127.0.0.1:<port>/<nonce>?code=<one-time code>`, or `?error=cancelled|failed&provider=<id>`,
+        and the app finishes with `POST /api/auth/desktop/exchange` or `POST /api/auth/desktop/connect` (ADR 0008).
       security: []
       parameters:
         - name: code
@@ -502,6 +603,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ReturnTo"
         - $ref: "#/components/parameters/LinkTicket"
+        - $ref: "#/components/parameters/DesktopChallenge"
+        - $ref: "#/components/parameters/DesktopPort"
+        - $ref: "#/components/parameters/DesktopNonce"
       responses:
         "302":
           description: Redirect to GitHub's sign-in page
@@ -519,6 +623,9 @@ paths:
         every redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=github` on the public URL with `email_unverified` (the GitHub account has no verified primary email),
         `disconnected` (the User on that email disconnected GitHub), `cancelled` (the person declined at GitHub) or `failed` (anything else).
+        A handshake the Desktop app started (`desktop`, `port`, `nonce`) signs nobody in here and sets no cookie: it
+        redirects to `http://127.0.0.1:<port>/<nonce>?code=<one-time code>`, or `?error=cancelled|failed&provider=<id>`,
+        and the app finishes with `POST /api/auth/desktop/exchange` or `POST /api/auth/desktop/connect` (ADR 0008).
       security: []
       parameters:
         - name: code
@@ -2143,6 +2250,35 @@ components:
         `already_linked`, `already_connected`, `email_unverified`, `cancelled`, `failed` or `expired`.
       schema:
         type: string
+    DesktopChallenge:
+      name: desktop
+      in: query
+      required: false
+      description: >-
+        The Desktop app only (ADR 0008): base64url SHA-256 of the app's verifier (RFC 7636 S256, 43 characters).
+        Together with `port` and `nonce` it makes the handshake end at the app's port on `127.0.0.1` with a one-time
+        code instead of signing the browser in. When any of the three is missing or malformed, the handshake ends in
+        the browser as usual.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{43}$"
+    DesktopPort:
+      name: port
+      in: query
+      required: false
+      description: The Desktop app's port on `127.0.0.1`, which the browser takes the result to. The host is never taken from the request.
+      schema:
+        type: integer
+        minimum: 1024
+        maximum: 65535
+    DesktopNonce:
+      name: nonce
+      in: query
+      required: false
+      description: The random path of this attempt on the Desktop app's port.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{16,64}$"
     ReturnTo:
       name: returnTo
       in: query
@@ -2315,6 +2451,19 @@ components:
         password:
           type: string
 
+    DesktopCode:
+      type: object
+      required: [code, verifier]
+      description: What a sign-in or connect in the system browser handed back to the Desktop app (ADR 0008).
+      properties:
+        code:
+          type: string
+          maxLength: 256
+          description: The one-time code from `http://127.0.0.1:<port>/<nonce>?code=`
+        verifier:
+          type: string
+          maxLength: 256
+          description: The secret the app made for this attempt (43-128 characters); the handshake was started with its hash
     AuthResponse:
       type: object
       required: [accessToken, user]

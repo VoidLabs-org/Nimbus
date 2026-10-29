@@ -721,6 +721,34 @@ export function createApiClient(
         { method: "POST" },
       ),
 
+    /**
+     * Desktop app: trades the one-time code a sign-in in the system browser handed back, and the app's verifier, for
+     * the sign-in (ADR 0008). The server sets the refresh cookie (the app then loads `/auth/callback`) or, with
+     * `twoStepRequired`, the pending sign-in's cookie for `/login/two-step`. Rejects with an ApiError whose `code` is
+     * what the sign-in page shows: "expired", "email_unverified" or "disconnected".
+     */
+    desktopExchange: (code: string, verifier: string) =>
+      request<{ twoStepRequired: boolean }>(
+        "/api/auth/desktop/exchange",
+        {
+          method: "POST",
+          body: JSON.stringify({ code, verifier }),
+          headers: { "X-Requested-With": "nimbus" },
+        },
+        { authenticated: false },
+      ),
+
+    /**
+     * Desktop app: connects the provider a connect in the system browser came back from, with its code and verifier.
+     * Rejects with an ApiError whose `code` is what the Security page shows: "expired", "email_unverified",
+     * "already_linked" or "already_connected".
+     */
+    desktopConnect: (code: string, verifier: string) =>
+      request<{ provider: string }>("/api/auth/desktop/connect", {
+        method: "POST",
+        body: JSON.stringify({ code, verifier }),
+      }),
+
     /** Whether the User has Two-step verification, since when, and how many Recovery codes are left. */
     twoStep: () => request<TwoStepStatus>("/api/users/me/two-step"),
 

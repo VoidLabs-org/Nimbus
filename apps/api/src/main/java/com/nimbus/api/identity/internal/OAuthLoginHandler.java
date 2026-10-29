@@ -25,7 +25,8 @@ import org.springframework.web.util.WebUtils;
  * cookie for an access token, so no token ever appears in a URL. A User with Two-step verification gets no session
  * yet: a pending sign-in cookie, and {@code /login/two-step} for the code. On failure the browser goes back to the sign-in
  * page with a short code. Either way the page the sign-in started from ({@link ReturnPath}) is passed on as
- * {@code returnTo}, and the handshake's short-lived HTTP session is dropped; nothing else in the API uses one.
+ * {@code returnTo}, and the handshake's short-lived HTTP session is dropped; nothing else in the API uses one. A
+ * handshake the Desktop app started ends at the app instead ({@link DesktopReturn}).
  */
 @Component
 class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationFailureHandler {
@@ -41,11 +42,14 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 
 	private final TwoStepSignIn twoStepSignIn;
 
+	private final DesktopCodes desktopCodes;
+
 	OAuthLoginHandler(ExternalSignIn externalSignIn, LinkTickets tickets,
-			TwoStepSignIn twoStepSignIn, AuthProperties properties) {
+			TwoStepSignIn twoStepSignIn, DesktopCodes desktopCodes, AuthProperties properties) {
 		this.externalSignIn = externalSignIn;
 		this.tickets = tickets;
 		this.twoStepSignIn = twoStepSignIn;
+		this.desktopCodes = desktopCodes;
 		this.publicUrl = properties.publicUrl();
 	}
 
@@ -54,7 +58,12 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			Authentication authentication) throws IOException {
 		var returnTo = ReturnPath.recall(request);
 		var ticket = LinkTicket.recall(request);
+		var desktop = DesktopReturn.recall(request);
 		endHandshake(request);
+		if (desktop.isPresent()) {
+			handToDesktop(response, (OAuth2AuthenticationToken) authentication, ticket, desktop.get());
+			return;
+		}
 		if (ticket.isPresent()) {
 			connect(request, response, (OAuth2AuthenticationToken) authentication, ticket.get());
 			return;
@@ -98,6 +107,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			AuthenticationException exception) throws IOException {
 		var returnTo = ReturnPath.recall(request);
 		var ticket = LinkTicket.recall(request);
+		var desktop = DesktopReturn.recall(request);
 		endHandshake(request);
 		// The provider reports "access_denied" when the person declines on its consent screen.
 		var declined = exception instanceof OAuth2AuthenticationException oauth
@@ -106,6 +116,11 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			log.warn("Sign-in with a provider failed", exception);
 		}
 		var provider = providerOf(request);
+		if (desktop.isPresent()) {
+			ticket.ifPresent(tickets::discard);
+			response.sendRedirect(desktop.get().withError(declined ? "cancelled" : "failed", provider));
+			return;
+		}
 		if (ticket.isPresent()) {
 			// The connect is over, so its ticket is no use any more.
 			tickets.discard(ticket.get());
@@ -113,6 +128,28 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			return;
 		}
 		redirect(response, loginError(declined ? "cancelled" : "failed", provider), returnTo);
+	}
+
+	/**
+	 * Ends a handshake the Desktop app started (ADR 0008) without signing anyone in here, in the browser: what the
+	 * provider sent waits under a one-time code, which the browser takes to the app's port. The app finishes the
+	 * sign-in or the connect with it ({@link DesktopSignIn}), so the cookies, Two-step verification and the Session's
+	 * device are the app's.
+	 */
+	private void handToDesktop(HttpServletResponse response, OAuth2AuthenticationToken login,
+			Optional<String> ticket, DesktopReturn desktop) throws IOException {
+		var provider = login.getAuthorizedClientRegistrationId();
+		String code;
+		try {
+			code = desktopCodes.issue(desktop.challenge(), profileOf(login), ticket.orElse(null));
+		}
+		catch (RuntimeException e) {
+			log.warn("Sign-in with a provider for the Desktop app failed", e);
+			ticket.ifPresent(tickets::discard);
+			response.sendRedirect(desktop.withError("failed", provider));
+			return;
+		}
+		response.sendRedirect(desktop.withCode(code));
 	}
 
 	/**

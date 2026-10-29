@@ -15,6 +15,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { browserSignIns } from "./browser-sign-in.js";
 import {
   appIconFile,
   isDevLaunch,
@@ -226,6 +227,19 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(start);
 }
 
+/**
+ * Brings the window in front of the browser once a sign-in comes back from it. Windows may refuse to let an app take
+ * the focus from another and only flash the taskbar button; that is left as it is.
+ */
+function bringForward() {
+  const [win] = BrowserWindow.getAllWindows();
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  reveal(win);
+  if (process.platform === "darwin") app.focus({ steal: true });
+  win.focus();
+}
+
 async function start() {
   let nimbusUrl;
   try {
@@ -256,6 +270,26 @@ async function start() {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!at || !win || !isNimbusPage(nimbusUrl, event.senderFrame?.url ?? "")) return;
     Menu.getApplicationMenu()?.popup({ window: win, ...at });
+  });
+
+  // "Continue with Google or GitHub", and Connect on Security, in the system browser (ADR 0008). The page gets back
+  // the one-time code and the verifier and trades them in itself, so the cookies land in the window.
+  const signIns = browserSignIns({
+    nimbusUrl,
+    openExternal: (address) => void shell.openExternal(address),
+    onHandback: bringForward,
+  });
+  ipcMain.handle("nimbus:browser-sign-in", (event, request) => {
+    if (!isNimbusPage(nimbusUrl, event.senderFrame?.url ?? "")) {
+      throw new Error("Only Nimbus may start a sign-in");
+    }
+    return signIns.start({ provider: request?.provider, linkTicket: request?.linkTicket ?? null });
+  });
+  ipcMain.on("nimbus:browser-sign-in-reopen", (event) => {
+    if (isNimbusPage(nimbusUrl, event.senderFrame?.url ?? "")) signIns.reopen();
+  });
+  ipcMain.on("nimbus:browser-sign-in-cancel", (event) => {
+    if (isNimbusPage(nimbusUrl, event.senderFrame?.url ?? "")) signIns.cancel();
   });
 
   // Looked at before the window opens, so it opens with the right icon.

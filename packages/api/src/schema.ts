@@ -510,12 +510,15 @@ export interface paths {
         put?: never;
         /**
          * Sign in with email and password
-         * @description For a User with Two-step verification a right password starts no session: the answer is `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code. A `two_step_remembered` cookie that remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code.
+         * @description For a User with Two-step verification a right password starts no session: the answer is `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code. A `two_step_remembered` cookie that remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code. The Mobile app (`X-Nimbus-Client: mobile`) gets the refresh token in the body as `refreshToken` and no refresh cookie.
          */
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /** @description `mobile` from the Mobile app (ADR 0010): it keeps the refresh token in the phone's secure storage, so the token travels in the body (`refreshToken`) instead of a cookie. */
+                    "X-Nimbus-Client"?: components["parameters"]["MobileClient"];
+                };
                 path?: never;
                 cookie?: never;
             };
@@ -981,19 +984,26 @@ export interface paths {
         put?: never;
         /**
          * Renew the session from the refresh cookie and get a new access token
-         * @description Exchanges the refresh cookie for a new one (rotation). A refresh token works once: presenting a used one revokes its whole session.
+         * @description Exchanges the refresh cookie for a new one (rotation). A refresh token works once: presenting a used one revokes its whole session. The Mobile app (`X-Nimbus-Client: mobile`) sends its token in the body instead and gets the new one back in the body, with no cookie; each mode reads only its own token.
          */
         post: {
             parameters: {
                 query?: never;
-                header: {
-                    /** @description Must be `nimbus`. Cross-site forms can't set it, so other sites can't use the cookie. */
-                    "X-Requested-With": "nimbus";
+                header?: {
+                    /** @description Must be `nimbus` unless `X-Nimbus-Client` is `mobile`. Cross-site forms can't set either, so other sites can't use the cookie. */
+                    "X-Requested-With"?: "nimbus";
+                    /** @description `mobile` from the Mobile app (ADR 0010): it keeps the refresh token in the phone's secure storage, so the token travels in the body (`refreshToken`) instead of a cookie. */
+                    "X-Nimbus-Client"?: components["parameters"]["MobileClient"];
                 };
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            /** @description The Mobile app's refresh token; a browser sends none. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RefreshTokenRequest"];
+                };
+            };
             responses: {
                 /** @description Session renewed */
                 200: {
@@ -1005,7 +1015,7 @@ export interface paths {
                         "application/json": components["schemas"]["AuthResponse"];
                     };
                 };
-                /** @description The cookie is missing, unknown, expired, revoked or already used */
+                /** @description The cookie (or the Mobile app's token) is missing, unknown, expired, revoked or already used */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1014,7 +1024,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description The X-Requested-With header is missing or not `nimbus` */
+                /** @description Neither `X-Requested-With: nimbus` nor `X-Nimbus-Client: mobile` */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1043,19 +1053,26 @@ export interface paths {
         put?: never;
         /**
          * Sign out of this browser
-         * @description Ends the session the refresh cookie belongs to, even if that token was already rotated, and clears the cookie. Other sessions of the same User are not affected. Succeeds with no cookie, an unknown cookie or a session that is already over.
+         * @description Ends the session the refresh cookie belongs to, even if that token was already rotated, and clears the cookie. Other sessions of the same User are not affected. Succeeds with no cookie, an unknown cookie or a session that is already over. The Mobile app (`X-Nimbus-Client: mobile`) sends its token in the body.
          */
         post: {
             parameters: {
                 query?: never;
-                header: {
-                    /** @description Must be `nimbus`. Cross-site forms can't set it, so other sites can't sign a User out. */
-                    "X-Requested-With": "nimbus";
+                header?: {
+                    /** @description Must be `nimbus` unless `X-Nimbus-Client` is `mobile`. Cross-site forms can't set either, so other sites can't sign a User out. */
+                    "X-Requested-With"?: "nimbus";
+                    /** @description `mobile` from the Mobile app (ADR 0010): it keeps the refresh token in the phone's secure storage, so the token travels in the body (`refreshToken`) instead of a cookie. */
+                    "X-Nimbus-Client"?: components["parameters"]["MobileClient"];
                 };
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            /** @description The Mobile app's refresh token; a browser sends none. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RefreshTokenRequest"];
+                };
+            };
             responses: {
                 /** @description Signed out; the refresh cookie is cleared (`Max-Age=0`) */
                 204: {
@@ -1066,7 +1083,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description The X-Requested-With header is missing or not `nimbus` */
+                /** @description Neither `X-Requested-With: nimbus` nor `X-Nimbus-Client: mobile` */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -3310,7 +3327,13 @@ export interface components {
         AuthResponse: {
             /** @description HS256 JWT, valid 15 minutes. Keep it in memory only. */
             accessToken: string;
+            /** @description Only for the Mobile app (`X-Nimbus-Client: mobile`), which keeps it in secure storage; a browser gets it in the refresh cookie instead, and this field is left out. */
+            refreshToken?: string;
             user: components["schemas"]["User"];
+        };
+        RefreshTokenRequest: {
+            /** @description The Mobile app's current refresh token, from its last sign-in or refresh */
+            refreshToken?: string;
         };
         User: {
             /** Format: uuid */
@@ -3616,6 +3639,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description `mobile` from the Mobile app (ADR 0010): it keeps the refresh token in the phone's secure storage, so the token travels in the body (`refreshToken`) instead of a cookie. */
+        MobileClient: "mobile";
         /** @description A ticket from `POST /api/users/me/linked-identities/{provider}/link-ticket`. With it the handshake connects the provider account to that ticket's User instead of signing anyone in: no session, no refresh cookie. It ends at `/settings/security?connected=<provider>`, or `/settings/security?error=<code>&provider=<provider>` with `already_linked`, `already_connected`, `email_unverified`, `cancelled`, `failed` or `expired`. */
         LinkTicket: string;
         /** @description The Desktop app only (ADR 0008): base64url SHA-256 of the app's verifier (RFC 7636 S256, 43 characters). Together with `port` and `nonce` it makes the handshake end at the app's port on `127.0.0.1` with a one-time code instead of signing the browser in. When any of the three is missing or malformed, the handshake ends in the browser as usual. */

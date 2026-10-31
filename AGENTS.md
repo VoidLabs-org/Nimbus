@@ -18,13 +18,15 @@ Project management app (projects, issues, boards, sprints) with AI features. Tea
 - `apps/api`: Spring Boot modular monolith (Java 21, Gradle, Spring Modulith, Flyway, PostgreSQL)
 - `apps/web`: React + Vite + React Compiler + Mantine
 - `apps/desktop`: thin Electron shell around `apps/web` (stretch goal)
+- `apps/mobile`: the Mobile app, React Native + Expo + Expo Router (stretch goal; see its README and `AGENTS.md`)
+- `packages/api`, `packages/tokens`: code shared by web and mobile (API errors, messages and generated contract types; theme values)
 - `packages/ui`: shared React components and the Mantine theme
 - `docs/specs`, `docs/adr`: living specs and decision records
 
 ## Commands
 
 - Database: shared dev DB via `apps/api/.env` (git-ignored, see `.env.example`), or `docker compose up -d` for a local one on port 5433 (plus MinIO on 9000 for uploads; the shared DB uses the shared R2 bucket, `STORAGE_*` in `.env`). Never commit `.env` or put credentials in tracked files.
-- `pnpm dev`: API (8080) + web (3000). `pnpm dev:desktop` also opens Electron. It also runs the API's `dev:watch`, which recompiles on save so Spring DevTools restarts the API. Changes to `.env` still need a manual restart.
+- `pnpm dev`: API (8080) + web (3000). `pnpm dev:desktop` also opens Electron; `pnpm dev:mobile` starts the API, web and Metro for the Mobile app. `pnpm dev` also runs the API's `dev:watch`, which recompiles on save so Spring DevTools restarts the API. Changes to `.env` still need a manual restart.
 - `pnpm build`, `pnpm lint`, `pnpm check-types`, `pnpm test`, `pnpm format`
 
 ## Conventions

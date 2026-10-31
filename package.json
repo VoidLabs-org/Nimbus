@@ -3,8 +3,9 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --filter=!desktop",
+    "dev": "turbo run dev --filter=!desktop --filter=!mobile",
     "dev:desktop": "turbo run dev --filter=desktop",
+    "dev:mobile": "turbo run dev --filter=mobile",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "format": "oxfmt",

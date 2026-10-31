@@ -14,7 +14,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Endpoints that a cookie alone authenticates must come from the Nimbus app: they need {@code X-Requested-With:
- * nimbus}, which cross-site forms can't set, or they answer {@code 403}. A new endpoint like them goes in
+ * nimbus}, which cross-site forms can't set, or they answer {@code 403}. The Mobile app's {@code X-Nimbus-Client:
+ * mobile} passes too: forms can't set it either, and in that mode the endpoints read the token from the body, not
+ * a cookie. A new endpoint like them goes in
  * {@link #COOKIE_ONLY}, so none can forget the check. Not a bean, for the same reason as {@link EmailVerifiedGate}.
  */
 class NimbusHeaderGate extends OncePerRequestFilter {
@@ -30,7 +32,7 @@ class NimbusHeaderGate extends OncePerRequestFilter {
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
 			throws ServletException, IOException {
 		if (HttpMethod.POST.matches(request.getMethod()) && COOKIE_ONLY.contains(request.getRequestURI())
-				&& !"nimbus".equals(request.getHeader("X-Requested-With"))) {
+				&& !"nimbus".equals(request.getHeader("X-Requested-With")) && !AuthController.fromMobileApp(request)) {
 			ProblemResponses.write(request, response,
 					ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "This request must come from the Nimbus app"));
 			return;

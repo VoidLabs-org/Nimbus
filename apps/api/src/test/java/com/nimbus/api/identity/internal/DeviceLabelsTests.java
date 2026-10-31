@@ -44,11 +44,21 @@ class DeviceLabelsTests {
 		assertThat(labels.of(userAgent)).isEqualTo(expected);
 	}
 
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+			Nimbus for Android | Nimbus/1.0.0 (Android 15)
+			Nimbus for Android | Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 Nimbus/1.0
+			Nimbus for iPhone | Nimbus/1.0.0 (iPhone; iOS 18.1)
+			Nimbus for iPad | Nimbus/1.0.0 (iPad; iPadOS 18.1)
+			""")
+	void namesTheMobileAppAndItsPhone(String expected, String userAgent) {
+		assertThat(labels.of(userAgent)).isEqualTo(expected);
+	}
+
 	@ParameterizedTest
-	@ValueSource(strings = {
-			"Mozilla/5.0 (Unknown) AppleWebKit/537.36 (KHTML, like Gecko) Nimbus/0.0.0",
-			"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 Nimbus/1.0" })
-	void namesJustNimbusWhenTheDesktopAppsSystemIsUnknownOrNotADesktopOne(String userAgent) {
+	@ValueSource(strings = { "Mozilla/5.0 (Unknown) AppleWebKit/537.36 (KHTML, like Gecko) Nimbus/0.0.0",
+			"Nimbus/1.0.0" })
+	void namesJustNimbusWhenTheAppsSystemIsUnknown(String userAgent) {
 		assertThat(labels.of(userAgent)).isEqualTo("Nimbus");
 	}
 

@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Nimbus",
+    "slug": "nimbus",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "nimbus",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "org.voidlabs.nimbus",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "org.voidlabs.nimbus",
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/nimbus-icon-light.png",
+          "imageWidth": 120,
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "image": "./assets/images/nimbus-icon-dark.png",
+            "backgroundColor": "#121110"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

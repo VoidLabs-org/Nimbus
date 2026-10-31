@@ -8,8 +8,8 @@ import ua_parser.Parser;
 /**
  * Names a browser for the list of a User's sessions: "Chrome on Windows". Built from the {@code User-Agent} header
  * when the list is read, not when the session starts, so a newer list of browsers also names old sessions. The raw
- * header never leaves the API. The Desktop app adds a {@code Nimbus/<version>} product token to its header and is
- * named after the system it runs on: "Nimbus for Mac".
+ * header never leaves the API. The Desktop and Mobile apps add a {@code Nimbus/<version>} product token to their header
+ * and are named after the computer or phone they run on: "Nimbus for Mac", "Nimbus for iPhone".
  */
 @Component
 class DeviceLabels {
@@ -20,7 +20,7 @@ class DeviceLabels {
 
 	static final String DESKTOP_APP = "Nimbus";
 
-	/** The Desktop app's product token: a word of its own, not part of another ("MyNimbus/3") or of a comment. */
+	/** The apps' product token: a word of its own, not part of another ("MyNimbus/3") or of a comment. */
 	private static final Pattern DESKTOP_TOKEN = Pattern.compile("(^|\\s)Nimbus/[^\\s()]+($|\\s)");
 
 	private final Parser parser;
@@ -39,8 +39,12 @@ class DeviceLabels {
 		}
 		var client = parser.parse(userAgent);
 		if (DESKTOP_TOKEN.matcher(userAgent).find()) {
-			var desktop = desktopSystem(known(client.os == null ? null : client.os.family), userAgent);
-			return desktop == null ? DESKTOP_APP : DESKTOP_APP + " for " + desktop;
+			var family = known(client.os == null ? null : client.os.family);
+			var device = phone(family, userAgent);
+			if (device == null) {
+				device = desktopSystem(family, userAgent);
+			}
+			return device == null ? DESKTOP_APP : DESKTOP_APP + " for " + device;
 		}
 		var browser = browserName(known(client.userAgent == null ? null : client.userAgent.family));
 		var system = systemName(known(client.os == null ? null : client.os.family));
@@ -64,6 +68,20 @@ class DeviceLabels {
 		}
 		var name = family.replace(" Mobile iOS", "").replace(" Mobile", "").replace("Mobile ", "").strip();
 		return name.isEmpty() ? family : name;
+	}
+
+	/**
+	 * The Mobile app says which phone it runs on ("Nimbus/1.0.0 (iPhone; iOS 18.1)"); an Android one may also be a
+	 * browser-like header whose system the parser names. An iPad is checked first, as it is not an iPhone.
+	 */
+	private static String phone(String family, String userAgent) {
+		if (userAgent.contains("iPad")) {
+			return "iPad";
+		}
+		if (userAgent.contains("iPhone")) {
+			return "iPhone";
+		}
+		return "Android".equals(family) || userAgent.contains("Android") ? "Android" : null;
 	}
 
 	/**

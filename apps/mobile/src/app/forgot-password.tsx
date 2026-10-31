@@ -20,6 +20,11 @@ import { Button, LinkButton } from "../components/Button";
 import { CODE_LENGTH, CodeField } from "../components/CodeField";
 import { FormMessage } from "../components/FormMessage";
 import { Screen } from "../components/Screen";
+import {
+  SecondCodeField,
+  secondCodeReady,
+  switchSecondCodeLabel,
+} from "../components/SecondCodeField";
 import { Text } from "../components/Text";
 import { TextField } from "../components/TextField";
 import { useCountdown } from "../countdown";
@@ -75,14 +80,9 @@ export default function ForgotPassword() {
   // The second code, asked for once the server said this User has Two-step verification.
   const [twoStep, setTwoStep] = useState(false);
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
-  const [twoStepCode, setTwoStepCode] = useState("");
-  const [recoveryCode, setRecoveryCode] = useState("");
+  const [secondCode, setSecondCode] = useState("");
   const [twoStepMessage, setTwoStepMessage] = useState<string | null>(null);
-  // A refused second code can't be sent again as it is: the message goes when it is changed.
-  const twoStepReady = !twoStep
-    ? true
-    : twoStepMessage === null &&
-      (useRecoveryCode ? recoveryCode.trim() !== "" : twoStepCode.length === CODE_LENGTH);
+  const twoStepReady = !twoStep || secondCodeReady(useRecoveryCode, secondCode, twoStepMessage);
   const waiting = secondsToResend > 0;
   const waitingForTyped = waiting && countdownFor === email.trim().toLowerCase();
   const locked = lockSeconds > 0;
@@ -103,8 +103,7 @@ export default function ForgotPassword() {
   /** Swaps the Sign-in code boxes for the Recovery code field, or back; what was typed and said about it goes. */
   function switchSecondCode(recovery: boolean) {
     setUseRecoveryCode(recovery);
-    setTwoStepCode("");
-    setRecoveryCode("");
+    setSecondCode("");
     setTwoStepMessage(null);
   }
 
@@ -183,9 +182,13 @@ export default function ForgotPassword() {
     setCodeRejected(false);
     setTwoStepMessage(null);
     setChecking(true);
-    const secondCode = !twoStep ? {} : useRecoveryCode ? { recoveryCode } : { twoStepCode };
+    const second = !twoStep
+      ? {}
+      : useRecoveryCode
+        ? { recoveryCode: secondCode }
+        : { twoStepCode: secondCode };
     try {
-      await api.resetPassword({ email, code, newPassword: password, ...secondCode });
+      await api.resetPassword({ email, code, newPassword: password, ...second });
       backToSignIn(email);
     } catch (failure) {
       showResetFailure(failure);
@@ -206,7 +209,8 @@ export default function ForgotPassword() {
       setTwoStep(true);
     } else if (failure.code === "invalid_two_step_code") {
       setTwoStepMessage(useRecoveryCode ? WRONG_RECOVERY_CODE : WRONG_SIGN_IN_CODE);
-      setTwoStepCode("");
+      // The boxes empty for the next code; a Recovery code stays, to correct a typo.
+      if (!useRecoveryCode) setSecondCode("");
     } else if (failure.status === 429) {
       if (failure.retryAfterSeconds) setLockSeconds(failure.retryAfterSeconds);
       else setFormError(tooManyAttemptsMessage(null));
@@ -345,50 +349,26 @@ export default function ForgotPassword() {
           />
           {twoStep ? (
             <View style={styles.secondCode}>
-              {useRecoveryCode ? (
-                <>
-                  <Text muted size={14} style={styles.body}>
-                    Two-step verification is on. Enter one of the recovery codes you saved.
-                  </Text>
-                  <TextField
-                    label="Recovery code"
-                    placeholder="xxxx-xxxx"
-                    value={recoveryCode}
-                    onChangeText={(value) => {
-                      setRecoveryCode(value);
-                      setTwoStepMessage(null);
-                    }}
-                    autoFocus
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="off"
-                    maxLength={64}
-                    editable={!checking && !locked}
-                    invalid={twoStepMessage !== null}
-                  />
-                </>
-              ) : (
-                <>
-                  <Text muted size={14} style={styles.body}>
-                    Two-step verification is on. Enter the 6-digit code from your authenticator app.
-                  </Text>
-                  <CodeField
-                    label="Sign-in code"
-                    value={twoStepCode}
-                    onChangeText={(value) => {
-                      setTwoStepCode(value);
-                      if (value !== twoStepCode && value !== "") setTwoStepMessage(null);
-                    }}
-                    invalid={twoStepMessage !== null}
-                    disabled={checking || locked}
-                  />
-                </>
-              )}
+              <Text muted size={14} style={styles.body}>
+                {useRecoveryCode
+                  ? "Two-step verification is on. Enter one of the recovery codes you saved."
+                  : "Two-step verification is on. Enter the 6-digit code from your authenticator app."}
+              </Text>
+              <SecondCodeField
+                recovery={useRecoveryCode}
+                value={secondCode}
+                onChangeText={(value) => {
+                  setSecondCode(value);
+                  setTwoStepMessage(null);
+                }}
+                refused={twoStepMessage !== null}
+                disabled={checking || locked}
+              />
               {twoStepMessage ? <FormMessage message={twoStepMessage} /> : null}
               {/* Off while a code is checked, so its answer can't land under the other kind of field. */}
               <View style={styles.switch}>
                 <LinkButton
-                  label={useRecoveryCode ? "Use your authenticator app" : "Use a recovery code"}
+                  label={switchSecondCodeLabel(useRecoveryCode)}
                   disabled={checking}
                   onPress={() => switchSecondCode(!useRecoveryCode)}
                 />

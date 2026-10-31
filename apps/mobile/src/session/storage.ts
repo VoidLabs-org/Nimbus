@@ -28,28 +28,55 @@ export const pendingSignInStore: TokenStore = {
 };
 
 /**
- * "Remember this device for 30 days", for each User who ticked it on this phone: their remembered token by email,
- * lower-cased, so another User signing in here is still asked for their code. One entry, as JSON, because a secure
- * storage key can't hold an email's characters.
+ * "Remember this device for 30 days", for each User who ticked it on this phone: their remembered token and User id by
+ * email, lower-cased, so another User signing in here is still asked for their code. One entry, as JSON, because a
+ * secure storage key can't hold an email's characters. Each change reads and rewrites that entry, so changes run one
+ * after another: two at once would each start from the old entry, and one would undo the other.
  */
 export const rememberedDevices: RememberedDevices = {
-  get: async (email) => (await readRemembered())[email.trim().toLowerCase()] ?? null,
-  set: async (email, token) => {
-    const all = await readRemembered();
-    all[email.trim().toLowerCase()] = token;
-    await SecureStore.setItemAsync(REMEMBERED_DEVICES, JSON.stringify(all));
+  get: async (email) => {
+    await changes;
+    return (await readRemembered())[key(email)]?.token ?? null;
   },
-  forget: async (email) => {
-    const all = await readRemembered();
-    delete all[email.trim().toLowerCase()];
-    await SecureStore.setItemAsync(REMEMBERED_DEVICES, JSON.stringify(all));
-  },
+  set: (email, userId, token) =>
+    change((all) => {
+      // The User's entry under an earlier email (before they changed it) is of no use any more.
+      for (const [other, entry] of Object.entries(all)) {
+        if (entry.userId === userId) delete all[other];
+      }
+      all[key(email)] = { userId, token };
+    }),
+  forget: (email) =>
+    change((all) => {
+      delete all[key(email)];
+    }),
 };
 
-async function readRemembered(): Promise<Record<string, string>> {
+type Remembered = Record<string, { userId: string; token: string }>;
+
+let changes: Promise<unknown> = Promise.resolve();
+
+function change(edit: (all: Remembered) => void): Promise<void> {
+  const next = changes.then(async () => {
+    const all = await readRemembered();
+    edit(all);
+    await SecureStore.setItemAsync(REMEMBERED_DEVICES, JSON.stringify(all));
+  });
+  // A failed change doesn't stop the ones after it.
+  changes = next.catch(() => {});
+  return next;
+}
+
+function key(email: string) {
+  return email.trim().toLowerCase();
+}
+
+async function readRemembered(): Promise<Remembered> {
   try {
-    const stored = JSON.parse((await SecureStore.getItemAsync(REMEMBERED_DEVICES)) ?? "{}");
-    return typeof stored === "object" && stored !== null ? stored : {};
+    const stored: unknown = JSON.parse(
+      (await SecureStore.getItemAsync(REMEMBERED_DEVICES)) ?? "{}",
+    );
+    return typeof stored === "object" && stored !== null ? (stored as Remembered) : {};
   } catch {
     return {};
   }

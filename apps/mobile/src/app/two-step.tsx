@@ -11,14 +11,17 @@ import {
 import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { BackLink } from "../components/BackLink";
+import { BackLink, backToSignIn } from "../components/BackLink";
 import { Button, LinkButton } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
-import { CODE_LENGTH, CodeField } from "../components/CodeField";
 import { FormMessage } from "../components/FormMessage";
 import { Screen } from "../components/Screen";
+import {
+  SecondCodeField,
+  secondCodeReady,
+  switchSecondCodeLabel,
+} from "../components/SecondCodeField";
 import { Text } from "../components/Text";
-import { TextField } from "../components/TextField";
 import { useCountdown } from "../countdown";
 import { useSession } from "../session/session";
 
@@ -37,10 +40,9 @@ function backToSignInTimedOut() {
  * Sign in, which says so.
  */
 export default function TwoStep() {
-  const { finishTwoStep } = useSession();
+  const { finishTwoStep, cancelTwoStep } = useSession();
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
-  const [code, setCode] = useState("");
-  const [recoveryCode, setRecoveryCode] = useState("");
+  const [secondCode, setSecondCode] = useState("");
   // About the User, not the kind of code, so switching between the two keeps it.
   const [rememberDevice, setRememberDevice] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -49,13 +51,12 @@ export default function TwoStep() {
   // The hourly lock is about the User too, so switching keeps its wait.
   const [lockSeconds, setLockSeconds] = useCountdown();
   const locked = lockSeconds > 0;
-  const ready = useRecoveryCode ? recoveryCode.trim() !== "" : code.length === CODE_LENGTH;
+  const ready = secondCodeReady(useRecoveryCode, secondCode, codeMessage);
 
   /** Swaps the code boxes for the Recovery code field, or back; what was typed and said about it goes. */
   function switchTo(recovery: boolean) {
     setUseRecoveryCode(recovery);
-    setCode("");
-    setRecoveryCode("");
+    setSecondCode("");
     setCodeMessage(null);
     setFormError(null);
   }
@@ -66,7 +67,10 @@ export default function TwoStep() {
     setCodeMessage(null);
     setFormError(null);
     try {
-      await finishTwoStep(useRecoveryCode ? { recoveryCode } : { code }, rememberDevice);
+      await finishTwoStep(
+        useRecoveryCode ? { recoveryCode: secondCode } : { code: secondCode },
+        rememberDevice,
+      );
       // Signed in: the Session's guards move the app on to Home.
     } catch (failure) {
       setChecking(false);
@@ -85,7 +89,8 @@ export default function TwoStep() {
           ? wrongCodeMessage(failure.triesLeft, WRONG_RECOVERY_CODE)
           : wrongCodeMessage(failure.triesLeft),
       );
-      setCode("");
+      // The boxes empty for the next code; a Recovery code stays, to correct a typo.
+      if (!useRecoveryCode) setSecondCode("");
     } else if (failure.code === "sign_in_expired") {
       backToSignInTimedOut();
     } else if (failure.status === 429 && failure.retryAfterSeconds) {
@@ -99,7 +104,13 @@ export default function TwoStep() {
 
   return (
     <Screen scroll>
-      <BackLink label="Sign in" />
+      <BackLink
+        label="Sign in"
+        onPress={() => {
+          void cancelTwoStep();
+          backToSignIn();
+        }}
+      />
       <View style={styles.heading}>
         <Text weight="semibold" size={28} accessibilityRole="header">
           {useRecoveryCode ? "Use a recovery code" : "Two-step verification"}
@@ -110,37 +121,18 @@ export default function TwoStep() {
             : "Enter the 6-digit code from your authenticator app."}
         </Text>
       </View>
-      {useRecoveryCode ? (
-        <TextField
-          label="Recovery code"
-          placeholder="xxxx-xxxx"
-          value={recoveryCode}
-          onChangeText={(value) => {
-            setRecoveryCode(value);
-            if (value !== recoveryCode) setCodeMessage(null);
-          }}
-          autoFocus
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="off"
-          maxLength={64}
-          editable={!checking && !locked}
-          invalid={codeMessage !== null}
-          onSubmitEditing={() => void verify()}
-        />
-      ) : (
-        <CodeField
-          label="Sign-in code"
-          value={code}
-          onChangeText={(value) => {
-            setCode(value);
-            // The message is about the code that was sent, not one being typed now.
-            if (value !== code && value !== "") setCodeMessage(null);
-          }}
-          invalid={codeMessage !== null}
-          disabled={checking || locked}
-        />
-      )}
+      <SecondCodeField
+        recovery={useRecoveryCode}
+        value={secondCode}
+        onChangeText={(value) => {
+          setSecondCode(value);
+          // The message is about the code that was sent, not one being typed now.
+          setCodeMessage(null);
+        }}
+        refused={codeMessage !== null}
+        disabled={checking || locked}
+        onSubmitEditing={() => void verify()}
+      />
       {codeMessage ? <FormMessage message={codeMessage} /> : null}
       {locked ? <FormMessage message={tooManyAttemptsIn(lockSeconds)} /> : null}
       {formError ? <FormMessage message={formError} /> : null}
@@ -164,7 +156,7 @@ export default function TwoStep() {
           </Text>
         )}
         <LinkButton
-          label={useRecoveryCode ? "Use your authenticator app" : "Use a recovery code"}
+          label={switchSecondCodeLabel(useRecoveryCode)}
           disabled={checking}
           onPress={() => switchTo(!useRecoveryCode)}
         />

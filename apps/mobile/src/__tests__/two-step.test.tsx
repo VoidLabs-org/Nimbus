@@ -103,6 +103,10 @@ describe("when the code doesn't work", () => {
         "That recovery code isn’t right, or it was used already. 3 tries left.",
       ),
     ).toBeTruthy();
+    // The refused code can't go again as it is: that would only spend another try.
+    expect(screen.getByRole("button", { name: "Verify" })).toBeDisabled();
+    await fireEvent.changeText(screen.getByLabelText("Recovery code"), "aaaa-bbbc");
+    expect(screen.getByRole("button", { name: "Verify" })).toBeEnabled();
   });
 
   it("goes back to Sign in when the pending sign-in timed out or ended", async () => {
@@ -114,6 +118,7 @@ describe("when the code doesn't work", () => {
 
     expect(await screen.findByText("Your sign-in timed out. Sign in again.")).toBeTruthy();
     expect(screen.getByText("Welcome back")).toBeTruthy();
+    expect(screen.getByLabelText("Email").props.value).toBe("ada@example.com");
     expect(secureStore.has(PENDING)).toBe(false);
   });
 
@@ -163,7 +168,10 @@ describe("remembering this device", () => {
   it("sends a remembered device only for the User it was remembered for", async () => {
     const api = fakeApi();
     secureStore.set("nimbus.welcomed", "yes");
-    secureStore.set(REMEMBERED, JSON.stringify({ "grace@example.com": "remembered-grace" }));
+    secureStore.set(
+      REMEMBERED,
+      JSON.stringify({ "grace@example.com": { userId: "grace-id", token: "remembered-grace" } }),
+    );
     api.answer("POST /api/auth/login", signedIn());
     api.answer("GET /api/users/me", { status: 200, body: ada });
 
@@ -177,7 +185,10 @@ describe("remembering this device", () => {
   it("forgets a remembered device the server no longer knows", async () => {
     const api = fakeApi();
     secureStore.set("nimbus.welcomed", "yes");
-    secureStore.set(REMEMBERED, JSON.stringify({ "ada@example.com": "remembered-old" }));
+    secureStore.set(
+      REMEMBERED,
+      JSON.stringify({ "ada@example.com": { userId: ada.id, token: "remembered-old" } }),
+    );
     api.answer("POST /api/auth/login", codeNeeded);
 
     await renderApp();
@@ -186,4 +197,72 @@ describe("remembering this device", () => {
     expect(await screen.findByText("Two-step verification")).toBeTruthy();
     expect(JSON.parse(secureStore.get(REMEMBERED)!)).toEqual({});
   });
+});
+
+describe("the pending sign-in", () => {
+  it("is dropped on going back to Sign in", async () => {
+    const api = fakeApi();
+
+    await openTwoStep(api);
+    await fireEvent.press(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByText("Welcome back")).toBeTruthy();
+    expect(secureStore.has(PENDING)).toBe(false);
+  });
+
+  it("left from an earlier launch is dropped", async () => {
+    fakeApi();
+    secureStore.set("nimbus.welcomed", "yes");
+    secureStore.set(PENDING, "pending-old");
+
+    await renderApp();
+
+    expect(await screen.findByText("Welcome back")).toBeTruthy();
+    expect(secureStore.has(PENDING)).toBe(false);
+  });
+});
+
+it("keeps a User's remembered device under the email they sign in with now", async () => {
+  const api = fakeApi();
+  // Remembered before the User changed their email.
+  secureStore.set(
+    REMEMBERED,
+    JSON.stringify({ "ada@old.example": { userId: ada.id, token: "remembered-old" } }),
+  );
+  api.answer("POST /api/auth/two-step", signedIn({ rememberedToken: "remembered-new" }));
+  api.answer("GET /api/users/me", { status: 200, body: ada });
+
+  await openTwoStep(api);
+  await fireEvent.press(screen.getByRole("checkbox", { name: "Remember this device for 30 days" }));
+  await enterCode("381002");
+  await screen.findByText(/Ada Lovelace/);
+
+  expect(JSON.parse(secureStore.get(REMEMBERED)!)).toEqual({
+    "ada@example.com": { userId: ada.id, token: "remembered-new" },
+  });
+});
+
+it("keeps the email filled in when the code step times out after Forgot password", async () => {
+  const api = fakeApi();
+  secureStore.set("nimbus.welcomed", "yes");
+  api.answer("POST /api/auth/password-reset", { status: 204 });
+  api.answer("POST /api/auth/password-reset/confirm", { status: 204 });
+  api.answer("POST /api/auth/login", codeNeeded);
+  api.answer("POST /api/auth/two-step", problem(401, "sign_in_expired"));
+
+  await renderApp();
+  await fireEvent.press(await screen.findByRole("button", { name: "Forgot password?" }));
+  await fireEvent.changeText(await screen.findByLabelText("Email"), "ada@example.com");
+  await fireEvent.press(screen.getByRole("button", { name: "Send code" }));
+  await fireEvent.changeText(await screen.findByLabelText("Reset code"), "720518");
+  await fireEvent.changeText(screen.getByLabelText("New password"), "new horse battery");
+  await fireEvent.press(screen.getByRole("button", { name: "Reset password" }));
+  await screen.findByText("Welcome back");
+  await fireEvent.changeText(screen.getByLabelText("Password"), "new horse battery");
+  await fireEvent.press(screen.getByRole("button", { name: "Sign in" }));
+  await screen.findByLabelText("Sign-in code");
+  await enterCode("381002");
+
+  expect(await screen.findByText("Your sign-in timed out. Sign in again.")).toBeTruthy();
+  expect(screen.getByLabelText("Email").props.value).toBe("ada@example.com");
 });

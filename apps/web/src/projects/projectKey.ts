@@ -12,6 +12,14 @@ export function suggestKey(name: string): string {
 }
 
 /**
+ * A Project key as the server stores it: ASCII letters in capitals. Not `toUpperCase()`, which also turns "ſ" and "ı"
+ * into S and I, so an address the server matches to no project would share the cache entry of one it does.
+ */
+export function storedKey(key: string): string {
+  return key.replace(/[a-z]/g, (letter) => letter.toUpperCase());
+}
+
+/**
  * The key after the name changes from `previousName` to `name`: it follows the name while it is empty or still the
  * key the old name suggested, and is left alone once the User has typed their own.
  */

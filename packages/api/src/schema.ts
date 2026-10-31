@@ -9,7 +9,40 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * The projects the User is a Member of
+         * @description Active projects only: Archived ones are left out. Sorted by lower-cased name, then by key, in code, so the order is the same on every database. No paging. Requires a verified email.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The projects, empty when the User is not a Member of any */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Project"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Email not verified (code: email_unverified) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         put?: never;
         /**
          * Create a project and become its first Member
@@ -3226,7 +3259,7 @@ export interface components {
             key: string;
             /** @description Trimmed, 1–100 Unicode code points, no ISO control characters; need not be unique */
             name: string;
-            /** @description Optional plain text; line breaks and tabs allowed, other control characters rejected */
+            /** @description Optional plain text, cleaned at both ends like the name (whitespace, Unicode spaces, invisible format characters); none when nothing is left. Line breaks and tabs inside it are kept, other control characters rejected. */
             description?: string | null;
         };
         Project: {

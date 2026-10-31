@@ -1,18 +1,5 @@
+import { Alert, Button, Container, Stack, Title } from "@mantine/core";
 import { Glyph } from "@repo/ui/glyph";
-import { ApiError } from "@repo/api";
-import {
-  Alert,
-  Button,
-  Container,
-  Group,
-  Stack,
-  Text,
-  Textarea,
-  TextInput,
-  Title,
-} from "@mantine/core";
-import { useForm } from "@mantine/form";
-import { ArrowButton } from "@repo/ui/arrow-button";
 import { Panel } from "@repo/ui/panel";
 import { Loading } from "@repo/ui/skeleton";
 import { Tag } from "@repo/ui/tag";
@@ -22,10 +9,6 @@ import { Link } from "react-router";
 import type { Project } from "../api/client";
 import { loadFailure, refreshFailed, useProjects } from "../api/queries";
 import { NewProjectForm } from "../projects/NewProjectForm";
-import { useNavigate } from "react-router";
-import { api } from "../api/client";
-import { useProjectCreated } from "../api/queries";
-import { keyForName } from "../projects/projectKey";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { FailedLoadPage } from "../shell/StatusPages";
 import { ProjectListSkeleton } from "./ProjectListSkeleton";

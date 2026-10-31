@@ -1,3 +1,4 @@
+import { ApiError } from "@repo/api";
 import { Alert, Button, Group, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { ArrowButton } from "@repo/ui/arrow-button";
@@ -5,7 +6,7 @@ import { Panel } from "@repo/ui/panel";
 import { toast } from "@repo/ui/toast";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { api, ApiError } from "../api/client";
+import { api } from "../api/client";
 import { useProjectCreated } from "../api/queries";
 import { keyForName } from "./projectKey";
 
@@ -30,11 +31,8 @@ export function NewProjectForm({ onCancel }: { onCancel: () => void }) {
   async function submit(values: typeof form.values) {
     setFailure(null);
     try {
-      const project = await api.createProject({
-        ...values,
-        // A description of only spaces is no description.
-        description: values.description.trim() ? values.description : null,
-      });
+      // The server cleans the description (and says none for a blank one), so every client gets the same rule.
+      const project = await api.createProject(values);
       await projectCreated(project);
       toast.success("Project created.");
       if (!left.current) navigate(`/projects/${encodeURIComponent(project.key)}`);

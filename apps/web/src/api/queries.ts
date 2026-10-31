@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { api, type Project, type Role } from "./client";
 import { failedLoad, type FailedLoad } from "@repo/api";
+import { storedKey } from "../projects/projectKey";
 
 /**
  * Cache keys. A Role's pages share the "roles" prefix (the list, the Role, who holds it), so one invalidation reaches
@@ -20,9 +21,9 @@ export const queryKeys = {
   linkedIdentities: ["linkedIdentities"] as const,
   twoStep: ["twoStep"] as const,
   providers: ["providers"] as const,
-  // The list, and one project under it; a change to the list invalidates it with `exact` so projects stay cached.
+  // The list, and one project under it (as the Roles are). Refreshing only the list takes `exact`.
   projects: ["projects"] as const,
-  project: (key: string) => ["projects", key.toUpperCase()] as const,
+  project: (key: string) => ["projects", storedKey(key)] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -38,27 +39,36 @@ export function useProjects() {
   return useQuery({ queryKey: queryKeys.projects, queryFn: () => api.projects() });
 }
 
-/** Project reads share the app's session-scoped cache. */
+/**
+ * One project, for its page. A project the list already holds (the same object, whatever the endpoint) shows at once
+ * from it, without a skeleton, and is then refreshed like any cached page (stale time 0). Only used when the project
+ * has no entry of its own, so it never replaces newer data.
+ */
 export function useProject(key: string) {
-  return useQuery({ queryKey: queryKeys.project(key), queryFn: () => api.project(key) });
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: queryKeys.project(key),
+    queryFn: () => api.project(key),
+    initialData: () =>
+      client
+        .getQueryData<Project[]>(queryKeys.projects)
+        ?.find((project) => project.key === storedKey(key)),
+    initialDataUpdatedAt: () => client.getQueryState(queryKeys.projects)?.dataUpdatedAt,
+  });
 }
 
 /**
  * Keep the server's created project, so opening it right after shows it at once, without a skeleton (it is then
- * refreshed, as every cached page is: stale time 0), and mark the list stale, since it has a new project. No other
- * project changes. The list is only marked, not fetched: the page that makes the project is about to be left, and the
- * list is fetched when it is shown next.
+ * refreshed, as every cached page is: stale time 0), and refresh the list, which has a new project: as for the Roles,
+ * a change invalidates and doesn't patch, and a fetch already under way is replaced, so it can't land without the new
+ * project. No other project changes. The list isn't waited for, so opening the project doesn't wait for it.
  */
 export function useProjectCreated() {
   const client = useQueryClient();
   return async (project: Project) => {
     await client.cancelQueries({ queryKey: queryKeys.project(project.key), exact: true });
     client.setQueryData(queryKeys.project(project.key), project);
-    void client.invalidateQueries({
-      queryKey: queryKeys.projects,
-      exact: true,
-      refetchType: "none",
-    });
+    void client.invalidateQueries({ queryKey: queryKeys.projects, exact: true });
   };
 }
 

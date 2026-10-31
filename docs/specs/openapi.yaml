@@ -2335,7 +2335,10 @@ components:
         description:
           type: [string, "null"]
           maxLength: 1000
-          description: Optional plain text; line breaks and tabs allowed, other control characters rejected
+          description: >-
+            Optional plain text, cleaned at both ends like the name (whitespace, Unicode spaces, invisible format
+            characters); none when nothing is left. Line breaks and tabs inside it are kept, other control
+            characters rejected.
     Project:
       type: object
       required: [id, key, name, description, archived, createdAt]

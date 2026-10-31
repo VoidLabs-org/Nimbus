@@ -23,7 +23,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
  * Forgot password: a Reset code emailed to the address, entered with a new password. The request answers before
  * the code is issued and mailed, so tests wait for the email the way a person waits for their inbox.
  */
-@Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class })
+@Import({ TestcontainersConfiguration.class, MovableClock.Configuration.class, SecurityEvents.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
 class PasswordResetTests {
@@ -39,6 +39,9 @@ class PasswordResetTests {
 	@Autowired
 	JdbcClient jdbc;
 
+	@Autowired
+	SecurityEvents events;
+
 	@Test
 	void theEmailedCodeSetsANewPasswordAndTheOldOneStopsWorking() {
 		var email = "pr-ada@example.com";
@@ -53,6 +56,21 @@ class PasswordResetTests {
 		// Used up.
 		reset(email, code, "another password").expectStatus().isBadRequest()
 			.expectBody().jsonPath("$.code").isEqualTo("code_expired");
+	}
+
+	@Test
+	void aResetPublishesPasswordChangedAsAResetOnlyWhenItSucceeds() {
+		var email = "pr-event@example.com";
+		var id = java.util.UUID.fromString(JsonPath.read(register(email), "$.user.id"));
+		request(email).expectStatus().isNoContent();
+		var code = awaitResetCode(email, 1);
+
+		reset(email, "000000".equals(code) ? "111111" : "000000", "new password").expectStatus().isBadRequest();
+		assertThat(events.of(PasswordChanged.class, id)).isEmpty();
+
+		reset(email, code, "new password").expectStatus().isNoContent();
+
+		assertThat(events.of(PasswordChanged.class, id)).singleElement().satisfies(event -> assertThat(event.reset()).isTrue());
 	}
 
 	@Test

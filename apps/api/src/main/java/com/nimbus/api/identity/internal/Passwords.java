@@ -3,6 +3,8 @@ package com.nimbus.api.identity.internal;
 import java.time.Clock;
 import java.util.UUID;
 
+import com.nimbus.api.identity.PasswordChanged;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.stereotype.Service;
@@ -33,9 +35,12 @@ class Passwords {
 
 	private final Clock clock;
 
+	private final ApplicationEventPublisher events;
+
 	Passwords(UserRepository users, PasswordEncoder passwordEncoder, Sessions sessions, AuthProperties properties,
 			Clock clock, PlatformTransactionManager transactionManager,
-			RememberedBrowsers rememberedBrowsers) {
+			RememberedBrowsers rememberedBrowsers, ApplicationEventPublisher events) {
+		this.events = events;
 		this.rememberedBrowsers = rememberedBrowsers;
 		this.clock = clock;
 		this.users = users;
@@ -72,7 +77,9 @@ class Passwords {
 					"The User for this token no longer exists"));
 			requireActive(sessionId, userId);
 			var changing = locked.passwordHash() != null;
-			locked.changePassword(hash, clock.instant());
+			var at = clock.instant();
+			locked.changePassword(hash, at);
+			events.publishEvent(new PasswordChanged(userId, at, false));
 			if (changing) {
 				sessions.endAllExcept(userId, sessionId);
 				// This browser too: a security change starts from a clean slate.

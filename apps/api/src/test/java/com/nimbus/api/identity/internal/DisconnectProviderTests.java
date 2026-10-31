@@ -1,6 +1,9 @@
 package com.nimbus.api.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+import java.time.Duration;
 
 import java.util.List;
 import java.util.Map;
@@ -54,6 +57,8 @@ class DisconnectProviderTests {
 			.expectBody(String.class).returnResult().getResponseBody();
 		assertThat(JsonPath.<List<String>>read(listed, "$[*].provider")).containsExactly("github");
 		assertThat(marks(user, "google")).isEqualTo(1);
+		// notifications sends it after the commit, so it arrives a moment later.
+		await().atMost(Duration.ofSeconds(10)).until(() -> RecordingMailer.sentTo("dc1@example.com").size() == 1);
 		var mails = RecordingMailer.sentTo("dc1@example.com");
 		assertThat(mails).hasSize(1);
 		assertThat(mails.get(0).subject()).isEqualTo("Google was disconnected from your Nimbus account");
@@ -68,8 +73,8 @@ class DisconnectProviderTests {
 	void disconnectingKeepsEverySession() {
 		var user = externalSignIn.signIn(profile("google", "g-dc2", "dc2@example.com"));
 		externalSignIn.signIn(profile("github", "gh-dc2", "dc2@example.com"));
-		var thisBrowser = sessions.start(user, null);
-		var otherBrowser = sessions.start(user, null);
+		var thisBrowser = sessions.start(user, null, false);
+		var otherBrowser = sessions.start(user, null, false);
 
 		disconnect(accessTokens.issueFor(user, thisBrowser.sessionId()), "github").expectStatus().isNoContent();
 
@@ -152,6 +157,8 @@ class DisconnectProviderTests {
 		RecordingMailer.failing(true);
 		try {
 			disconnect(token, "google").expectStatus().isNoContent();
+			// The send is notifications' and comes after the commit; it must still fail while the mailer does.
+			await().atMost(Duration.ofSeconds(10)).until(() -> RecordingMailer.attemptedTo("dc7@example.com").size() == 1);
 		}
 		finally {
 			RecordingMailer.failing(false);
@@ -172,7 +179,8 @@ class DisconnectProviderTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		// Completes this fixture's provider sign-up, whose first Session sends no sign-in alert.
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec disconnect(String accessToken, String provider) {

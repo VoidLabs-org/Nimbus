@@ -10,21 +10,11 @@ import {
   type MantineColorsTuple,
   type VariantColorsResolver,
 } from "@mantine/core";
+import { orange, radius, webFontStack } from "@repo/tokens";
 
-// Brand orange: 10 shades, lightest to darkest, built around #ff6b3d (shade 5). Mantine needs real colours here
-// to work out its tints; on the page, shades 1 to 9 come from the theme's accent variables (orangeShades below).
-const nimbus: MantineColorsTuple = [
-  "#fff7f3",
-  "#ffefe7",
-  "#ffdccb",
-  "#ffbd9f",
-  "#ff9468",
-  "#ff6b3d",
-  "#e3532a",
-  "#a63d1c",
-  "#762c15",
-  "#47200f",
-];
+// Brand orange from the tokens: Mantine needs real colours here to work out its tints; on the page, shades 1 to 9
+// come from the theme's accent variables (orangeShades below).
+const nimbus: MantineColorsTuple = orange;
 
 // Filled orange buttons carry dark text: white on #ff6b3d is about 2.9:1, too faint to read comfortably. Hover
 // goes lighter, not darker (--accent-hover, per theme), so the dark text stays readable. Any shade of the orange
@@ -68,7 +58,7 @@ export const cssVariablesResolver: CSSVariablesResolver = () => {
   return { variables: {}, light: shared, dark: shared };
 };
 
-const pill = "999px";
+const pill = `${radius.pill}px`;
 
 // Shared Nimbus theme for the web app (and the Electron app later). Colours that change between Paper, Ink, Fog
 // and Slate live in themes.css; this holds what is the same in all four.
@@ -77,10 +67,9 @@ export const theme = createTheme({
   primaryShade: 5,
   colors: { nimbus },
   variantColorResolver,
-  fontFamily: "Poppins, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  fontFamily: webFontStack,
   headings: {
-    fontFamily:
-      "Poppins, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    fontFamily: webFontStack,
     fontWeight: "600",
   },
   defaultRadius: "xl",

@@ -124,7 +124,7 @@ class ConfirmItsYouTests {
 	void aUserWithoutAPasswordIsToldToSignInAgain() {
 		var user = externalSignIn
 			.signIn(new ExternalProfile("google", "g-cy6", "cy6@example.com", true, "Someone", null, "cy6@example.com"));
-		var token = accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		var token = accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 
 		confirm(token, Map.of("password", "anything")).expectStatus().isEqualTo(409).expectBody()
 			.jsonPath("$.code").isEqualTo("no_password");
@@ -154,7 +154,7 @@ class ConfirmItsYouTests {
 
 		var user = externalSignIn
 			.signIn(new ExternalProfile("google", "g-cy9", "cy9@example.com", true, "Someone", null, "cy9@example.com"));
-		var started = sessions.start(user, null);
+		var started = sessions.start(user, null, false);
 		var token = accessTokens.issueFor(user, started.sessionId());
 		sessions.endAll(user);
 		confirm(token, Map.of("password", PASSWORD)).expectStatus().isUnauthorized();

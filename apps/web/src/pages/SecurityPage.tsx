@@ -1,3 +1,4 @@
+import { ApiError } from "@repo/api";
 import { IconDeviceDesktop, IconDeviceMobile } from "@tabler/icons-react";
 import { Button, Container, Stack, Title } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -6,7 +7,7 @@ import { toast } from "@repo/ui/toast";
 import { Glyph } from "@repo/ui/glyph";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
-import { ApiError, api, type SessionInfo } from "../api/client";
+import { api, type SessionInfo } from "../api/client";
 import { loadFailure, queryKeys, useSessions } from "../api/queries";
 import { activityText, isPhone, sessionName, signedInText } from "../settings/sessionView";
 import { ConnectedAccountsCard } from "./ConnectedAccountsCard";

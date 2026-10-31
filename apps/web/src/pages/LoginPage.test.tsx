@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ApiError } from "@repo/api";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -6,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { useState, type ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, type User } from "../api/client";
+import { type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import { SessionContext, type Session } from "../auth/useSession";
 import { AppRoutes } from "../App";

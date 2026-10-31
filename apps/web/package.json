@@ -17,6 +17,7 @@
     "@mantine/form": "^9.7.1",
     "@mantine/hooks": "^9.7.1",
     "@mantine/notifications": "^9.7.1",
+    "@repo/api": "workspace:*",
     "@repo/ui": "workspace:*",
     "@tabler/icons-react": "^3.49.0",
     "@tanstack/react-query": "^5.104.3",

@@ -58,7 +58,7 @@ class PasswordLastChangedTests {
 	void aUserWithoutAPasswordHasNoneUntilTheySetOneAndChangingItMovesIt() {
 		var user = externalSignIn
 			.signIn(new ExternalProfile("google", "g-plc2", "plc2@example.com", true, "Someone", null, "plc2@example.com"));
-		var token = accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		var token = accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 		me(token).expectStatus().isOk().expectBody().jsonPath("$.passwordChangedAt").isEmpty();
 
 		var set = clock.instant().truncatedTo(ChronoUnit.MICROS);

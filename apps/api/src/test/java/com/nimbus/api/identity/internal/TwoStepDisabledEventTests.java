@@ -50,7 +50,7 @@ class TwoStepDisabledEventTests {
 	void removingItPublishesTwoStepDisabledOnce() {
 		var email = "tsd1@example.com";
 		var user = externalSignIn.signIn(new ExternalProfile("google", "g-" + email, email, true, "Someone", null, email));
-		var token = accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		var token = accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 		String key = JsonPath.read(client.post().uri("/api/users/me/two-step/setup").header("Authorization", "Bearer " + token)
 			.exchange().expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody(), "$.key");
 		List<String> codes = JsonPath.read(client.post().uri("/api/users/me/two-step/setup/verify")

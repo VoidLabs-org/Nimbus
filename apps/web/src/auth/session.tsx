@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
 import {
   api,
-  ApiError,
   type ChangePasswordInput,
   type LoginInput,
   type PictureSource,
@@ -11,7 +10,7 @@ import {
   type TwoStepAnswer,
   type User,
 } from "../api/client";
-import { failedLoad } from "../api/failure";
+import { ApiError, failedLoad } from "@repo/api";
 import { queryKeys } from "../api/queries";
 import { SignInCheck } from "../shell/SignInCheck";
 import { OfflinePage, ServerErrorPage } from "../shell/StatusPages";

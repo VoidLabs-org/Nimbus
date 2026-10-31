@@ -1,6 +1,7 @@
 package com.nimbus.api.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import java.io.IOException;
 import java.util.List;
@@ -32,6 +33,7 @@ import org.springframework.security.core.authority.AuthorityUtils;
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
+@org.springframework.test.context.event.RecordApplicationEvents
 class OAuthLoginHandlerTests {
 
 	@Autowired
@@ -50,7 +52,41 @@ class OAuthLoginHandlerTests {
 	Registration registration;
 
 	@Autowired
+	UserRepository users;
+
+	@Autowired
 	ExternalSignIn externalSignIn;
+
+	@Autowired
+	org.springframework.test.context.event.ApplicationEvents events;
+
+	@org.junit.jupiter.params.ParameterizedTest
+	@org.junit.jupiter.params.provider.ValueSource(strings = { "google", "github" })
+	void providerSignUpSendsNoAlertButReturningSignInDoes(String provider) throws Exception {
+		var email = "handler-signin-alert-" + provider + "@example.com";
+		var login = providerLogin(provider, email);
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), new MockHttpServletResponse(), login);
+		assertThat(events.stream(com.nimbus.api.identity.SignedIn.class)).isEmpty();
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), new MockHttpServletResponse(), login);
+		assertThat(events.stream(com.nimbus.api.identity.SignedIn.class)).hasSize(1);
+	}
+
+	@org.junit.jupiter.params.ParameterizedTest
+	@org.junit.jupiter.params.provider.ValueSource(strings = { "google", "github" })
+	void firstProviderSignInToAnExistingUserDoesPublishSignedIn(String provider) throws Exception {
+		var email = "handler-existing-signin-" + provider + "@example.com";
+		var user = registration.create("Existing", email, "correct horse");
+		handler.onAuthenticationSuccess(new MockHttpServletRequest(), new MockHttpServletResponse(), providerLogin(provider, email));
+		assertThat(events.stream(com.nimbus.api.identity.SignedIn.class)).singleElement()
+			.satisfies(event -> assertThat(event.userId()).isEqualTo(user.getId()));
+	}
+
+	private static OAuth2AuthenticationToken providerLogin(String provider, String email) {
+		if (provider.equals("google")) return google(claims(email, email, true));
+		var attributes = Map.<String, Object>of("id", email, "login", "ada-codes", "emails",
+			List.of(Map.of("email", email, "primary", true, "verified", true)));
+		return new OAuth2AuthenticationToken(new DefaultOAuth2User(AuthorityUtils.createAuthorityList("OAUTH2_USER"), attributes, "id"), List.of(), "github");
+	}
 
 	@Test
 	void successSetsARefreshCookieThatWorksAndRedirectsWithoutAnyTokenInTheUrl() throws Exception {
@@ -158,7 +194,10 @@ class OAuthLoginHandlerTests {
 	@Test
 	void withATicketSuccessLinksTheAccountAndGoesBackToSecurityWithNoCookie() throws Exception {
 		var user = registration.create("Con", "handler-con@example.com", "correct horse");
-		var session = sessions.start(user, null);
+		// Only a User with a verified email gets Security alerts.
+		user.verifyEmail();
+		users.save(user);
+		var session = sessions.start(user, null, false);
 		var response = new MockHttpServletResponse();
 
 		handler.onAuthenticationSuccess(connecting(user, session, "google"), response,
@@ -167,6 +206,9 @@ class OAuthLoginHandlerTests {
 		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/settings/security?connected=google");
 		assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
 		assertThat(linkedIdentities.listFor(user.getId())).hasSize(1);
+		// notifications sends it after the commit, so it arrives a moment later.
+		await().atMost(java.time.Duration.ofSeconds(10)).until(() -> RecordingMailer.sentTo("handler-con@example.com").stream()
+			.anyMatch(mail -> mail.subject().equals("Google was connected to your Nimbus account")));
 		var mails = RecordingMailer.sentTo("handler-con@example.com");
 		assertThat(mails).extracting(Mail::subject).contains("Google was connected to your Nimbus account");
 		assertThat(mails).filteredOn(mail -> mail.subject().contains("connected")).singleElement().satisfies(mail -> {
@@ -180,7 +222,7 @@ class OAuthLoginHandlerTests {
 	@Test
 	void withATicketAFailureGoesBackToSecurityWithTheCodeAndProvider() throws Exception {
 		var user = registration.create("Con", "handler-fail@example.com", "correct horse");
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 
 		var unverified = new MockHttpServletResponse();
 		handler.onAuthenticationSuccess(connecting(user, session, "google"), unverified,
@@ -213,7 +255,7 @@ class OAuthLoginHandlerTests {
 	void anotherAccountOfAProviderTheUserHasIsAlreadyConnectedNotAlreadyLinked() throws Exception {
 		var user = externalSignIn.signIn(
 				new ExternalProfile("google", "g-handler-7", "handler-two@example.com", true, "Two", null, "two"));
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 		var response = new MockHttpServletResponse();
 
 		handler.onAuthenticationSuccess(connecting(user, session, "google"), response,
@@ -226,7 +268,7 @@ class OAuthLoginHandlerTests {
 	@Test
 	void aTicketThatIsUnknownUsedOrFromAnEndedSessionIsExpired() throws Exception {
 		var user = registration.create("Con", "handler-exp@example.com", "correct horse");
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 		var expired = "http://localhost:3000/settings/security?error=expired&provider=google";
 
 		var unknown = new MockHttpServletResponse();
@@ -243,7 +285,7 @@ class OAuthLoginHandlerTests {
 		assertThat(used.getRedirectedUrl()).isEqualTo(expired);
 
 		var other = registration.create("End", "handler-end@example.com", "correct horse");
-		var otherSession = sessions.start(other, null);
+		var otherSession = sessions.start(other, null, false);
 		var ended = connecting(other, otherSession, "google");
 		sessions.endAll(other);
 		var response = new MockHttpServletResponse();
@@ -257,7 +299,7 @@ class OAuthLoginHandlerTests {
 	@Test
 	void aTicketFollowedInAnotherBrowserOrForAnotherProviderIsExpired() throws Exception {
 		var user = registration.create("Con", "handler-csrf@example.com", "correct horse");
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 		var expired = "http://localhost:3000/settings/security?error=expired&provider=google";
 
 		var issued = tickets.issue(user.getId(), session.sessionId(), "google");

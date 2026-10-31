@@ -1,9 +1,9 @@
+import { ApiError } from "@repo/api";
 import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { Tag } from "@repo/ui/tag";
 import { useParams } from "react-router";
-import { ApiError } from "../api/client";
 import { loadFailure, refreshFailed, useProject } from "../api/queries";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";

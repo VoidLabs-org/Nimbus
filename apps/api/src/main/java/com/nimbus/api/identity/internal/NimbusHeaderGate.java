@@ -19,8 +19,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 class NimbusHeaderGate extends OncePerRequestFilter {
 
-	/** The POST endpoints whose only credential is a cookie. */
-	static final Set<String> COOKIE_ONLY = Set.of("/api/auth/refresh", "/api/auth/logout", "/api/auth/two-step");
+	/**
+	 * The POST endpoints whose only credential is a cookie, and the Desktop app's code exchange, which needs no Bearer
+	 * token but reads the remembered cookie and sets the sign-in's cookies.
+	 */
+	static final Set<String> COOKIE_ONLY = Set.of("/api/auth/refresh", "/api/auth/logout", "/api/auth/two-step",
+			"/api/auth/desktop/exchange");
 
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)

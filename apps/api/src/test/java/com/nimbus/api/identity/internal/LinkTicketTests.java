@@ -45,7 +45,7 @@ class LinkTicketTests {
 	@Test
 	void aFreshSessionGetsATicketItCanRedeemOnceForItselfTheProviderAndTheBrowser() {
 		var user = externalSignIn.signIn(profile("google", "g-lt1", "lt1@example.com"));
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 
 		var result = ticket(accessTokens.issueFor(user, session.sessionId()), "github").expectStatus().isOk()
 			.expectBody(String.class).returnResult();
@@ -179,7 +179,7 @@ class LinkTicketTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec ticket(String accessToken, String provider) {

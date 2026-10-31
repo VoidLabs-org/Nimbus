@@ -7,7 +7,7 @@
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 24px;
   max-width: 1600px;
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--window-frame, 0px));
   margin: 0 auto;
   padding: 24px;
   box-sizing: border-box;
@@ -148,6 +148,21 @@
   --arrow-button-height: 52px;
   --arrow-size: 36px;
   font-size: 16px;
+}
+
+/* In the Desktop app (every page with this layout): no panel, the form at the design's width in the middle of
+   the window, under the small logo. */
+.page.centred {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.centred .compactBrand {
+  display: flex;
+}
+
+.centred .form {
+  max-width: 464px;
+  padding: 40px 0;
 }
 
 /* Below about 900px only the form shows, full width. */
@@ -330,6 +345,48 @@
   background: var(--color-accent);
   color: var(--color-bg);
   font-size: 32px;
+  font-weight: 700;
+}
+
+/* The Desktop app's browser tab when the sign-in didn't finish. */
+.failedMark {
+  background: color-mix(in srgb, var(--mantine-color-red-6) 16%, transparent);
+  color: var(--mantine-color-red-6);
+}
+
+/* The provider the User signed in with, on the Desktop app's browser tab (design "Desktop Sign-in Handoff"). */
+.handoffStep {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: var(--color-surface);
+}
+
+.handoffIcon {
+  display: flex;
+  flex: none;
+}
+
+.handoffLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.handoffCheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-size: 13px;
   font-weight: 700;
 }
 

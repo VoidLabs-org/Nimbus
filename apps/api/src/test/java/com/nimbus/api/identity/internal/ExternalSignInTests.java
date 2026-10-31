@@ -145,7 +145,7 @@ class ExternalSignInTests {
 		var existing = registration.create("Dee", "dee@example.com", "correct horse");
 		existing.verifyEmail();
 		users.save(existing);
-		var token = sessions.start(existing, null);
+		var token = sessions.start(existing, null, false);
 
 		var signedIn = externalSignIn.signIn(google("g-dee", "dee@example.com", true, "Dee G", "https://img/dee"));
 
@@ -163,8 +163,8 @@ class ExternalSignInTests {
 	@Test
 	void anUnverifiedPasswordUserIsLinkedVerifiedAndLosesPasswordAndEverySession() {
 		var squatted = registration.create("Eli", "eli@example.com", "squatter pass");
-		var firstBrowser = sessions.start(squatted, null);
-		var secondBrowser = sessions.start(squatted, null);
+		var firstBrowser = sessions.start(squatted, null, false);
+		var secondBrowser = sessions.start(squatted, null, false);
 		assertThat(squatted.emailVerified()).isFalse();
 
 		var signedIn = externalSignIn.signIn(google("g-eli", "eli@example.com", true, "Eli Real", "https://img/eli"));
@@ -190,7 +190,7 @@ class ExternalSignInTests {
 	@Test
 	void aDisconnectedProviderIsRefusedOnTheUsersEmailAndLeavesPasswordAndSessionsAlone() {
 		var user = registration.create("Dis", "dis@example.com", "correct horse");
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 		jdbc.update("INSERT INTO disconnected_providers (user_id, provider, disconnected_at) VALUES (?, 'google', now())",
 				user.getId());
 
@@ -219,7 +219,7 @@ class ExternalSignInTests {
 	@Test
 	void connectingLinksTheProviderAccountEvenWhenItsEmailIsDifferent() {
 		var user = registration.create("Con", "con@example.com", "correct horse");
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 
 		var linked = externalSignIn.connect(user.getId(), session.sessionId(), google("g-con", "con.work@example.com", true, "Con", null));
 
@@ -238,7 +238,7 @@ class ExternalSignInTests {
 	void connectingAnAccountThatBelongsToAnotherUserIsRefusedAndChangesNothing() {
 		var owner = externalSignIn.signIn(google("g-own", "own@example.com", true, "Own", null));
 		var other = registration.create("Oth", "oth@example.com", "correct horse");
-		var otherSession = sessions.start(other, null);
+		var otherSession = sessions.start(other, null, false);
 
 		assertThatThrownBy(() -> externalSignIn.connect(other.getId(), otherSession.sessionId(), google("g-own", "own@example.com", true, "Own", null)))
 			.isInstanceOf(ExternalSignIn.AlreadyLinkedException.class);
@@ -250,7 +250,7 @@ class ExternalSignInTests {
 	@Test
 	void connectingAnAccountTheUserAlreadyHasOnlyRefreshesItsName() {
 		var user = externalSignIn.signIn(google("g-same", "same@example.com", true, "Same", null));
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 
 		var linked = externalSignIn.connect(user.getId(), session.sessionId(), new ExternalProfile("google", "g-same", "same@example.com",
 				true, "Same", null, "renamed@example.com"));
@@ -263,7 +263,7 @@ class ExternalSignInTests {
 	@Test
 	void connectingAnotherAccountOfAProviderTheUserHasIsRefusedWithItsOwnReason() {
 		var user = externalSignIn.signIn(google("g-two-a", "two@example.com", true, "Two", null));
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 
 		assertThatThrownBy(() -> externalSignIn.connect(user.getId(), session.sessionId(),
 				google("g-two-b", "two.work@example.com", true, "Two", null)))
@@ -274,7 +274,7 @@ class ExternalSignInTests {
 	@Test
 	void connectingForASessionThatHasEndedChangesNothing() {
 		var user = registration.create("End", "end@example.com", "correct horse");
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 		sessions.endAll(user);
 
 		assertThatThrownBy(() -> externalSignIn.connect(user.getId(), session.sessionId(),
@@ -286,7 +286,7 @@ class ExternalSignInTests {
 	@Test
 	void connectingStillNeedsAVerifiedEmailFromTheProvider() {
 		var user = registration.create("Unv", "unv@example.com", "correct horse");
-		var session = sessions.start(user, null);
+		var session = sessions.start(user, null, false);
 
 		assertThatThrownBy(() -> externalSignIn.connect(user.getId(), session.sessionId(), google("g-unv", "unv@example.com", false, "Unv", null)))
 			.isInstanceOf(ExternalSignIn.EmailUnverifiedException.class);
@@ -302,7 +302,7 @@ class ExternalSignInTests {
 		assertThatThrownBy(() -> externalSignIn.signIn(google("g-back2", "back@example.com", true, "Back", null)))
 			.isInstanceOf(ExternalSignIn.ProviderDisconnectedException.class);
 
-		externalSignIn.connect(user.getId(), sessions.start(user, null).sessionId(),
+		externalSignIn.connect(user.getId(), sessions.start(user, null, false).sessionId(),
 				google("g-back2", "back.other@example.com", true, "Back", null));
 
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM disconnected_providers WHERE user_id = ?", Integer.class,

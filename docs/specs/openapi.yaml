@@ -19,6 +19,8 @@ tags:
     description: User profiles (identity module)
   - name: access
     description: Permissions, Roles and Role assignments (access module)
+  - name: notifications
+    description: The signed-in User's Notification inbox
 
 paths:
   /api/projects:
@@ -110,6 +112,176 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/notifications:
+    get:
+      tags: [notifications]
+      summary: List the caller's Notifications, newest first
+      description: >-
+        Requires a verified User. Ordered by createdAt descending, then id descending.
+        The cursor resumes after the last item, including when timestamps are equal.
+        Display content is a stored snapshot; reading never looks up the current device or User.
+      parameters:
+        - in: query
+          name: before
+          description: Opaque nextCursor from the previous page
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: The caller's Notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPage"
+        "400":
+          description: Invalid cursor or limit
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Unverified User (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/notifications/unread-count:
+    get:
+      tags: [notifications]
+      summary: Count the caller's unread Notifications
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count:
+                    type: integer
+                    format: int64
+                    minimum: 0
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Unverified User (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/notifications/{id}/read:
+    post:
+      tags: [notifications]
+      summary: Mark one of the caller's Notifications as read
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Marked read, including when already read
+        "400":
+          description: Invalid Notification id
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Unverified User (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Notification does not exist or belongs to another User
+
+  /api/notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark all of the caller's Notifications as read
+      responses:
+        "204":
+          description: All of the caller's Notifications are read
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Unverified User (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/users/me/notification-settings:
+    get:
+      tags: [notifications]
+      summary: The caller's email switches for Issue Notification types
+      description: >-
+        Requires a verified User. Always lists the five Issue types in a fixed order. Email defaults to on except for
+        ISSUE_EDITED. In-app Notifications and Security alerts are always on and not listed.
+      responses:
+        "200":
+          description: One entry per Issue type
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationSetting"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Unverified User (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/users/me/notification-settings/{type}:
+    put:
+      tags: [notifications]
+      summary: Switch email on or off for one Issue Notification type
+      description: >-
+        Requires a verified User. Only switches that differ from the default are stored; saving the default removes the
+        stored switch. Security alert types and unknown types give 400.
+      parameters:
+        - in: path
+          name: type
+          required: true
+          schema:
+            $ref: "#/components/schemas/IssueNotificationType"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: boolean
+      responses:
+        "204":
+          description: Saved
+        "400":
+          description: Unknown type, a Security alert type, or a missing email
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Unverified User (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /api/auth/register:
     post:
       tags: [auth]
@@ -285,6 +457,101 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/auth/desktop/exchange:
+    post:
+      tags: [auth]
+      summary: The Desktop app trades a one-time code from the browser for the sign-in
+      description: >-
+        After "Continue with Google or GitHub" in the system browser (ADR 0008), the Desktop app's page sends the code
+        the browser handed back and the verifier whose hash started the handshake. A code lasts 60 seconds and works
+        once; a wrong verifier also ends it. It signs in as the browser's callback would, but with this request's
+        `User-Agent` (the Session's device) and `two_step_remembered` cookie: either the refresh cookie (then load
+        `/auth/callback`) or, for a User with Two-step verification, the `two_step_pending` cookie (then
+        `/login/two-step`).
+      security: []
+      parameters:
+        - name: X-Requested-With
+          in: header
+          required: true
+          description: Must be `nimbus`. It sets cookies, so cross-site forms must not reach it.
+          schema:
+            type: string
+            const: nimbus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DesktopCode"
+      responses:
+        "200":
+          description: >-
+            `twoStepRequired: false` with the refresh cookie set, or `true` with the `two_step_pending` cookie set
+          headers:
+            Set-Cookie:
+              description: The refresh cookie (see `RefreshCookie`), or the pending cookie (see the `twoStepPendingCookie` scheme)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [twoStepRequired]
+                properties:
+                  twoStepRequired:
+                    type: boolean
+        "400":
+          description: >-
+            `code: expired` (unknown, used, older than 60 seconds, a connect's code, or the wrong verifier),
+            `email_unverified` or `disconnected`, as on the sign-in page; or a field over 256 characters (`errors`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The X-Requested-With header is missing or not `nimbus`
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/auth/desktop/connect:
+    post:
+      tags: [auth]
+      summary: The Desktop app finishes connecting a provider from Security
+      description: >-
+        For a connect started in the system browser with a link ticket (ADR 0008). The ticket must have been issued to
+        this access token's Session (instead of the `link_binder` cookie, which stays in the app); then the provider
+        account is connected as on the callback in a browser.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DesktopCode"
+      responses:
+        "200":
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider]
+                properties:
+                  provider:
+                    type: string
+                    example: github
+        "400":
+          description: >-
+            `code: expired` (the code as for the exchange, a sign-in's code, or a ticket that is used, expired or
+            another Session's), `email_unverified`, `already_linked` or `already_connected`, as on the Security page
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: No valid access token, or its Session has ended
+
   /api/auth/oauth2/google:
     get:
       tags: [auth]
@@ -297,6 +564,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ReturnTo"
         - $ref: "#/components/parameters/LinkTicket"
+        - $ref: "#/components/parameters/DesktopChallenge"
+        - $ref: "#/components/parameters/DesktopPort"
+        - $ref: "#/components/parameters/DesktopNonce"
       responses:
         "302":
           description: Redirect to Google's sign-in page
@@ -314,6 +584,9 @@ paths:
         every redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=google` on the public URL with `email_unverified` (Google did not verify the email),
         `disconnected` (the User on that email disconnected Google), `cancelled` (the person declined at Google) or `failed` (anything else).
+        A handshake the Desktop app started (`desktop`, `port`, `nonce`) signs nobody in here and sets no cookie: it
+        redirects to `http://127.0.0.1:<port>/<nonce>?code=<one-time code>`, or `?error=cancelled|failed&provider=<id>`,
+        and the app finishes with `POST /api/auth/desktop/exchange` or `POST /api/auth/desktop/connect` (ADR 0008).
       security: []
       parameters:
         - name: code
@@ -353,6 +626,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ReturnTo"
         - $ref: "#/components/parameters/LinkTicket"
+        - $ref: "#/components/parameters/DesktopChallenge"
+        - $ref: "#/components/parameters/DesktopPort"
+        - $ref: "#/components/parameters/DesktopNonce"
       responses:
         "302":
           description: Redirect to GitHub's sign-in page
@@ -370,6 +646,9 @@ paths:
         every redirect as `&returnTo=<page>` (or `?returnTo=`). On failure it redirects to
         `/login?error=<code>&provider=github` on the public URL with `email_unverified` (the GitHub account has no verified primary email),
         `disconnected` (the User on that email disconnected GitHub), `cancelled` (the person declined at GitHub) or `failed` (anything else).
+        A handshake the Desktop app started (`desktop`, `port`, `nonce`) signs nobody in here and sets no cookie: it
+        redirects to `http://127.0.0.1:<port>/<nonce>?code=<one-time code>`, or `?error=cancelled|failed&provider=<id>`,
+        and the app finishes with `POST /api/auth/desktop/exchange` or `POST /api/auth/desktop/connect` (ADR 0008).
       security: []
       parameters:
         - name: code
@@ -1994,6 +2273,35 @@ components:
         `already_linked`, `already_connected`, `email_unverified`, `cancelled`, `failed` or `expired`.
       schema:
         type: string
+    DesktopChallenge:
+      name: desktop
+      in: query
+      required: false
+      description: >-
+        The Desktop app only (ADR 0008): base64url SHA-256 of the app's verifier (RFC 7636 S256, 43 characters).
+        Together with `port` and `nonce` it makes the handshake end at the app's port on `127.0.0.1` with a one-time
+        code instead of signing the browser in. When any of the three is missing or malformed, the handshake ends in
+        the browser as usual.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{43}$"
+    DesktopPort:
+      name: port
+      in: query
+      required: false
+      description: The Desktop app's port on `127.0.0.1`, which the browser takes the result to. The host is never taken from the request.
+      schema:
+        type: integer
+        minimum: 1024
+        maximum: 65535
+    DesktopNonce:
+      name: nonce
+      in: query
+      required: false
+      description: The random path of this attempt on the Desktop app's port.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{16,64}$"
     ReturnTo:
       name: returnTo
       in: query
@@ -2047,6 +2355,70 @@ components:
         createdAt:
           type: string
           format: date-time
+    IssueNotificationType:
+      type: string
+      enum: [ISSUE_ASSIGNED, ISSUE_UNASSIGNED, ISSUE_STATUS_CHANGED, ISSUE_EDITED, ISSUE_DELETED]
+
+    NotificationSetting:
+      type: object
+      required: [type, email]
+      properties:
+        type:
+          $ref: "#/components/schemas/IssueNotificationType"
+        email:
+          type: boolean
+
+    NotificationPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationItem"
+        nextCursor:
+          type: [string, "null"]
+          description: Pass as before to fetch older Notifications; null at the end
+
+    NotificationItem:
+      type: object
+      required: [id, type, createdAt, read, snapshot, link]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - SIGNED_IN
+            - PASSWORD_CHANGED
+            - LINKED_IDENTITY_CONNECTED
+            - LINKED_IDENTITY_DISCONNECTED
+            - OTHER_SESSIONS_SIGNED_OUT
+        createdAt:
+          type: string
+          format: date-time
+        read:
+          type: boolean
+        snapshot:
+          type: object
+          required: [title]
+          properties:
+            title:
+              type: string
+              example: New sign-in to your account
+            deviceLabel:
+              type: string
+              description: Only for SIGNED_IN
+              example: Safari on iPhone
+            detail:
+              type: string
+              description: The line under the title for every other type
+              example: If this wasn't you, reset it now.
+        link:
+          type: string
+          const: /settings/security
+
     RegisterRequest:
       type: object
       required: [displayName, email, password]
@@ -2102,6 +2474,19 @@ components:
         password:
           type: string
 
+    DesktopCode:
+      type: object
+      required: [code, verifier]
+      description: What a sign-in or connect in the system browser handed back to the Desktop app (ADR 0008).
+      properties:
+        code:
+          type: string
+          maxLength: 256
+          description: The one-time code from `http://127.0.0.1:<port>/<nonce>?code=`
+        verifier:
+          type: string
+          maxLength: 256
+          description: The secret the app made for this attempt (43-128 characters); the handshake was started with its hash
     AuthResponse:
       type: object
       required: [accessToken, user]
@@ -2254,7 +2639,7 @@ components:
 
     CatalogPermission:
       type: object
-      required: [key, heading, description, kind, scopes, ownHint]
+      required: [key, heading, description, kind, scopes, ownHint, reserved]
       properties:
         key:
           type: string
@@ -2412,7 +2797,7 @@ components:
           oneOf:
             - type: "null"
             - type: object
-              required: [id, displayName, email]
+              required: [id, displayName, email, avatarUrl]
               properties:
                 id:
                   type: string
@@ -2421,6 +2806,9 @@ components:
                   type: [string, "null"]
                 email:
                   type: [string, "null"]
+                avatarUrl:
+                  type: [string, "null"]
+                  description: The picture they show; null without one or for a User who no longer exists
         action:
           type: string
           enum:
@@ -2431,6 +2819,8 @@ components:
               role.grants_changed,
               role.reset,
               role.deleted,
+              role.assigned,
+              role.unassigned,
               role.defaults_applied,
               role.locked_grants_restored,
               catalog.unknown_grant,
@@ -2450,9 +2840,11 @@ components:
               description: Whether the Role still exists
         before:
           type: [object, "null"]
+          additionalProperties: true
           description: The state before the change; null when there was none
         after:
           type: [object, "null"]
+          additionalProperties: true
           description: The state after the change; null when there is none
 
     CreateRoleRequest:

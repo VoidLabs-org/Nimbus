@@ -179,7 +179,7 @@ class RemoveTwoStepTests {
 	@Test
 	void anEndedSessionIs401AndAnUnverifiedUserIs403() {
 		var user = googleUser("rts9@example.com");
-		var token = accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		var token = accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 		sessions.endAll(user);
 		remove(token, Map.of("code", "123456")).expectStatus().isUnauthorized();
 
@@ -217,7 +217,7 @@ class RemoveTwoStepTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec remove(String token, Map<String, String> body) {

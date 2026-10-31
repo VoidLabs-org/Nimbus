@@ -1,9 +1,10 @@
+import { ApiError } from "@repo/api";
 import { Button } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { toast } from "@repo/ui/toast";
 import { useEffect, useRef, useState } from "react";
-import { ApiError, type User } from "../api/client";
+import { type User } from "../api/client";
 import { useSession } from "../auth/useSession";
 import {
   PICTURE_HINT,

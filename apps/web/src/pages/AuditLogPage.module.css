@@ -24,7 +24,10 @@
   color: var(--color-accent-2-500);
 }
 
+/* The rows lay out by the list's own width, not the window's: the list is narrower than the window inside the
+   Desktop app's Settings overlay. */
 .list {
+  container-type: inline-size;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -85,6 +88,8 @@ li.row:hover {
   font: inherit;
   font-size: 14px;
   text-align: left;
+  /* A long email in the summary wraps rather than running into the Role pill. */
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 
@@ -162,15 +167,21 @@ a.role:hover {
   color: var(--color-accent-2-700);
 }
 
-/* Narrow screens: the time, who and Role pill go on one line above the summary. */
-@media (max-width: 48em) {
+/* A narrow list (a narrow window, or the Desktop app's Settings overlay): the time, who and Role pill go on one line
+   above the summary, which gets the row's whole width. Below the five columns' comfortable width. */
+@container (max-width: 860px) {
+  /* The arrow keeps its own column down both lines, so it lines up row to row whatever the Role pill's length. */
   .row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto 20px;
     grid-template-areas:
-      "time who role"
-      "what what arrow";
+      "time who role arrow"
+      "what what what arrow";
     gap: 8px 12px;
     padding: 14px 16px;
+  }
+
+  .role {
+    justify-self: end;
   }
 }
 

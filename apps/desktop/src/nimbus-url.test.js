@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isNavigationAllowed, parseNimbusUrl } from "./nimbus-url.js";
+import { isNavigationAllowed, isNimbusPage, parseNimbusUrl } from "./nimbus-url.js";
+
+describe("isNimbusPage", () => {
+  const nimbus = new URL("http://localhost:3000");
+
+  it("is any page of Nimbus's own origin", () => {
+    assert.equal(isNimbusPage(nimbus, "http://localhost:3000/settings/appearance"), true);
+  });
+
+  it("is not a provider's page, another site or a page with no web origin", () => {
+    for (const address of [
+      "https://github.com/login",
+      "https://localhost:3000/",
+      "http://localhost:3001/",
+      "about:blank",
+      "",
+    ]) {
+      assert.equal(isNimbusPage(nimbus, address), false, address);
+    }
+  });
+});
 
 describe("parseNimbusUrl", () => {
   it("defaults to the dev server", () => {

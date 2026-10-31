@@ -121,7 +121,7 @@ Nimbus run as its own application window, as opposed to Nimbus in a browser. It 
 _Avoid_: Electron app (outside the code), native app
 
 **Sidebar**:
-The panel on the left of the Desktop app with Home, Projects and Settings. It is either open, showing names, or folded into a narrow rail of icons. The browser's equivalent is the navbar.
+The panel on the left of the Desktop app with Home, Projects and Settings. It is either open or folded away, when it can peek out over the page. The browser's equivalent is the navbar.
 _Avoid_: Navbar (that is the browser's), menu
 
 **Tab**:
@@ -131,6 +131,10 @@ _Avoid_: Window, page (when the open page is meant)
 **Jump**:
 The Desktop app's quick "Search or jump to…" box, opened with Ctrl or ⌘ K, that opens a page by name.
 _Avoid_: Command palette, search
+
+**Mobile app**:
+Nimbus installed on a phone, as opposed to Nimbus in a phone's browser.
+_Avoid_: Native app, RN app, phone app
 
 ## Development workflow
 

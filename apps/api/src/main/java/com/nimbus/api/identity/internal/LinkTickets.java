@@ -67,6 +67,21 @@ class LinkTickets {
 					binder.getBytes(StandardCharsets.UTF_8)));
 	}
 
+	/**
+	 * Takes the ticket back for a connect the Desktop app finishes (ADR 0008), where the browser that went to the
+	 * provider holds no binder cookie: the Session trading in the app's code must be the one that asked instead. Empty
+	 * as for {@link #redeem}, and when the ticket is another User's or another Session's.
+	 */
+	Optional<Ticket> redeemFor(String value, String provider, UUID userId, UUID sessionId) {
+		if (value == null) {
+			return Optional.empty();
+		}
+		return Optional.ofNullable(issued.remove(value))
+			.filter(found -> found.expiresAt().isAfter(clock.instant()))
+			.filter(found -> found.provider().equals(provider))
+			.filter(found -> found.userId().equals(userId) && found.sessionId().equals(sessionId));
+	}
+
 	/** Throws the ticket away, e.g. when the connect ended at the provider. */
 	void discard(String value) {
 		if (value != null) {

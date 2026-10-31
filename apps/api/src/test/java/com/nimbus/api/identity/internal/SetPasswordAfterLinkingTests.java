@@ -9,6 +9,8 @@ import java.util.Map;
 
 import com.nimbus.api.RecordingMailer;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.identity.PasswordChanged;
+import com.nimbus.api.identity.SecurityEvents;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -20,7 +22,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
  * Users who only sign in with a provider get a way back to a password. Providers are not faked over HTTP: the
  * profile is what the provider would have said, handed to the entry point the OAuth success handler uses.
  */
-@Import(TestcontainersConfiguration.class)
+@Import({ TestcontainersConfiguration.class, SecurityEvents.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
 class SetPasswordAfterLinkingTests {
@@ -43,6 +45,9 @@ class SetPasswordAfterLinkingTests {
 	@Autowired
 	SignIn signIn;
 
+	@Autowired
+	SecurityEvents events;
+
 	@Test
 	void aGoogleOnlyUserCanSetAPasswordAndThenSignInWithIt() {
 		var user = externalSignIn.signIn(profile("google", "g-ada", "ada@example.com"));
@@ -54,6 +59,17 @@ class SetPasswordAfterLinkingTests {
 
 		hasPassword(token, true);
 		login("ada@example.com", "first password").expectStatus().isOk();
+	}
+
+	// Adding a way to sign in is as security-relevant as changing one, so a first password is a Security alert too.
+	@Test
+	void settingAFirstPasswordPublishesPasswordChangedAsAChange() {
+		var user = externalSignIn.signIn(profile("google", "g-first-event", "first-event@example.com"));
+
+		setPassword(tokenFor(user), Map.of("newPassword", "first password")).expectStatus().isNoContent();
+
+		assertThat(events.of(PasswordChanged.class, user.getId())).singleElement()
+			.satisfies(event -> assertThat(event.reset()).isFalse());
 	}
 
 	@Test
@@ -69,8 +85,8 @@ class SetPasswordAfterLinkingTests {
 	@Test
 	void settingAFirstPasswordLeavesTheOtherSessionsRunning() {
 		var user = externalSignIn.signIn(profile("google", "g-first", "first@example.com"));
-		var thisBrowser = sessions.start(user, null);
-		var otherBrowser = sessions.start(user, null);
+		var thisBrowser = sessions.start(user, null, false);
+		var otherBrowser = sessions.start(user, null, false);
 
 		setPassword(accessTokens.issueFor(user, thisBrowser.sessionId()), Map.of("newPassword", "first password"))
 			.expectStatus().isNoContent();
@@ -136,7 +152,7 @@ class SetPasswordAfterLinkingTests {
 	}
 
 	private String tokenFor(User user) {
-		return accessTokens.issueFor(user, sessions.start(user, null).sessionId());
+		return accessTokens.issueFor(user, sessions.start(user, null, false).sessionId());
 	}
 
 	private RestTestClient.ResponseSpec setPassword(String accessToken, Map<String, String> body) {

@@ -1,5 +1,6 @@
+import { ApiError, NetworkError } from "@repo/api";
 import { describe, expect, it } from "vitest";
-import { ApiError, createApiClient, NetworkError } from "./client";
+import { createApiClient } from "./client";
 
 const alice = { id: "5b0c", email: "alice@example.com", displayName: "Alice", avatarUrl: null };
 

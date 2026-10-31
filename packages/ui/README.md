@@ -39,8 +39,8 @@ flowchart LR
 ```
 
 - **`NimbusThemeProvider`** is the one place that decides the theme. It wraps `MantineProvider`, sets `data-theme` on `<html>`, makes Mantine's light/dark follow the mode, saves choices and follows changes made in other tabs. It also draws the background glow, which shows on Fog and Slate only.
-- **`themes.css`** holds the four themes as CSS variables (names and values from the design), the 2px orange focus ring, Poppins (bundled from `@fontsource/poppins`, no font CDN) and the shared components' styles.
-- **`theme.ts`** is the Mantine theme: the orange palette built around `#ff6b3d`, Poppins, `xl` corners, pill buttons and inputs, and dark text on filled orange. Its `cssVariablesResolver` points Mantine's own colours (body, text, dimmed, borders, the orange shades) at the theme variables, so stock Mantine components match all four themes without any styling.
+- **`themes.css`** holds the four themes as CSS variables (names and values from the design, the same values as `@repo/tokens`, which the Mobile app reads), the 2px orange focus ring, Poppins (bundled from `@fontsource/poppins`, no font CDN) and the shared components' styles.
+- **`theme.ts`** is the Mantine theme: the orange palette built around `#ff6b3d` and the Poppins font stack (both from `@repo/tokens`), `xl` corners, pill buttons and inputs, and dark text on filled orange. Its `cssVariablesResolver` points Mantine's own colours (body, text, dimmed, borders, the orange shades) at the theme variables, so stock Mantine components match all four themes without any styling.
 - **The pre-paint script** in `apps/web/index.html` applies the saved theme before React loads, so a reload doesn't flash the wrong theme. It must read the same key and pick the theme the same way as the provider.
 
 ## Using it in a page
@@ -83,9 +83,9 @@ export function ProjectSummary() {
 - **`Panel`, not Mantine's `Paper`**, for surfaces.
 - **`toast`, not Mantine's `notifications.show`.** Name what happened (success, info, warning, error), not a colour; the kind picks the icon, colour, how long it stays and how a screen reader announces it. At most three show; a new one always shows, closing the oldest that is not an error (or the oldest error, if all three are). The same message shown again while it is open is not repeated.
 - **The orange is for actions.** Filled orange buttons get dark text automatically; don't override it to white (too low contrast).
-- **Changing a theme:** edit its block in `themes.css`. A new variable needs a value in `:root` so pages render even without `data-theme`.
+- **Changing a theme:** edit its block in `themes.css` and the same value in `@repo/tokens` (`--color-accent-100` is `colorAccent100` there); `themes.test.ts` fails until the two match. A new variable needs a value in `:root` so pages render even without `data-theme`, and in the tokens' shared values.
 - **Changing the storage key or how the theme is picked:** change the provider and the pre-paint script together.
 
 ## Tests
 
-`pnpm --filter @repo/ui test` runs Vitest (jsdom) against the provider and hook as a page would use them: first visit follows the system, every mode × surface pair, Mantine following the mode, two consumers agreeing, choices surviving a reload and other tabs' changes, System, and unreadable storage. The toast tests render `NimbusToasts` and show toasts as a page would: errors as alerts that stay, the other kinds read out politely and closing on their own, an icon for each kind, at most three at once with the newest always shown, and a repeated message shown once. Pages are checked by hand in all four themes.
+`pnpm --filter @repo/ui test` runs Vitest (jsdom) against the provider and hook as a page would use them: first visit follows the system, every mode × surface pair, Mantine following the mode, two consumers agreeing, choices surviving a reload and other tabs' changes, System, and unreadable storage. The toast tests render `NimbusToasts` and show toasts as a page would: errors as alerts that stay, the other kinds read out politely and closing on their own, an icon for each kind, at most three at once with the newest always shown, and a repeated message shown once. `themes.test.ts` reads `themes.css` and checks every variable of each theme against `@repo/tokens`. Pages are checked by hand in all four themes.

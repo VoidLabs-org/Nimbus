@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
-import type { FailedLoad } from "../api/failure";
+import type { FailedLoad } from "@repo/api";
 import { loginPath, safeReturnPath } from "../auth/returnPath";
 import { PrimaryAction, SecondaryAction, StatusNote, StatusPage } from "./StatusPage";
 

@@ -1,6 +1,12 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  // Files written by other tools: AGENTS.md (turbo block) and installed skills (npx skills).
-  // Formatting them would cause churn on every update.
-  "ignorePatterns": ["AGENTS.md", ".agents/**", ".claude/skills/**", "skills-lock.json"]
+  // Files written by other tools: AGENTS.md (turbo block), installed skills (npx skills) and the API types generated
+  // from the contract (its check compares the generator's exact output). Formatting them would cause churn on every update.
+  "ignorePatterns": [
+    "AGENTS.md",
+    ".agents/**",
+    ".claude/skills/**",
+    "skills-lock.json",
+    "packages/api/src/schema.ts"
+  ]
 }

@@ -169,6 +169,13 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail desktopSignInFailed(DesktopSignIn.FailedException e) {
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+		problem.setProperty("code", e.code());
+		return problem;
+	}
+
+	@ExceptionHandler
 	ProblemDetail alreadyVerified(EmailVerification.AlreadyVerifiedException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 	}

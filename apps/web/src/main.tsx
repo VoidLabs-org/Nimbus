@@ -8,10 +8,12 @@ import "@repo/ui/themes.css";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import App from "./App.tsx";
 import { AppNotifications } from "./shell/AppNotifications";
+import { isDesktop } from "./shell/desktop";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <NimbusThemeProvider>
+    {/* The Desktop app has only the flat themes: glass doesn't suit a window. */}
+    <NimbusThemeProvider flatOnly={isDesktop()}>
       <AppNotifications />
       <App />
     </NimbusThemeProvider>

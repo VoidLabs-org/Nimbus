@@ -24,7 +24,7 @@ pnpm dev:mobile                   # API, web and Metro together, for the develop
 
 In the terminal view, select Metro's pane to use its keys (`r` reloads the app, `j` opens the debugger).
 
-Rebuild with `pnpm --filter mobile android` only after adding a package with native code, or changing `app.json`. The last one was `expo-crypto` (#204, Google and GitHub sign-in): a development build from before it needs that rebuild.
+Rebuild with `pnpm --filter mobile android` only after adding a package with native code, or changing `app.json`. The last one was `expo-image-picker` (#205, Profile picture, with its camera and photo permissions in `app.json`): a development build from before it needs that rebuild.
 
 ## Where the API is
 

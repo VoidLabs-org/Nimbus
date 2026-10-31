@@ -19,6 +19,14 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Nimbus uses the photo you choose as your profile picture.",
+          "cameraPermission": "Nimbus uses the camera to take your profile picture.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/nimbus-icon-light.png",

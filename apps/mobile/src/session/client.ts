@@ -3,6 +3,16 @@ import type { components, paths } from "@repo/api/schema";
 
 export type User = components["schemas"]["User"];
 export type RegisterInput = components["schemas"]["RegisterRequest"];
+export type PictureSource = NonNullable<User["pictureSource"]>;
+
+/** A photo on the phone, as the image picker hands it over, to upload. */
+export type PhotoFile = { uri: string; name: string; type: string };
+
+/** "Confirm it's you": the password, and with Two-step verification a Sign-in code or a Recovery code. */
+export type ConfirmAnswer =
+  | { password: string }
+  | { password: string; twoStepCode: string }
+  | { password: string; recoveryCode: string };
 /** A Reset code and the new password, and with Two-step verification a Sign-in code or a Recovery code. */
 export type ResetPasswordInput = {
   email: string;
@@ -94,7 +104,10 @@ export function createMobileApi({
     headers.set("X-Nimbus-Client", "mobile");
     headers.set("User-Agent", userAgent);
     headers.set("Accept", "application/json");
-    if (init.body !== undefined) headers.set("Content-Type", "application/json");
+    // An upload's form sets its own multipart type, with the boundary.
+    if (init.body !== undefined && !(init.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
     if (authenticated && accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
     let response: Response;
@@ -428,6 +441,57 @@ export function createMobileApi({
       ),
 
     me: () => request<User>("/api/users/me"),
+
+    /** Changes the display name and answers the User. 400 with `fieldErrors.displayName`, 429 when blocked. */
+    updateDisplayName: (displayName: string) =>
+      request<User>("/api/users/me", { method: "PATCH", body: JSON.stringify({ displayName }) }),
+
+    /**
+     * Uploads a photo as the User's Profile picture, which then shows; answers the User. A 400 says why it was refused
+     * (`code` "file_too_large", "unsupported_type" or "unreadable_image"); a 429 means 10 uploads in the last hour.
+     */
+    uploadProfilePicture: (photo: PhotoFile) => {
+      const form = new FormData();
+      // React Native's form takes a file as its address on the phone, with a name and a type.
+      form.append("file", photo as unknown as Blob);
+      return request<User>("/api/users/me/profile-picture", { method: "PUT", body: form });
+    },
+
+    /** Sets what the Profile picture shows; answers the User. 400 `source_unavailable` when it isn't there. */
+    choosePictureSource: (source: PictureSource) =>
+      request<User>("/api/users/me/profile-picture/source", {
+        method: "PUT",
+        body: JSON.stringify({ source }),
+      }),
+
+    /** Removes the uploaded photo (fine without one). Read the User again for what they show now. */
+    removeProfilePicture: () =>
+      request<void>("/api/users/me/profile-picture", { method: "DELETE" }),
+
+    /**
+     * Mails a Verification code to the new address; Resend is the same call. 400 "same_email" or
+     * `fieldErrors.email`, 409 "email_taken", 403 "reauth_required" when the sign-in is too old, 429 when the address
+     * was sent codes too fast.
+     */
+    requestEmailChange: (email: string) =>
+      request<void>("/api/users/me/email-change", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+
+    /**
+     * "Confirm it's you" for a sign-in too old to change the email. `fieldErrors.password`, "two_step_required",
+     * "invalid_two_step_code", 409 "no_password" (sign in again instead), or 429.
+     */
+    confirmItsYou: (answer: ConfirmAnswer) =>
+      request<void>("/api/users/me/confirm", { method: "POST", body: JSON.stringify(answer) }),
+
+    /** Changes the email to the pending address; answers the User. "invalid_code", "code_expired", 409 "email_taken". */
+    confirmEmailChange: (code: string) =>
+      request<User>("/api/users/me/email-change/confirm", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
   };
 }
 

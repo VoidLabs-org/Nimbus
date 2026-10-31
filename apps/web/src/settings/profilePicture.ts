@@ -1,26 +1,13 @@
-/** What Profile accepts as a Profile picture: the browser checks these before anything is uploaded. */
-export const PICTURE_TYPES = ["image/jpeg", "image/png", "image/webp"];
-
-export const MAX_PICTURE_BYTES = 5 * 1024 * 1024;
-
-export const PICTURE_HINT = "JPEG, PNG or WebP, up to 5 MB.";
-
-/** For a file too big or of another type, checked in the browser (35e), or refused by the server for the same. */
-export const WRONG_FILE = "That file is over 5 MB. Choose a JPEG, PNG or WebP up to 5 MB.";
-
-/** The server's `unreadable_image` (35f). */
-export const UNREADABLE = "We couldn’t read that image. Try a different file.";
-
-/** The server's 429 on the 10th-plus upload in an hour (35g); the wait comes from `Retry-After`. */
-export function uploadLimitMessage(retryAfterSeconds: number | null): string {
-  const minutes = Math.max(1, Math.ceil((retryAfterSeconds ?? 60) / 60));
-  return `You've uploaded 10 photos this hour. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
-}
-
-/** Null when the file can be uploaded, otherwise what to tell the User. */
-export function pictureFileError(file: { type: string; size: number }): string | null {
-  return PICTURE_TYPES.includes(file.type) && file.size <= MAX_PICTURE_BYTES ? null : WRONG_FILE;
-}
+// The limits and messages are shared with the Mobile app (@repo/api); this file adds the browser's own crop.
+export {
+  MAX_PICTURE_BYTES,
+  PICTURE_HINT,
+  PICTURE_TYPES,
+  pictureFileError,
+  UNREADABLE,
+  uploadLimitMessage,
+  WRONG_FILE,
+} from "@repo/api";
 
 /** A part of the image, as react-easy-crop reports it: in pixels for cropping, in percent for previews. */
 export type CropArea = { x: number; y: number; width: number; height: number };
@@ -102,22 +89,4 @@ export function previewStyle(src: string, area: CropArea | null) {
   };
 }
 
-/** The letters Mantine's Avatar draws for a name, so the hint agrees with the thumbnail beside it. */
-export function initialsOf(name: string): string {
-  const words = name.split(" ");
-  if (words.length === 1) return name.slice(0, 2).toUpperCase();
-  return words
-    .map((word) => word[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-/** "24 Oct 2026", in the same order and spelling wherever the browser is set to. */
-export function uploadedOn(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+export { initialsOf, uploadedOn } from "@repo/api";

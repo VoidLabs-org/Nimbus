@@ -84,6 +84,8 @@ function Screens() {
       >
         <Stack.Protected guard={state.kind === "signedIn" && !unverified} redirectTo={home}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="profile" />
+          <Stack.Screen name="change-email" />
         </Stack.Protected>
         <Stack.Protected guard={unverified} redirectTo={home}>
           <Stack.Screen name="verify-email" />

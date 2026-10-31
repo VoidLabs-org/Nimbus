@@ -53,6 +53,13 @@ type Session = {
   verifyEmail: (code: string) => Promise<void>;
   /** Reads the User again, as when their email was verified on another device. */
   reload: () => Promise<void>;
+  /** The User as the server answered after a change on Profile; every screen shows it at once. */
+  userChanged: (user: User) => void;
+  /**
+   * Signs out so the User signs in again, then comes back to `path`: for a change that needs a recent sign-in, by a
+   * User with no password to confirm it's them. Rejects, still signed in, when the server can't be reached.
+   */
+  signInAgainFor: (path: string) => Promise<void>;
   /** Ends this phone's Session on the server; rejects, still signed in, when the server can't be reached. */
   signOut: () => Promise<void>;
   /** Forgets the Session on this phone only, for when the server is down and the User wants out anyway. */
@@ -128,6 +135,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setState({ kind: "signedIn", user, since: Date.now() });
   }
 
+  /** Home reads the User through the "me" query, the rest of the app from the Session: both take the new one. */
+  function userChanged(user: User) {
+    queryClient.setQueryData(["me"], user);
+    setState({ kind: "signedIn", user, since: Date.now() });
+  }
+
   const session: Session = {
     state,
     welcomed,
@@ -145,6 +158,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signedIn(await api.finishTwoStep(secondCode, rememberDevice));
     },
     cancelTwoStep: () => api.cancelTwoStep(),
+    userChanged,
+    signInAgainFor: async (path) => {
+      await api.signOut();
+      queryClient.clear();
+      returnTo.current = path;
+      setState({ kind: "signedOut" });
+    },
     exchange: async (code, verifier) => {
       const outcome = await api.exchange(code, verifier);
       if ("user" in outcome) signedIn(outcome.user);

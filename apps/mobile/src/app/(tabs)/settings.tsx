@@ -1,6 +1,7 @@
 import { NetworkError } from "@repo/api";
+import { router } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Button } from "../../components/Button";
 import { ProfilePicture } from "../../components/ProfilePicture";
 import { Screen } from "../../components/Screen";
@@ -10,8 +11,8 @@ import { useSession } from "../../session/session";
 import { useTheme } from "../../theme";
 
 /**
- * Settings (design M3h): who is signed in, and Sign out behind a confirming sheet. Profile, Security, Notifications and
- * Appearance join with their tickets.
+ * Settings (design M3h): who is signed in, which opens Profile, and Sign out behind a confirming sheet. Security,
+ * Notifications and Appearance join with their tickets.
  */
 export default function Settings() {
   const theme = useTheme();
@@ -40,7 +41,15 @@ export default function Settings() {
       <Text weight="semibold" size={28} accessibilityRole="header" style={styles.title}>
         Settings
       </Text>
-      <View style={[styles.account, { backgroundColor: theme.card, borderColor: theme.line }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Profile, ${user.displayName}, ${user.email}`}
+        onPress={() => router.push("/profile")}
+        style={({ pressed }) => [
+          styles.account,
+          { backgroundColor: pressed ? theme.seg : theme.card, borderColor: theme.line },
+        ]}
+      >
         <ProfilePicture user={user} size={48} />
         <View style={styles.who}>
           <Text weight="semibold">{user.displayName}</Text>
@@ -48,7 +57,10 @@ export default function Settings() {
             {user.email}
           </Text>
         </View>
-      </View>
+        <Text muted size={20}>
+          ›
+        </Text>
+      </Pressable>
       <View style={styles.spacer} />
       <Button label="Sign out" variant="secondary" onPress={() => setConfirming(true)} />
 

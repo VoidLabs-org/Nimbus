@@ -14,9 +14,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Endpoints that a cookie alone authenticates must come from the Nimbus app: they need {@code X-Requested-With:
- * nimbus}, which cross-site forms can't set, or they answer {@code 403}. The Mobile app's {@code X-Nimbus-Client:
- * mobile} passes too: forms can't set it either, and in that mode the endpoints read the token from the body, not
- * a cookie. A new endpoint like them goes in
+ * nimbus}, which cross-site forms can't set, or they answer {@code 403}. On {@link #READS_BODY_TOKEN} the Mobile
+ * app's {@code X-Nimbus-Client: mobile} passes too: forms can't set it either, and with it those endpoints read the
+ * token from the body and ignore the cookie. An endpoint goes there only once it does that. A new endpoint like them goes in
  * {@link #COOKIE_ONLY}, so none can forget the check. Not a bean, for the same reason as {@link EmailVerifiedGate}.
  */
 class NimbusHeaderGate extends OncePerRequestFilter {
@@ -28,16 +28,23 @@ class NimbusHeaderGate extends OncePerRequestFilter {
 	static final Set<String> COOKIE_ONLY = Set.of("/api/auth/refresh", "/api/auth/logout", "/api/auth/two-step",
 			"/api/auth/desktop/exchange");
 
+	/** The cookie endpoints that, for the Mobile app, take the refresh token from the body instead (ADR 0010). */
+	static final Set<String> READS_BODY_TOKEN = Set.of("/api/auth/refresh", "/api/auth/logout");
+
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
 			throws ServletException, IOException {
 		if (HttpMethod.POST.matches(request.getMethod()) && COOKIE_ONLY.contains(request.getRequestURI())
-				&& !"nimbus".equals(request.getHeader("X-Requested-With")) && !AuthController.fromMobileApp(request)) {
+				&& !"nimbus".equals(request.getHeader("X-Requested-With")) && !mobileReadingTheBody(request)) {
 			ProblemResponses.write(request, response,
 					ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "This request must come from the Nimbus app"));
 			return;
 		}
 		chain.doFilter(request, response);
+	}
+
+	private static boolean mobileReadingTheBody(HttpServletRequest request) {
+		return READS_BODY_TOKEN.contains(request.getRequestURI()) && AuthController.fromMobileApp(request);
 	}
 
 }

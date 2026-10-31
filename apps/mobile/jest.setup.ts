@@ -16,4 +16,6 @@ jest.mock("expo-secure-store", () => ({
 
 afterEach(() => {
   mockStored.clear();
+  // Undoes test-support's comeBackToTheApp, which moves the clock.
+  jest.restoreAllMocks();
 });

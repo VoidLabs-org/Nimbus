@@ -127,6 +127,22 @@ class MobileSessionTests {
 		refresh(phoneToken).expectStatus().isOk();
 	}
 
+	// Only refresh and logout read the Mobile app's token from the body; the other cookie endpoints still need the
+	// browser header, whatever the client says it is.
+	@Test
+	void theMobileHeaderPassesOnlyEndpointsThatReadTheBodyToken() {
+		client.post().uri("/api/auth/two-step")
+			.header(MOBILE, "mobile")
+			.body(Map.of("code", "123456"))
+			.exchange()
+			.expectStatus().isForbidden();
+		client.post().uri("/api/auth/desktop/exchange")
+			.header(MOBILE, "mobile")
+			.body(Map.of("code", "x", "verifier", "y"))
+			.exchange()
+			.expectStatus().isForbidden();
+	}
+
 	@Test
 	void theSessionsListNamesThePhone() {
 		register("Fermat", "fermat@example.com");

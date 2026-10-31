@@ -11,14 +11,14 @@ import { nimbusUserAgent } from "./userAgent";
  * Where the app stands with the User's Session:
  * - `starting`: reading the phone's storage and renewing a stored Session (the splash screen stays up)
  * - `signedOut`: no Session; Welcome on the first launch, Sign in after that
- * - `signedIn`: the tabs
+ * - `signedIn`: the tabs; `user` as the server sent it at `since` (a sign-in or a renewal)
  * - `expired`: the Session ended while the app had it; "Your session expired", then Sign in returns to `returnTo`
  * - `offline` / `serverError`: a stored Session couldn't be renewed for now; nothing is signed out
  */
 export type SessionState =
   | { kind: "starting" }
   | { kind: "signedOut" }
-  | { kind: "signedIn"; user: User }
+  | { kind: "signedIn"; user: User; since: number }
   | { kind: "expired"; returnTo: string | null }
   | { kind: "offline" }
   | { kind: "serverError" };
@@ -76,12 +76,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   /** Renews a stored Session, as on every launch. */
   async function restore() {
-    if (!(await api.hasStoredSession())) {
-      setState({ kind: "signedOut" });
-      return;
-    }
     try {
-      setState({ kind: "signedIn", user: await api.refresh() });
+      const user = await api.restore();
+      setState(user ? { kind: "signedIn", user, since: Date.now() } : { kind: "signedOut" });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setState({ kind: "expired", returnTo: null });
@@ -113,7 +110,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if ("user" in outcome) {
         setWelcomed(true);
         void welcomeSeen.set();
-        setState({ kind: "signedIn", user: outcome.user });
+        setState({ kind: "signedIn", user: outcome.user, since: Date.now() });
       }
       return outcome;
     },
@@ -123,7 +120,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setState({ kind: "signedOut" });
     },
     forget: async () => {
-      await refreshTokenStore.clear();
+      await api.forget();
       queryClient.clear();
       setState({ kind: "signedOut" });
     },

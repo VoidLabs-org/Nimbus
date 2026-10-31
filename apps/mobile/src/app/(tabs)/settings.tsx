@@ -1,3 +1,4 @@
+import { NetworkError } from "@repo/api";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button } from "../../components/Button";
@@ -14,21 +15,22 @@ import { useTheme } from "../../theme";
  */
 export default function Settings() {
   const theme = useTheme();
-  const { state, signOut } = useSession();
+  const { state, signOut, forget } = useSession();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // Why signing out didn't happen: no connection, or a server that failed.
+  const [failure, setFailure] = useState<"offline" | "server" | null>(null);
 
   if (state.kind !== "signedIn") return null;
   const { user } = state;
 
   async function confirmSignOut() {
     setBusy(true);
-    setFailed(false);
+    setFailure(null);
     try {
       await signOut();
-    } catch {
-      setFailed(true);
+    } catch (error) {
+      setFailure(error instanceof NetworkError ? "offline" : "server");
       setBusy(false);
     }
   }
@@ -57,9 +59,11 @@ export default function Settings() {
         <Text muted style={styles.body}>
           You’ll need your email and password, or Google or GitHub, to sign back in on this phone.
         </Text>
-        {failed ? (
+        {failure ? (
           <Text size={13} accessibilityRole="alert" style={{ color: theme.toastError }}>
-            Can’t reach Nimbus, so you’re still signed in. Check your connection and try again.
+            {failure === "offline"
+              ? "Can’t reach Nimbus, so you’re still signed in. Check your connection and try again."
+              : "Nimbus couldn’t sign you out just now. Try again, or sign out on this phone only."}
           </Text>
         ) : null}
         <Button
@@ -68,6 +72,13 @@ export default function Settings() {
           busy={busy}
           onPress={() => void confirmSignOut()}
         />
+        {failure === "server" ? (
+          <Button
+            label="Sign out on this phone only"
+            variant="secondary"
+            onPress={() => void forget()}
+          />
+        ) : null}
         <Button label="Cancel" variant="secondary" onPress={() => setConfirming(false)} />
       </Sheet>
     </Screen>

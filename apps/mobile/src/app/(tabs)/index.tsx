@@ -9,20 +9,22 @@ import { useTheme } from "../../theme";
 
 /**
  * Home (design M3d): who is signed in, and where Projects and Issues are for now. The unread count and the latest
- * Notifications come with #208. The User is read again from the API, so a new name shows; a Session that has ended
- * meanwhile surfaces here as "Your session expired".
+ * Notifications come with #208. The User from signing in or the launch counts as fresh for a minute; after that,
+ * coming back to the app reads them again, so a new name shows, and a Session that ended meanwhile surfaces here as
+ * "Your session expired".
  */
 export default function Home() {
   const theme = useTheme();
   const { state, api } = useSession();
-  const signedInAs = state.kind === "signedIn" ? state.user : null;
+  const signedIn = state.kind === "signedIn" ? state : null;
   // The time of day when Home opened; it stays put while the screen is up.
   const [opened] = useState(() => new Date());
   const { data: user } = useQuery({
     queryKey: ["me"],
     queryFn: api.me,
-    initialData: signedInAs ?? undefined,
-    initialDataUpdatedAt: 0,
+    initialData: signedIn?.user,
+    initialDataUpdatedAt: signedIn?.since,
+    staleTime: 60_000,
   });
 
   if (!user) return null;

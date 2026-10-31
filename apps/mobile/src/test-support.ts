@@ -1,4 +1,6 @@
+import { act } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
+import { AppState } from "react-native";
 
 /** What the app keeps in the phone's secure storage (see jest.setup.ts), to seed and inspect. */
 export const secureStore = (globalThis as unknown as { __secureStore: Map<string, string> })
@@ -9,7 +11,7 @@ export type SentRequest = { method: string; path: string; headers: Headers; body
 
 type Answer = { status: number; body?: unknown; headers?: Record<string, string> } | "offline";
 
-type Handler = (request: SentRequest) => Answer;
+type Handler = (request: SentRequest) => Answer | Promise<Answer>;
 
 /**
  * Stands in for the Nimbus API: `answer` sets what a path answers (in order, the last one repeating), and `sent` lists
@@ -30,7 +32,7 @@ export function fakeApi() {
     sent.push(request);
     const queue = handlers.get(`${request.method} ${request.path}`);
     const handler = queue && (queue.length > 1 ? queue.shift()! : queue[0]!);
-    const answer = handler ? handler(request) : { status: 404 };
+    const answer = handler ? await handler(request) : { status: 404 };
     if (answer === "offline") throw new TypeError("Network request failed");
     return new Response(answer.body === undefined ? null : JSON.stringify(answer.body), {
       status: answer.status,
@@ -70,4 +72,29 @@ export const ada = {
 /** Opens the real app, as on a phone. */
 export function renderApp(initialUrl?: string) {
   return renderRouter("./src/app", initialUrl ? { initialUrl } : undefined);
+}
+
+/** An answer the test releases when it chooses, to hold a request "in flight". */
+export function heldBack() {
+  let release!: (answer: Answer) => void;
+  const answer = new Promise<Answer>((resolve) => {
+    release = resolve;
+  });
+  return { answer: () => answer, release: (value: Answer) => act(async () => release(value)) };
+}
+
+/**
+ * The User leaves the app and comes back `minutes` later: the clock moves on, and the app hears it went to the
+ * background and returned, as React Native's AppState (mocked in tests) would tell it.
+ */
+export async function comeBackToTheApp(minutes: number) {
+  const now = Date.now() + minutes * 60_000;
+  jest.spyOn(Date, "now").mockReturnValue(now);
+  const listeners = (AppState.addEventListener as jest.Mock).mock.calls
+    .filter(([event]) => event === "change")
+    .map(([, listener]) => listener as (status: string) => void);
+  await act(async () => {
+    for (const listener of listeners) listener("background");
+    for (const listener of listeners) listener("active");
+  });
 }

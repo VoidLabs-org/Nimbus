@@ -1,4 +1,5 @@
 import { fireEvent, screen } from "@testing-library/react-native";
+import * as SecureStore from "expo-secure-store";
 import { ada, fakeApi, renderApp, secureStore } from "../test-support";
 
 function signedIn(refreshToken = "refresh-1") {
@@ -91,4 +92,19 @@ it("opens on Sign in, not Welcome, once Welcome was left", async () => {
 
   expect(await screen.findByText("Welcome back")).toBeTruthy();
   expect(screen.queryByText(/Projects, issues, boards/)).toBeNull();
+});
+
+it("stays signed in for this launch when the phone can't store the token", async () => {
+  const api = fakeApi();
+  secureStore.set("nimbus.welcomed", "yes");
+  api.answer("POST /api/auth/login", signedIn());
+  // The Keychain or Keystore refuses the first write: the refresh token.
+  (SecureStore.setItemAsync as jest.Mock).mockRejectedValueOnce(new Error("Keychain busy"));
+  jest.spyOn(console, "warn").mockImplementation(() => {});
+
+  await renderApp();
+  await signInWith("ada@example.com", "correct horse");
+
+  expect(await screen.findByText(/Ada Lovelace/)).toBeTruthy();
+  expect(secureStore.has("nimbus.refreshToken")).toBe(false);
 });

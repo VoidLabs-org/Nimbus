@@ -6,11 +6,12 @@ import {
   useFonts,
 } from "@expo-google-fonts/poppins";
 import { ApiError } from "@repo/api";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type Href, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
+import { AppState } from "react-native";
 import { SessionProvider, type SessionState, useSession } from "../session/session";
 import { useTheme } from "../theme";
 
@@ -30,6 +31,15 @@ export default function RootLayout() {
         },
       }),
   );
+  // Server data counts as "in view" while the app is in the foreground, so stale data is read again on coming back
+  // (TanStack Query's React Native setup; a browser tells it on its own).
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (status) =>
+      focusManager.setFocused(status === "active"),
+    );
+    return () => subscription.remove();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>

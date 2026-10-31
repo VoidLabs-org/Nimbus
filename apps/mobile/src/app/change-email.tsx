@@ -10,13 +10,14 @@ import {
   NetworkError,
   RESEND_WAIT_SECONDS,
   SAME_EMAIL,
+  sameAddress,
   tooManyAttemptsMessage,
   WRONG_PASSWORD,
   WRONG_RECOVERY_CODE,
   WRONG_SIGN_IN_CODE,
 } from "@repo/api";
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, usePreventRemove } from "expo-router";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { BackLink } from "../components/BackLink";
 import { Button, LinkButton } from "../components/Button";
@@ -37,11 +38,6 @@ import { useSession } from "../session/session";
 
 /** The new address, Confirm it's you for an old sign-in, the code sent to the new address, or that code gone. */
 type Step = "email" | "confirm" | "code" | "expired";
-
-/** The server compares addresses trimmed and lower-cased. */
-function sameAddress(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
-}
 
 /**
  * Back to Profile, which says the email changed. The time makes each change's news new, so a second one shows it
@@ -66,6 +62,8 @@ export default function ChangeEmail() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
+  // A Resend that failed: said under the links, not about the code, which may still be right.
+  const [resendError, setResendError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [checking, setChecking] = useState(false);
   // An address was sent codes too fast: Send code is off for it while this counts down.
@@ -85,6 +83,14 @@ export default function ChangeEmail() {
   const [signInAgain, setSignInAgain] = useState(false);
   const [signInAgainError, setSignInAgainError] = useState<string | null>(null);
   const busy = sending || checking || confirming;
+  // Leaving can't happen while a request is out (Back, a swipe, the phone's back button), so no answer lands, and no
+  // code goes out, after the User has gone.
+  usePreventRemove(busy, () => {});
+  // Set once the email changed; back to Profile after the render that ends `busy`, which would block it otherwise.
+  const [changedTo, setChangedTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (changedTo) backToProfile(changedTo);
+  }, [changedTo]);
 
   if (state.kind !== "signedIn") return null;
   const { user } = state;
@@ -92,6 +98,7 @@ export default function ChangeEmail() {
   /** Asks for a code for `email`; `fromAddress` when it is the address step's (or Confirm it's you's) send. */
   async function send(email: string, fromAddress: boolean) {
     setSending(true);
+    setResendError(null);
     try {
       await api.requestEmailChange(email);
       setSentTo(email);
@@ -132,7 +139,7 @@ export default function ChangeEmail() {
       setStep("email");
     } else if (!fromAddress) {
       // Not the code's error: the code typed may still be right.
-      setCodeError(
+      setResendError(
         failure instanceof NetworkError
           ? NETWORK_ERROR
           : "Couldn’t send a new code. Please try again.",
@@ -151,7 +158,8 @@ export default function ChangeEmail() {
     setChecking(true);
     try {
       userChanged(await api.confirmEmailChange(code));
-      backToProfile(sentTo);
+      setChecking(false);
+      setChangedTo(sentTo);
     } catch (failure) {
       if (failure instanceof ApiError && failure.code === "invalid_code") {
         setCodeError(emailChangeCodeMessage(failure.triesLeft));
@@ -224,7 +232,12 @@ export default function ChangeEmail() {
   return (
     <Screen scroll>
       {step === "email" ? (
-        <BackLink label="Profile" onPress={() => router.back()} />
+        <BackLink
+          label="Profile"
+          onPress={() => {
+            if (!busy) router.back();
+          }}
+        />
       ) : step === "confirm" && phase === "secondCode" ? (
         <BackLink
           label="Back"
@@ -395,6 +408,7 @@ export default function ChangeEmail() {
             />
             <LinkButton label="Use a different email" disabled={busy} onPress={backToEmail} />
           </View>
+          {resendError ? <FormMessage message={resendError} /> : null}
         </>
       ) : (
         <>
@@ -406,7 +420,7 @@ export default function ChangeEmail() {
               Codes last 15 minutes. Send a new one to <Text weight="semibold">{sentTo}</Text>.
             </Text>
           </View>
-          {codeError ? <FormMessage message={codeError} /> : null}
+          {resendError ? <FormMessage message={resendError} /> : null}
           <Button
             label={
               resendSeconds > 0 ? `Send a new code in ${clock(resendSeconds)}` : "Send a new code"

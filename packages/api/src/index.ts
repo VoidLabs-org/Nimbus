@@ -29,6 +29,7 @@ export {
   PICTURE_TYPES,
   pictureFileError,
   SAME_EMAIL,
+  sameAddress,
   UNREADABLE,
   uploadedOn,
   uploadLimitMessage,

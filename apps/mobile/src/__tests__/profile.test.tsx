@@ -7,7 +7,7 @@ import {
   emailChangeCodeMessage,
   uploadLimitMessage,
 } from "@repo/api";
-import { fireEvent, screen } from "@testing-library/react-native";
+import { act, fireEvent, screen } from "@testing-library/react-native";
 import * as ImagePicker from "expo-image-picker";
 import { ada, fakeApi, photoPicked, renderApp, secureStore } from "../test-support";
 
@@ -391,5 +391,130 @@ describe("changing the email", () => {
 
     expect(await screen.findByRole("header", { name: "Profile" })).toBeTruthy();
     expect(screen.getByText("ada@example.com")).toBeTruthy();
+  });
+});
+
+describe("after the review", () => {
+  it("comes back to Profile above the tabs after signing in again, so Settings is one step back", async () => {
+    const api = fakeApi();
+    api.answer("POST /api/users/me/email-change", {
+      status: 403,
+      body: { detail: "No", code: "reauth_required" },
+    });
+    api.answer("POST /api/auth/logout", { status: 204 });
+    const noPassword = { ...ada, hasPassword: false };
+
+    await openProfile(api, noPassword);
+    await fireEvent.press(screen.getByRole("button", { name: /Email/ }));
+    await fireEvent.changeText(await screen.findByLabelText("New email"), "ada@new.example");
+    await fireEvent.press(screen.getByRole("button", { name: "Send code" }));
+    await screen.findByText("Sign in again to change your email");
+    const buttons = screen.getAllByRole("button", { name: "Sign in again" });
+    await fireEvent.press(buttons[buttons.length - 1]!);
+    api.answer("POST /api/auth/login", {
+      status: 200,
+      body: { accessToken: "access-2", refreshToken: "refresh-2", user: noPassword },
+    });
+    await fireEvent.changeText(await screen.findByLabelText("Email"), "ada@example.com");
+    await fireEvent.changeText(screen.getByLabelText("Password"), "correct horse");
+    await fireEvent.press(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("header", { name: "Profile" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Settings" }));
+    expect(
+      await screen.findByText(/Projects and issues are on the web for now|Sign out/),
+    ).toBeTruthy();
+  });
+
+  it("keeps Change email on when only Resend failed: the code typed may still be right", async () => {
+    const api = fakeApi();
+    api.answer("POST /api/users/me/email-change", { status: 204 }, "offline");
+    api.answer("POST /api/users/me/email-change/confirm", {
+      status: 200,
+      body: { ...ada, email: "ada@new.example" },
+    });
+    jest.useFakeTimers();
+
+    await openProfile(api);
+    await fireEvent.press(screen.getByRole("button", { name: /Email/ }));
+    await fireEvent.changeText(await screen.findByLabelText("New email"), "ada@new.example");
+    await fireEvent.press(screen.getByRole("button", { name: "Send code" }));
+    await fireEvent.changeText(await screen.findByLabelText("Verification code"), "290415");
+    for (let second = 0; second < 60; second++) {
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+    }
+    await fireEvent.press(screen.getByRole("button", { name: "Resend code" }));
+    expect(await screen.findByText(/Can’t reach Nimbus/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change email" })).toBeEnabled();
+    jest.useRealTimers();
+  });
+
+  it("says when the camera or the library couldn't open", async () => {
+    const api = fakeApi();
+    (ImagePicker.launchCameraAsync as jest.Mock).mockRejectedValueOnce(new Error("No camera"));
+
+    await openProfile(api);
+    await openPictureSheet();
+    await fireEvent.press(screen.getByRole("button", { name: "Take photo" }));
+
+    expect(await screen.findByText("Couldn't open the camera. Please try again.")).toBeTruthy();
+  });
+
+  it("says the photo was removed even when reading the User again fails", async () => {
+    const api = fakeApi();
+    api.answer("DELETE /api/users/me/profile-picture", { status: 204 });
+
+    await openProfile(api, withPictures);
+    api.answer("GET /api/users/me", "offline");
+    await openPictureSheet();
+    await fireEvent.press(screen.getByRole("button", { name: "Remove photo" }));
+
+    expect(await screen.findByText("Profile picture updated")).toBeTruthy();
+    expect(screen.queryByText(/Couldn't remove your photo/)).toBeNull();
+  });
+
+  it("sends nothing when the name wasn't changed, even from the keyboard", async () => {
+    const api = fakeApi();
+
+    await openProfile(api);
+    await fireEvent.press(screen.getByRole("button", { name: /Display name/ }));
+    await fireEvent(await screen.findByLabelText("Display name"), "submitEditing");
+
+    expect(api.to("PATCH /api/users/me")).toHaveLength(0);
+  });
+
+  it("takes the type from the file name when the picker gives none", async () => {
+    const api = fakeApi();
+    photoPicked("library", { mimeType: undefined, fileName: "IMG_0001.HEIC" });
+
+    await openProfile(api);
+    await openPictureSheet();
+    await fireEvent.press(screen.getByRole("button", { name: "Choose from library" }));
+
+    expect(await screen.findByText(WRONG_FILE)).toBeTruthy();
+    expect(api.to("PUT /api/users/me/profile-picture")).toHaveLength(0);
+  });
+
+  it("drops the upload limit's message once the wait is over", async () => {
+    const api = fakeApi();
+    api.answer("PUT /api/users/me/profile-picture", {
+      status: 429,
+      headers: { "Retry-After": "60" },
+    });
+    photoPicked("library", {});
+
+    await openProfile(api);
+    jest.useFakeTimers();
+    await openPictureSheet();
+    await fireEvent.press(screen.getByRole("button", { name: "Choose from library" }));
+    expect(await screen.findByText(uploadLimitMessage(60))).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+
+    expect(screen.queryByText(uploadLimitMessage(60))).toBeNull();
+    jest.useRealTimers();
   });
 });

@@ -13,6 +13,7 @@ import {
   GENERIC_ERROR,
   RESEND_WAIT_SECONDS,
   SAME_EMAIL,
+  sameAddress,
 } from "@repo/api";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
 import { useCountdown } from "../auth/countdown";
@@ -362,11 +363,6 @@ export function ChangeEmailDialog({
       )}
     </WindowFrame>
   );
-}
-
-/** The server compares addresses trimmed and lower-cased. */
-function sameAddress(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 const STEPS = ["Confirm it’s you", "New email", "Enter code"] as const;

@@ -49,6 +49,11 @@ export function uploadedOn(iso: string): string {
   });
 }
 
+/** Whether two addresses are the same to the server, which compares them trimmed and lower-cased. */
+export function sameAddress(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 /** Change email: the new address is the one the User has (`same_email`). */
 export const SAME_EMAIL = "That’s already your email.";
 

@@ -28,6 +28,25 @@ import { useSession } from "../session/session";
 
 const PICTURE_UPDATED = "Profile picture updated";
 
+/** By the file's ending, for a picked photo the picker gave no type for. */
+const TYPES_BY_ENDING: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+/**
+ * The picked photo's type: the picker's, or else what its name says, so a HEIC photo is refused here, before a
+ * wasted upload, as the web refuses it. A name that says nothing either is left to the server.
+ */
+function typeOf(asset: ImagePicker.ImagePickerAsset): string {
+  if (asset.mimeType) return asset.mimeType;
+  const ending = asset.fileName?.split(".").pop()?.toLowerCase();
+  if (!ending || ending === asset.fileName?.toLowerCase()) return "image/jpeg";
+  return TYPES_BY_ENDING[ending] ?? `image/${ending}`;
+}
+
 /** A new key for each toast, so the same news twice shows twice. */
 function newKey() {
   return String(Date.now());
@@ -55,15 +74,15 @@ export default function Profile() {
   const [busy, setBusy] = useState(false);
   // Under Edit picture: why the last picture change didn't happen.
   const [pictureMessage, setPictureMessage] = useState<string | null>(null);
-  // Set by a 429: no new photo until the wait is over (Remove and Show keep working).
-  const [limitedFor, setLimitedFor] = useState(0);
+  // Set by a 429: no new photo until the wait is over (Remove and Show keep working), and its message goes with it.
+  const [limit, setLimit] = useState<{ message: string; seconds: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; key: string } | null>(null);
 
   useEffect(() => {
-    if (limitedFor <= 0) return;
-    const timer = setTimeout(() => setLimitedFor(0), limitedFor * 1000);
+    if (!limit) return;
+    const timer = setTimeout(() => setLimit(null), limit.seconds * 1000);
     return () => clearTimeout(timer);
-  }, [limitedFor]);
+  }, [limit]);
 
   if (state.kind !== "signedIn") return null;
   const { user } = state;
@@ -83,22 +102,33 @@ export default function Profile() {
   async function pickPhoto(from: "camera" | "library") {
     setPictureSheet(false);
     setPictureMessage(null);
-    if (from === "camera") {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        setPictureMessage(
-          "Allow Nimbus to use the camera in your phone’s settings, then try again.",
-        );
-        return;
+    let picked: ImagePicker.ImagePickerResult;
+    try {
+      if (from === "camera") {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setPictureMessage(
+            "Allow Nimbus to use the camera in your phone’s settings, then try again.",
+          );
+          return;
+        }
       }
+      picked =
+        from === "camera"
+          ? await ImagePicker.launchCameraAsync(PICK)
+          : await ImagePicker.launchImageLibraryAsync(PICK);
+    } catch {
+      // No camera, or the phone's picker failed to open.
+      setPictureMessage(
+        from === "camera"
+          ? "Couldn't open the camera. Please try again."
+          : "Couldn't open your photos. Please try again.",
+      );
+      return;
     }
-    const picked =
-      from === "camera"
-        ? await ImagePicker.launchCameraAsync(PICK)
-        : await ImagePicker.launchImageLibraryAsync(PICK);
     const asset = picked.canceled ? null : picked.assets[0];
     if (!asset) return;
-    const type = asset.mimeType ?? "image/jpeg";
+    const type = typeOf(asset);
     const wrong = pictureFileError({ type, size: asset.fileSize });
     if (wrong) {
       setPictureMessage(wrong);
@@ -114,8 +144,10 @@ export default function Profile() {
       done(PICTURE_UPDATED, changed);
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 429) {
-        setPictureMessage(uploadLimitMessage(failure.retryAfterSeconds));
-        setLimitedFor(failure.retryAfterSeconds ?? 60);
+        setLimit({
+          message: uploadLimitMessage(failure.retryAfterSeconds),
+          seconds: failure.retryAfterSeconds ?? 60,
+        });
       } else if (failure instanceof ApiError && failure.status === 400) {
         setPictureMessage(failure.code === "unreadable_image" ? UNREADABLE : WRONG_FILE);
       } else {
@@ -150,12 +182,16 @@ export default function Profile() {
     setBusy(true);
     try {
       await api.removeProfilePicture();
-      done(PICTURE_UPDATED, await api.me());
     } catch {
       setPictureMessage("Couldn't remove your photo. Check your connection and try again.");
-    } finally {
       setBusy(false);
+      return;
     }
+    // It is gone either way; reading the User again only shows what they show now, and a later read catches up.
+    const changed = await api.me().catch(() => null);
+    if (changed) done(PICTURE_UPDATED, changed);
+    else setToast({ message: PICTURE_UPDATED, key: newKey() });
+    setBusy(false);
   }
 
   const { uploadedAt, providers } = user.pictureOptions;
@@ -187,7 +223,9 @@ export default function Profile() {
           ) : null}
         </View>
         <LinkButton label="Edit picture" disabled={busy} onPress={() => setPictureSheet(true)} />
-        {pictureMessage ? <FormMessage message={pictureMessage} /> : null}
+        {(limit?.message ?? pictureMessage) ? (
+          <FormMessage message={limit?.message ?? pictureMessage!} />
+        ) : null}
       </View>
       <SettingsGroup>
         <SettingsRow
@@ -211,13 +249,13 @@ export default function Profile() {
         <Button
           label="Take photo"
           variant="secondary"
-          disabled={limitedFor > 0}
+          disabled={limit !== null}
           onPress={() => void pickPhoto("camera")}
         />
         <Button
           label="Choose from library"
           variant="secondary"
-          disabled={limitedFor > 0}
+          disabled={limit !== null}
           onPress={() => void pickPhoto("library")}
         />
         <Text muted size={13} weight="semibold" style={styles.show}>
@@ -273,7 +311,8 @@ function DisplayNameForm({
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (saving) return;
+    // The keyboard's Return can submit an unchanged name, which the button can't.
+    if (saving || name === current) return;
     const mistake = displayNameError(name);
     setError(mistake);
     if (mistake) return;

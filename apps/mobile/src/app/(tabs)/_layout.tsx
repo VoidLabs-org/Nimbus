@@ -5,15 +5,21 @@ import { Text } from "../../components/Text";
 import { useSession } from "../../session/session";
 import { fonts, useTheme } from "../../theme";
 
+/** The tabs' own paths, besides Home's "/". */
+const TABS = ["/inbox", "/settings"];
+
 /** Home, Inbox and Settings, the signed-in app (design M3d). */
 export default function TabsLayout() {
   const theme = useTheme();
   const { takeReturnTo } = useSession();
 
-  // After "Your session expired" and signing in again, back to the screen the User was on.
+  // After "Your session expired" and signing in again, back to the screen the User was on. A tab replaces Home; any
+  // other screen (Profile, Change email) goes on top of the tabs, so its Back returns to them.
   useEffect(() => {
     const returnTo = takeReturnTo();
-    if (returnTo && returnTo !== "/") router.replace(returnTo as Href);
+    if (!returnTo || returnTo === "/") return;
+    if (TABS.includes(returnTo)) router.replace(returnTo as Href);
+    else router.push(returnTo as Href);
   }, [takeReturnTo]);
 
   return (

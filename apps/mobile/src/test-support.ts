@@ -1,5 +1,6 @@
 import { act } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
+import * as WebBrowser from "expo-web-browser";
 import { AppState } from "react-native";
 
 /** What the app keeps in the phone's secure storage (see jest.setup.ts), to seed and inspect. */
@@ -97,4 +98,16 @@ export async function comeBackToTheApp(minutes: number) {
     for (const listener of listeners) listener("background");
     for (const listener of listeners) listener("active");
   });
+}
+
+/**
+ * How the next provider sign-in in the in-app browser ends: the link the API's callback handed back (such as
+ * `nimbus://auth?code=c-1`), or the User closing the browser. Answers the mock, to check what was opened.
+ */
+export function browserReturns(outcome: string | "closed") {
+  const open = WebBrowser.openAuthSessionAsync as jest.Mock;
+  open.mockResolvedValueOnce(
+    outcome === "closed" ? { type: "cancel" } : { type: "success", url: outcome },
+  );
+  return open;
 }

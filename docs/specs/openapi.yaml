@@ -482,23 +482,91 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /api/auth/app/exchange:
+    post:
+      tags: [auth]
+      summary: An app trades a one-time code from the browser for the sign-in
+      description: >-
+        After "Continue with Google or GitHub" in a browser started by one of the apps, the app sends the code the
+        browser handed back and the verifier whose hash started the handshake. A code lasts 60 seconds and works once;
+        a wrong verifier also ends it. It signs in as the browser's callback would, but with this request's
+        `User-Agent` (the Session's device) and remembered devices. The Desktop app (ADR 0008) sends its
+        `two_step_remembered` cookie and gets either the refresh cookie (then load `/auth/callback`) or, for a User
+        with Two-step verification, the `two_step_pending` cookie (then `/login/two-step`). The Mobile app
+        (`X-Nimbus-Client: mobile`, ADR 0010) sends `rememberedTokens` and gets what `POST /api/auth/login` answers it:
+        the tokens and the User, or `{twoStepRequired: true, pendingToken}`; no cookies.
+      security: []
+      parameters:
+        - name: X-Requested-With
+          in: header
+          required: false
+          description: >-
+            Must be `nimbus` unless `X-Nimbus-Client` is `mobile`. It sets cookies for the Desktop app, so cross-site
+            forms must not reach it.
+          schema:
+            type: string
+            const: nimbus
+        - $ref: "#/components/parameters/MobileClient"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppCode"
+      responses:
+        "200":
+          description: >-
+            The Desktop app: `twoStepRequired: false` with the refresh cookie set, or `true` with the `two_step_pending`
+            cookie set. The Mobile app: `AuthResponse`, or `twoStepRequired: true` with `pendingToken`.
+          headers:
+            Set-Cookie:
+              description: >-
+                The Desktop app only: the refresh cookie (see `RefreshCookie`), or the pending cookie (see the
+                `twoStepPendingCookie` scheme)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [twoStepRequired]
+                    properties:
+                      twoStepRequired:
+                        type: boolean
+                      pendingToken:
+                        type: string
+                        description: >-
+                          Only for the Mobile app, with `twoStepRequired` true, for `POST /api/auth/two-step`.
+                  - $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: >-
+            `code: expired` (unknown, used, older than 60 seconds, a connect's code, or the wrong verifier),
+            `email_unverified` or `disconnected`, as on the sign-in page; or a field over its limit (`errors`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: "Neither `X-Requested-With: nimbus` nor `X-Nimbus-Client: mobile`"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /api/auth/desktop/exchange:
     post:
       tags: [auth]
-      summary: The Desktop app trades a one-time code from the browser for the sign-in
+      deprecated: true
+      summary: The Desktop app's old path for `POST /api/auth/app/exchange`
       description: >-
-        After "Continue with Google or GitHub" in the system browser (ADR 0008), the Desktop app's page sends the code
-        the browser handed back and the verifier whose hash started the handshake. A code lasts 60 seconds and works
-        once; a wrong verifier also ends it. It signs in as the browser's callback would, but with this request's
-        `User-Agent` (the Session's device) and `two_step_remembered` cookie: either the refresh cookie (then load
-        `/auth/callback`) or, for a User with Two-step verification, the `two_step_pending` cookie (then
-        `/login/two-step`).
+        The same exchange for the Desktop app, kept until it has moved to `/api/auth/app/exchange`. It needs
+        `X-Requested-With: nimbus`; the Mobile app's header doesn't pass here.
       security: []
       parameters:
         - name: X-Requested-With
           in: header
           required: true
-          description: Must be `nimbus`. It sets cookies, so cross-site forms must not reach it.
           schema:
             type: string
             const: nimbus
@@ -507,45 +575,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DesktopCode"
+              $ref: "#/components/schemas/AppCode"
       responses:
         "200":
-          description: >-
-            `twoStepRequired: false` with the refresh cookie set, or `true` with the `two_step_pending` cookie set
-          headers:
-            Set-Cookie:
-              description: The refresh cookie (see `RefreshCookie`), or the pending cookie (see the `twoStepPendingCookie` scheme)
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [twoStepRequired]
-                properties:
-                  twoStepRequired:
-                    type: boolean
+          description: As for `POST /api/auth/app/exchange` from the Desktop app
         "400":
-          description: >-
-            `code: expired` (unknown, used, older than 60 seconds, a connect's code, or the wrong verifier),
-            `email_unverified` or `disconnected`, as on the sign-in page; or a field over 256 characters (`errors`)
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
+          description: As for `POST /api/auth/app/exchange`
         "403":
           description: The X-Requested-With header is missing or not `nimbus`
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
 
-  /api/auth/desktop/connect:
+  /api/auth/app/connect:
     post:
       tags: [auth]
-      summary: The Desktop app finishes connecting a provider from Security
+      summary: An app finishes connecting a provider from Security
       description: >-
-        For a connect started in the system browser with a link ticket (ADR 0008). The ticket must have been issued to
+        For a connect started in a browser by one of the apps with a link ticket (ADR 0008).
+        `/api/auth/desktop/connect` is the Desktop app's old path for it, kept until it has moved. The ticket must have been issued to
         this access token's Session (instead of the `link_binder` cookie, which stays in the app); then the provider
         account is connected as on the callback in a browser.
       requestBody:
@@ -553,7 +598,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DesktopCode"
+              $ref: "#/components/schemas/AppCode"
       responses:
         "200":
           description: Connected
@@ -592,6 +637,7 @@ paths:
         - $ref: "#/components/parameters/DesktopChallenge"
         - $ref: "#/components/parameters/DesktopPort"
         - $ref: "#/components/parameters/DesktopNonce"
+        - $ref: "#/components/parameters/MobileChallenge"
       responses:
         "302":
           description: Redirect to Google's sign-in page
@@ -654,6 +700,7 @@ paths:
         - $ref: "#/components/parameters/DesktopChallenge"
         - $ref: "#/components/parameters/DesktopPort"
         - $ref: "#/components/parameters/DesktopNonce"
+        - $ref: "#/components/parameters/MobileChallenge"
       responses:
         "302":
           description: Redirect to GitHub's sign-in page
@@ -2352,6 +2399,18 @@ components:
         type: integer
         minimum: 1024
         maximum: 65535
+    MobileChallenge:
+      name: mobile
+      in: query
+      required: false
+      description: >-
+        The Mobile app only: base64url SHA-256 of the app's verifier (RFC 7636 S256, 43 characters). The handshake then
+        ends at `nimbus://auth?code=<code>` (or `?error=<code>&provider=<provider>`), which the phone's in-app browser
+        hands to the app, instead of signing the browser in. The link is fixed, never taken from the request. When it
+        is missing or malformed, the handshake ends in the browser as usual; `desktop`, when usable, wins.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{43}$"
     DesktopNonce:
       name: nonce
       in: query
@@ -2541,19 +2600,31 @@ components:
             Only from the Mobile app: the `rememberedToken` a Two-step sign-in answered, to skip the code. A browser
             sends the `two_step_remembered` cookie instead; this field is ignored from one.
 
-    DesktopCode:
+    AppCode:
       type: object
       required: [code, verifier]
-      description: What a sign-in or connect in the system browser handed back to the Desktop app (ADR 0008).
+      description: What a sign-in or connect in a browser handed back to one of the apps.
       properties:
         code:
           type: string
           maxLength: 256
-          description: The one-time code from `http://127.0.0.1:<port>/<nonce>?code=`
+          description: >-
+            The one-time code from `http://127.0.0.1:<port>/<nonce>?code=` (the Desktop app) or
+            `nimbus://auth?code=` (the Mobile app)
         verifier:
           type: string
           maxLength: 256
           description: The secret the app made for this attempt (43-128 characters); the handshake was started with its hash
+        rememberedTokens:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 128
+          description: >-
+            Only from the Mobile app, at the exchange: every User's `rememberedToken` it keeps (it can't know
+            beforehand whom the provider signs in as); the one that remembers this User skips the code. The Desktop
+            app sends its `two_step_remembered` cookie instead.
     AuthResponse:
       type: object
       required: [accessToken, user]

@@ -31,7 +31,8 @@ export const pendingSignInStore: TokenStore = {
  * "Remember this device for 30 days", for each User who ticked it on this phone: their remembered token and User id by
  * email, lower-cased, so another User signing in here is still asked for their code. One entry, as JSON, because a
  * secure storage key can't hold an email's characters. Each change reads and rewrites that entry, so changes run one
- * after another: two at once would each start from the old entry, and one would undo the other.
+ * after another: two at once would each start from the old entry, and one would undo the other. At most
+ * {@link MAX_REMEMBERED} are kept, the latest, which is as many as a provider sign-in may send.
  */
 export const rememberedDevices: RememberedDevices = {
   get: async (email) => {
@@ -45,14 +46,31 @@ export const rememberedDevices: RememberedDevices = {
         if (entry.userId === userId) delete all[other];
       }
       all[key(email)] = { userId, token };
+      // Oldest first, as the entries were added: the ones over the limit go.
+      for (const oldest of Object.keys(all).slice(0, -MAX_REMEMBERED)) delete all[oldest];
     }),
   forget: (email) =>
     change((all) => {
       delete all[key(email)];
     }),
+  forgetUser: (userId) =>
+    change((all) => {
+      for (const [email, entry] of Object.entries(all)) {
+        if (entry.userId === userId) delete all[email];
+      }
+    }),
+  all: async () => {
+    await changes;
+    return Object.values(await readRemembered())
+      .map((entry) => entry.token)
+      .slice(-MAX_REMEMBERED);
+  },
 };
 
 type Remembered = Record<string, { userId: string; token: string }>;
+
+/** As many remembered devices as the API's app sign-in takes at once (`rememberedTokens`, at most 20). */
+const MAX_REMEMBERED = 20;
 
 let changes: Promise<unknown> = Promise.resolve();
 

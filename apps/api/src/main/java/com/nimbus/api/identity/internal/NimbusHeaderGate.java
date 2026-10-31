@@ -26,13 +26,14 @@ class NimbusHeaderGate extends OncePerRequestFilter {
 	 * token but reads the remembered cookie and sets the sign-in's cookies.
 	 */
 	static final Set<String> COOKIE_ONLY = Set.of("/api/auth/refresh", "/api/auth/logout", "/api/auth/two-step",
-			"/api/auth/desktop/exchange");
+			"/api/auth/app/exchange", "/api/auth/desktop/exchange");
 
 	/**
 	 * The cookie endpoints that, for the Mobile app, take their token from the body instead (ADR 0010): the refresh
-	 * token, or the pending sign-in's.
+	 * token, the pending sign-in's, or (at the apps' exchange) the remembered devices.
 	 */
-	static final Set<String> READS_BODY_TOKEN = Set.of("/api/auth/refresh", "/api/auth/logout", "/api/auth/two-step");
+	static final Set<String> READS_BODY_TOKEN = Set.of("/api/auth/refresh", "/api/auth/logout", "/api/auth/two-step",
+			"/api/auth/app/exchange");
 
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)

@@ -125,7 +125,7 @@ class DesktopSignInTests {
 	void aCodeExpiresAfterAMinute() throws Exception {
 		googleUser("ds5@example.com", "g-ds-5");
 		var code = codeFor(google("g-ds-5", "ds5@example.com"));
-		clock.advance(DesktopCodes.LIFETIME.plusSeconds(1));
+		clock.advance(AppCodes.LIFETIME.plusSeconds(1));
 
 		exchange(code, VERIFIER).expectStatus().isBadRequest().expectBody().jsonPath("$.code").isEqualTo("expired");
 	}
@@ -218,7 +218,7 @@ class DesktopSignInTests {
 
 		assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3000/auth/desktop-done?outdated=1");
 		assertThat(handshake.isInvalid()).isFalse();
-		assertThat(DesktopReturn.recall(request)).isPresent();
+		assertThat(AppReturn.recall(request)).isPresent();
 	}
 
 	@Test
@@ -292,10 +292,10 @@ class DesktopSignInTests {
 		for (var port : List.of("80", "70000", "53682x", "")) {
 			var request = new MockHttpServletRequest();
 			request.setSession(new MockHttpSession());
-			request.setParameter(DesktopReturn.CHALLENGE, challengeOf(VERIFIER));
-			request.setParameter(DesktopReturn.PORT, port);
-			request.setParameter(DesktopReturn.NONCE, NONCE);
-			DesktopReturn.remember(request);
+			request.setParameter(AppReturn.CHALLENGE, challengeOf(VERIFIER));
+			request.setParameter(AppReturn.PORT, port);
+			request.setParameter(AppReturn.NONCE, NONCE);
+			AppReturn.remember(request);
 			var response = new MockHttpServletResponse();
 
 			handler.onAuthenticationSuccess(request, response, google("g-ds-13", "ds13@example.com"));
@@ -334,10 +334,10 @@ class DesktopSignInTests {
 	private static MockHttpServletRequest startedForDesktop() throws NoSuchAlgorithmException {
 		var request = new MockHttpServletRequest();
 		request.setSession(new MockHttpSession());
-		request.setParameter(DesktopReturn.CHALLENGE, challengeOf(VERIFIER));
-		request.setParameter(DesktopReturn.PORT, "53682");
-		request.setParameter(DesktopReturn.NONCE, NONCE);
-		DesktopReturn.remember(request);
+		request.setParameter(AppReturn.CHALLENGE, challengeOf(VERIFIER));
+		request.setParameter(AppReturn.PORT, "53682");
+		request.setParameter(AppReturn.NONCE, NONCE);
+		AppReturn.remember(request);
 		request.removeAllParameters();
 		return request;
 	}

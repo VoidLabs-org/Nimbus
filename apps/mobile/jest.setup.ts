@@ -18,4 +18,22 @@ afterEach(() => {
   mockStored.clear();
   // Undoes test-support's comeBackToTheApp, which moves the clock.
   jest.restoreAllMocks();
+  // Module mocks keep their calls and queued answers otherwise; each test starts with the browser closing.
+  jest.clearAllMocks();
+  (jest.requireMock("expo-web-browser").openAuthSessionAsync as jest.Mock)
+    .mockReset()
+    .mockImplementation(async () => ({ type: "cancel" }));
 });
+
+// The phone's random bytes and hashing, made predictable: tests check what is sent, not the cryptography.
+jest.mock("expo-crypto", () => ({
+  getRandomBytes: jest.fn((count: number) => new Uint8Array(count).fill(7)),
+  digestStringAsync: jest.fn(async () => "q83vEjRWeJA+/w=="),
+  CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+  CryptoEncoding: { BASE64: "base64", HEX: "hex" },
+}));
+
+// The in-app browser: a test says how the provider sign-in in it ends (test-support's `browserReturns`).
+jest.mock("expo-web-browser", () => ({
+  openAuthSessionAsync: jest.fn(async () => ({ type: "cancel" })),
+}));

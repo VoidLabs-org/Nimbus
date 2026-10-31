@@ -6,6 +6,9 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
   server: {
+    // IPv4, not `localhost`: Node may resolve that to IPv6 [::1] only, where `adb reverse` (the Mobile app on an
+    // emulator or a USB phone) can't reach it. Browsers and the Desktop app still open http://localhost:3000.
+    host: "127.0.0.1",
     port: 3000,
     strictPort: true,
     proxy: {

@@ -37,20 +37,17 @@ class AuthController {
 
 	private final SignIn signIn;
 
-	private final AccessTokens accessTokens;
-
 	private final Sessions sessions;
 
 	private final TwoStepSignIn twoStepSignIn;
 
-	private final ProfilePictures pictures;
+	private final SessionResponses responses;
 
-	AuthController(Registration registration, SignIn signIn, AccessTokens accessTokens, Sessions sessions,
-			TwoStepSignIn twoStepSignIn, ProfilePictures pictures) {
-		this.pictures = pictures;
+	AuthController(Registration registration, SignIn signIn, Sessions sessions, TwoStepSignIn twoStepSignIn,
+			SessionResponses responses) {
+		this.responses = responses;
 		this.registration = registration;
 		this.signIn = signIn;
-		this.accessTokens = accessTokens;
 		this.sessions = sessions;
 		this.twoStepSignIn = twoStepSignIn;
 	}
@@ -98,12 +95,13 @@ class AuthController {
 				request.recoveryCode(), Boolean.TRUE.equals(request.rememberBrowser()),
 				http.getHeader(HttpHeaders.USER_AGENT));
 		if (mobile) {
-			return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), signedIn.rememberedToken(), http);
+			return responses.withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), signedIn.rememberedToken(),
+					http);
 		}
 		var cookies = signedIn.rememberedToken() == null ? new ResponseCookie[] { PendingSignIns.clearedCookie() }
 				: new ResponseCookie[] { PendingSignIns.clearedCookie(),
 						RememberedBrowsers.cookie(signedIn.rememberedToken()) };
-		return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), null, http, cookies);
+		return responses.withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), null, http, cookies);
 	}
 
 	/**
@@ -115,7 +113,7 @@ class AuthController {
 	ResponseEntity<AuthResponse> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String cookie,
 			@RequestBody(required = false) RefreshTokenRequest body, HttpServletRequest http) {
 		var refreshed = sessions.refresh(refreshToken(cookie, body, http), http.getRemoteAddr());
-		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token(), null, http);
+		return responses.withSession(HttpStatus.OK, refreshed.user(), refreshed.token(), null, http);
 	}
 
 	/**
@@ -139,24 +137,10 @@ class AuthController {
 	 */
 	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user, HttpServletRequest http,
 			boolean announce, ResponseCookie... alsoSet) {
-		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT), announce), null,
-				http, alsoSet);
+		var refreshToken = sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT), announce);
+		return responses.withSession(status, user, refreshToken, null, http, alsoSet);
 	}
 
-	/** @param rememberedToken the Mobile app's new remembered device, for the body; null for none, and for a browser */
-	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken,
-			String rememberedToken, HttpServletRequest http, ResponseCookie... alsoSet) {
-		var mobile = fromMobileApp(http);
-		var response = ResponseEntity.status(status);
-		if (!mobile) {
-			response.header(HttpHeaders.SET_COOKIE, refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
-		}
-		for (var cookie : alsoSet) {
-			response.header(HttpHeaders.SET_COOKIE, cookie.toString());
-		}
-		return response.body(new AuthResponse(accessTokens.issueFor(user, refreshToken.sessionId()),
-				mobile ? refreshToken.value() : null, rememberedToken, UserResponse.from(user, pictures)));
-	}
 
 	static boolean fromMobileApp(HttpServletRequest http) {
 		return MOBILE.equals(http.getHeader(CLIENT_HEADER));

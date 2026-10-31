@@ -2,6 +2,7 @@ package com.nimbus.api.identity.internal;
 
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -75,7 +76,17 @@ class TwoStepSignIn {
 	 * {@code pendingToken}; empty when no code is needed and the sign-in can go ahead now
 	 */
 	Optional<String> begin(User user, ExternalProfile profile, String rememberedToken) {
-		if (store.find(user.getId()).isEmpty() || rememberedBrowsers.isRemembered(user.getId(), rememberedToken)) {
+		return begin(user, profile, rememberedToken == null ? List.of() : List.of(rememberedToken));
+	}
+
+	/**
+	 * As {@link #begin(User, ExternalProfile, String)}, for an app that keeps several Users' remembered devices and
+	 * can't know beforehand whom a provider signs in as: the one that remembers this User skips the code. They are
+	 * looked up only for a User with Two-step verification, one at a time until one matches.
+	 */
+	Optional<String> begin(User user, ExternalProfile profile, List<String> rememberedTokens) {
+		if (store.find(user.getId()).isEmpty()
+				|| rememberedTokens.stream().anyMatch(token -> rememberedBrowsers.isRemembered(user.getId(), token))) {
 			return Optional.empty();
 		}
 		return Optional.of(pending.start(user.getId(), user.passwordHash(), profile));

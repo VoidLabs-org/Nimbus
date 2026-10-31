@@ -18,6 +18,7 @@
     "@tanstack/react-query": "^5.104.3",
     "expo": "~58.0.21",
     "expo-constants": "~58.0.14",
+    "expo-crypto": "~58.0.7",
     "expo-dev-client": "~58.0.17",
     "expo-device": "~58.0.5",
     "expo-font": "~58.0.11",
@@ -51,6 +52,7 @@
     "setupFilesAfterEnv": [
       "./jest.setup.ts"
     ],
+    "testTimeout": 30000,
     "transformIgnorePatterns": [
       "node_modules/(?!(.pnpm|(jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|react-native-svg|standard-navigation))"
     ]

@@ -32,7 +32,7 @@ class EmailVerifiedGate extends OncePerRequestFilter {
 
 	private static final Set<String> ALLOWED_POSTS = Set.of("/api/auth/verify-email", "/api/auth/verify-email/resend", "/api/auth/logout",
 			"/api/auth/refresh", "/api/auth/login", "/api/auth/register", "/api/auth/password-reset",
-			"/api/auth/password-reset/confirm", "/api/auth/two-step", "/api/auth/desktop/exchange");
+			"/api/auth/password-reset/confirm", "/api/auth/two-step", "/api/auth/app/exchange", "/api/auth/desktop/exchange");
 
 	private final UserRepository users;
 

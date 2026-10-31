@@ -42,6 +42,11 @@ type Session = {
   finishTwoStep: (secondCode: SecondCode, rememberDevice: boolean) => Promise<void>;
   /** Leaves the code step without finishing it. */
   cancelTwoStep: () => Promise<void>;
+  /**
+   * Finishes a Google or GitHub sign-in with the code the in-app browser handed back: a Session, or a Sign-in code still
+   * to give. Rejects with the server's ApiError (`code` as on the sign-in page) if refused.
+   */
+  exchange: (code: string, verifier: string) => Promise<SignInOutcome>;
   /** Creates a User and signs them in, as an Unverified User. */
   register: (input: RegisterInput) => Promise<void>;
   /** Checks the Verification code; once it is right the app opens. Rejects with the server's ApiError if refused. */
@@ -140,6 +145,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signedIn(await api.finishTwoStep(secondCode, rememberDevice));
     },
     cancelTwoStep: () => api.cancelTwoStep(),
+    exchange: async (code, verifier) => {
+      const outcome = await api.exchange(code, verifier);
+      if ("user" in outcome) signedIn(outcome.user);
+      return outcome;
+    },
     register: async (input) => {
       const user = await api.register(input);
       // A new User: nothing to return to from an earlier User's expired Session.

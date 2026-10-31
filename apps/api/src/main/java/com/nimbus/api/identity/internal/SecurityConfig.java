@@ -52,7 +52,7 @@ class SecurityConfig {
 			.authorizeHttpRequests(requests -> requests
 				.requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh",
 					"/api/auth/logout", "/api/auth/password-reset", "/api/auth/password-reset/confirm",
-					"/api/auth/two-step", "/api/auth/desktop/exchange")
+					"/api/auth/two-step", "/api/auth/app/exchange", "/api/auth/desktop/exchange")
 				.permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/auth/providers").permitAll()
 				// Profile pictures load in <img> tags, which can't send the access token; their keys are unguessable.

@@ -18,4 +18,22 @@ export {
   WRONG_SIGN_IN_CODE,
   wrongCodeMessage,
 } from "./messages";
+export {
+  confirmHeading,
+  type ConfirmPhase,
+  EMAIL_TAKEN,
+  emailChangeCodeMessage,
+  initialsOf,
+  MAX_PICTURE_BYTES,
+  PICTURE_HINT,
+  PICTURE_TYPES,
+  pictureFileError,
+  SAME_EMAIL,
+  sameAddress,
+  UNREADABLE,
+  uploadedOn,
+  uploadLimitMessage,
+  WRONG_FILE,
+  WRONG_PASSWORD,
+} from "./profile";
 export { displayNameError, emailError, passwordError } from "./validation";

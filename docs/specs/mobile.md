@@ -4,7 +4,7 @@ The Mobile app (`apps/mobile`): Nimbus for Android and iOS, built with React Nat
 
 ## What it holds now
 
-Sign in with email and password or with Google or GitHub, with Two-step verification, Create an account with email verification, Forgot password, staying signed in between launches, Home, and Sign out. Inbox is a placeholder until #208; Settings shows who is signed in and Sign out. Projects and Issues are on the web for now.
+Sign in with email and password or with Google or GitHub, with Two-step verification, Create an account with email verification, Forgot password, staying signed in between launches, Home, and Sign out. Inbox is a placeholder until #208; Settings shows who is signed in, which opens Profile, and Sign out. Projects and Issues are on the web for now.
 
 ## Talking to the API
 
@@ -35,6 +35,16 @@ Sign in with email and password or with Google or GitHub, with Two-step verifica
 - **Forgot password**, from "Forgot password?" on Sign in: an email, then the Reset code and the new password on one screen, as on the web, with its messages for a wrong code, an expired one (only "Send a new code" is left), a `429` on sending (Send code counts the wait down) and on resetting (Reset password is off while the wait counts down). A right code goes back to Sign in with the email filled in and a toast: "Password updated. You were signed out on other devices." A User with Two-step verification is asked for a Sign-in code too, or a Recovery code, once the Reset code is right (`two_step_required`), as on the web; the Reset code and the password stay as typed, and a wrong second code gets web's messages.
 - **While open.** A request answered `401` renews the Session once and tries again. When renewing is refused too, the stored token is deleted, the cached server data is dropped and the app shows "Your session expired" (once, however many requests were waiting). The User from signing in or the launch counts as fresh for a minute; after that, coming back to the app (TanStack Query's `focusManager`, fed by `AppState`) reads stale data again.
 - **Signing out** (Settings, confirmed in a bottom sheet) ends the Session on the server with the stored token, then deletes it and drops the cached data. If the server can't be reached the User stays signed in and the sheet says so, as on the web. If the server fails (a `5xx`), the sheet also offers **Sign out on this phone only**, which forgets the Session here; it stays in the Sessions list until it expires or is signed out from another device.
+
+## Profile
+
+Settings' account card opens Profile (designs M7a–M7f), which uses the web's endpoints and messages; the API is unchanged.
+
+- **Display name.** A sheet with the web's check (`displayNameError`) and its messages; `PATCH /api/users/me`.
+- **Profile picture.** Edit picture opens a sheet. Take photo (after the camera permission) and Choose from library use `expo-image-picker` with its own square crop (`allowsEditing`, `aspect: [1, 1]`): on iOS that is M7c's "Move and scale", on Android the system's crop, which looks different. The photo is checked as on the web (`pictureFileError`: JPEG, PNG or WebP up to 5 MB) and sent as a form to `PUT /api/users/me/profile-picture`. The server's refusals get the web's messages (`WRONG_FILE`, `UNREADABLE`, `uploadLimitMessage` after 10 uploads in an hour, when Take photo and Choose from library stay off until the wait is over). "Show" offers the uploaded photo, each connected provider with a picture, and initials (`PUT …/profile-picture/source`); Remove photo deletes the upload and reads the User again.
+- **Change email** is its own screen: the new address, then the code sent there (`POST /api/users/me/email-change`, then `…/confirm`). A sign-in too old for it (`reauth_required`) asks "Confirm it's you" first, the password and with Two-step verification a Sign-in code or a Recovery code (`POST /api/users/me/confirm`), then sends the code; a User with no password is asked to sign in again, and comes back to Profile. Wrong, expired and refused codes, a taken or unchanged address and a 429 get the web's messages. Back on Profile a toast says "Email changed to …".
+- Every change takes the User the server answers into the Session and the `["me"]` query, so Home and Settings show it at once.
+- The texts and checks the web and the app share live in `@repo/api` (`profile.ts`): the picture's limits and messages, initials, Change email's messages and Confirm it's you's headings.
 
 ## Look
 

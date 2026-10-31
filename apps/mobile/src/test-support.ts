@@ -1,7 +1,9 @@
 import { act } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
+import * as ImagePicker from "expo-image-picker";
 import * as WebBrowser from "expo-web-browser";
 import { AppState } from "react-native";
+import type { User } from "./session/client";
 
 /** What the app keeps in the phone's secure storage (see jest.setup.ts), to seed and inspect. */
 export const secureStore = (globalThis as unknown as { __secureStore: Map<string, string> })
@@ -28,7 +30,8 @@ export function fakeApi() {
       method: init.method ?? "GET",
       path: url.pathname,
       headers: new Headers(init.headers),
-      body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+      // JSON as sent, or an upload's form as it is.
+      body: typeof init.body === "string" ? JSON.parse(init.body) : init.body,
     };
     sent.push(request);
     const queue = handlers.get(`${request.method} ${request.path}`);
@@ -57,7 +60,7 @@ export function fakeApi() {
   };
 }
 
-export const ada = {
+export const ada: User = {
   id: "7a3c6c1e-0000-4000-8000-000000000001",
   email: "ada@example.com",
   displayName: "Ada Lovelace",
@@ -110,4 +113,33 @@ export function browserReturns(outcome: string | "closed") {
     outcome === "closed" ? { type: "cancel" } : { type: "success", url: outcome },
   );
   return open;
+}
+
+/** A photo as the picker hands it over after its square crop. */
+export const photo = {
+  uri: "file:///cache/ImagePicker/crop-1.jpg",
+  fileName: "crop-1.jpg",
+  mimeType: "image/jpeg",
+  fileSize: 120_000,
+  width: 1024,
+  height: 1024,
+};
+
+/**
+ * What the User does in the camera or the photo library the next time it opens: picks `asset` (cropped), or backs
+ * out. Answers the mock, to check how it was opened.
+ */
+export function photoPicked(
+  from: "camera" | "library",
+  asset: Partial<typeof photo> | "cancelled",
+) {
+  const launch = (
+    from === "camera" ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync
+  ) as jest.Mock;
+  launch.mockResolvedValueOnce(
+    asset === "cancelled"
+      ? { canceled: true, assets: null }
+      : { canceled: false, assets: [{ ...photo, ...asset }] },
+  );
+  return launch;
 }

@@ -23,6 +23,10 @@ afterEach(() => {
   (jest.requireMock("expo-web-browser").openAuthSessionAsync as jest.Mock)
     .mockReset()
     .mockImplementation(async () => ({ type: "cancel" }));
+  const picker = jest.requireMock("expo-image-picker");
+  for (const launch of [picker.launchCameraAsync, picker.launchImageLibraryAsync] as jest.Mock[]) {
+    launch.mockReset().mockImplementation(async () => ({ canceled: true, assets: null }));
+  }
 });
 
 // The phone's random bytes and hashing, made predictable: tests check what is sent, not the cryptography.
@@ -31,6 +35,14 @@ jest.mock("expo-crypto", () => ({
   digestStringAsync: jest.fn(async () => "q83vEjRWeJA+/w=="),
   CryptoDigestAlgorithm: { SHA256: "SHA-256" },
   CryptoEncoding: { BASE64: "base64", HEX: "hex" },
+}));
+
+// The camera and the photo library: a test says what the User picks (test-support's `photoPicked`); permission is given.
+jest.mock("expo-image-picker", () => ({
+  requestCameraPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  requestMediaLibraryPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  launchCameraAsync: jest.fn(async () => ({ canceled: true, assets: null })),
+  launchImageLibraryAsync: jest.fn(async () => ({ canceled: true, assets: null })),
 }));
 
 // The in-app browser: a test says how the provider sign-in in it ends (test-support's `browserReturns`).

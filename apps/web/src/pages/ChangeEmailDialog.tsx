@@ -5,7 +5,16 @@ import { useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
 import { api, type ConfirmAnswer } from "../api/client";
-import { ApiError, clock, GENERIC_ERROR, RESEND_WAIT_SECONDS } from "@repo/api";
+import {
+  ApiError,
+  clock,
+  EMAIL_TAKEN,
+  emailChangeCodeMessage,
+  GENERIC_ERROR,
+  RESEND_WAIT_SECONDS,
+  SAME_EMAIL,
+  sameAddress,
+} from "@repo/api";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
 import { useCountdown } from "../auth/countdown";
 import { useSession } from "../auth/useSession";
@@ -14,9 +23,6 @@ import { ConfirmItsYouStep } from "./ConfirmItsYouStep";
 import dialogs from "./DisconnectDialogs.module.css";
 import setup from "./TwoStepSetupDialog.module.css";
 import classes from "./ChangeEmailDialog.module.css";
-
-const SAME_EMAIL = "That’s already your email.";
-const EMAIL_TAKEN = "That email is already used by another Nimbus account.";
 
 /**
  * Step 1 ("confirm") renews an old sign-in, step 2 asks for the new address, step 3 for the code sent there;
@@ -130,12 +136,7 @@ export function ChangeEmailDialog({
     },
     onError: (failure) => {
       if (failure instanceof ApiError && failure.code === "invalid_code") {
-        const left = failure.triesLeft;
-        setCodeError(
-          left === null
-            ? "That code didn’t match."
-            : `That code didn’t match. ${left} ${left === 1 ? "try" : "tries"} left.`,
-        );
+        setCodeError(emailChangeCodeMessage(failure.triesLeft));
       } else if (failure instanceof ApiError && failure.code === "code_expired") {
         setCode("");
         setStep("expired");
@@ -362,11 +363,6 @@ export function ChangeEmailDialog({
       )}
     </WindowFrame>
   );
-}
-
-/** The server compares addresses trimmed and lower-cased. */
-function sameAddress(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 const STEPS = ["Confirm it’s you", "New email", "Enter code"] as const;

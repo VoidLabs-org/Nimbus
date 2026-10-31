@@ -5,6 +5,7 @@ import {
   ApiError,
   GENERIC_ERROR,
   tooManyAttemptsMessage,
+  WRONG_PASSWORD,
   WRONG_RECOVERY_CODE,
   WRONG_SIGN_IN_CODE,
 } from "@repo/api";
@@ -65,7 +66,7 @@ export function ConfirmItsYouStep({
       if (phase === "password") setPasswordError(message);
       else setCodeError(message);
     } else if (failure instanceof ApiError && failure.fieldErrors.password) {
-      setPasswordError("That password isn’t right.");
+      setPasswordError(WRONG_PASSWORD);
       onPhase("password");
     } else if (phase === "password") {
       setPasswordError(GENERIC_ERROR);

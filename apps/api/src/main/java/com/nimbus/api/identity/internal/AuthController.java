@@ -95,12 +95,13 @@ class AuthController {
 				request.recoveryCode(), Boolean.TRUE.equals(request.rememberBrowser()),
 				http.getHeader(HttpHeaders.USER_AGENT));
 		if (mobile) {
-			return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), signedIn.rememberedToken(), http);
+			return responses.withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), signedIn.rememberedToken(),
+					http);
 		}
 		var cookies = signedIn.rememberedToken() == null ? new ResponseCookie[] { PendingSignIns.clearedCookie() }
 				: new ResponseCookie[] { PendingSignIns.clearedCookie(),
 						RememberedBrowsers.cookie(signedIn.rememberedToken()) };
-		return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), null, http, cookies);
+		return responses.withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), null, http, cookies);
 	}
 
 	/**
@@ -112,7 +113,7 @@ class AuthController {
 	ResponseEntity<AuthResponse> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String cookie,
 			@RequestBody(required = false) RefreshTokenRequest body, HttpServletRequest http) {
 		var refreshed = sessions.refresh(refreshToken(cookie, body, http), http.getRemoteAddr());
-		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token(), null, http);
+		return responses.withSession(HttpStatus.OK, refreshed.user(), refreshed.token(), null, http);
 	}
 
 	/**
@@ -136,14 +137,10 @@ class AuthController {
 	 */
 	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user, HttpServletRequest http,
 			boolean announce, ResponseCookie... alsoSet) {
-		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT), announce), null,
-				http, alsoSet);
+		var refreshToken = sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT), announce);
+		return responses.withSession(status, user, refreshToken, null, http, alsoSet);
 	}
 
-	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken,
-			String rememberedToken, HttpServletRequest http, ResponseCookie... alsoSet) {
-		return responses.withSession(status, user, refreshToken, rememberedToken, http, alsoSet);
-	}
 
 	static boolean fromMobileApp(HttpServletRequest http) {
 		return MOBILE.equals(http.getHeader(CLIENT_HEADER));

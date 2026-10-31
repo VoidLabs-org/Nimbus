@@ -28,6 +28,8 @@ export type RememberedDevices = {
   get(email: string): Promise<string | null>;
   set(email: string, userId: string, token: string): Promise<void>;
   forget(email: string): Promise<void>;
+  /** Forgets the User's entry, whichever email it is under. */
+  forgetUser(userId: string): Promise<void>;
   /** Every User's token, for a provider sign-in, which can't know beforehand whom it signs in as. */
   all(): Promise<string[]>;
 };
@@ -328,6 +330,9 @@ export function createMobileApi({
         await bestEffort("remember the device", () =>
           remembered.set(email, answer.user.id, rememberedToken),
         );
+      } else {
+        // A code was needed, so whatever this phone kept for the User no longer skips it.
+        await bestEffort("forget the device", () => remembered.forgetUser(answer.user.id));
       }
       generation++;
       return keep(answer);

@@ -18,6 +18,11 @@ afterEach(() => {
   mockStored.clear();
   // Undoes test-support's comeBackToTheApp, which moves the clock.
   jest.restoreAllMocks();
+  // Module mocks keep their calls and queued answers otherwise; each test starts with the browser closing.
+  jest.clearAllMocks();
+  (jest.requireMock("expo-web-browser").openAuthSessionAsync as jest.Mock)
+    .mockReset()
+    .mockImplementation(async () => ({ type: "cancel" }));
 });
 
 // The phone's random bytes and hashing, made predictable: tests check what is sent, not the cryptography.

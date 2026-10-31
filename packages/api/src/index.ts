@@ -7,6 +7,7 @@ export {
   connectErrorMessage,
   GENERIC_ERROR,
   NETWORK_ERROR,
+  providerName,
   providerSignInErrorMessage,
   RESEND_WAIT_SECONDS,
   SIGN_IN_TIMED_OUT,

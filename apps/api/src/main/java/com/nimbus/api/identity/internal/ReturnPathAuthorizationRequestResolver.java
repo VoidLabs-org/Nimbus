@@ -8,8 +8,8 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 
 /**
  * Starts the handshake at {@code /api/auth/oauth2/<provider>} as Spring does, and also remembers the page it
- * started from ({@link ReturnPath}), the ticket of a connect ({@link LinkTicket}) and, for the Desktop app, where to
- * hand the result back ({@link AppReturn}). The redirect to the provider is Spring's own, so the page is not in it.
+ * started from ({@link ReturnPath}), the ticket of a connect ({@link LinkTicket}) and, for the Desktop or the Mobile
+ * app, where to hand the result back ({@link AppReturn}). The redirect to the provider is Spring's own, so the page is not in it.
  */
 class ReturnPathAuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {
 

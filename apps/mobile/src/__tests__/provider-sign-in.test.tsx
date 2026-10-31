@@ -1,4 +1,5 @@
-import { fireEvent, screen } from "@testing-library/react-native";
+import { act, fireEvent, screen } from "@testing-library/react-native";
+import * as WebBrowser from "expo-web-browser";
 import { ada, browserReturns, fakeApi, renderApp, secureStore } from "../test-support";
 
 const REMEMBERED = "nimbus.rememberedDevices";
@@ -149,4 +150,67 @@ describe("when it doesn't work, it says what the web says", () => {
     expect(await screen.findByText(message)).toBeTruthy();
     expect(screen.getByText("Welcome back")).toBeTruthy();
   });
+});
+
+it("opens one browser however quickly the buttons are tapped", async () => {
+  const api = fakeApi();
+  bothProviders(api);
+  const open = WebBrowser.openAuthSessionAsync as jest.Mock;
+  let finish!: (result: { type: string }) => void;
+  open.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+
+  const google = await openSignIn();
+  await fireEvent.press(google);
+  await fireEvent.press(screen.getByRole("button", { name: "Continue with GitHub" }));
+  await act(async () => finish({ type: "cancel" }));
+
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(await screen.findByText("Sign-in with Google was cancelled.")).toBeTruthy();
+});
+
+it("forgets a User's remembered device once a code was needed anyway", async () => {
+  const api = fakeApi();
+  bothProviders(api);
+  secureStore.set(
+    REMEMBERED,
+    JSON.stringify({ "ada@example.com": { userId: ada.id, token: "remembered-stale" } }),
+  );
+  api.answer("POST /api/auth/app/exchange", {
+    status: 200,
+    body: { twoStepRequired: true, pendingToken: "pending-1" },
+  });
+  api.answer("POST /api/auth/two-step", signedIn());
+  api.answer("GET /api/users/me", { status: 200, body: ada });
+  browserReturns("nimbus://auth?code=c-5");
+
+  await fireEvent.press(await openSignIn());
+  await fireEvent.changeText(await screen.findByLabelText("Sign-in code"), "381002");
+  await fireEvent.press(screen.getByRole("button", { name: "Verify" }));
+
+  await screen.findByText(/Ada Lovelace/);
+  expect(JSON.parse(secureStore.get(REMEMBERED)!)).toEqual({});
+});
+
+it("sends at most the 20 latest remembered devices, as many as the server takes", async () => {
+  const api = fakeApi();
+  bothProviders(api);
+  const many = Object.fromEntries(
+    Array.from({ length: 25 }, (_, n) => [
+      `user${n}@example.com`,
+      { userId: `u${n}`, token: `t${n}` },
+    ]),
+  );
+  secureStore.set(REMEMBERED, JSON.stringify(many));
+  api.answer("POST /api/auth/app/exchange", signedIn());
+  api.answer("GET /api/users/me", { status: 200, body: ada });
+  browserReturns("nimbus://auth?code=c-6");
+
+  await fireEvent.press(await openSignIn());
+
+  await screen.findByText(/Ada Lovelace/);
+  const sent = (api.to("POST /api/auth/app/exchange")[0]!.body as { rememberedTokens: string[] })
+    .rememberedTokens;
+  expect(sent).toHaveLength(20);
+  expect(sent[0]).toBe("t5");
+  expect(sent[19]).toBe("t24");
 });

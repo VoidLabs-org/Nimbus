@@ -89,7 +89,7 @@ export function tooManyAttemptsMessage(retryAfterSeconds: number | null): string
 }
 
 /** The provider's display name for the `provider` the server puts on `/login`; anything unknown is not echoed back. */
-function providerName(provider: string | null): string | null {
+export function providerName(provider: string | null): string | null {
   switch (provider) {
     case "google":
       return "Google";

@@ -1,7 +1,13 @@
-import { ApiError, NETWORK_ERROR, NetworkError, providerSignInErrorMessage } from "@repo/api";
+import {
+  ApiError,
+  NETWORK_ERROR,
+  NetworkError,
+  providerName,
+  providerSignInErrorMessage,
+} from "@repo/api";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from "react-native";
 import { apiUrl } from "../config";
 import { openProviderSignIn } from "../session/providerSignIn";
@@ -12,13 +18,10 @@ import { GitHubIcon, GoogleIcon } from "./ProviderIcons";
 import { Logo, Screen } from "./Screen";
 import { Text } from "./Text";
 
-/** What each provider id from the server looks like here, in the order to show them. An id not listed is not shown. */
-const PROVIDERS = [
-  { id: "google", name: "Google" },
-  { id: "github", name: "GitHub" },
-] as const;
+/** The providers the app has a button for, in the order to show them. An id not listed is not shown. */
+const PROVIDERS = ["google", "github"] as const;
 
-type Provider = (typeof PROVIDERS)[number];
+type Provider = { id: (typeof PROVIDERS)[number]; name: string };
 
 /**
  * "or", then Google and GitHub (design M6a), only for the providers the server offers; nothing while it is asked, or
@@ -35,12 +38,18 @@ export function ProviderButtons() {
   const [busy, setBusy] = useState<Provider | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set at once, unlike `busy`, so a second tap before the next render can't open a second browser.
+  const started = useRef(false);
 
-  const shown = PROVIDERS.filter((provider) => offered.data?.includes(provider.id));
+  const shown: Provider[] = PROVIDERS.filter((id) => offered.data?.includes(id)).map((id) => ({
+    id,
+    name: providerName(id) ?? id,
+  }));
   if (shown.length === 0) return null;
 
   async function signInWith(provider: Provider) {
-    if (busy) return;
+    if (started.current) return;
+    started.current = true;
     setError(null);
     setBusy(provider);
     try {
@@ -67,6 +76,7 @@ export function ProviderButtons() {
             ),
       );
     } finally {
+      started.current = false;
       setFinishing(false);
       setBusy(null);
     }

@@ -27,15 +27,11 @@ class AppSignIn {
 
 	private final LinkTickets tickets;
 
-	private final RememberedBrowsers rememberedBrowsers;
-
-	AppSignIn(AppCodes codes, ExternalSignIn externalSignIn, TwoStepSignIn twoStepSignIn, LinkTickets tickets,
-			RememberedBrowsers rememberedBrowsers) {
+	AppSignIn(AppCodes codes, ExternalSignIn externalSignIn, TwoStepSignIn twoStepSignIn, LinkTickets tickets) {
 		this.codes = codes;
 		this.externalSignIn = externalSignIn;
 		this.twoStepSignIn = twoStepSignIn;
 		this.tickets = tickets;
-		this.rememberedBrowsers = rememberedBrowsers;
 	}
 
 	/**
@@ -56,7 +52,7 @@ class AppSignIn {
 		var profile = handoff.profile();
 		try {
 			var pending = externalSignIn.whoSignsIn(profile)
-				.flatMap(existing -> twoStepSignIn.begin(existing, profile, rememberedFor(existing, rememberedTokens)));
+				.flatMap(existing -> twoStepSignIn.begin(existing, profile, rememberedTokens));
 			if (pending.isPresent()) {
 				return new Outcome(null, pending.get());
 			}
@@ -111,12 +107,6 @@ class AppSignIn {
 			log.warn("Connecting a provider for an app failed", e);
 			throw new FailedException("failed");
 		}
-	}
-
-	/** The one of the app's remembered devices that remembers {@code user}, or null. */
-	private String rememberedFor(User user, List<String> tokens) {
-		return tokens.stream().filter(token -> rememberedBrowsers.isRemembered(user.getId(), token)).findFirst()
-			.orElse(null);
 	}
 
 	/**

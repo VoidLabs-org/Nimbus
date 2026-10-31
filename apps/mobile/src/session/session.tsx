@@ -130,7 +130,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return outcome;
     },
     register: async (input) => {
-      signedIn(await api.register(input));
+      const user = await api.register(input);
+      // A new User: nothing to return to from an earlier User's expired Session.
+      returnTo.current = null;
+      signedIn(user);
     },
     verifyEmail: async (code) => {
       setState({ kind: "signedIn", user: await api.verifyEmail(code), since: Date.now() });
@@ -158,7 +161,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setState({ kind: "signedOut" });
     },
     signInAgain: () => {
-      returnTo.current = state.kind === "expired" ? state.returnTo : null;
+      const path = state.kind === "expired" ? state.returnTo : null;
+      // The verify-email screen is no place to come back to: a verified User couldn't open it.
+      returnTo.current = path === "/verify-email" ? null : path;
       setState({ kind: "signedOut" });
     },
     retry: restore,

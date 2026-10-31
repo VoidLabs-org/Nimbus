@@ -1,4 +1,4 @@
-import { type ComponentRef, useRef } from "react";
+import { type ComponentRef, useEffect, useRef } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { fonts, useTheme } from "../theme";
 import { Text } from "./Text";
@@ -32,6 +32,14 @@ export function CodeField({
 }: Props) {
   const theme = useTheme();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
+  const wasDisabled = useRef(disabled);
+
+  // Turning the field off while a code is checked closes the keyboard; once it is back on (after a wrong code, say),
+  // the keyboard comes back with it, so the next digits go in without a tap.
+  useEffect(() => {
+    if (wasDisabled.current && !disabled) input.current?.focus();
+    wasDisabled.current = disabled;
+  }, [disabled]);
 
   function change(text: string) {
     const code = text.replace(/\D/g, "").slice(0, CODE_LENGTH);

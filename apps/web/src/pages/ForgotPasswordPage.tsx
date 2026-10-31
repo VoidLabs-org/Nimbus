@@ -9,6 +9,7 @@ import {
   clock,
   GENERIC_ERROR,
   passwordError,
+  RESEND_WAIT_SECONDS,
   tooManyAttemptsIn,
   tooManyAttemptsMessage,
   WRONG_RECOVERY_CODE,
@@ -24,7 +25,7 @@ import {
 } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
 import { CodeAlert as Alert, CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
-import { RESEND_WAIT_SECONDS, useCountdown } from "../auth/countdown";
+import { useCountdown } from "../auth/countdown";
 import { recoveryCodeInputProps } from "../auth/recoveryCode";
 import { useSession } from "../auth/useSession";
 

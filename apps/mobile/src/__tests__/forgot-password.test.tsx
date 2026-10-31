@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react-native";
+import { act, fireEvent, screen } from "@testing-library/react-native";
 import { ada, fakeApi, renderApp, secureStore } from "../test-support";
 
 async function openForgotPassword() {
@@ -154,4 +154,43 @@ it("goes back to the email step for a different address", async () => {
   await fireEvent.press(screen.getByRole("button", { name: "Use a different email" }));
 
   expect(await screen.findByText("Forgot your password?")).toBeTruthy();
+});
+
+it("goes back to the code step for the address the code was sent to", async () => {
+  const api = fakeApi();
+  api.answer("POST /api/auth/password-reset", { status: 204 });
+
+  await openForgotPassword();
+  await askForCode();
+  await fireEvent.press(screen.getByRole("button", { name: "Back" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Enter the code" }));
+
+  expect(await screen.findByLabelText("Reset code")).toBeTruthy();
+  expect(api.to("POST /api/auth/password-reset")).toHaveLength(1);
+});
+
+it("says why Resend waits when the server refuses a new code", async () => {
+  jest.useFakeTimers();
+  const api = fakeApi();
+  api.answer(
+    "POST /api/auth/password-reset",
+    { status: 204 },
+    {
+      status: 429,
+      headers: { "Retry-After": "600" },
+    },
+  );
+
+  await openForgotPassword();
+  await askForCode();
+  // The first send's minute runs out, one second at a time.
+  for (let second = 0; second < 60; second++) {
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+  }
+  await fireEvent.press(screen.getByRole("button", { name: "Resend code" }));
+
+  expect(await screen.findByText("Too many attempts. Try again in 10:00.")).toBeTruthy();
+  jest.useRealTimers();
 });

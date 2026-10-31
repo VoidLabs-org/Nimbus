@@ -6,11 +6,14 @@ export { failedLoad, type FailedLoad } from "./failure";
 export {
   connectErrorMessage,
   GENERIC_ERROR,
+  NETWORK_ERROR,
   providerSignInErrorMessage,
+  RESEND_WAIT_SECONDS,
   SIGN_IN_TIMED_OUT,
   tooManyAttemptsIn,
   tooManyAttemptsMessage,
   WRONG_RECOVERY_CODE,
+  verificationCodeMessage,
   WRONG_SIGN_IN_CODE,
   wrongCodeMessage,
 } from "./messages";

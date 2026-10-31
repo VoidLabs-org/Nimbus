@@ -1,4 +1,10 @@
-import { ApiError, GENERIC_ERROR, NetworkError, tooManyAttemptsMessage } from "@repo/api";
+import {
+  ApiError,
+  GENERIC_ERROR,
+  NETWORK_ERROR,
+  NetworkError,
+  tooManyAttemptsMessage,
+} from "@repo/api";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -53,7 +59,7 @@ export default function SignIn() {
       } else if (failure instanceof ApiError && failure.status === 400) {
         setError(failure.message);
       } else if (failure instanceof NetworkError) {
-        setError("Can’t reach Nimbus. Check your connection and try again.");
+        setError(NETWORK_ERROR);
       } else {
         setError(GENERIC_ERROR);
       }

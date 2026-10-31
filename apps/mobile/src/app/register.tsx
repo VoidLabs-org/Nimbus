@@ -3,6 +3,7 @@ import {
   displayNameError,
   emailError,
   GENERIC_ERROR,
+  NETWORK_ERROR,
   NetworkError,
   passwordError,
   tooManyAttemptsMessage,
@@ -33,6 +34,8 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    // The keyboard's Return can submit while the button is busy.
+    if (busy) return;
     setError(null);
     const mistakes = Object.fromEntries(
       Object.entries({
@@ -57,7 +60,7 @@ export default function Register() {
       } else if (failure instanceof ApiError && failure.status === 400) {
         setError(failure.message);
       } else if (failure instanceof NetworkError) {
-        setError("Can’t reach Nimbus. Check your connection and try again.");
+        setError(NETWORK_ERROR);
       } else {
         setError(GENERIC_ERROR);
       }

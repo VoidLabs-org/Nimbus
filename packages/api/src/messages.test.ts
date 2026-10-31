@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { connectErrorMessage, providerSignInErrorMessage, wrongCodeMessage } from "./messages";
+import { ApiError, NetworkError } from "./errors";
+import {
+  connectErrorMessage,
+  NETWORK_ERROR,
+  providerSignInErrorMessage,
+  verificationCodeMessage,
+  wrongCodeMessage,
+} from "./messages";
 
 describe("connectErrorMessage", () => {
   it("explains each code the server redirects to the Security page with", () => {
@@ -60,5 +67,21 @@ describe("wrongCodeMessage", () => {
     expect(wrongCodeMessage(3)).toBe("That code isn’t right. 3 tries left.");
     expect(wrongCodeMessage(1)).toBe("That code isn’t right. 1 try left.");
     expect(wrongCodeMessage(null)).toBe("That code isn’t right.");
+  });
+});
+
+describe("verificationCodeMessage", () => {
+  it("explains each way checking the code can fail", () => {
+    expect(verificationCodeMessage(new ApiError(400, "x", {}, null, "invalid_code", 2))).toBe(
+      "That code isn’t right. 2 tries left.",
+    );
+    expect(verificationCodeMessage(new ApiError(400, "x", {}, null, "code_expired"))).toMatch(
+      /expired/,
+    );
+    expect(verificationCodeMessage(new ApiError(429, "x", {}, 60))).toBe(
+      "Too many attempts. Try again in 1 minute.",
+    );
+    expect(verificationCodeMessage(new NetworkError(new TypeError("offline")))).toBe(NETWORK_ERROR);
+    expect(verificationCodeMessage(new Error("?"))).toMatch(/went wrong/);
   });
 });

@@ -1,5 +1,5 @@
 import { fireEvent, screen } from "@testing-library/react-native";
-import { ada, fakeApi, renderApp, secureStore } from "../test-support";
+import { ada, comeBackToTheApp, fakeApi, heldBack, renderApp, secureStore } from "../test-support";
 
 const REFRESH_TOKEN = "nimbus.refreshToken";
 const unverifiedAda = { ...ada, emailVerified: false };
@@ -97,6 +97,49 @@ describe("the register form", () => {
     expect(secureStore.has(REFRESH_TOKEN)).toBe(false);
   });
 
+  it("sends one registration however often it is submitted", async () => {
+    const api = fakeApi();
+    const answer = heldBack();
+    api.answer("POST /api/auth/register", answer.answer);
+
+    await openRegister();
+    await fillIn("Ada Lovelace", "ada@example.com", "correct horse");
+    await fireEvent(screen.getByLabelText("Password"), "submitEditing");
+    await answer.release({ status: 201, body: session(unverifiedAda, "refresh-1") });
+
+    expect(await screen.findByText("Check your email")).toBeTruthy();
+    expect(api.to("POST /api/auth/register")).toHaveLength(1);
+  });
+
+  it("goes to Home, not the screen a previous User's Session expired on", async () => {
+    const api = fakeApi();
+    secureStore.set("nimbus.welcomed", "yes");
+    secureStore.set(REFRESH_TOKEN, "stored-1");
+    api.answer(
+      "POST /api/auth/refresh",
+      { status: 200, body: session(ada, "stored-2") },
+      { status: 401 },
+    );
+    api.answer("GET /api/users/me", { status: 401 });
+
+    await renderApp();
+    await screen.findByText(/Ada Lovelace/);
+    await fireEvent.press(screen.getByText("Settings"));
+    await screen.findByRole("button", { name: "Sign out" });
+    await comeBackToTheApp(2);
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign in again" }));
+
+    api.answer("POST /api/auth/register", { status: 201, body: session(unverifiedAda, "new-1") });
+    api.answer("POST /api/auth/verify-email", { status: 200, body: ada });
+    api.answer("POST /api/auth/refresh", { status: 200, body: session(ada, "new-2") });
+    api.answer("GET /api/users/me", { status: 200, body: ada });
+    await fireEvent.press(await screen.findByRole("button", { name: "Create an account" }));
+    await fillIn("Ada Lovelace", "ada@example.com", "correct horse");
+    await fireEvent.changeText(await screen.findByLabelText("Verification code"), "419027");
+
+    expect(await screen.findByText(/Projects and issues are on the web for now/)).toBeTruthy();
+  });
+
   it("says how long to wait when there were too many tries", async () => {
     const api = fakeApi();
     api.answer("POST /api/auth/register", { status: 429, headers: { "Retry-After": "60" } });
@@ -146,6 +189,35 @@ describe("the verify-email screen", () => {
 
     expect(await screen.findByText("That code isn’t right. 2 tries left.")).toBeTruthy();
     expect(screen.getByLabelText("Verification code").props.value).toBe("");
+  });
+
+  it("says the Session expired when it ends just as the right code goes in", async () => {
+    const api = fakeApi();
+    unverifiedBefore(api);
+    api.answer(
+      "POST /api/auth/refresh",
+      { status: 200, body: session(unverifiedAda, "stored-2") },
+      { status: 401 },
+    );
+    api.answer("POST /api/auth/verify-email", { status: 200, body: ada });
+
+    await renderApp();
+    await fireEvent.changeText(await screen.findByLabelText("Verification code"), "419027");
+
+    expect(await screen.findByText("Your session expired.")).toBeTruthy();
+    expect(screen.queryByText(/Projects and issues are on the web for now/)).toBeNull();
+  });
+
+  it("says it can't reach Nimbus without a connection, and keeps the code", async () => {
+    const api = fakeApi();
+    unverifiedBefore(api);
+    api.answer("POST /api/auth/verify-email", "offline");
+
+    await renderApp();
+    await fireEvent.changeText(await screen.findByLabelText("Verification code"), "419027");
+
+    expect(await screen.findByText(/Can’t reach Nimbus/)).toBeTruthy();
+    expect(screen.getByLabelText("Verification code").props.value).toBe("419027");
   });
 
   it("says when the code is gone", async () => {

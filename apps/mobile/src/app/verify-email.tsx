@@ -2,8 +2,10 @@ import {
   ApiError,
   clock,
   GENERIC_ERROR,
-  tooManyAttemptsMessage,
-  wrongCodeMessage,
+  NETWORK_ERROR,
+  NetworkError,
+  RESEND_WAIT_SECONDS,
+  verificationCodeMessage,
 } from "@repo/api";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -12,20 +14,8 @@ import { CODE_LENGTH, CodeField } from "../components/CodeField";
 import { FormMessage } from "../components/FormMessage";
 import { Logo, Screen } from "../components/Screen";
 import { Text } from "../components/Text";
-import { RESEND_WAIT_SECONDS, useCountdown } from "../countdown";
+import { useCountdown } from "../countdown";
 import { useSession } from "../session/session";
-
-/** What to tell the User when the server refused their code. */
-function verificationErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.code === "invalid_code") return wrongCodeMessage(error.triesLeft);
-    if (error.code === "code_expired") {
-      return "That code has expired, or was cancelled after too many wrong tries.";
-    }
-    if (error.status === 429) return tooManyAttemptsMessage(error.retryAfterSeconds);
-  }
-  return GENERIC_ERROR;
-}
 
 /**
  * All an Unverified User sees (design M4b), until they enter the Verification code emailed to them. The last digit
@@ -57,9 +47,10 @@ export default function VerifyEmail() {
     try {
       await verifyEmail(value);
     } catch (failure) {
-      setError(verificationErrorMessage(failure));
+      setError(verificationCodeMessage(failure));
       setCodeRejected(failure instanceof ApiError && failure.status === 400);
-      setCode("");
+      // Without a connection the code wasn't looked at: it stays, to send again.
+      if (!(failure instanceof NetworkError)) setCode("");
       setChecking(false);
     }
   }
@@ -81,9 +72,11 @@ export default function VerifyEmail() {
         setSecondsToResend(failure.retryAfterSeconds);
       } else if (failure instanceof ApiError && failure.status === 409) {
         // Verified on another device meanwhile: reading the User again opens the app.
-        await reload().catch(() => setError(GENERIC_ERROR));
+        await reload().catch((error: unknown) =>
+          setError(error instanceof NetworkError ? NETWORK_ERROR : GENERIC_ERROR),
+        );
       } else {
-        setError(GENERIC_ERROR);
+        setError(failure instanceof NetworkError ? NETWORK_ERROR : GENERIC_ERROR);
       }
     } finally {
       setResending(false);

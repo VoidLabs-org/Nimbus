@@ -230,15 +230,22 @@ export function createMobileApi({
     /**
      * Checks the Verification code and answers the User, now verified. The access token in hand says "unverified", so
      * the server would look the User up on every request until it expires: a renewed one says "verified". If renewing
-     * fails the User is verified all the same, and the next renewal fixes the token. Rejects with a 400 ApiError for a
-     * wrong code (`invalid_code`, with `triesLeft`) or a gone one (`code_expired`).
+     * can't be done for now the User is verified all the same, and the next renewal fixes the token; if the Session
+     * has ended meanwhile (a 401), it is lost and this rejects. Also rejects with a 400 ApiError for a wrong code
+     * (`invalid_code`, with `triesLeft`) or a gone one (`code_expired`).
      */
     verifyEmail: async (code: string): Promise<User> => {
       const user = await request<User>("/api/auth/verify-email", {
         method: "POST",
         body: JSON.stringify({ code }),
       });
-      return refresh().catch(() => user);
+      try {
+        return await refresh();
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 401) return user;
+        reportLost();
+        throw error;
+      }
     },
 
     /** Mails a new Verification code. A 429 says how long to wait; a 409, that the email is verified already. */

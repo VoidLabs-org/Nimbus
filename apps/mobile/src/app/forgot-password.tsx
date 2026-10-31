@@ -2,8 +2,10 @@ import {
   ApiError,
   clock,
   GENERIC_ERROR,
+  NETWORK_ERROR,
   NetworkError,
   passwordError,
+  RESEND_WAIT_SECONDS,
   tooManyAttemptsIn,
   tooManyAttemptsMessage,
   wrongCodeMessage,
@@ -18,14 +20,12 @@ import { FormMessage } from "../components/FormMessage";
 import { Screen } from "../components/Screen";
 import { Text } from "../components/Text";
 import { TextField } from "../components/TextField";
-import { RESEND_WAIT_SECONDS, useCountdown } from "../countdown";
+import { useCountdown } from "../countdown";
 import { useSession } from "../session/session";
 
 /** Until the app can take a Sign-in code (#203), a User with Two-step verification resets on the web. */
 const TWO_STEP_NOT_YET =
   "Two-step verification is on for this account, and the app can’t take its code yet. Reset your password on the web for now.";
-
-const OFFLINE = "Can’t reach Nimbus. Check your connection and try again.";
 
 /**
  * Back to the Sign in screen below, with the email filled in and the news that the password changed. The time makes
@@ -36,7 +36,7 @@ function backToSignIn(email: string) {
 }
 
 function failureMessage(failure: unknown): string {
-  return failure instanceof NetworkError ? OFFLINE : GENERIC_ERROR;
+  return failure instanceof NetworkError ? NETWORK_ERROR : GENERIC_ERROR;
 }
 
 /**
@@ -60,6 +60,8 @@ export default function ForgotPassword() {
   // The code is gone (expired, or cancelled after too many wrong tries): only a new one helps.
   const [expired, setExpired] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // The address the last code went to (lower-cased), so the email step can lead back to entering it.
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [resending, setResending] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -101,7 +103,9 @@ export default function ForgotPassword() {
       } else if (failure instanceof ApiError && failure.status === 429) {
         setFormError(tooManyAttemptsMessage(null));
       } else if (failure instanceof ApiError && failure.fieldErrors.email) {
-        setEmailMessage(failure.fieldErrors.email);
+        // On the code step there is no Email field to show it under.
+        if (step === "email") setEmailMessage(failure.fieldErrors.email);
+        else setFormError(failure.fieldErrors.email);
       } else {
         setFormError(failureMessage(failure));
       }
@@ -125,6 +129,7 @@ export default function ForgotPassword() {
     const sent = await requestCode(address);
     setSending(false);
     if (!sent) return;
+    setSentTo(address.toLowerCase());
     setEmail(address);
     clearCode();
     setPassword("");
@@ -190,13 +195,20 @@ export default function ForgotPassword() {
     }
   }
 
-  function backToEmail() {
-    clearCode();
-    setPassword("");
-    setPasswordMessage(null);
+  /** Back to the email step; what was typed stays, for "Enter the code" to come back to. */
+  function back() {
     setNotice(null);
     setFormError(null);
     setStep("email");
+  }
+
+  /** Back to an empty email step, for another address. */
+  function differentEmail() {
+    clearCode();
+    setPassword("");
+    setPasswordMessage(null);
+    setSentTo(null);
+    back();
   }
 
   if (step === "email") {
@@ -236,6 +248,12 @@ export default function ForgotPassword() {
           disabled={waitingForTyped}
           onPress={() => void sendFirstCode()}
         />
+        {sentTo !== null && sentTo === email.trim().toLowerCase() ? (
+          // A code already went to this address and still works: no need to wait for another.
+          <View style={styles.enterCode}>
+            <LinkButton label="Enter the code" onPress={() => setStep("code")} />
+          </View>
+        ) : null}
       </Screen>
     );
   }
@@ -243,7 +261,7 @@ export default function ForgotPassword() {
   const shownNotice = waiting && !codeMessage ? notice : null;
   return (
     <Screen scroll>
-      <BackLink label="Back" onPress={backToEmail} />
+      <BackLink label="Back" onPress={back} />
       <View style={styles.heading}>
         <Text weight="semibold" size={28} accessibilityRole="header">
           Check your email
@@ -268,6 +286,9 @@ export default function ForgotPassword() {
       />
       {codeMessage ? <FormMessage message={codeMessage} /> : null}
       {locked ? <FormMessage message={tooManyAttemptsIn(lockSeconds)} /> : null}
+      {sendLimited && waiting && !locked ? (
+        <FormMessage message={tooManyAttemptsIn(secondsToResend)} />
+      ) : null}
       {shownNotice ? <FormMessage message={shownNotice} kind="notice" /> : null}
       {expired ? (
         <Button
@@ -319,7 +340,7 @@ export default function ForgotPassword() {
           disabled={waiting || resending || locked}
           onPress={() => void sendNewCode()}
         />
-        <LinkButton label="Use a different email" onPress={backToEmail} />
+        <LinkButton label="Use a different email" onPress={differentEmail} />
       </View>
     </Screen>
   );
@@ -330,4 +351,5 @@ const styles = StyleSheet.create({
   body: { lineHeight: 22 },
   spacer: { flex: 1 },
   links: { flexDirection: "row", justifyContent: "space-between" },
+  enterCode: { alignItems: "center" },
 });

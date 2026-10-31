@@ -1,5 +1,7 @@
 package com.nimbus.api.projects.internal;
 
+import java.util.List;
+
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -31,16 +33,22 @@ class ProjectsController {
 		return projects.create(currentUser.id(), request.key(), request.name(), request.description());
 	}
 
+	@GetMapping
+	List<ProjectService.ProjectView> list() {
+		return projects.listFor(currentUser.id());
+	}
+
 	@GetMapping("/{key}")
 	ProjectService.ProjectView open(@PathVariable String key) {
 		return projects.open(currentUser.id(), key);
 	}
 
 	/**
-	 * The name is cleaned at both ends before it is checked, so pasted surrounding whitespace is not an error, and
-	 * neither are the invisible characters that look like it (non-breaking and other Unicode spaces, zero-width
-	 * characters). A name of only those is empty. Patterns count Unicode code points; {@code \p{Cc}} is every control
-	 * character. A description keeps line breaks and tabs.
+	 * The name and the description are cleaned at both ends before they are checked, so pasted surrounding whitespace
+	 * is not an error, and neither are the invisible characters that look like it (non-breaking and other Unicode
+	 * spaces, zero-width characters). A name of only those is empty; a description of only those is none. Patterns
+	 * count Unicode code points; {@code \p{Cc}} is every control character. A description keeps line breaks and tabs
+	 * inside it.
 	 */
 	record CreateProject(
 			@NotNull(message = KEY_RULE) @Pattern(regexp = ProjectKeys.PATTERN, message = KEY_RULE) String key,
@@ -55,8 +63,14 @@ class ProjectsController {
 		private static final java.util.regex.Pattern EDGES = java.util.regex.Pattern
 			.compile("\\A[\\s\\p{Z}\\p{Cf}]+|[\\s\\p{Z}\\p{Cf}]+\\z");
 
+		/** The name and the description are cleaned at both ends; a description with nothing left is none. */
 		CreateProject {
-			name = name == null ? null : EDGES.matcher(name).replaceAll("");
+			name = name == null ? null : clean(name);
+			description = description == null || clean(description).isEmpty() ? null : clean(description);
+		}
+
+		private static String clean(String text) {
+			return EDGES.matcher(text).replaceAll("");
 		}
 	}
 }

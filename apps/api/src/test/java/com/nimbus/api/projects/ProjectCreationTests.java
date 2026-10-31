@@ -175,6 +175,17 @@ class ProjectCreationTests {
 	}
 
 	@Test
+	void aDescriptionIsCleanedAtBothEndsAndOneOfOnlyInvisibleCharactersIsNone() {
+		var token = register(true);
+		client.post().uri("/api/projects").header("Authorization", "Bearer " + token)
+			.body(Map.of("key", "DESCB", "name", "Cleaned", "description", "  About it \n"))
+			.exchange().expectStatus().isCreated().expectBody().jsonPath("$.description").isEqualTo("About it");
+		client.post().uri("/api/projects").header("Authorization", "Bearer " + token)
+			.body(Map.of("key", "DESCC", "name", "Blank", "description", " ​ \t"))
+			.exchange().expectStatus().isCreated().expectBody().jsonPath("$.description").isEqualTo(null);
+	}
+
+	@Test
 	void descriptionsKeepLineBreaksButNotOtherControlCharacters() {
 		var token = register(true);
 		client.post().uri("/api/projects").header("Authorization", "Bearer " + token)

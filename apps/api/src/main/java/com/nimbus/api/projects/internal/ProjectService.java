@@ -6,6 +6,8 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,6 +55,22 @@ class ProjectService implements Projects {
 			.param("project", project.id()).param("user", actor).param("at", Timestamp.from(project.createdAt())).update();
 		events.publishEvent(new ProjectCreated(project.id(), project.key(), actor));
 		return project;
+	}
+
+	/**
+	 * The active (not Archived) projects the actor is a Member of, by lower-cased name, then by key (names need not be
+	 * unique). Sorted here and not by the database, as the Roles are, so the order is the same on every database
+	 * whatever its locale: a collation would skip spaces and punctuation, and its {@code lower()} differs from Java's.
+	 */
+	public List<ProjectView> listFor(UUID actor) {
+		return jdbc.sql(SELECT + """
+				WHERE archived_at IS NULL
+				AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
+				""")
+			.param("user", actor).query(ProjectService::view).list().stream()
+			.sorted(Comparator.comparing((ProjectView project) -> project.name().toLowerCase(Locale.ROOT))
+				.thenComparing(ProjectView::key))
+			.toList();
 	}
 
 	/** Unknown projects and projects the actor is not a Member of are both "not found". */

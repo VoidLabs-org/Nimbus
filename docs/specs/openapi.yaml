@@ -24,6 +24,29 @@ tags:
 
 paths:
   /api/projects:
+    get:
+      tags: [projects]
+      summary: The projects the User is a Member of
+      description: >-
+        Active projects only: Archived ones are left out. Sorted by lower-cased name, then by key, in code, so the
+        order is the same on every database. No paging. Requires a verified email.
+      responses:
+        "200":
+          description: The projects, empty when the User is not a Member of any
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "Email not verified (code: email_unverified)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
     post:
       tags: [projects]
       summary: Create a project and become its first Member
@@ -2312,7 +2335,10 @@ components:
         description:
           type: [string, "null"]
           maxLength: 1000
-          description: Optional plain text; line breaks and tabs allowed, other control characters rejected
+          description: >-
+            Optional plain text, cleaned at both ends like the name (whitespace, Unicode spaces, invisible format
+            characters); none when nothing is left. Line breaks and tabs inside it are kept, other control
+            characters rejected.
     Project:
       type: object
       required: [id, key, name, description, archived, createdAt]

@@ -1,148 +1,106 @@
-import { ApiError } from "@repo/api";
-import {
-  Alert,
-  Button,
-  Container,
-  Group,
-  Stack,
-  Text,
-  Textarea,
-  TextInput,
-  Title,
-} from "@mantine/core";
-import { useForm } from "@mantine/form";
-import { ArrowButton } from "@repo/ui/arrow-button";
+import { Alert, Button, Container, Stack, Title } from "@mantine/core";
+import { Glyph } from "@repo/ui/glyph";
 import { Panel } from "@repo/ui/panel";
-import { toast } from "@repo/ui/toast";
+import { Loading } from "@repo/ui/skeleton";
+import { Tag } from "@repo/ui/tag";
+import { IconArrowRight } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
-import { api } from "../api/client";
-import { useProjectCreated } from "../api/queries";
-import { keyForName } from "../projects/projectKey";
+import { Link } from "react-router";
+import type { Project } from "../api/client";
+import { loadFailure, refreshFailed, useProjects } from "../api/queries";
+import { NewProjectForm } from "../projects/NewProjectForm";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
+import { FailedLoadPage } from "../shell/StatusPages";
+import { ProjectListSkeleton } from "./ProjectListSkeleton";
+import classes from "./ProjectsPage.module.css";
 
 /**
- * The Projects entry point; the project list is added by ticket #39. The key follows the name until the User types
- * their own (see `keyForName`). A create that finishes after the User went to another page doesn't pull them back.
+ * The projects the User is a Member of, by name, each opening its page, and "New project", which opens the form
+ * above the list. A User with no projects sees why the list is empty. "New project" waits for the list, as "New
+ * Role" does, so the form is never open when a failed load replaces the page.
  */
 export default function ProjectsPage() {
-  const navigate = useNavigate();
-  const projectCreated = useProjectCreated();
-  const [failure, setFailure] = useState<string | null>(null);
-  const form = useForm({ initialValues: { name: "", key: "", description: "" } });
-  const left = useRef(false);
+  const query = useProjects();
+  const projects = query.data ?? null;
+  const failure = loadFailure(query);
+  const [creating, setCreating] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
+  const wasCreating = useRef(false);
   useEffect(() => {
-    left.current = false;
-    return () => {
-      left.current = true;
-    };
-  }, []);
+    // Closing the form removes the button that had focus; hand it back to the one that opened the form.
+    if (wasCreating.current && !creating) opener.current?.focus();
+    wasCreating.current = creating;
+  }, [creating]);
 
-  async function submit(values: typeof form.values) {
-    setFailure(null);
-    try {
-      const project = await api.createProject({
-        ...values,
-        description: values.description || null,
-      });
-      await projectCreated(project);
-      toast.success("Project created.");
-      if (!left.current) navigate(`/projects/${encodeURIComponent(project.key)}`);
-    } catch (error) {
-      if (left.current) return;
-      if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {
-        form.setErrors(error.fieldErrors);
-      } else {
-        setFailure(
-          error instanceof ApiError
-            ? error.message
-            : "Couldn't create your project. Please try again.",
-        );
-      }
-    }
-  }
+  // Offline or a server error, with nothing cached to show: the status page takes the place of the list.
+  if (failure) return <FailedLoadPage failure={failure} onRetry={() => void query.refetch()} />;
 
   return (
-    <Container size="sm" px={0} py="xl">
+    <Container size="md" px={0} py="xl">
       <Stack gap="lg">
         <BreadcrumbTrail crumbs={[{ label: "Projects" }]} />
-        <div>
-          <Title order={1} fz={40} lh={1.1}>
-            Projects
-          </Title>
-          <Text c="dimmed" mt="xs">
-            A place for your team to plan and track work.
-          </Text>
+        <div className={classes.header}>
+          <div>
+            <Title order={1} fz={40} lh={1.1}>
+              Projects
+            </Title>
+            <div className={classes.description}>A place for your team to plan and track work.</div>
+          </div>
+          {projects && !creating && (
+            <Button ref={opener} onClick={() => setCreating(true)}>
+              + New project
+            </Button>
+          )}
         </div>
-        <Panel p="xl">
-          <form onSubmit={(event) => form.onSubmit(submit)(event)}>
-            <Stack gap="lg">
-              <div>
-                <Title order={2} fz={24}>
-                  New project
-                </Title>
-                <Text size="sm" c="dimmed" mt={6}>
-                  Create a project and become its first Member.
-                </Text>
-              </div>
-              {failure && (
-                <Alert color="red" role="alert">
-                  {failure}
-                </Alert>
-              )}
-              <TextInput
-                label="Name"
-                placeholder="Nimbus Web"
-                required
-                maxLength={100}
-                disabled={form.submitting}
-                {...form.getInputProps("name")}
-                onChange={(event) => {
-                  const name = event.currentTarget.value;
-                  form.setFieldValue("key", keyForName(form.values.name, name, form.values.key));
-                  form.setFieldValue("name", name);
-                }}
-              />
-              <TextInput
-                label="Project key"
-                placeholder="NW"
-                required
-                maxLength={10}
-                description="2–10 letters or digits, starting with a letter. This can't be changed later."
-                disabled={form.submitting}
-                {...form.getInputProps("key")}
-                onChange={(event) =>
-                  form.setFieldValue("key", event.currentTarget.value.toUpperCase())
-                }
-              />
-              <Textarea
-                label="Description"
-                description="Optional"
-                placeholder="What is this project for?"
-                rows={3}
-                maxLength={1000}
-                disabled={form.submitting}
-                {...form.getInputProps("description")}
-              />
-              <Group justify="space-between">
-                <Button
-                  variant="subtle"
-                  disabled={form.submitting}
-                  onClick={() => {
-                    form.reset();
-                    setFailure(null);
-                  }}
-                >
-                  Clear
-                </Button>
-                <ArrowButton type="submit" loading={form.submitting}>
-                  Create project
-                </ArrowButton>
-              </Group>
-            </Stack>
-          </form>
-        </Panel>
+        {creating && <NewProjectForm onCancel={() => setCreating(false)} />}
+        {refreshFailed(query) && (
+          <Alert color="yellow" title="Couldn't refresh your projects">
+            Showing the last loaded list.{" "}
+            <Button variant="subtle" size="compact-sm" onClick={() => void query.refetch()}>
+              Try again
+            </Button>
+          </Alert>
+        )}
+        {projects ? (
+          <ProjectList projects={projects} />
+        ) : (
+          <Loading>
+            <ProjectListSkeleton />
+          </Loading>
+        )}
       </Stack>
     </Container>
+  );
+}
+
+/** The projects in a panel; each row opens the project. */
+function ProjectList({ projects }: { projects: Project[] }) {
+  return (
+    <Panel p={8}>
+      {projects.length === 0 ? (
+        <p className={classes.empty}>No projects to show yet. Create one to get started.</p>
+      ) : (
+        <ul className={classes.list} aria-label="Your projects">
+          {projects.map((project) => (
+            <li key={project.id}>
+              <Link to={`/projects/${encodeURIComponent(project.key)}`} className={classes.row}>
+                <div className={classes.project}>
+                  <div className={classes.name}>
+                    {project.name}
+                    <Tag>{project.key}</Tag>
+                  </div>
+                  {project.description && (
+                    <div className={classes.summary}>{project.description}</div>
+                  )}
+                </div>
+                <span className={classes.arrow}>
+                  <Glyph icon={IconArrowRight} />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }

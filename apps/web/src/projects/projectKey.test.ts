@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyForName, suggestKey } from "./projectKey";
+import { keyForName, storedKey, suggestKey } from "./projectKey";
 
 describe("suggestKey", () => {
   it("uses the initials of several words", () => {
@@ -30,6 +30,18 @@ describe("suggestKey", () => {
 
   it("is empty for an empty name", () => {
     expect(suggestKey("")).toBe("");
+  });
+});
+
+describe("storedKey", () => {
+  it("writes a key in capitals, as the server stores it", () => {
+    expect(storedKey("nIm")).toBe("NIM");
+  });
+
+  it("leaves letters that Unicode capitalises into ASCII ones alone, as the server does", () => {
+    // "ſ" (long s) and "ı" (dotless i) are S and I in upper case, but the server matches them to no project.
+    expect(storedKey("ſam")).toBe("ſAM");
+    expect(storedKey("nım")).toBe("NıM");
   });
 });
 

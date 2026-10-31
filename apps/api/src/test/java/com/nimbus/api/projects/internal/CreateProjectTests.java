@@ -49,4 +49,26 @@ class CreateProjectTests {
 		assertThat(check("x".repeat(100))).isEmpty();
 		assertThat(check("x".repeat(101))).hasSize(1);
 	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", "   ", " ", "​", "  ​  ", "\t\r\n" })
+	void aDescriptionWithNothingVisibleInItIsNoDescription(String description) {
+		var request = new ProjectsController.CreateProject("ABC", "Nimbus", description);
+
+		assertThat(request.description()).isNull();
+		assertThat(VALIDATOR.validate(request)).isEmpty();
+	}
+
+	@Test
+	void aDescriptionIsCleanedAtBothEndsLikeANameButItsLineBreaksAreKept() {
+		var request = new ProjectsController.CreateProject("ABC", "Nimbus",
+				"  First line\r\nSecond\tline\n​ ");
+
+		assertThat(request.description()).isEqualTo("First line\r\nSecond\tline");
+	}
+
+	@Test
+	void noDescriptionStaysNone() {
+		assertThat(new ProjectsController.CreateProject("ABC", "Nimbus", null).description()).isNull();
+	}
 }

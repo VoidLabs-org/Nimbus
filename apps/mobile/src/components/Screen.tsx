@@ -22,8 +22,19 @@ export function Logo() {
   );
 }
 
-/** A whole screen on the theme's page colour, inside the phone's safe area. Forms scroll when the keyboard is up. */
-export function Screen({ children, scroll = false }: { children: ReactNode; scroll?: boolean }) {
+/**
+ * A whole screen on the theme's page colour, inside the phone's safe area. Forms scroll when the keyboard is up.
+ * `overlay`, such as a toast, sits over the screen and doesn't scroll.
+ */
+export function Screen({
+  children,
+  scroll = false,
+  overlay,
+}: {
+  children: ReactNode;
+  scroll?: boolean;
+  overlay?: ReactNode;
+}) {
   const theme = useTheme();
   const body = scroll ? (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -33,7 +44,10 @@ export function Screen({ children, scroll = false }: { children: ReactNode; scro
     <View style={styles.content}>{children}</View>
   );
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: theme.colorBg }]}>{body}</SafeAreaView>
+    <SafeAreaView style={[styles.screen, { backgroundColor: theme.colorBg }]}>
+      {body}
+      {overlay}
+    </SafeAreaView>
   );
 }
 

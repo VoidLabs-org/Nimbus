@@ -73,15 +73,20 @@ function Screens() {
   if (!ready) return null;
 
   const signedOut = state.kind === "signedOut";
-  const home = homeFor(state.kind, welcomed);
+  // An Unverified User gets only the verify-email screen until their code is right.
+  const unverified = state.kind === "signedIn" && !state.user.emailVerified;
+  const home = homeFor(state, welcomed);
   return (
     <>
       <StatusBar style={theme.dark ? "light" : "dark"} />
       <Stack
         screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colorBg } }}
       >
-        <Stack.Protected guard={state.kind === "signedIn"} redirectTo={home}>
+        <Stack.Protected guard={state.kind === "signedIn" && !unverified} redirectTo={home}>
           <Stack.Screen name="(tabs)" />
+        </Stack.Protected>
+        <Stack.Protected guard={unverified} redirectTo={home}>
+          <Stack.Screen name="verify-email" />
         </Stack.Protected>
         <Stack.Protected guard={state.kind === "expired"} redirectTo={home}>
           <Stack.Screen name="session-expired" />
@@ -98,6 +103,7 @@ function Screens() {
         <Stack.Protected guard={signedOut} redirectTo={home}>
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="register" />
+          <Stack.Screen name="forgot-password" />
         </Stack.Protected>
       </Stack>
     </>
@@ -105,10 +111,10 @@ function Screens() {
 }
 
 /** The screen each state of the Session belongs on. */
-function homeFor(kind: SessionState["kind"], welcomed: boolean): Href {
-  switch (kind) {
+function homeFor(state: SessionState, welcomed: boolean): Href {
+  switch (state.kind) {
     case "signedIn":
-      return "/";
+      return state.user.emailVerified ? "/" : "/verify-email";
     case "expired":
       return "/session-expired";
     case "offline":

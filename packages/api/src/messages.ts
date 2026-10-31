@@ -1,7 +1,14 @@
 import { clock } from "./clock";
+import { ApiError, NetworkError } from "./errors";
 
 /** For a failure the page has nothing more specific to say about. */
 export const GENERIC_ERROR = "Something went wrong. Please try again.";
+
+/** For a request that couldn't reach the server (a NetworkError). */
+export const NETWORK_ERROR = "Can’t reach Nimbus. Check your connection and try again.";
+
+/** How long Resend stays off after an emailed code is sent, matching the server's 60 seconds between emails. */
+export const RESEND_WAIT_SECONDS = 60;
 
 /**
  * A Sign-in code the server refused: `invalid_code` in a Security page window, `invalid_two_step_code` on the
@@ -15,6 +22,29 @@ export const WRONG_SIGN_IN_CODE =
  * verification, `invalid_two_step_code` on the forgot-password page (where `invalid_code` is about the Reset code).
  */
 export const WRONG_RECOVERY_CODE = "That recovery code isn’t right, or it was used already.";
+
+/**
+ * An emailed code the server refused (`invalid_code`): a Verification code or a Reset code, with the `triesLeft` it
+ * sent.
+ */
+export function wrongCodeMessage(triesLeft: number | null): string {
+  return triesLeft === null
+    ? "That code isn’t right."
+    : `That code isn’t right. ${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left.`;
+}
+
+/** What to tell the User when checking their Verification code failed. */
+export function verificationCodeMessage(error: unknown): string {
+  if (error instanceof NetworkError) return NETWORK_ERROR;
+  if (error instanceof ApiError) {
+    if (error.code === "invalid_code") return wrongCodeMessage(error.triesLeft);
+    if (error.code === "code_expired") {
+      return "That code has expired, or was cancelled after too many wrong tries.";
+    }
+    if (error.status === 429) return tooManyAttemptsMessage(error.retryAfterSeconds);
+  }
+  return GENERIC_ERROR;
+}
 
 /** On the sign-in page, after a Two-step verification sign-in ended (`sign_in_expired`). */
 export const SIGN_IN_TIMED_OUT = "Your sign-in timed out. Sign in again.";

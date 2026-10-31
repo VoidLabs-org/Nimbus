@@ -3,8 +3,13 @@ import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { type RegisterInput } from "../api/client";
-import { ApiError, tooManyAttemptsMessage } from "@repo/api";
-import { displayNameError } from "../auth/displayName";
+import {
+  ApiError,
+  displayNameError,
+  emailError,
+  passwordError,
+  tooManyAttemptsMessage,
+} from "@repo/api";
 import {
   AuthForm,
   AuthLayout,
@@ -12,7 +17,6 @@ import {
   AuthSubmit,
   AuthTextInput,
 } from "../auth/AuthLayout";
-import { passwordError } from "../auth/password";
 import { ProviderButtons } from "../auth/ProviderButtons";
 import { safeReturnPath } from "../auth/returnPath";
 import { useSession } from "../auth/useSession";
@@ -28,8 +32,7 @@ export default function RegisterPage() {
     initialValues: { displayName: "", email: "", password: "" },
     validate: {
       displayName: displayNameError,
-      email: (value) =>
-        /^\S+@\S+\.\S+$/.test(value.trim()) ? null : "Enter a valid email address",
+      email: emailError,
       password: passwordError,
     },
   });

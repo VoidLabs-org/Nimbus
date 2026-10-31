@@ -8,10 +8,13 @@ import {
   ApiError,
   clock,
   GENERIC_ERROR,
+  passwordError,
+  RESEND_WAIT_SECONDS,
   tooManyAttemptsIn,
   tooManyAttemptsMessage,
   WRONG_RECOVERY_CODE,
   WRONG_SIGN_IN_CODE,
+  wrongCodeMessage,
 } from "@repo/api";
 import {
   AuthForm,
@@ -22,8 +25,7 @@ import {
 } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
 import { CodeAlert as Alert, CODE_LENGTH, CodePinInput, PinnedSubmit } from "../auth/CodeEntry";
-import { RESEND_WAIT_SECONDS, useCountdown } from "../auth/countdown";
-import { passwordError } from "../auth/password";
+import { useCountdown } from "../auth/countdown";
 import { recoveryCodeInputProps } from "../auth/recoveryCode";
 import { useSession } from "../auth/useSession";
 
@@ -213,12 +215,7 @@ export default function ForgotPasswordPage() {
     if (!(failure instanceof ApiError)) {
       setFormError(GENERIC_ERROR);
     } else if (failure.code === "invalid_code") {
-      const left = failure.triesLeft;
-      setCodeMessage(
-        left === null
-          ? "That code isn’t right."
-          : `That code isn’t right. ${left} ${left === 1 ? "try" : "tries"} left.`,
-      );
+      setCodeMessage(wrongCodeMessage(failure.triesLeft));
       setCodeRejected(true);
     } else if (failure.code === "two_step_required") {
       setTwoStep(true);

@@ -2,32 +2,15 @@ import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
 import { api } from "../api/client";
-import { ApiError, clock, tooManyAttemptsMessage } from "@repo/api";
+import { ApiError, clock, RESEND_WAIT_SECONDS, verificationCodeMessage } from "@repo/api";
 import { AuthForm, AuthLayout, AuthSubmit } from "./AuthLayout";
 import { CODE_LENGTH, CodePinInput, PinnedSubmit } from "./CodeEntry";
 import classes from "./AuthLayout.module.css";
-import { RESEND_WAIT_SECONDS, useCountdown } from "./countdown";
+import { useCountdown } from "./countdown";
 import { useSession } from "./useSession";
 
 /** How long "Email verified" stays up before the app opens (the progress bar fills over this time). */
 const CONFIRM_MS = 1500;
-
-/** What to tell the User when the server refused their code. */
-function verificationErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.code === "invalid_code") {
-      const left = error.triesLeft;
-      return left === null
-        ? "That code isn’t right."
-        : `That code isn’t right. ${left} ${left === 1 ? "try" : "tries"} left.`;
-    }
-    if (error.code === "code_expired") {
-      return "That code has expired, or was cancelled after too many wrong tries.";
-    }
-    if (error.status === 429) return tooManyAttemptsMessage(error.retryAfterSeconds);
-  }
-  return "Something went wrong. Please try again.";
-}
 
 /**
  * What a signed-in User sees, in place of the whole app, until they enter the Verification code emailed to
@@ -92,7 +75,7 @@ export function VerifyEmailScreen() {
     try {
       await verifyEmail(value);
     } catch (failure) {
-      setError(verificationErrorMessage(failure));
+      setError(verificationCodeMessage(failure));
       setCodeRejected(failure instanceof ApiError && failure.status === 400);
       setCode("");
     } finally {

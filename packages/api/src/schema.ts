@@ -489,11 +489,17 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Register with email and password, and sign in straight away */
+        /**
+         * Register with email and password, and sign in straight away
+         * @description The new User is an Unverified User until they enter the Verification code emailed to them. The Mobile app (`X-Nimbus-Client: mobile`) gets the refresh token in the body as `refreshToken` and no refresh cookie.
+         */
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /** @description `mobile` from the Mobile app (ADR 0010): it keeps the refresh token in the phone's secure storage, so the token travels in the body (`refreshToken`) instead of a cookie. */
+                    "X-Nimbus-Client"?: components["parameters"]["MobileClient"];
+                };
                 path?: never;
                 cookie?: never;
             };

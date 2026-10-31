@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
 
-/** How long Resend stays off after a send, matching the server's 60 seconds between emails to one address. */
-export const RESEND_WAIT_SECONDS = 60;
-
 /** Counts {@code seconds} down to 0, one a second, once it is set above 0. */
 export function useCountdown() {
   const [seconds, setSeconds] = useState(0);

@@ -3,7 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "expo-router";
 import { createContext, type ReactNode, use, useEffect, useRef, useState } from "react";
 import { apiUrl } from "../config";
-import { createMobileApi, type MobileApi, type SignInOutcome, type User } from "./client";
+import {
+  createMobileApi,
+  type MobileApi,
+  type RegisterInput,
+  type SignInOutcome,
+  type User,
+} from "./client";
 import { refreshTokenStore, welcomeSeen } from "./storage";
 import { nimbusUserAgent } from "./userAgent";
 
@@ -11,7 +17,8 @@ import { nimbusUserAgent } from "./userAgent";
  * Where the app stands with the User's Session:
  * - `starting`: reading the phone's storage and renewing a stored Session (the splash screen stays up)
  * - `signedOut`: no Session; Welcome on the first launch, Sign in after that
- * - `signedIn`: the tabs; `user` as the server sent it at `since` (a sign-in or a renewal)
+ * - `signedIn`: the tabs; `user` as the server sent it at `since` (a sign-in or a renewal). An Unverified User
+ *   (`emailVerified` false) sees only the verify-email screen instead
  * - `expired`: the Session ended while the app had it; "Your session expired", then Sign in returns to `returnTo`
  * - `offline` / `serverError`: a stored Session couldn't be renewed for now; nothing is signed out
  */
@@ -30,6 +37,12 @@ type Session = {
   api: MobileApi;
   markWelcomed: () => void;
   signIn: (email: string, password: string) => Promise<SignInOutcome>;
+  /** Creates a User and signs them in, as an Unverified User. */
+  register: (input: RegisterInput) => Promise<void>;
+  /** Checks the Verification code; once it is right the app opens. Rejects with the server's ApiError if refused. */
+  verifyEmail: (code: string) => Promise<void>;
+  /** Reads the User again, as when their email was verified on another device. */
+  reload: () => Promise<void>;
   /** Ends this phone's Session on the server; rejects, still signed in, when the server can't be reached. */
   signOut: () => Promise<void>;
   /** Forgets the Session on this phone only, for when the server is down and the User wants out anyway. */
@@ -97,6 +110,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // oxlint-disable-next-line react/exhaustive-deps
   }, []);
 
+  function signedIn(user: User) {
+    setWelcomed(true);
+    void welcomeSeen.set();
+    setState({ kind: "signedIn", user, since: Date.now() });
+  }
+
   const session: Session = {
     state,
     welcomed,
@@ -107,12 +126,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     },
     signIn: async (email, password) => {
       const outcome = await api.signIn(email, password);
-      if ("user" in outcome) {
-        setWelcomed(true);
-        void welcomeSeen.set();
-        setState({ kind: "signedIn", user: outcome.user, since: Date.now() });
-      }
+      if ("user" in outcome) signedIn(outcome.user);
       return outcome;
+    },
+    register: async (input) => {
+      const user = await api.register(input);
+      // A new User: nothing to return to from an earlier User's expired Session.
+      returnTo.current = null;
+      signedIn(user);
+    },
+    verifyEmail: async (code) => {
+      setState({ kind: "signedIn", user: await api.verifyEmail(code), since: Date.now() });
+    },
+    reload: async () => {
+      try {
+        setState({ kind: "signedIn", user: await api.reload(), since: Date.now() });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          queryClient.clear();
+          setState({ kind: "expired", returnTo: null });
+        } else {
+          throw error;
+        }
+      }
     },
     signOut: async () => {
       await api.signOut();
@@ -125,7 +161,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setState({ kind: "signedOut" });
     },
     signInAgain: () => {
-      returnTo.current = state.kind === "expired" ? state.returnTo : null;
+      const path = state.kind === "expired" ? state.returnTo : null;
+      // The verify-email screen is no place to come back to: a verified User couldn't open it.
+      returnTo.current = path === "/verify-email" ? null : path;
       setState({ kind: "signedOut" });
     },
     retry: restore,

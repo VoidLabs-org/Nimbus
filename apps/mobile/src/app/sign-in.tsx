@@ -1,9 +1,16 @@
-import { ApiError, GENERIC_ERROR, NetworkError, tooManyAttemptsMessage } from "@repo/api";
-import { router } from "expo-router";
+import {
+  ApiError,
+  GENERIC_ERROR,
+  NETWORK_ERROR,
+  NetworkError,
+  tooManyAttemptsMessage,
+} from "@repo/api";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, LinkButton } from "../components/Button";
 import { Logo, Screen } from "../components/Screen";
+import { Toast } from "../components/Toast";
 import { Text } from "../components/Text";
 import { TextField } from "../components/TextField";
 import { useSession } from "../session/session";
@@ -13,15 +20,26 @@ import { useTheme } from "../theme";
 const TWO_STEP_NOT_YET =
   "Two-step verification isn’t available in the app yet. Sign in on the web for now.";
 
-/** Sign in with email and password (design M3a–M3c): just the logo and the form. */
+/**
+ * Sign in with email and password (design M3a–M3c): just the logo and the form. After Forgot password it opens with
+ * the email filled in and says the password changed (design M4f).
+ */
 export default function SignIn() {
   const theme = useTheme();
   const { signIn } = useSession();
-  const [email, setEmail] = useState("");
+  const params = useLocalSearchParams<{ email?: string; passwordReset?: string }>();
+  const [email, setEmail] = useState(params.email ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+
+  // Forgot password comes back to the Sign in screen already open below it, with the email it reset.
+  const [filledFrom, setFilledFrom] = useState(params.email);
+  if (params.email !== filledFrom) {
+    setFilledFrom(params.email);
+    if (params.email) setEmail(params.email);
+  }
 
   async function submit() {
     setError(null);
@@ -41,7 +59,7 @@ export default function SignIn() {
       } else if (failure instanceof ApiError && failure.status === 400) {
         setError(failure.message);
       } else if (failure instanceof NetworkError) {
-        setError("Can’t reach Nimbus. Check your connection and try again.");
+        setError(NETWORK_ERROR);
       } else {
         setError(GENERIC_ERROR);
       }
@@ -52,7 +70,18 @@ export default function SignIn() {
 
   const invalid = error === "Invalid email or password.";
   return (
-    <Screen scroll>
+    <Screen
+      scroll
+      overlay={
+        params.passwordReset ? (
+          // A new key for each reset, so a second one shows the toast again.
+          <Toast
+            key={params.passwordReset}
+            message="Password updated. You were signed out on other devices."
+          />
+        ) : null
+      }
+    >
       <Logo />
       <View style={styles.heading}>
         <Text weight="semibold" size={28} accessibilityRole="header">
@@ -79,6 +108,9 @@ export default function SignIn() {
         autoComplete="current-password"
         textContentType="password"
         invalid={invalid || "password" in fieldErrors}
+        aside={
+          <LinkButton label="Forgot password?" onPress={() => router.push("/forgot-password")} />
+        }
         onSubmitEditing={() => void submit()}
       />
       {fieldErrors.password ? <FieldError message={fieldErrors.password} /> : null}

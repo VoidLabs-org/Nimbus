@@ -286,7 +286,12 @@ paths:
     post:
       tags: [auth]
       summary: Register with email and password, and sign in straight away
+      description: >-
+        The new User is an Unverified User until they enter the Verification code emailed to them. The Mobile app
+        (`X-Nimbus-Client: mobile`) gets the refresh token in the body as `refreshToken` and no refresh cookie.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/MobileClient"
       requestBody:
         required: true
         content:

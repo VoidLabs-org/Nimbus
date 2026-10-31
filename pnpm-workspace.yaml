@@ -1,3 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Install scripts pnpm may run. These two (the Mobile app's file watcher and Jest's resolver) ship prebuilt binaries
+# as optional dependencies; their scripts only build from source or double-check, so they don't run.
+allowBuilds:
+  "@parcel/watcher": false
+  unrs-resolver: false

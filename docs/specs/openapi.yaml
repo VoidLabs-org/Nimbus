@@ -322,8 +322,11 @@ paths:
         For a User with Two-step verification a right password starts no session: the answer is
         `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that
         `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code. A `two_step_remembered` cookie that
-        remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code.
+        remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code. The Mobile app
+        (`X-Nimbus-Client: mobile`) gets the refresh token in the body as `refreshToken` and no refresh cookie.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/MobileClient"
       requestBody:
         required: true
         content:
@@ -682,17 +685,29 @@ paths:
       summary: Renew the session from the refresh cookie and get a new access token
       description: >-
         Exchanges the refresh cookie for a new one (rotation). A refresh token works once: presenting a used one
-        revokes its whole session.
+        revokes its whole session. The Mobile app (`X-Nimbus-Client: mobile`) sends its token in the body instead
+        and gets the new one back in the body, with no cookie; each mode reads only its own token.
       security:
         - refreshCookie: []
+        - {}
       parameters:
         - name: X-Requested-With
           in: header
-          required: true
-          description: Must be `nimbus`. Cross-site forms can't set it, so other sites can't use the cookie.
+          required: false
+          description: >-
+            Must be `nimbus` unless `X-Nimbus-Client` is `mobile`. Cross-site forms can't set either, so other
+            sites can't use the cookie.
           schema:
             type: string
             const: nimbus
+        - $ref: "#/components/parameters/MobileClient"
+      requestBody:
+        required: false
+        description: The Mobile app's refresh token; a browser sends none.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
       responses:
         "200":
           description: Session renewed
@@ -704,13 +719,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuthResponse"
         "401":
-          description: The cookie is missing, unknown, expired, revoked or already used
+          description: The cookie (or the Mobile app's token) is missing, unknown, expired, revoked or already used
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
         "403":
-          description: The X-Requested-With header is missing or not `nimbus`
+          description: "Neither `X-Requested-With: nimbus` nor `X-Nimbus-Client: mobile`"
           content:
             application/problem+json:
               schema:
@@ -725,17 +740,28 @@ paths:
       description: >-
         Ends the session the refresh cookie belongs to, even if that token was already rotated, and clears the
         cookie. Other sessions of the same User are not affected. Succeeds with no cookie, an unknown cookie or
-        a session that is already over.
+        a session that is already over. The Mobile app (`X-Nimbus-Client: mobile`) sends its token in the body.
       security:
         - refreshCookie: []
+        - {}
       parameters:
         - name: X-Requested-With
           in: header
-          required: true
-          description: Must be `nimbus`. Cross-site forms can't set it, so other sites can't sign a User out.
+          required: false
+          description: >-
+            Must be `nimbus` unless `X-Nimbus-Client` is `mobile`. Cross-site forms can't set either, so other
+            sites can't sign a User out.
           schema:
             type: string
             const: nimbus
+        - $ref: "#/components/parameters/MobileClient"
+      requestBody:
+        required: false
+        description: The Mobile app's refresh token; a browser sends none.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
       responses:
         "204":
           description: Signed out; the refresh cookie is cleared (`Max-Age=0`)
@@ -745,7 +771,7 @@ paths:
               schema:
                 type: string
         "403":
-          description: The X-Requested-With header is missing or not `nimbus`
+          description: "Neither `X-Requested-With: nimbus` nor `X-Nimbus-Client: mobile`"
           content:
             application/problem+json:
               schema:
@@ -2262,6 +2288,16 @@ components:
         Secure; SameSite=Strict; Path=/api/auth/two-step; Max-Age=300`. Single use.
 
   parameters:
+    MobileClient:
+      name: X-Nimbus-Client
+      in: header
+      required: false
+      description: >-
+        `mobile` from the Mobile app (ADR 0010): it keeps the refresh token in the phone's secure storage, so the token
+        travels in the body (`refreshToken`) instead of a cookie.
+      schema:
+        type: string
+        const: mobile
     LinkTicket:
       name: link
       in: query
@@ -2497,8 +2533,20 @@ components:
         accessToken:
           type: string
           description: HS256 JWT, valid 15 minutes. Keep it in memory only.
+        refreshToken:
+          type: string
+          description: >-
+            Only for the Mobile app (`X-Nimbus-Client: mobile`), which keeps it in secure storage; a browser gets it
+            in the refresh cookie instead, and this field is left out.
         user:
           $ref: "#/components/schemas/User"
+
+    RefreshTokenRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          description: The Mobile app's current refresh token, from its last sign-in or refresh
 
     User:
       type: object

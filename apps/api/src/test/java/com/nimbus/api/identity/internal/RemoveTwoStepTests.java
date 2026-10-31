@@ -171,7 +171,7 @@ class RemoveTwoStepTests {
 		var again = turnOn(user.token());
 
 		client.post().uri("/api/auth/two-step").header("X-Requested-With", "nimbus")
-			.cookie(waiting.getName(), waiting.getValue())
+			.cookie(PendingSignIns.COOKIE, waiting)
 			.body(Map.of("code", SignInCodes.codeFor(again.key(), clock.instant()))).exchange().expectStatus()
 			.isUnauthorized().expectBody().jsonPath("$.code").isEqualTo("sign_in_expired");
 	}

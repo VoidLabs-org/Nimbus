@@ -64,17 +64,22 @@ class AuthController {
 
 	/**
 	 * A User with Two-step verification gets no Session for the password alone: the answer says a Sign-in code is
-	 * needed, and a cookie holds the pending sign-in that {@code /two-step} finishes.
+	 * needed, and a cookie holds the pending sign-in that {@code /two-step} finishes. The Mobile app gets the pending
+	 * sign-in in the body instead, and sends its remembered device in the body, not a cookie.
 	 */
 	@PostMapping("/login")
 	ResponseEntity<?> login(@Valid @RequestBody LoginRequest request,
 			@CookieValue(name = RememberedBrowsers.COOKIE, required = false) String remembered, HttpServletRequest http) {
 		var user = signIn.signIn(request.email(), request.password(), http.getRemoteAddr());
-		var pending = twoStepSignIn.begin(user, null, remembered);
+		var mobile = fromMobileApp(http);
+		var pending = twoStepSignIn.begin(user, null, mobile ? request.rememberedToken() : remembered);
 		if (pending.isPresent()) {
+			if (mobile) {
+				return ResponseEntity.ok().body(new TwoStepRequiredResponse(true, pending.get()));
+			}
 			return ResponseEntity.ok()
-				.header(HttpHeaders.SET_COOKIE, pending.get().toString())
-				.body(new TwoStepRequiredResponse(true));
+				.header(HttpHeaders.SET_COOKIE, PendingSignIns.cookie(pending.get()).toString())
+				.body(new TwoStepRequiredResponse(true, null));
 		}
 		return signedIn(HttpStatus.OK, user, http, true);
 	}
@@ -82,16 +87,23 @@ class AuthController {
 	/**
 	 * The second step of a sign-in: a right Sign-in code or Recovery code starts the Session as {@code /login} does
 	 * and ends the pending sign-in. The pending cookie is the only credential, so {@link NimbusHeaderGate} checks its header.
+	 * The Mobile app sends the pending sign-in in the body ({@code pendingToken}) and gets a remembered device back there
+	 * ({@code rememberedToken}); its requests ignore the cookie, and it gets no cookies.
 	 */
 	@PostMapping("/two-step")
 	ResponseEntity<AuthResponse> twoStep(@CookieValue(name = PendingSignIns.COOKIE, required = false) String pendingId,
 			@Valid @RequestBody TwoStepRequest request, HttpServletRequest http) {
-		var signedIn = twoStepSignIn.finish(pendingId, request.code(), request.recoveryCode(),
-				Boolean.TRUE.equals(request.rememberBrowser()), http.getHeader(HttpHeaders.USER_AGENT));
+		var mobile = fromMobileApp(http);
+		var signedIn = twoStepSignIn.finish(mobile ? request.pendingToken() : pendingId, request.code(),
+				request.recoveryCode(), Boolean.TRUE.equals(request.rememberBrowser()),
+				http.getHeader(HttpHeaders.USER_AGENT));
+		if (mobile) {
+			return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), signedIn.rememberedToken(), http);
+		}
 		var cookies = signedIn.rememberedToken() == null ? new ResponseCookie[] { PendingSignIns.clearedCookie() }
 				: new ResponseCookie[] { PendingSignIns.clearedCookie(),
 						RememberedBrowsers.cookie(signedIn.rememberedToken()) };
-		return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), http, cookies);
+		return withSession(HttpStatus.OK, signedIn.user(), signedIn.token(), null, http, cookies);
 	}
 
 	/**
@@ -103,7 +115,7 @@ class AuthController {
 	ResponseEntity<AuthResponse> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String cookie,
 			@RequestBody(required = false) RefreshTokenRequest body, HttpServletRequest http) {
 		var refreshed = sessions.refresh(refreshToken(cookie, body, http), http.getRemoteAddr());
-		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token(), http);
+		return withSession(HttpStatus.OK, refreshed.user(), refreshed.token(), null, http);
 	}
 
 	/**
@@ -127,12 +139,13 @@ class AuthController {
 	 */
 	private ResponseEntity<AuthResponse> signedIn(HttpStatus status, User user, HttpServletRequest http,
 			boolean announce, ResponseCookie... alsoSet) {
-		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT), announce), http,
-				alsoSet);
+		return withSession(status, user, sessions.start(user, http.getHeader(HttpHeaders.USER_AGENT), announce), null,
+				http, alsoSet);
 	}
 
+	/** @param rememberedToken the Mobile app's new remembered device, for the body; null for none, and for a browser */
 	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken,
-			HttpServletRequest http, ResponseCookie... alsoSet) {
+			String rememberedToken, HttpServletRequest http, ResponseCookie... alsoSet) {
 		var mobile = fromMobileApp(http);
 		var response = ResponseEntity.status(status);
 		if (!mobile) {
@@ -142,7 +155,7 @@ class AuthController {
 			response.header(HttpHeaders.SET_COOKIE, cookie.toString());
 		}
 		return response.body(new AuthResponse(accessTokens.issueFor(user, refreshToken.sessionId()),
-				mobile ? refreshToken.value() : null, UserResponse.from(user, pictures)));
+				mobile ? refreshToken.value() : null, rememberedToken, UserResponse.from(user, pictures)));
 	}
 
 	static boolean fromMobileApp(HttpServletRequest http) {
@@ -172,10 +185,15 @@ class AuthController {
 			.build();
 	}
 
-	/** Capped like registration, so oversized input never reaches the limiter or the password hash. */
+	/**
+	 * Capped like registration, so oversized input never reaches the limiter or the password hash.
+	 *
+	 * @param rememberedToken only from the Mobile app: its remembered device, which a browser keeps in a cookie
+	 */
 	record LoginRequest(
 			@NotBlank @Size(max = ValidEmail.MAX_LENGTH) String email,
-			@NotNull @Size(max = ValidPassword.MAX_LENGTH) String password) {
+			@NotNull @Size(max = ValidPassword.MAX_LENGTH) String password,
+			@Size(max = 128) String rememberedToken) {
 
 		LoginRequest {
 			email = email == null ? null : email.strip();
@@ -196,12 +214,17 @@ class AuthController {
 
 	}
 
-	/** @param refreshToken only for the Mobile app; a browser gets it in the cookie, and the field is left out */
+	/**
+	 * @param refreshToken only for the Mobile app; a browser gets it in the cookie, and the field is left out
+	 * @param rememberedToken only for the Mobile app, after a Two-step sign-in that remembered the device
+	 */
 	record AuthResponse(String accessToken, @JsonInclude(JsonInclude.Include.NON_NULL) String refreshToken,
-			UserResponse user) {
+			@JsonInclude(JsonInclude.Include.NON_NULL) String rememberedToken, UserResponse user) {
 	}
 
-	record TwoStepRequiredResponse(boolean twoStepRequired) {
+	/** @param pendingToken only for the Mobile app; a browser gets the pending sign-in in its cookie */
+	record TwoStepRequiredResponse(boolean twoStepRequired,
+			@JsonInclude(JsonInclude.Include.NON_NULL) String pendingToken) {
 	}
 
 	/** The Mobile app's refresh token, for {@code /refresh} and {@code /logout}. */
@@ -213,8 +236,10 @@ class AuthController {
 	 * a wrong Sign-in code.
 	 *
 	 * @param rememberBrowser "Don't ask again on this device for 30 days"; null counts as not ticked
+	 * @param pendingToken only from the Mobile app: the pending sign-in, which a browser keeps in a cookie
 	 */
-	record TwoStepRequest(@Size(max = 64) String code, @Size(max = 64) String recoveryCode, Boolean rememberBrowser) {
+	record TwoStepRequest(@Size(max = 64) String code, @Size(max = 64) String recoveryCode, Boolean rememberBrowser,
+			@Size(max = 128) String pendingToken) {
 	}
 
 }

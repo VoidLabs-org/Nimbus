@@ -7,6 +7,7 @@ import {
   SIGN_IN_TIMED_OUT,
   tooManyAttemptsIn,
   WRONG_RECOVERY_CODE,
+  wrongCodeMessage,
 } from "@repo/api";
 import { AuthForm, AuthLayout, AuthSubmit, AuthTextInput } from "../auth/AuthLayout";
 import classes from "../auth/AuthLayout.module.css";
@@ -70,10 +71,10 @@ export default function TwoStepSignInPage() {
     if (!(failure instanceof ApiError)) {
       setFormError(GENERIC_ERROR);
     } else if (failure.code === "invalid_code") {
-      const left = failure.triesLeft;
-      const wrong = useRecoveryCode ? WRONG_RECOVERY_CODE : "That code isn’t right.";
       setCodeMessage(
-        left === null ? wrong : `${wrong} ${left} ${left === 1 ? "try" : "tries"} left.`,
+        useRecoveryCode
+          ? wrongCodeMessage(failure.triesLeft, WRONG_RECOVERY_CODE)
+          : wrongCodeMessage(failure.triesLeft),
       );
     } else if (failure.code === "sign_in_expired") {
       void navigate(backToLogin, { replace: true, state: { notice: SIGN_IN_TIMED_OUT } });

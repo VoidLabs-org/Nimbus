@@ -104,6 +104,7 @@ function Screens() {
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="register" />
           <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="two-step" />
         </Stack.Protected>
       </Stack>
     </>

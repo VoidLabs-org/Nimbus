@@ -176,9 +176,9 @@ class NewRecoveryCodesTests {
 
 	/** A Google sign-in by the User, finished with a Recovery code. */
 	private RestTestClient.ResponseSpec recoveryCode(TwoStepUser user, String code) {
-		var cookie = twoStepSignIn.begin(user.user(), null, null).orElseThrow();
+		var pending = twoStepSignIn.begin(user.user(), null, null).orElseThrow();
 		return client.post().uri("/api/auth/two-step").header("X-Requested-With", "nimbus")
-			.cookie(cookie.getName(), cookie.getValue()).body(Map.of("recoveryCode", code)).exchange();
+			.cookie(PendingSignIns.COOKIE, pending).body(Map.of("recoveryCode", code)).exchange();
 	}
 
 	private RestTestClient.ResponseSpec newCodes(String token, String code) {

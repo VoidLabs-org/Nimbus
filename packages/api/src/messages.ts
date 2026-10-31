@@ -24,13 +24,16 @@ export const WRONG_SIGN_IN_CODE =
 export const WRONG_RECOVERY_CODE = "That recovery code isn’t right, or it was used already.";
 
 /**
- * An emailed code the server refused (`invalid_code`): a Verification code or a Reset code, with the `triesLeft` it
- * sent.
+ * A code the server refused (`invalid_code`), with the `triesLeft` it sent: an emailed Verification code or Reset
+ * code, or at sign-in a Sign-in code, or a Recovery code with `wrong` set to {@link WRONG_RECOVERY_CODE}.
  */
-export function wrongCodeMessage(triesLeft: number | null): string {
+export function wrongCodeMessage(
+  triesLeft: number | null,
+  wrong = "That code isn’t right.",
+): string {
   return triesLeft === null
-    ? "That code isn’t right."
-    : `That code isn’t right. ${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left.`;
+    ? wrong
+    : `${wrong} ${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left.`;
 }
 
 /** What to tell the User when checking their Verification code failed. */

@@ -3,6 +3,7 @@ import {
   GENERIC_ERROR,
   NETWORK_ERROR,
   NetworkError,
+  SIGN_IN_TIMED_OUT,
   tooManyAttemptsMessage,
 } from "@repo/api";
 import { router, useLocalSearchParams } from "expo-router";
@@ -16,18 +17,19 @@ import { TextField } from "../components/TextField";
 import { useSession } from "../session/session";
 import { useTheme } from "../theme";
 
-/** Shown until the app can take a Sign-in code (#203). */
-const TWO_STEP_NOT_YET =
-  "Two-step verification isn’t available in the app yet. Sign in on the web for now.";
-
 /**
- * Sign in with email and password (design M3a–M3c): just the logo and the form. After Forgot password it opens with
- * the email filled in and says the password changed (design M4f).
+ * Sign in with email and password (design M3a–M3c): just the logo and the form. A User with Two-step verification
+ * goes on to the Sign-in code; when that timed out, they come back here and are told so. After Forgot password it
+ * opens with the email filled in and says the password changed (design M4f).
  */
 export default function SignIn() {
   const theme = useTheme();
   const { signIn } = useSession();
-  const params = useLocalSearchParams<{ email?: string; passwordReset?: string }>();
+  const params = useLocalSearchParams<{
+    email?: string;
+    passwordReset?: string;
+    timedOut?: string;
+  }>();
   const [email, setEmail] = useState(params.email ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +42,15 @@ export default function SignIn() {
     setFilledFrom(params.email);
     if (params.email) setEmail(params.email);
   }
+  // The Sign-in code step comes back here when its pending sign-in timed out or ended.
+  const [timedOutFrom, setTimedOutFrom] = useState(params.timedOut);
+  if (params.timedOut !== timedOutFrom) {
+    setTimedOutFrom(params.timedOut);
+    if (params.timedOut) {
+      setError(SIGN_IN_TIMED_OUT);
+      setPassword("");
+    }
+  }
 
   async function submit() {
     setError(null);
@@ -47,7 +58,7 @@ export default function SignIn() {
     setBusy(true);
     try {
       const outcome = await signIn(email.trim(), password);
-      if ("twoStepRequired" in outcome) setError(TWO_STEP_NOT_YET);
+      if ("twoStepRequired" in outcome) router.push("/two-step");
       // Signed in: the Session's guards move the app on to Home.
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 401) {

@@ -9,7 +9,6 @@ import java.util.UUID;
 import com.nimbus.api.identity.RecoveryCodeUsed;
 import com.nimbus.api.identity.internal.SlidingWindowLimiter.LimitExceededException;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -70,15 +69,16 @@ class TwoStepSignIn {
 	 * Starts the second step when {@code user}, whom a provider's {@code profile} signs in as (null for a password
 	 * sign-in), has Two-step verification. Nothing of the profile is stored until the code is right.
 	 *
-	 * @param rememberedToken the browser's {@link RememberedBrowsers#COOKIE}, or null: when it remembers this User's
-	 * browser, no code is needed
-	 * @return the pending sign-in's cookie; empty when no code is needed and the sign-in can go ahead now
+	 * @param rememberedToken the browser's {@link RememberedBrowsers#COOKIE} (the Mobile app's {@code rememberedToken}),
+	 * or null: when it remembers this User's browser, no code is needed
+	 * @return the pending sign-in's id, for its cookie ({@link PendingSignIns#cookie}) or the Mobile app's
+	 * {@code pendingToken}; empty when no code is needed and the sign-in can go ahead now
 	 */
-	Optional<ResponseCookie> begin(User user, ExternalProfile profile, String rememberedToken) {
+	Optional<String> begin(User user, ExternalProfile profile, String rememberedToken) {
 		if (store.find(user.getId()).isEmpty() || rememberedBrowsers.isRemembered(user.getId(), rememberedToken)) {
 			return Optional.empty();
 		}
-		return Optional.of(PendingSignIns.cookie(pending.start(user.getId(), user.passwordHash(), profile)));
+		return Optional.of(pending.start(user.getId(), user.passwordHash(), profile));
 	}
 
 	/**
@@ -86,7 +86,7 @@ class TwoStepSignIn {
 	 * sign-in and starts the Session. A right Recovery code is marked used and publishes {@link RecoveryCodeUsed}. All
 	 * of it is one transaction, so a Session that fails to start gives back the code and the pending sign-in.
 	 *
-	 * @param pendingId from the cookie, or null when there was none
+	 * @param pendingId from the cookie (the Mobile app's {@code pendingToken}), or null when there was none
 	 * @param code the Sign-in code; ignored when {@code recoveryCode} is given
 	 * @param recoveryCode a Recovery code, compared with capitals, spaces and dashes ignored; null or blank for a
 	 * Sign-in code
@@ -158,7 +158,8 @@ class TwoStepSignIn {
 
 	/**
 	 * @param token the new Session's first refresh token
-	 * @param rememberedToken for the {@link RememberedBrowsers#COOKIE} cookie; null when the browser wasn't remembered
+	 * @param rememberedToken for the {@link RememberedBrowsers#COOKIE} cookie (the Mobile app's {@code rememberedToken});
+	 * null when the browser wasn't remembered
 	 */
 	record SignedIn(User user, Sessions.IssuedToken token, String rememberedToken) {
 	}

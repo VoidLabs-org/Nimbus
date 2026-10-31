@@ -81,7 +81,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 				.flatMap(existing -> twoStepSignIn.begin(existing, profile,
 						remembered == null ? null : remembered.getValue()));
 			if (pending.isPresent()) {
-				response.addHeader(HttpHeaders.SET_COOKIE, pending.get().toString());
+				response.addHeader(HttpHeaders.SET_COOKIE, PendingSignIns.cookie(pending.get()).toString());
 				redirect(response, "/login/two-step", returnTo);
 				return;
 			}

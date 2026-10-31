@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
 import { ApiError, api, type TwoStepSetup } from "../api/client";
-import { WRONG_SIGN_IN_CODE } from "../api/messages";
+import { WRONG_SIGN_IN_CODE } from "@repo/api";
 import { queryKeys } from "../api/queries";
 import { CODE_LENGTH, CodePinInput } from "../auth/CodeEntry";
 import { copy } from "./copy";

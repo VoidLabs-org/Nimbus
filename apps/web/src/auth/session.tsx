@@ -11,7 +11,7 @@ import {
   type TwoStepAnswer,
   type User,
 } from "../api/client";
-import { failedLoad } from "../api/failure";
+import { failedLoad } from "@repo/api";
 import { queryKeys } from "../api/queries";
 import { SignInCheck } from "../shell/SignInCheck";
 import { OfflinePage, ServerErrorPage } from "../shell/StatusPages";

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "check-types": {
+      // Also checks that src/schema.ts matches the contract, which lives outside this package.
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/docs/specs/openapi.yaml"]
+    }
+  }
+}

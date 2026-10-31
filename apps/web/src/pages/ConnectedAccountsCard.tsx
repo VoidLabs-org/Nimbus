@@ -6,7 +6,7 @@ import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { ApiError, api } from "../api/client";
-import { connectErrorMessage } from "../api/messages";
+import { connectErrorMessage } from "@repo/api";
 import { BrowserSignInWait } from "../auth/BrowserSignInWait";
 import { browserSignInBridge, useBrowserSignIn } from "../auth/useBrowserSignIn";
 import { PROVIDERS } from "../auth/providers";

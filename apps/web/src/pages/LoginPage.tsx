@@ -3,7 +3,7 @@ import { useForm } from "@mantine/form";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { ApiError, type LoginInput } from "../api/client";
-import { GENERIC_ERROR, providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
+import { GENERIC_ERROR, providerSignInErrorMessage, tooManyAttemptsMessage } from "@repo/api";
 import {
   AuthForm,
   AuthLayout,

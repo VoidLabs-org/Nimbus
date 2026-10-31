@@ -1,4 +1,8 @@
+import { ApiError, apiErrorFrom, EMAIL_UNVERIFIED, NetworkError } from "@repo/api";
 import { sessionExpiredPath } from "../auth/returnPath";
+
+// The errors live in @repo/api, shared with the Mobile app; pages keep importing them from here.
+export { ApiError, EMAIL_UNVERIFIED, NetworkError };
 
 export type User = {
   id: string;
@@ -231,9 +235,6 @@ export type ConfirmAnswer =
 /** A setup in progress: the key for the authenticator app, as text and as what the QR code holds. */
 export type TwoStepSetup = { key: string; otpauthUri: string };
 
-/** The `code` the server puts on the 403 it answers an Unverified User with. */
-export const EMAIL_UNVERIFIED = "email_unverified";
-
 type AuthResponse = { accessToken: string; user: User };
 
 /** The answer to a right password when the User has Two-step verification: no Session yet. */
@@ -243,42 +244,6 @@ type TwoStepRequired = { twoStepRequired: true };
 function sessionStarted(user: User | null): User {
   if (!user) throw new Error("The server started no session");
   return user;
-}
-
-/** A failed API call, carrying the server's problem details (RFC 9457). */
-export class ApiError extends Error {
-  readonly status: number;
-  readonly fieldErrors: Record<string, string>;
-  /** From Retry-After on a 429: how long until another attempt may succeed. */
-  readonly retryAfterSeconds: number | null;
-  /** The server's machine-readable reason, e.g. "email_unverified" or "invalid_code"; null when it sent none. */
-  readonly code: string | null;
-  /** On an "invalid_code": how many wrong tries the Verification code has left. */
-  readonly triesLeft: number | null;
-
-  constructor(
-    status: number,
-    detail: string | undefined,
-    fieldErrors: Record<string, string> = {},
-    retryAfterSeconds: number | null = null,
-    code: string | null = null,
-    triesLeft: number | null = null,
-  ) {
-    super(detail ?? `Request failed with status ${status}`);
-    this.status = status;
-    this.fieldErrors = fieldErrors;
-    this.retryAfterSeconds = retryAfterSeconds;
-    this.code = code;
-    this.triesLeft = triesLeft;
-  }
-}
-
-/** A request that never reached the server: no network, or the server can't be found. Carries fetch's own error. */
-export class NetworkError extends Error {
-  constructor(cause: unknown) {
-    super("The request couldn't reach the server", { cause });
-    this.name = "NetworkError";
-  }
 }
 
 export type ApiClientOptions = {
@@ -329,15 +294,7 @@ export function createApiClient(
     }
     const body = await response.json().catch(() => undefined);
     if (!response.ok) {
-      const retryAfter = Number(response.headers.get("Retry-After"));
-      const error = new ApiError(
-        response.status,
-        body?.detail,
-        body?.errors,
-        retryAfter > 0 ? retryAfter : null,
-        typeof body?.code === "string" ? body.code : null,
-        typeof body?.triesLeft === "number" ? body.triesLeft : null,
-      );
+      const error = apiErrorFrom(response.status, body, response.headers.get("Retry-After"));
       if (error.status === 403 && error.code === EMAIL_UNVERIFIED) {
         emailUnverifiedListeners.forEach((listener) => listener());
       }

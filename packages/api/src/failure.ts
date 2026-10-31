@@ -1,4 +1,4 @@
-import { ApiError, NetworkError } from "./client";
+import { ApiError, NetworkError } from "./errors";
 
 /** Which status page a page shows when loading it failed. */
 export type FailedLoad = "not-found" | "no-access" | "offline" | "server";

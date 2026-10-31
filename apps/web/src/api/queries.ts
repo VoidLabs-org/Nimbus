@@ -5,7 +5,7 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { api, type Project, type Role } from "./client";
-import { failedLoad, type FailedLoad } from "./failure";
+import { failedLoad, type FailedLoad } from "@repo/api";
 
 /**
  * Cache keys. A Role's pages share the "roles" prefix (the list, the Role, who holds it), so one invalidation reaches

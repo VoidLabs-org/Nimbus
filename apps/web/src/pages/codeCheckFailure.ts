@@ -1,5 +1,5 @@
 import { ApiError } from "../api/client";
-import { GENERIC_ERROR } from "../api/messages";
+import { GENERIC_ERROR } from "@repo/api";
 
 /**
  * What a Security page window that checks a Sign-in code or a Recovery code (View new codes, Remove) does with a

@@ -4,7 +4,7 @@ import { useForm } from "@mantine/form";
 import { toast } from "@repo/ui/toast";
 import { WindowFrame } from "../access/WindowFrame";
 import { ApiError } from "../api/client";
-import { tooManyAttemptsMessage } from "../api/messages";
+import { tooManyAttemptsMessage } from "@repo/api";
 import { passwordError } from "../auth/password";
 import { useSession } from "../auth/useSession";
 import dialogs from "./DisconnectDialogs.module.css";

@@ -6,7 +6,7 @@ import {
   tooManyAttemptsMessage,
   WRONG_RECOVERY_CODE,
   WRONG_SIGN_IN_CODE,
-} from "../api/messages";
+} from "@repo/api";
 import { CODE_LENGTH } from "../auth/CodeEntry";
 import { type ConfirmPhase } from "../settings/profileView";
 import dialogs from "./DisconnectDialogs.module.css";

@@ -3,8 +3,9 @@
  * and the Mobile app. Names are the CSS variable names in camelCase: --color-accent-100 is colorAccent100.
  *
  * Paper (light, flat), Ink (dark, flat), Fog (light, glass) and Slate (dark, glass) come from the "Nimbus Themes"
- * design. Colours are CSS colour strings, which React Native also accepts; shadows and the panel blur are CSS values
- * the web uses as they are.
+ * design. Colours are CSS colour strings, which React Native also accepts. Shadows are CSS box-shadow strings, some
+ * inset or in layers: React Native's boxShadow takes them on the New Architecture (Expo's default). panelBlur and the
+ * blob values are for the web's glass and glow only.
  */
 
 export type ThemeName = "paper" | "ink" | "fog" | "slate";
@@ -247,9 +248,11 @@ export const orange = [
   shared.colorAccent900,
 ] as const;
 
-/** Poppins first; it ships with each app, so there is no font download. */
-export const fontFamily =
-  "Poppins, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+/** The brand font. Each app ships it, so there is no download; React Native takes this single name. */
+export const fontFamily = "Poppins";
 
-/** Corner radii in pixels: pill for buttons and inputs, panel for cards and panels. */
-export const radius = { pill: 999, panel: 28 } as const;
+/** The web's font stack: Poppins, then the system font while it loads or if it is missing. */
+export const webFontStack = `${fontFamily}, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif`;
+
+/** Corner radius in pixels for pill shapes: buttons and inputs. */
+export const radius = { pill: 999 } as const;

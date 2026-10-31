@@ -10,11 +10,11 @@ import {
   type MantineColorsTuple,
   type VariantColorsResolver,
 } from "@mantine/core";
-import { fontFamily, orange, radius } from "@repo/tokens";
+import { orange, radius, webFontStack } from "@repo/tokens";
 
 // Brand orange from the tokens: Mantine needs real colours here to work out its tints; on the page, shades 1 to 9
 // come from the theme's accent variables (orangeShades below).
-const nimbus: MantineColorsTuple = [...orange];
+const nimbus: MantineColorsTuple = orange;
 
 // Filled orange buttons carry dark text: white on #ff6b3d is about 2.9:1, too faint to read comfortably. Hover
 // goes lighter, not darker (--accent-hover, per theme), so the dark text stays readable. Any shade of the orange
@@ -67,9 +67,9 @@ export const theme = createTheme({
   primaryShade: 5,
   colors: { nimbus },
   variantColorResolver,
-  fontFamily,
+  fontFamily: webFontStack,
   headings: {
-    fontFamily,
+    fontFamily: webFontStack,
     fontWeight: "600",
   },
   defaultRadius: "xl",

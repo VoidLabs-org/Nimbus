@@ -7,25 +7,31 @@ import stylesheet from "./themes.css?raw";
 
 const css = stylesheet.replace(/\/\*[\s\S]*?\*\//g, "");
 
+/** The variables of the one rule with exactly this selector. A second such rule would be missed, so it fails. */
 function block(selector: string): Record<string, string> {
-  const start = css.indexOf(`${selector} {`);
-  if (start < 0) throw new Error(`themes.css has no ${selector} block`);
-  const body = css.slice(start, css.indexOf("}", start));
+  const escaped = selector.replace(/[[\]"]/g, "\\$&");
+  const rules = [...css.matchAll(new RegExp(`(?:^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`, "g"))];
+  if (rules.length !== 1)
+    throw new Error(`themes.css has ${rules.length} ${selector} rules, expected 1`);
   return Object.fromEntries(
-    [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2]!.trim()]),
+    [...rules[0]![1]!.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2]!.trim()]),
   );
 }
 
 const root = block(":root");
 
-/** One theme as the browser computes it: the shared values, the theme's own on top, and var() references filled in. */
+/** One theme as the browser computes it: the shared values, the theme's own on top, and var() references filled in
+ *  from the theme itself, as often as they nest. */
 function computed(name: string): Record<string, string> {
-  const variables = { ...root, ...block(`:root[data-theme="${name}"]`) };
+  const variables: Record<string, string> = { ...root, ...block(`:root[data-theme="${name}"]`) };
+  const resolve = (value: string, seen: string[]): string =>
+    value.replace(/var\((--[\w-]+)\)/g, (reference, ref: string) => {
+      const target = variables[ref];
+      if (target === undefined || seen.includes(ref)) return reference;
+      return resolve(target, [...seen, ref]);
+    });
   return Object.fromEntries(
-    Object.entries(variables).map(([key, value]) => [
-      key,
-      value.replace(/var\((--[\w-]+)\)/g, (_, ref: string) => root[ref] ?? ref),
-    ]),
+    Object.entries(variables).map(([key, value]) => [key, resolve(value, [key])]),
   );
 }
 

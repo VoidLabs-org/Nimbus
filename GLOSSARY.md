@@ -132,6 +132,10 @@ _Avoid_: Window, page (when the open page is meant)
 The Desktop app's quick "Search or jump to…" box, opened with Ctrl or ⌘ K, that opens a page by name.
 _Avoid_: Command palette, search
 
+**Mobile app**:
+Nimbus installed on a phone, as opposed to Nimbus in a phone's browser.
+_Avoid_: Native app, RN app, phone app
+
 ## Development workflow
 
 **Feature spec**:

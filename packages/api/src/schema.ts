@@ -702,7 +702,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/auth/desktop/exchange": {
+    "/api/auth/app/exchange": {
         parameters: {
             query?: never;
             header?: never;
@@ -712,39 +712,43 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * The Desktop app trades a one-time code from the browser for the sign-in
-         * @description After "Continue with Google or GitHub" in the system browser (ADR 0008), the Desktop app's page sends the code the browser handed back and the verifier whose hash started the handshake. A code lasts 60 seconds and works once; a wrong verifier also ends it. It signs in as the browser's callback would, but with this request's `User-Agent` (the Session's device) and `two_step_remembered` cookie: either the refresh cookie (then load `/auth/callback`) or, for a User with Two-step verification, the `two_step_pending` cookie (then `/login/two-step`).
+         * An app trades a one-time code from the browser for the sign-in
+         * @description After "Continue with Google or GitHub" in a browser started by one of the apps, the app sends the code the browser handed back and the verifier whose hash started the handshake. A code lasts 60 seconds and works once; a wrong verifier also ends it. It signs in as the browser's callback would, but with this request's `User-Agent` (the Session's device) and remembered devices. The Desktop app (ADR 0008) sends its `two_step_remembered` cookie and gets either the refresh cookie (then load `/auth/callback`) or, for a User with Two-step verification, the `two_step_pending` cookie (then `/login/two-step`). The Mobile app (`X-Nimbus-Client: mobile`, ADR 0010) sends `rememberedTokens` and gets what `POST /api/auth/login` answers it: the tokens and the User, or `{twoStepRequired: true, pendingToken}`; no cookies.
          */
         post: {
             parameters: {
                 query?: never;
-                header: {
-                    /** @description Must be `nimbus`. It sets cookies, so cross-site forms must not reach it. */
-                    "X-Requested-With": "nimbus";
+                header?: {
+                    /** @description Must be `nimbus` unless `X-Nimbus-Client` is `mobile`. It sets cookies for the Desktop app, so cross-site forms must not reach it. */
+                    "X-Requested-With"?: "nimbus";
+                    /** @description `mobile` from the Mobile app (ADR 0010): it keeps the refresh token in the phone's secure storage, so the token travels in the body (`refreshToken`) instead of a cookie. */
+                    "X-Nimbus-Client"?: components["parameters"]["MobileClient"];
                 };
                 path?: never;
                 cookie?: never;
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["DesktopCode"];
+                    "application/json": components["schemas"]["AppCode"];
                 };
             };
             responses: {
-                /** @description `twoStepRequired: false` with the refresh cookie set, or `true` with the `two_step_pending` cookie set */
+                /** @description The Desktop app: `twoStepRequired: false` with the refresh cookie set, or `true` with the `two_step_pending` cookie set. The Mobile app: `AuthResponse`, or `twoStepRequired: true` with `pendingToken`. */
                 200: {
                     headers: {
-                        /** @description The refresh cookie (see `RefreshCookie`), or the pending cookie (see the `twoStepPendingCookie` scheme) */
+                        /** @description The Desktop app only: the refresh cookie (see `RefreshCookie`), or the pending cookie (see the `twoStepPendingCookie` scheme) */
                         "Set-Cookie"?: string;
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": {
                             twoStepRequired: boolean;
-                        };
+                            /** @description Only for the Mobile app, with `twoStepRequired` true, for `POST /api/auth/two-step`. */
+                            pendingToken?: string;
+                        } | components["schemas"]["AuthResponse"];
                     };
                 };
-                /** @description `code: expired` (unknown, used, older than 60 seconds, a connect's code, or the wrong verifier), `email_unverified` or `disconnected`, as on the sign-in page; or a field over 256 characters (`errors`) */
+                /** @description `code: expired` (unknown, used, older than 60 seconds, a connect's code, or the wrong verifier), `email_unverified` or `disconnected`, as on the sign-in page; or a field over its limit (`errors`) */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -753,7 +757,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description The X-Requested-With header is missing or not `nimbus` */
+                /** @description Neither `X-Requested-With: nimbus` nor `X-Nimbus-Client: mobile` */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -770,7 +774,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/auth/desktop/connect": {
+    "/api/auth/desktop/exchange": {
         parameters: {
             query?: never;
             header?: never;
@@ -780,8 +784,66 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * The Desktop app finishes connecting a provider from Security
-         * @description For a connect started in the system browser with a link ticket (ADR 0008). The ticket must have been issued to this access token's Session (instead of the `link_binder` cookie, which stays in the app); then the provider account is connected as on the callback in a browser.
+         * The Desktop app's old path for `POST /api/auth/app/exchange`
+         * @deprecated
+         * @description The same exchange for the Desktop app, kept until it has moved to `/api/auth/app/exchange`. It needs `X-Requested-With: nimbus`; the Mobile app's header doesn't pass here.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "X-Requested-With": "nimbus";
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AppCode"];
+                };
+            };
+            responses: {
+                /** @description As for `POST /api/auth/app/exchange` from the Desktop app */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description As for `POST /api/auth/app/exchange` */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The X-Requested-With header is missing or not `nimbus` */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/app/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * An app finishes connecting a provider from Security
+         * @description For a connect started in a browser by one of the apps with a link ticket (ADR 0008). `/api/auth/desktop/connect` is the Desktop app's old path for it, kept until it has moved. The ticket must have been issued to this access token's Session (instead of the `link_binder` cookie, which stays in the app); then the provider account is connected as on the callback in a browser.
          */
         post: {
             parameters: {
@@ -792,7 +854,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["DesktopCode"];
+                    "application/json": components["schemas"]["AppCode"];
                 };
             };
             responses: {
@@ -856,6 +918,8 @@ export interface paths {
                     port?: components["parameters"]["DesktopPort"];
                     /** @description The random path of this attempt on the Desktop app's port. */
                     nonce?: components["parameters"]["DesktopNonce"];
+                    /** @description The Mobile app only: base64url SHA-256 of the app's verifier (RFC 7636 S256, 43 characters). The handshake then ends at `nimbus://auth?code=<code>` (or `?error=<code>&provider=<provider>`), which the phone's in-app browser hands to the app, instead of signing the browser in. The link is fixed, never taken from the request. When it is missing or malformed, the handshake ends in the browser as usual; `desktop`, when usable, wins. */
+                    mobile?: components["parameters"]["MobileChallenge"];
                 };
                 header?: never;
                 path?: never;
@@ -949,6 +1013,8 @@ export interface paths {
                     port?: components["parameters"]["DesktopPort"];
                     /** @description The random path of this attempt on the Desktop app's port. */
                     nonce?: components["parameters"]["DesktopNonce"];
+                    /** @description The Mobile app only: base64url SHA-256 of the app's verifier (RFC 7636 S256, 43 characters). The handshake then ends at `nimbus://auth?code=<code>` (or `?error=<code>&provider=<provider>`), which the phone's in-app browser hands to the app, instead of signing the browser in. The link is fixed, never taken from the request. When it is missing or malformed, the handshake ends in the browser as usual; `desktop`, when usable, wins. */
+                    mobile?: components["parameters"]["MobileChallenge"];
                 };
                 header?: never;
                 path?: never;
@@ -3364,12 +3430,14 @@ export interface components {
             /** @description Only from the Mobile app: the `rememberedToken` a Two-step sign-in answered, to skip the code. A browser sends the `two_step_remembered` cookie instead; this field is ignored from one. */
             rememberedToken?: string;
         };
-        /** @description What a sign-in or connect in the system browser handed back to the Desktop app (ADR 0008). */
-        DesktopCode: {
-            /** @description The one-time code from `http://127.0.0.1:<port>/<nonce>?code=` */
+        /** @description What a sign-in or connect in a browser handed back to one of the apps. */
+        AppCode: {
+            /** @description The one-time code from `http://127.0.0.1:<port>/<nonce>?code=` (the Desktop app) or `nimbus://auth?code=` (the Mobile app) */
             code: string;
             /** @description The secret the app made for this attempt (43-128 characters); the handshake was started with its hash */
             verifier: string;
+            /** @description Only from the Mobile app, at the exchange: every User's `rememberedToken` it keeps (it can't know beforehand whom the provider signs in as); the one that remembers this User skips the code. The Desktop app sends its `two_step_remembered` cookie instead. */
+            rememberedTokens?: string[];
         };
         AuthResponse: {
             /** @description HS256 JWT, valid 15 minutes. Keep it in memory only. */
@@ -3696,6 +3764,8 @@ export interface components {
         DesktopChallenge: string;
         /** @description The Desktop app's port on `127.0.0.1`, which the browser takes the result to. The host is never taken from the request. */
         DesktopPort: number;
+        /** @description The Mobile app only: base64url SHA-256 of the app's verifier (RFC 7636 S256, 43 characters). The handshake then ends at `nimbus://auth?code=<code>` (or `?error=<code>&provider=<provider>`), which the phone's in-app browser hands to the app, instead of signing the browser in. The link is fixed, never taken from the request. When it is missing or malformed, the handshake ends in the browser as usual; `desktop`, when usable, wins. */
+        MobileChallenge: string;
         /** @description The random path of this attempt on the Desktop app's port. */
         DesktopNonce: string;
         /** @description The page to land on after signing in, e.g. `/projects/42`. Kept in the handshake's session (never sent to the provider) and passed back as `returnTo` on the redirect that ends the handshake. Ignored unless it is a path inside the app: one leading `/`, not `/` alone, no control characters, at most 2048 characters. */

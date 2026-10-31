@@ -542,7 +542,7 @@ export function createApiClient(
      */
     desktopExchange: (code: string, verifier: string) =>
       request<{ twoStepRequired: boolean }>(
-        "/api/auth/desktop/exchange",
+        "/api/auth/app/exchange",
         {
           method: "POST",
           body: JSON.stringify({ code, verifier }),
@@ -557,7 +557,7 @@ export function createApiClient(
      * "already_linked" or "already_connected".
      */
     desktopConnect: (code: string, verifier: string) =>
-      request<{ provider: string }>("/api/auth/desktop/connect", {
+      request<{ provider: string }>("/api/auth/app/connect", {
         method: "POST",
         body: JSON.stringify({ code, verifier }),
       }),

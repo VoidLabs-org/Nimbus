@@ -26,7 +26,7 @@ import org.springframework.web.util.WebUtils;
  * yet: a pending sign-in cookie, and {@code /login/two-step} for the code. On failure the browser goes back to the sign-in
  * page with a short code. Either way the page the sign-in started from ({@link ReturnPath}) is passed on as
  * {@code returnTo}, and the handshake's short-lived HTTP session is dropped; nothing else in the API uses one. A
- * handshake the Desktop app started ends at the app instead ({@link DesktopReturn}).
+ * handshake one of the apps started ends at that app instead ({@link AppReturn}).
  */
 @Component
 class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationFailureHandler {
@@ -42,14 +42,14 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 
 	private final TwoStepSignIn twoStepSignIn;
 
-	private final DesktopCodes desktopCodes;
+	private final AppCodes appCodes;
 
 	OAuthLoginHandler(ExternalSignIn externalSignIn, LinkTickets tickets,
-			TwoStepSignIn twoStepSignIn, DesktopCodes desktopCodes, AuthProperties properties) {
+			TwoStepSignIn twoStepSignIn, AppCodes appCodes, AuthProperties properties) {
 		this.externalSignIn = externalSignIn;
 		this.tickets = tickets;
 		this.twoStepSignIn = twoStepSignIn;
-		this.desktopCodes = desktopCodes;
+		this.appCodes = appCodes;
 		this.publicUrl = properties.publicUrl();
 	}
 
@@ -58,10 +58,10 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			Authentication authentication) throws IOException {
 		var returnTo = ReturnPath.recall(request);
 		var ticket = LinkTicket.recall(request);
-		var desktop = DesktopReturn.recall(request);
+		var app = AppReturn.recall(request);
 		endHandshake(request);
-		if (desktop.isPresent()) {
-			handToDesktop(response, (OAuth2AuthenticationToken) authentication, ticket, desktop.get());
+		if (app.isPresent()) {
+			handToApp(response, (OAuth2AuthenticationToken) authentication, ticket, app.get());
 			return;
 		}
 		if (ticket.isPresent()) {
@@ -85,7 +85,7 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 				redirect(response, "/login/two-step", returnTo);
 				return;
 			}
-			var refreshToken = externalSignIn.startSession(profile, request.getHeader(HttpHeaders.USER_AGENT));
+			var refreshToken = externalSignIn.startSession(profile, request.getHeader(HttpHeaders.USER_AGENT)).token();
 			response.addHeader(HttpHeaders.SET_COOKIE,
 					AuthController.refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
 			redirect(response, "/auth/callback", returnTo);
@@ -107,8 +107,8 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			AuthenticationException exception) throws IOException {
 		var returnTo = ReturnPath.recall(request);
 		var ticket = LinkTicket.recall(request);
-		var desktop = DesktopReturn.recall(request);
-		if (desktop.isPresent() && isOutdatedTab(exception)) {
+		var app = AppReturn.recall(request);
+		if (app.orElse(null) instanceof AppReturn.Desktop && isOutdatedTab(exception)) {
 			// "Open the browser again" started a newer handshake in this session, and this tab is the older one. The
 			// newer one is still under way, so neither it nor the app's attempt is ended; this tab only says to use it.
 			response.sendRedirect(publicUrl + "/auth/desktop-done?outdated=1");
@@ -122,9 +122,9 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 			log.warn("Sign-in with a provider failed", exception);
 		}
 		var provider = providerOf(request);
-		if (desktop.isPresent()) {
+		if (app.isPresent()) {
 			ticket.ifPresent(tickets::discard);
-			response.sendRedirect(desktop.get().withError(declined ? "cancelled" : "failed", provider));
+			response.sendRedirect(app.get().withError(declined ? "cancelled" : "failed", provider));
 			return;
 		}
 		if (ticket.isPresent()) {
@@ -137,25 +137,25 @@ class OAuthLoginHandler implements AuthenticationSuccessHandler, AuthenticationF
 	}
 
 	/**
-	 * Ends a handshake the Desktop app started (ADR 0008) without signing anyone in here, in the browser: what the
-	 * provider sent waits under a one-time code, which the browser takes to the app's port. The app finishes the
-	 * sign-in or the connect with it ({@link DesktopSignIn}), so the cookies, Two-step verification and the Session's
-	 * device are the app's.
+	 * Ends a handshake one of the apps started without signing anyone in here, in the browser: what the provider sent
+	 * waits under a one-time code, which the browser takes to the app (the Desktop app's port, ADR 0008, or the Mobile
+	 * app's {@code nimbus://} link). The app finishes the sign-in or the connect with it ({@link AppSignIn}), so the
+	 * tokens, Two-step verification and the Session's device are the app's.
 	 */
-	private void handToDesktop(HttpServletResponse response, OAuth2AuthenticationToken login,
-			Optional<String> ticket, DesktopReturn desktop) throws IOException {
+	private void handToApp(HttpServletResponse response, OAuth2AuthenticationToken login,
+			Optional<String> ticket, AppReturn app) throws IOException {
 		var provider = login.getAuthorizedClientRegistrationId();
 		String code;
 		try {
-			code = desktopCodes.issue(desktop.challenge(), profileOf(login), ticket.orElse(null));
+			code = appCodes.issue(app.challenge(), profileOf(login), ticket.orElse(null));
 		}
 		catch (RuntimeException e) {
-			log.warn("Sign-in with a provider for the Desktop app failed", e);
+			log.warn("Sign-in with a provider for an app failed", e);
 			ticket.ifPresent(tickets::discard);
-			response.sendRedirect(desktop.withError("failed", provider));
+			response.sendRedirect(app.withError("failed", provider));
 			return;
 		}
-		response.sendRedirect(desktop.withCode(code));
+		response.sendRedirect(app.withCode(code));
 	}
 
 	/**

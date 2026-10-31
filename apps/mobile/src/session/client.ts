@@ -28,11 +28,17 @@ export type RememberedDevices = {
   get(email: string): Promise<string | null>;
   set(email: string, userId: string, token: string): Promise<void>;
   forget(email: string): Promise<void>;
+  /** Every User's token, for a provider sign-in, which can't know beforehand whom it signs in as. */
+  all(): Promise<string[]>;
 };
 
 type AuthResponse = components["schemas"]["AuthResponse"];
 type LoginAnswer =
   paths["/api/auth/login"]["post"]["responses"][200]["content"]["application/json"];
+type ProvidersAnswer =
+  paths["/api/auth/providers"]["get"]["responses"][200]["content"]["application/json"];
+type ExchangeAnswer =
+  paths["/api/auth/app/exchange"]["post"]["responses"][200]["content"]["application/json"];
 
 /** What a right password led to: a Session, or (with Two-step verification) a Sign-in code still to give. */
 export type SignInOutcome = { user: User } | { twoStepRequired: true };
@@ -252,6 +258,39 @@ export function createMobileApi({
       }
       generation++;
       return { user: await keep(answer) };
+    },
+
+    /** The sign-in providers the server offers ("google", "github"); public. */
+    providers: () =>
+      send<ProvidersAnswer>("/api/auth/providers", {}, false).then((answer) => answer.providers),
+
+    /**
+     * Trades the one-time code a provider sign-in in the in-app browser handed back, with this attempt's verifier,
+     * for the sign-in: a Session, or (with Two-step verification) a pending sign-in for {@link finishTwoStep}. Sends
+     * every User's remembered device, so the one the provider signs in as can skip the code. Rejects with a 400
+     * ApiError whose `code` is what the sign-in page shows: `expired`, `email_unverified`, `disconnected`, `failed`.
+     */
+    exchange: async (code: string, verifier: string): Promise<SignInOutcome> => {
+      await settled();
+      const rememberedTokens = await remembered.all().catch(() => []);
+      const answer = await send<ExchangeAnswer>(
+        "/api/auth/app/exchange",
+        { method: "POST", body: JSON.stringify({ code, verifier, rememberedTokens }) },
+        false,
+      );
+      if ("user" in answer) {
+        generation++;
+        return { user: await keep(answer) };
+      }
+      if (!answer.twoStepRequired || !answer.pendingToken) {
+        throw new Error("The server answered neither a Session nor a pending sign-in");
+      }
+      const token = answer.pendingToken;
+      pendingToken = token;
+      // Kept under the email the server answers once the code is right.
+      pendingEmail = null;
+      await bestEffort("keep the pending sign-in", () => pendingStore.set(token));
+      return { twoStepRequired: true };
     },
 
     /**

@@ -50,6 +50,10 @@ export const rememberedDevices: RememberedDevices = {
     change((all) => {
       delete all[key(email)];
     }),
+  all: async () => {
+    await changes;
+    return Object.values(await readRemembered()).map((entry) => entry.token);
+  },
 };
 
 type Remembered = Record<string, { userId: string; token: string }>;

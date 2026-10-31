@@ -169,7 +169,7 @@ class IdentityErrors {
 	}
 
 	@ExceptionHandler
-	ProblemDetail desktopSignInFailed(DesktopSignIn.FailedException e) {
+	ProblemDetail appSignInFailed(AppSignIn.FailedException e) {
 		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
 		problem.setProperty("code", e.code());
 		return problem;

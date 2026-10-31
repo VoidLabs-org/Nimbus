@@ -14,14 +14,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
 /**
- * The one-time codes a provider sign-in started by the Desktop app hands back to the app (ADR 0008). A code stands
- * for who the provider vouched for, nothing more: no Session, no link, until the app trades it in. It is random,
+ * The one-time codes a provider sign-in started by one of the apps hands back to it (the Desktop app, ADR 0008, or
+ * the Mobile app). A code stands for who the provider vouched for, nothing more: no Session, no link, until the app
+ * trades it in. It is random,
  * lasts {@link #LIFETIME} (it only has to get from the browser to the app), works once, and only together with the
  * verifier whose hash the app gave at the start (RFC 7636 S256), so a program that sees the code going by can't use
  * it. Kept in memory only, like {@link LinkTickets}: a restart just means signing in again.
  */
 @Component
-class DesktopCodes {
+class AppCodes {
 
 	static final Duration LIFETIME = Duration.ofSeconds(60);
 
@@ -38,7 +39,7 @@ class DesktopCodes {
 
 	private final Clock clock;
 
-	DesktopCodes(Clock clock) {
+	AppCodes(Clock clock) {
 		this.clock = clock;
 	}
 

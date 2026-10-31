@@ -13,6 +13,7 @@ import { StyleSheet, View } from "react-native";
 import { BackLink, backToSignIn } from "../components/BackLink";
 import { Button, LinkButton } from "../components/Button";
 import { FormMessage } from "../components/FormMessage";
+import { ProviderButtons } from "../components/ProviderButtons";
 import { Screen } from "../components/Screen";
 import { Text } from "../components/Text";
 import { TextField } from "../components/TextField";
@@ -114,6 +115,7 @@ export default function Register() {
       />
       {error ? <FormMessage message={error} indent /> : null}
       <Button label="Create account" busy={busy} onPress={() => void submit()} />
+      <ProviderButtons />
       <View style={styles.footer}>
         <Text muted size={14}>
           Already have an account?

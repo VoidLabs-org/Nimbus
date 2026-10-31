@@ -37,20 +37,17 @@ class AuthController {
 
 	private final SignIn signIn;
 
-	private final AccessTokens accessTokens;
-
 	private final Sessions sessions;
 
 	private final TwoStepSignIn twoStepSignIn;
 
-	private final ProfilePictures pictures;
+	private final SessionResponses responses;
 
-	AuthController(Registration registration, SignIn signIn, AccessTokens accessTokens, Sessions sessions,
-			TwoStepSignIn twoStepSignIn, ProfilePictures pictures) {
-		this.pictures = pictures;
+	AuthController(Registration registration, SignIn signIn, Sessions sessions, TwoStepSignIn twoStepSignIn,
+			SessionResponses responses) {
+		this.responses = responses;
 		this.registration = registration;
 		this.signIn = signIn;
-		this.accessTokens = accessTokens;
 		this.sessions = sessions;
 		this.twoStepSignIn = twoStepSignIn;
 	}
@@ -143,19 +140,9 @@ class AuthController {
 				http, alsoSet);
 	}
 
-	/** @param rememberedToken the Mobile app's new remembered device, for the body; null for none, and for a browser */
 	private ResponseEntity<AuthResponse> withSession(HttpStatus status, User user, Sessions.IssuedToken refreshToken,
 			String rememberedToken, HttpServletRequest http, ResponseCookie... alsoSet) {
-		var mobile = fromMobileApp(http);
-		var response = ResponseEntity.status(status);
-		if (!mobile) {
-			response.header(HttpHeaders.SET_COOKIE, refreshCookie(refreshToken.value(), refreshToken.lifetime()).toString());
-		}
-		for (var cookie : alsoSet) {
-			response.header(HttpHeaders.SET_COOKIE, cookie.toString());
-		}
-		return response.body(new AuthResponse(accessTokens.issueFor(user, refreshToken.sessionId()),
-				mobile ? refreshToken.value() : null, rememberedToken, UserResponse.from(user, pictures)));
+		return responses.withSession(status, user, refreshToken, rememberedToken, http, alsoSet);
 	}
 
 	static boolean fromMobileApp(HttpServletRequest http) {

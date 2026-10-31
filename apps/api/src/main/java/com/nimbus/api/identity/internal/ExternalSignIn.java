@@ -78,9 +78,13 @@ class ExternalSignIn {
 
 	/** Resolves the profile and starts its Session atomically, suppressing only a new User's first alert. */
 	@Transactional
-	Sessions.IssuedToken startSession(ExternalProfile profile, String userAgent) {
+	Started startSession(ExternalProfile profile, String userAgent) {
 		var result = resolve(profile);
-		return sessions.start(result.user(), userAgent, !result.created());
+		return new Started(result.user(), sessions.start(result.user(), userAgent, !result.created()));
+	}
+
+	/** The User signed in (created, maybe) and their new Session's first refresh token. */
+	record Started(User user, Sessions.IssuedToken token) {
 	}
 
 	private record Resolved(User user, boolean created) {

@@ -10,6 +10,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, LinkButton } from "../components/Button";
+import { ProviderButtons } from "../components/ProviderButtons";
 import { Logo, Screen } from "../components/Screen";
 import { Toast } from "../components/Toast";
 import { Text } from "../components/Text";
@@ -135,6 +136,7 @@ export default function SignIn() {
         </Text>
       ) : null}
       <Button label="Sign in" busy={busy} onPress={() => void submit()} />
+      <ProviderButtons />
       <View style={styles.footer}>
         <Text muted size={14}>
           New to Nimbus?

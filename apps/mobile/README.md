@@ -42,4 +42,4 @@ pnpm --filter mobile check-types
 pnpm --filter mobile lint
 ```
 
-Tests render the real `src/app` routes with `fetch` stubbed and secure storage faked (`src/test-support.ts`, `jest.setup.ts`). Keep test files out of `src/app`: every file there is a screen.
+Tests render the real `src/app` routes with `fetch` stubbed and secure storage faked (`src/test-support.ts`, `jest.setup.ts`). Each test file's first test loads every screen (about 2 seconds here, several times that on a CI runner), so the timeout is 30 seconds (`testTimeout` in `package.json`), not Jest's 5. Keep test files out of `src/app`: every file there is a screen.

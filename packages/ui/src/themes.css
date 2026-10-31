@@ -3,6 +3,9 @@
  * Ink (dark, flat), Fog (light, glass) and Slate (dark, glass). Values and names come from the "Nimbus Themes"
  * design. Mantine's own colours point at these (see cssVariablesResolver in theme.ts), so components follow
  * whichever theme is on.
+ *
+ * The values are also in @repo/tokens, which the Mobile app reads: change a value in both places (themes.test.ts
+ * fails until they match).
  */
 
 /* Poppins ships with the app (no font CDN), so it works offline, in the desktop app too, without a reflow. */
@@ -45,7 +48,7 @@
   --color-surface: #f7e9dc;
   --card: #ffffff;
   --color-text: #201d1a;
-  --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
+  --color-divider: rgba(32, 30, 29, 0.16);
 
   --glass: rgba(255, 255, 255, 0.5);
   --glass-border: rgba(255, 255, 255, 0.85);
@@ -77,9 +80,9 @@
   --toast-error: #e5484d;
   --toast-error-fg: #ffffff;
 
-  --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
-  --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
-  --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+  --shadow-sm: 0 1px 2px rgba(46, 43, 37, 0.14);
+  --shadow-md: 0 3px 10px rgba(46, 43, 37, 0.16);
+  --shadow-lg: 0 12px 32px rgba(46, 43, 37, 0.22);
 
   /* Frosted panels on the glass themes only. */
   --panel-blur: none;

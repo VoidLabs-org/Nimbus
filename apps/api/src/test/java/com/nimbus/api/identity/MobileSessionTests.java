@@ -52,6 +52,28 @@ class MobileSessionTests {
 	}
 
 	@Test
+	void registeringAsTheMobileAppAnswersTheRefreshTokenInTheBodyAndSetsNoCookie() {
+		var phone = client.post().uri("/api/auth/register")
+			.header(MOBILE, "mobile")
+			.body(Map.of("displayName", "Hopper", "email", "hopper@example.com", "password", "correct horse"))
+			.exchange()
+			.expectStatus().isCreated()
+			.expectBody(String.class).returnResult();
+		var browser = client.post().uri("/api/auth/register")
+			.body(Map.of("displayName", "Lamarr", "email", "lamarr@example.com", "password", "correct horse"))
+			.exchange()
+			.expectStatus().isCreated()
+			.expectBody(String.class).returnResult();
+
+		assertThat(phone.getResponseHeaders().get(HttpHeaders.SET_COOKIE)).isNull();
+		assertThat(JsonPath.<Boolean>read(phone.getResponseBody(), "$.user.emailVerified")).isFalse();
+		String token = JsonPath.read(phone.getResponseBody(), "$.refreshToken");
+		refresh(token).expectStatus().isOk();
+		assertThat(RefreshCookies.valueOf(browser)).isNotBlank();
+		assertThat(browser.getResponseBody()).doesNotContain("refreshToken");
+	}
+
+	@Test
 	void refreshingWithTheTokenInTheBodyRotatesItAndNeedsNoBrowserHeader() {
 		register("Babbage", "babbage@example.com");
 		var signedIn = signedInToken("babbage@example.com");

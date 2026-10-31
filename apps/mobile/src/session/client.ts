@@ -2,6 +2,9 @@ import { ApiError, apiErrorFrom, NetworkError } from "@repo/api";
 import type { components } from "@repo/api/schema";
 
 export type User = components["schemas"]["User"];
+export type RegisterInput = components["schemas"]["RegisterRequest"];
+/** A Reset code and the new password; the app has no Sign-in code to add yet (#203). */
+export type ResetPasswordInput = { email: string; code: string; newPassword: string };
 
 /** Where the refresh token is kept between launches: the phone's secure storage (ADR 0010). */
 export type TokenStore = {
@@ -211,6 +214,55 @@ export function createMobileApi({
       lostReported = true;
       await drop();
     },
+
+    /** Creates a User, an Unverified User until they enter their Verification code, and signs them in. */
+    register: async (input: RegisterInput): Promise<User> => {
+      await settled();
+      const answer = await send<AuthResponse>(
+        "/api/auth/register",
+        { method: "POST", body: JSON.stringify(input) },
+        false,
+      );
+      generation++;
+      return keep(answer);
+    },
+
+    /**
+     * Checks the Verification code and answers the User, now verified. The access token in hand says "unverified", so
+     * the server would look the User up on every request until it expires: a renewed one says "verified". If renewing
+     * fails the User is verified all the same, and the next renewal fixes the token. Rejects with a 400 ApiError for a
+     * wrong code (`invalid_code`, with `triesLeft`) or a gone one (`code_expired`).
+     */
+    verifyEmail: async (code: string): Promise<User> => {
+      const user = await request<User>("/api/auth/verify-email", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+      return refresh().catch(() => user);
+    },
+
+    /** Mails a new Verification code. A 429 says how long to wait; a 409, that the email is verified already. */
+    resendVerificationCode: () =>
+      request<void>("/api/auth/verify-email/resend", { method: "POST" }),
+
+    /** Renews the Session to read the User again, as when their email was verified on another device. */
+    reload: () => refresh(),
+
+    /** Emails a Reset code if a User has the address; the answer is the same either way. */
+    requestPasswordReset: (email: string) =>
+      send<void>(
+        "/api/auth/password-reset",
+        { method: "POST", body: JSON.stringify({ email }) },
+        false,
+      ),
+
+    /** Sets a new password with a right Reset code. Signs no one in: every Session of the User ends. */
+    resetPassword: (input: ResetPasswordInput) =>
+      send<void>(
+        "/api/auth/password-reset/confirm",
+        { method: "POST", body: JSON.stringify(input) },
+        false,
+      ),
 
     me: () => request<User>("/api/users/me"),
   };

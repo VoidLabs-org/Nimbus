@@ -12,4 +12,6 @@ export {
   tooManyAttemptsMessage,
   WRONG_RECOVERY_CODE,
   WRONG_SIGN_IN_CODE,
+  wrongCodeMessage,
 } from "./messages";
+export { displayNameError, emailError, passwordError } from "./validation";

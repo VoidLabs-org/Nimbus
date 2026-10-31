@@ -64,15 +64,36 @@ export function Button({
   );
 }
 
-/** A plain text action, such as "Create an account" under a form. */
-export function LinkButton({ label, onPress }: { label: string; onPress: () => void }) {
+/** A plain text action, such as "Create an account" under a form. Disabled, it is grey, as Resend while it counts. */
+export function LinkButton({
+  label,
+  onPress,
+  disabled = false,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   const theme = useTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={8}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={8}
+    >
       <Text
         weight="semibold"
         size={14}
-        style={{ color: theme.dark ? theme.colorAccent600 : theme.colorAccent700 }}
+        style={{
+          color: disabled
+            ? theme.colorAccent2700
+            : theme.dark
+              ? theme.colorAccent600
+              : theme.colorAccent700,
+        }}
       >
         {label}
       </Text>

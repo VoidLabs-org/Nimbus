@@ -16,6 +16,16 @@ export const WRONG_SIGN_IN_CODE =
  */
 export const WRONG_RECOVERY_CODE = "That recovery code isn’t right, or it was used already.";
 
+/**
+ * An emailed code the server refused (`invalid_code`): a Verification code or a Reset code, with the `triesLeft` it
+ * sent.
+ */
+export function wrongCodeMessage(triesLeft: number | null): string {
+  return triesLeft === null
+    ? "That code isn’t right."
+    : `That code isn’t right. ${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left.`;
+}
+
 /** On the sign-in page, after a Two-step verification sign-in ended (`sign_in_expired`). */
 export const SIGN_IN_TIMED_OUT = "Your sign-in timed out. Sign in again.";
 

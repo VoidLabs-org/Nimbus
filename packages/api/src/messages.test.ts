@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectErrorMessage, providerSignInErrorMessage } from "./messages";
+import { connectErrorMessage, providerSignInErrorMessage, wrongCodeMessage } from "./messages";
 
 describe("connectErrorMessage", () => {
   it("explains each code the server redirects to the Security page with", () => {
@@ -52,5 +52,13 @@ describe("providerSignInErrorMessage", () => {
 
     expect(message).toMatch(/went wrong/i);
     expect(message).not.toContain("script");
+  });
+});
+
+describe("wrongCodeMessage", () => {
+  it("says how many tries are left when the server said", () => {
+    expect(wrongCodeMessage(3)).toBe("That code isn’t right. 3 tries left.");
+    expect(wrongCodeMessage(1)).toBe("That code isn’t right. 1 try left.");
+    expect(wrongCodeMessage(null)).toBe("That code isn’t right.");
   });
 });

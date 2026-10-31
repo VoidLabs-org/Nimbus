@@ -2,7 +2,7 @@ import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
 import { api } from "../api/client";
-import { ApiError, clock, tooManyAttemptsMessage } from "@repo/api";
+import { ApiError, clock, tooManyAttemptsMessage, wrongCodeMessage } from "@repo/api";
 import { AuthForm, AuthLayout, AuthSubmit } from "./AuthLayout";
 import { CODE_LENGTH, CodePinInput, PinnedSubmit } from "./CodeEntry";
 import classes from "./AuthLayout.module.css";
@@ -15,12 +15,7 @@ const CONFIRM_MS = 1500;
 /** What to tell the User when the server refused their code. */
 function verificationErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.code === "invalid_code") {
-      const left = error.triesLeft;
-      return left === null
-        ? "That code isn’t right."
-        : `That code isn’t right. ${left} ${left === 1 ? "try" : "tries"} left.`;
-    }
+    if (error.code === "invalid_code") return wrongCodeMessage(error.triesLeft);
     if (error.code === "code_expired") {
       return "That code has expired, or was cancelled after too many wrong tries.";
     }

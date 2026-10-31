@@ -1,7 +1,8 @@
+import { ApiError } from "@repo/api";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { toast } from "@repo/ui/toast";
 import { useState } from "react";
-import { ApiError, type PictureSource, type User } from "../api/client";
+import { type PictureSource, type User } from "../api/client";
 import { useSession } from "../auth/useSession";
 import { initialsOf, uploadedOn } from "../settings/profilePicture";
 import classes from "./PictureSourceChoice.module.css";

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+import { ApiError } from "@repo/api";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, type Project, type User } from "../api/client";
+import { api, type Project, type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import { SessionContext, type Session } from "../auth/useSession";
 import { AppRoutes } from "../App";

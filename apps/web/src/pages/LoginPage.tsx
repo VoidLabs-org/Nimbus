@@ -2,8 +2,13 @@ import { Alert, Anchor, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { ApiError, type LoginInput } from "../api/client";
-import { GENERIC_ERROR, providerSignInErrorMessage, tooManyAttemptsMessage } from "../api/messages";
+import { type LoginInput } from "../api/client";
+import {
+  ApiError,
+  GENERIC_ERROR,
+  providerSignInErrorMessage,
+  tooManyAttemptsMessage,
+} from "@repo/api";
 import {
   AuthForm,
   AuthLayout,

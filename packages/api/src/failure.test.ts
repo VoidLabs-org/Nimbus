@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, NetworkError } from "./client";
+import { ApiError, NetworkError } from "./errors";
 import { failedLoad } from "./failure";
 
 describe("failedLoad", () => {

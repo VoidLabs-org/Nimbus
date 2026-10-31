@@ -14,7 +14,7 @@ import { settingsCrumbs } from "../settings/crumbs";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
 import type { AuditEntry, AuditPage } from "../api/client";
 import { loadFailure, useAuditLog } from "../api/queries";
-import type { FailedLoad } from "../api/failure";
+import type { FailedLoad } from "@repo/api";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./AuditLogPage.module.css";
 import { AuditLogSkeleton } from "./AuditLogSkeleton";

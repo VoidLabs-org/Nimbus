@@ -1,0 +1,22 @@
+{
+  "name": "@repo/api",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "lint": "oxlint --max-warnings 0",
+    "check-types": "node scripts/generate.mjs --check && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "openapi-typescript": "7.13.0",
+    "oxlint": "^1.87.0",
+    "typescript": "7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

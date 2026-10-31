@@ -2616,7 +2616,7 @@ components:
 
     CatalogPermission:
       type: object
-      required: [key, heading, description, kind, scopes, ownHint]
+      required: [key, heading, description, kind, scopes, ownHint, reserved]
       properties:
         key:
           type: string
@@ -2774,7 +2774,7 @@ components:
           oneOf:
             - type: "null"
             - type: object
-              required: [id, displayName, email]
+              required: [id, displayName, email, avatarUrl]
               properties:
                 id:
                   type: string
@@ -2783,6 +2783,9 @@ components:
                   type: [string, "null"]
                 email:
                   type: [string, "null"]
+                avatarUrl:
+                  type: [string, "null"]
+                  description: The picture they show; null without one or for a User who no longer exists
         action:
           type: string
           enum:
@@ -2793,6 +2796,8 @@ components:
               role.grants_changed,
               role.reset,
               role.deleted,
+              role.assigned,
+              role.unassigned,
               role.defaults_applied,
               role.locked_grants_restored,
               catalog.unknown_grant,
@@ -2812,9 +2817,11 @@ components:
               description: Whether the Role still exists
         before:
           type: [object, "null"]
+          additionalProperties: true
           description: The state before the change; null when there was none
         after:
           type: [object, "null"]
+          additionalProperties: true
           description: The state after the change; null when there is none
 
     CreateRoleRequest:

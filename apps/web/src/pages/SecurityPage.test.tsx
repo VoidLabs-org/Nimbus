@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ApiError } from "@repo/api";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { toast } from "@repo/ui/toast";
@@ -6,7 +7,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, type LinkedIdentity, type SessionInfo, type User } from "../api/client";
+import { api, type LinkedIdentity, type SessionInfo, type User } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import { goTo } from "../auth/redirect";
 import type { BrowserSignInResult, NimbusDesktop } from "../shell/desktop";
@@ -375,7 +376,7 @@ describe("signing out all other devices", () => {
 
 describe("the Connected accounts card", () => {
   const identity = (
-    provider: string,
+    provider: LinkedIdentity["provider"],
     accountName: string | null,
     connectedAgo = 3 * DAY,
   ): LinkedIdentity => ({
@@ -524,7 +525,7 @@ describe("the Connected accounts card", () => {
 });
 
 describe("disconnecting a provider", () => {
-  const identity = (provider: string, accountName: string): LinkedIdentity => ({
+  const identity = (provider: LinkedIdentity["provider"], accountName: string): LinkedIdentity => ({
     provider,
     accountName,
     connectedAt: new Date(Date.now() - 3 * DAY).toISOString(),

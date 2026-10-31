@@ -2,8 +2,8 @@ import { Alert, Anchor, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ApiError, type RegisterInput } from "../api/client";
-import { tooManyAttemptsMessage } from "../api/messages";
+import { type RegisterInput } from "../api/client";
+import { ApiError, tooManyAttemptsMessage } from "@repo/api";
 import { displayNameError } from "../auth/displayName";
 import {
   AuthForm,

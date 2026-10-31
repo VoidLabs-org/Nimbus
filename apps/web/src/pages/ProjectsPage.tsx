@@ -1,3 +1,4 @@
+import { ApiError } from "@repo/api";
 import {
   Alert,
   Button,
@@ -15,7 +16,7 @@ import { Panel } from "@repo/ui/panel";
 import { toast } from "@repo/ui/toast";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { api, ApiError } from "../api/client";
+import { api } from "../api/client";
 import { useProjectCreated } from "../api/queries";
 import { keyForName } from "../projects/projectKey";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";

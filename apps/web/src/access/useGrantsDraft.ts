@@ -1,6 +1,7 @@
+import { ApiError } from "@repo/api";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, api, type CatalogPermission, type Role, type Scope } from "../api/client";
+import { api, type CatalogPermission, type Role, type Scope } from "../api/client";
 import { changeCount, grantsSignature, scopesIn } from "./grants";
 
 /**

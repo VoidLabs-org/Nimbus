@@ -1,12 +1,13 @@
 import { Button, PasswordInput } from "@mantine/core";
 import { useState } from "react";
-import { ApiError, type ConfirmAnswer } from "../api/client";
+import { type ConfirmAnswer } from "../api/client";
 import {
+  ApiError,
   GENERIC_ERROR,
   tooManyAttemptsMessage,
   WRONG_RECOVERY_CODE,
   WRONG_SIGN_IN_CODE,
-} from "../api/messages";
+} from "@repo/api";
 import { CODE_LENGTH } from "../auth/CodeEntry";
 import { type ConfirmPhase } from "../settings/profileView";
 import dialogs from "./DisconnectDialogs.module.css";

@@ -1,4 +1,4 @@
-import { clock } from "../auth/countdown";
+import { clock } from "./clock";
 
 /** For a failure the page has nothing more specific to say about. */
 export const GENERIC_ERROR = "Something went wrong. Please try again.";

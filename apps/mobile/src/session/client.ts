@@ -1,10 +1,16 @@
 import { ApiError, apiErrorFrom, NetworkError } from "@repo/api";
-import type { components } from "@repo/api/schema";
+import type { components, paths } from "@repo/api/schema";
 
 export type User = components["schemas"]["User"];
 export type RegisterInput = components["schemas"]["RegisterRequest"];
-/** A Reset code and the new password; the app has no Sign-in code to add yet (#203). */
-export type ResetPasswordInput = { email: string; code: string; newPassword: string };
+/** A Reset code and the new password, and with Two-step verification a Sign-in code or a Recovery code. */
+export type ResetPasswordInput = {
+  email: string;
+  code: string;
+  newPassword: string;
+  twoStepCode?: string;
+  recoveryCode?: string;
+};
 
 /** Where the refresh token is kept between launches: the phone's secure storage (ADR 0010). */
 export type TokenStore = {
@@ -13,14 +19,33 @@ export type TokenStore = {
   clear(): Promise<void>;
 };
 
-type AuthResponse = { accessToken: string; refreshToken: string; user: User };
+/**
+ * Each User's remembered device on this phone ("Remember this device for 30 days"), by the email they sign in with
+ * (case ignored): the token that lets their password sign-in skip the Sign-in code. Remembering a device for a User
+ * replaces any entry they had under another email, as after changing it.
+ */
+export type RememberedDevices = {
+  get(email: string): Promise<string | null>;
+  set(email: string, userId: string, token: string): Promise<void>;
+  forget(email: string): Promise<void>;
+};
+
+type AuthResponse = components["schemas"]["AuthResponse"];
+type LoginAnswer =
+  paths["/api/auth/login"]["post"]["responses"][200]["content"]["application/json"];
 
 /** What a right password led to: a Session, or (with Two-step verification) a Sign-in code still to give. */
 export type SignInOutcome = { user: User } | { twoStepRequired: true };
 
+/** The second step of a sign-in: a Sign-in code from the authenticator app, or a Recovery code. */
+export type SecondCode = { code: string } | { recoveryCode: string };
+
 export type MobileApiOptions = {
   baseUrl: string;
   store: TokenStore;
+  /** Where the pending Two-step sign-in is kept until its code is right. */
+  pendingStore: TokenStore;
+  remembered: RememberedDevices;
   userAgent: string;
   /** Called once when the Session can no longer be renewed (a 401 from refresh), after the stored token is gone. */
   onSessionLost: () => void;
@@ -36,6 +61,8 @@ export type MobileApiOptions = {
 export function createMobileApi({
   baseUrl,
   store,
+  pendingStore,
+  remembered,
   userAgent,
   onSessionLost,
   fetchFn = (input, init) => fetch(input, init),
@@ -49,6 +76,10 @@ export function createMobileApi({
   let generation = 0;
   // Set once a lost Session was reported, or the User signed out on purpose, until the next sign-in.
   let lostReported = false;
+  // The pending Two-step sign-in, from a right password until its code is right, and the email it was started with,
+  // which its remembered device is kept under; the token is also in `pendingStore`.
+  let pendingToken: string | null = null;
+  let pendingEmail: string | null = null;
 
   async function send<T>(path: string, init: RequestInit = {}, authenticated = true): Promise<T> {
     const headers = new Headers(init.headers);
@@ -80,6 +111,8 @@ export function createMobileApi({
    * in memory first; if the phone can't store it, this launch carries on and only the next one has to sign in again.
    */
   async function keep(answer: AuthResponse): Promise<User> {
+    // With X-Nimbus-Client: mobile the server always answers it (ADR 0010).
+    if (!answer.refreshToken) throw new Error("The server sent no refresh token");
     refreshToken = answer.refreshToken;
     accessToken = answer.accessToken;
     lostReported = false;
@@ -92,6 +125,21 @@ export function createMobileApi({
       );
     }
     return answer.user;
+  }
+
+  /** Storage that fails only costs a later step (a Sign-in code asked for again), so it doesn't stop this one. */
+  async function bestEffort(what: string, write: () => Promise<void>) {
+    try {
+      await write();
+    } catch (failure) {
+      console.warn(`Couldn't ${what} in secure storage`, failure);
+    }
+  }
+
+  async function endPending() {
+    pendingToken = null;
+    pendingEmail = null;
+    await bestEffort("forget the pending sign-in", () => pendingStore.clear());
   }
 
   async function drop() {
@@ -165,24 +213,85 @@ export function createMobileApi({
      * (a 401 when the server ended the Session; a NetworkError or another ApiError when it couldn't be asked).
      */
     restore: async (): Promise<User | null> => {
+      // A pending sign-in left from an earlier launch can't be finished: its screen is gone, and the server's copy
+      // ends after 5 minutes anyway.
+      await endPending();
       if (!(await storedRefreshToken())) return null;
       return refresh();
     },
 
     /**
-     * Signs in with email and password. A User with Two-step verification gets no Session yet: the app can't take
-     * the code until the Two-step ticket, so the answer says a code is needed and nothing is stored.
+     * Signs in with email and password, sending this User's remembered device if the phone has one. A User with
+     * Two-step verification gets no Session yet: the answer says a code is needed, and the pending sign-in is kept
+     * for {@link finishTwoStep}. A remembered device that didn't skip the code is no longer known, so it is forgotten.
      */
     signIn: async (email: string, password: string): Promise<SignInOutcome> => {
       await settled();
-      const answer = await send<AuthResponse | { twoStepRequired: true }>(
+      const rememberedToken = await remembered.get(email).catch(() => null);
+      const answer = await send<LoginAnswer>(
         "/api/auth/login",
-        { method: "POST", body: JSON.stringify({ email, password }) },
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email,
+            password,
+            ...(rememberedToken ? { rememberedToken } : {}),
+          }),
+        },
         false,
       );
-      if ("twoStepRequired" in answer) return { twoStepRequired: true };
+      if ("twoStepRequired" in answer) {
+        if (rememberedToken) await bestEffort("forget the device", () => remembered.forget(email));
+        const token = answer.pendingToken;
+        // With X-Nimbus-Client: mobile the server always answers it (ADR 0010).
+        if (!token) throw new Error("The server sent no pending sign-in");
+        pendingToken = token;
+        pendingEmail = email;
+        await bestEffort("keep the pending sign-in", () => pendingStore.set(token));
+        return { twoStepRequired: true };
+      }
       generation++;
       return { user: await keep(answer) };
+    },
+
+    /**
+     * Finishes a pending Two-step sign-in with a Sign-in code or a Recovery code and starts the Session. With
+     * `rememberDevice`, the device the server remembers is kept for this User, under the email they signed in with
+     * (the one the next sign-in will look it up by). Rejects with a 400 ApiError for a wrong
+     * code (`invalid_code`, with `triesLeft`), a 429 while the User is over the hourly lock, and a 401
+     * (`sign_in_expired`) when the pending sign-in is gone: timed out, ended by the fifth wrong code, or never there.
+     */
+    finishTwoStep: async (secondCode: SecondCode, rememberDevice: boolean): Promise<User> => {
+      await settled();
+      const token = pendingToken ?? (await pendingStore.get().catch(() => null));
+      let answer: AuthResponse;
+      try {
+        answer = await send<AuthResponse>(
+          "/api/auth/two-step",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              pendingToken: token,
+              ...secondCode,
+              rememberBrowser: rememberDevice,
+            }),
+          },
+          false,
+        );
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) await endPending();
+        throw error;
+      }
+      const email = pendingEmail ?? answer.user.email;
+      await endPending();
+      const { rememberedToken } = answer;
+      if (rememberedToken) {
+        await bestEffort("remember the device", () =>
+          remembered.set(email, answer.user.id, rememberedToken),
+        );
+      }
+      generation++;
+      return keep(answer);
     },
 
     /**
@@ -208,6 +317,9 @@ export function createMobileApi({
      * Forgets the Session on this phone only, for when the server can't end it. It stays in the User's Sessions list
      * until it expires or they sign it out from another device.
      */
+    /** Leaves the code step: the pending sign-in is dropped here (the server's copy ends after 5 minutes). */
+    cancelTwoStep: () => endPending(),
+
     forget: async () => {
       await settled();
       generation++;

@@ -1,4 +1,5 @@
 import { act, fireEvent, screen } from "@testing-library/react-native";
+import { WRONG_RECOVERY_CODE, WRONG_SIGN_IN_CODE } from "@repo/api";
 import { ada, fakeApi, renderApp, secureStore } from "../test-support";
 
 async function openForgotPassword() {
@@ -116,21 +117,6 @@ describe("when the Reset code doesn't work", () => {
     expect(screen.getByText("Use 8 to 128 characters")).toBeTruthy();
     expect(api.to("POST /api/auth/password-reset/confirm")).toHaveLength(0);
   });
-
-  it("sends a User with Two-step verification to the web for now", async () => {
-    const api = fakeApi();
-    api.answer("POST /api/auth/password-reset", { status: 204 });
-    api.answer("POST /api/auth/password-reset/confirm", {
-      status: 400,
-      body: { detail: "Two-step", code: "two_step_required" },
-    });
-
-    await openForgotPassword();
-    await askForCode();
-    await reset("720518", "new horse battery");
-
-    expect(await screen.findByText(/Reset your password on the web for now/)).toBeTruthy();
-  });
 });
 
 it("says how long to wait when the address was sent codes too often", async () => {
@@ -193,4 +179,87 @@ it("says why Resend waits when the server refuses a new code", async () => {
 
   expect(await screen.findByText("Too many attempts. Try again in 10:00.")).toBeTruthy();
   jest.useRealTimers();
+});
+
+describe("for a User with Two-step verification", () => {
+  const twoStepRequired = {
+    status: 400,
+    body: { detail: "Two-step", code: "two_step_required" },
+  };
+
+  async function askedForSecondCode(api: ReturnType<typeof fakeApi>) {
+    api.answer("POST /api/auth/password-reset", { status: 204 });
+    await openForgotPassword();
+    await askForCode();
+    await reset("720518", "new horse battery");
+    await screen.findByText(
+      "Two-step verification is on. Enter the 6-digit code from your authenticator app.",
+    );
+  }
+
+  it("asks for the Sign-in code too, keeping the Reset code and the password", async () => {
+    const api = fakeApi();
+    api.answer("POST /api/auth/password-reset/confirm", twoStepRequired, { status: 204 });
+
+    await askedForSecondCode(api);
+    expect(screen.getByLabelText("Reset code").props.value).toBe("720518");
+    expect(screen.getByLabelText("New password").props.value).toBe("new horse battery");
+    await fireEvent.changeText(screen.getByLabelText("Sign-in code"), "381002");
+    await fireEvent.press(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(
+      await screen.findByText("Password updated. You were signed out on other devices."),
+    ).toBeTruthy();
+    expect(api.to("POST /api/auth/password-reset/confirm")[1]!.body).toEqual({
+      email: "ada@example.com",
+      code: "720518",
+      newPassword: "new horse battery",
+      twoStepCode: "381002",
+    });
+  });
+
+  it("takes a Recovery code instead", async () => {
+    const api = fakeApi();
+    api.answer("POST /api/auth/password-reset/confirm", twoStepRequired, { status: 204 });
+
+    await askedForSecondCode(api);
+    await fireEvent.press(screen.getByRole("button", { name: "Use a recovery code" }));
+    await fireEvent.changeText(await screen.findByLabelText("Recovery code"), "k7qx-2m9d");
+    await fireEvent.press(screen.getByRole("button", { name: "Reset password" }));
+
+    await screen.findByText("Password updated. You were signed out on other devices.");
+    expect(api.to("POST /api/auth/password-reset/confirm")[1]!.body).toMatchObject({
+      recoveryCode: "k7qx-2m9d",
+    });
+  });
+
+  it("says a wrong Sign-in code didn't work, and clears it", async () => {
+    const api = fakeApi();
+    api.answer("POST /api/auth/password-reset/confirm", twoStepRequired, {
+      status: 400,
+      body: { detail: "Wrong", code: "invalid_two_step_code" },
+    });
+
+    await askedForSecondCode(api);
+    await fireEvent.changeText(screen.getByLabelText("Sign-in code"), "999999");
+    await fireEvent.press(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(await screen.findByText(WRONG_SIGN_IN_CODE)).toBeTruthy();
+    expect(screen.getByLabelText("Sign-in code").props.value).toBe("");
+  });
+
+  it("says a wrong Recovery code isn't right or was used", async () => {
+    const api = fakeApi();
+    api.answer("POST /api/auth/password-reset/confirm", twoStepRequired, {
+      status: 400,
+      body: { detail: "Wrong", code: "invalid_two_step_code" },
+    });
+
+    await askedForSecondCode(api);
+    await fireEvent.press(screen.getByRole("button", { name: "Use a recovery code" }));
+    await fireEvent.changeText(await screen.findByLabelText("Recovery code"), "aaaa-bbbb");
+    await fireEvent.press(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(await screen.findByText(WRONG_RECOVERY_CODE)).toBeTruthy();
+  });
 });

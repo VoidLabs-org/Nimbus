@@ -5,6 +5,7 @@ import {
   NETWORK_ERROR,
   providerSignInErrorMessage,
   verificationCodeMessage,
+  WRONG_RECOVERY_CODE,
   wrongCodeMessage,
 } from "./messages";
 
@@ -67,6 +68,9 @@ describe("wrongCodeMessage", () => {
     expect(wrongCodeMessage(3)).toBe("That code isn’t right. 3 tries left.");
     expect(wrongCodeMessage(1)).toBe("That code isn’t right. 1 try left.");
     expect(wrongCodeMessage(null)).toBe("That code isn’t right.");
+    expect(wrongCodeMessage(2, WRONG_RECOVERY_CODE)).toBe(
+      "That recovery code isn’t right, or it was used already. 2 tries left.",
+    );
   });
 });
 

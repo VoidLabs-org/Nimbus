@@ -328,7 +328,9 @@ paths:
         `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that
         `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code. A `two_step_remembered` cookie that
         remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code. The Mobile app
-        (`X-Nimbus-Client: mobile`) gets the refresh token in the body as `refreshToken` and no refresh cookie.
+        (`X-Nimbus-Client: mobile`) gets the refresh token in the body as `refreshToken` and no refresh cookie; for a
+        User with Two-step verification it gets `pendingToken` in the body instead of the pending cookie, and sends
+        its remembered device as `rememberedToken` in the body instead of the cookie.
       security: []
       parameters:
         - $ref: "#/components/parameters/MobileClient"
@@ -359,6 +361,11 @@ paths:
                       twoStepRequired:
                         type: boolean
                         const: true
+                      pendingToken:
+                        type: string
+                        description: >-
+                          Only for the Mobile app: the pending sign-in, for `POST /api/auth/two-step`. A browser gets
+                          the `two_step_pending` cookie instead.
         "400":
           $ref: "#/components/responses/InvalidFields"
         "401":
@@ -382,17 +389,23 @@ paths:
         pending sign-in lasts 5 minutes and allows 5 wrong codes. A refresh never comes here. With
         `rememberBrowser: true` a right code also sets `two_step_remembered` (HttpOnly; Secure; SameSite=Lax;
         Path=/api; Max-Age 30 days): password and Google/GitHub sign-ins of this User on this browser skip the code for
-        a fixed 30 days, until a password change or reset, Remove, or "Sign out all other devices" elsewhere.
+        a fixed 30 days, until a password change or reset, Remove, or "Sign out all other devices" elsewhere. The
+        Mobile app (`X-Nimbus-Client: mobile`) sends `pendingToken` in the body instead of the cookie, which it
+        ignores, gets `rememberedToken` in the body instead of `two_step_remembered`, and gets no cookies.
       security:
         - twoStepPendingCookie: []
+        - {}
       parameters:
         - name: X-Requested-With
           in: header
-          required: true
-          description: Must be `nimbus`. Cross-site forms can't set it, so other sites can't use the cookie.
+          required: false
+          description: >-
+            Must be `nimbus` unless `X-Nimbus-Client` is `mobile`. Cross-site forms can't set either, so other
+            sites can't use the cookie.
           schema:
             type: string
             const: nimbus
+        - $ref: "#/components/parameters/MobileClient"
       requestBody:
         required: true
         content:
@@ -413,6 +426,10 @@ paths:
                   type: boolean
                   default: false
                   description: Don't ask again on this device for 30 days.
+                pendingToken:
+                  type: string
+                  maxLength: 128
+                  description: Only from the Mobile app, the `pendingToken` from `POST /api/auth/login`.
       responses:
         "200":
           description: >-
@@ -2517,6 +2534,12 @@ components:
           description: Case-insensitive
         password:
           type: string
+        rememberedToken:
+          type: string
+          maxLength: 128
+          description: >-
+            Only from the Mobile app: the `rememberedToken` a Two-step sign-in answered, to skip the code. A browser
+            sends the `two_step_remembered` cookie instead; this field is ignored from one.
 
     DesktopCode:
       type: object
@@ -2543,6 +2566,11 @@ components:
           description: >-
             Only for the Mobile app (`X-Nimbus-Client: mobile`), which keeps it in secure storage; a browser gets it
             in the refresh cookie instead, and this field is left out.
+        rememberedToken:
+          type: string
+          description: >-
+            Only for the Mobile app, after `POST /api/auth/two-step` with `rememberBrowser: true`: keep it and send it
+            with the next `POST /api/auth/login` to skip the code for 30 days.
         user:
           $ref: "#/components/schemas/User"
 

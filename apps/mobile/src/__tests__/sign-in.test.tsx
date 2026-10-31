@@ -60,19 +60,6 @@ describe("when signing in doesn't work", () => {
     expect(await screen.findByText("Too many attempts. Try again in 2 minutes.")).toBeTruthy();
   });
 
-  it("tells a User with Two-step verification it isn't in the app yet", async () => {
-    const api = fakeApi();
-    api.answer("POST /api/auth/login", { status: 200, body: { twoStepRequired: true } });
-
-    await openSignIn();
-    await signInWith("ada@example.com", "correct horse");
-
-    expect(
-      await screen.findByText(/Two-step verification isn’t available in the app yet/),
-    ).toBeTruthy();
-    expect(screen.getByLabelText("Email")).toBeTruthy();
-  });
-
   it("says it can't reach Nimbus without a connection", async () => {
     const api = fakeApi();
     api.answer("POST /api/auth/login", "offline");

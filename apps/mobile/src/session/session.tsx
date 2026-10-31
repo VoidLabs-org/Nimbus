@@ -7,10 +7,11 @@ import {
   createMobileApi,
   type MobileApi,
   type RegisterInput,
+  type SecondCode,
   type SignInOutcome,
   type User,
 } from "./client";
-import { refreshTokenStore, welcomeSeen } from "./storage";
+import { pendingSignInStore, refreshTokenStore, rememberedDevices, welcomeSeen } from "./storage";
 import { nimbusUserAgent } from "./userAgent";
 
 /**
@@ -37,6 +38,10 @@ type Session = {
   api: MobileApi;
   markWelcomed: () => void;
   signIn: (email: string, password: string) => Promise<SignInOutcome>;
+  /** The second step of a Two-step sign-in. Rejects with the server's ApiError if the code is refused. */
+  finishTwoStep: (secondCode: SecondCode, rememberDevice: boolean) => Promise<void>;
+  /** Leaves the code step without finishing it. */
+  cancelTwoStep: () => Promise<void>;
   /** Creates a User and signs them in, as an Unverified User. */
   register: (input: RegisterInput) => Promise<void>;
   /** Checks the Verification code; once it is right the app opens. Rejects with the server's ApiError if refused. */
@@ -79,6 +84,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     createMobileApi({
       baseUrl: apiUrl,
       store: refreshTokenStore,
+      pendingStore: pendingSignInStore,
+      remembered: rememberedDevices,
       userAgent: nimbusUserAgent(),
       onSessionLost: () => {
         queryClient.clear();
@@ -129,6 +136,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if ("user" in outcome) signedIn(outcome.user);
       return outcome;
     },
+    finishTwoStep: async (secondCode, rememberDevice) => {
+      signedIn(await api.finishTwoStep(secondCode, rememberDevice));
+    },
+    cancelTwoStep: () => api.cancelTwoStep(),
     register: async (input) => {
       const user = await api.register(input);
       // A new User: nothing to return to from an earlier User's expired Session.

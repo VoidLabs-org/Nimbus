@@ -49,7 +49,8 @@ class DesktopSignIn {
 		var profile = handoff.profile();
 		try {
 			var pending = externalSignIn.whoSignsIn(profile)
-				.flatMap(existing -> twoStepSignIn.begin(existing, profile, rememberedToken));
+				.flatMap(existing -> twoStepSignIn.begin(existing, profile, rememberedToken))
+				.map(PendingSignIns::cookie);
 			if (pending.isPresent()) {
 				return new Outcome(null, pending.get());
 			}

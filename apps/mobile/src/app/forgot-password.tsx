@@ -8,6 +8,8 @@ import {
   RESEND_WAIT_SECONDS,
   tooManyAttemptsIn,
   tooManyAttemptsMessage,
+  WRONG_RECOVERY_CODE,
+  WRONG_SIGN_IN_CODE,
   wrongCodeMessage,
 } from "@repo/api";
 import { router } from "expo-router";
@@ -18,14 +20,15 @@ import { Button, LinkButton } from "../components/Button";
 import { CODE_LENGTH, CodeField } from "../components/CodeField";
 import { FormMessage } from "../components/FormMessage";
 import { Screen } from "../components/Screen";
+import {
+  SecondCodeField,
+  secondCodeReady,
+  switchSecondCodeLabel,
+} from "../components/SecondCodeField";
 import { Text } from "../components/Text";
 import { TextField } from "../components/TextField";
 import { useCountdown } from "../countdown";
 import { useSession } from "../session/session";
-
-/** Until the app can take a Sign-in code (#203), a User with Two-step verification resets on the web. */
-const TWO_STEP_NOT_YET =
-  "Two-step verification is on for this account, and the app can’t take its code yet. Reset your password on the web for now.";
 
 /**
  * Back to the Sign in screen below, with the email filled in and the news that the password changed. The time makes
@@ -42,14 +45,16 @@ function failureMessage(failure: unknown): string {
 /**
  * Forgot password, in two steps on one screen, as on the web (designs M4c–M4e). Step 1 has a Reset code emailed (the
  * server answers the same for every address, so this never says whether one is registered). Step 2 takes the code and
- * the new password together. A right code sets the password and goes back to Sign in with the email filled in.
+ * the new password together. A right code sets the password and goes back to Sign in with the email filled in. A User
+ * with Two-step verification is asked for a Sign-in code too, or a Recovery code, once the Reset code is right
+ * (`two_step_required`); the Reset code and the password stay as typed.
  */
 export default function ForgotPassword() {
   const { api } = useSession();
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [emailMessage, setEmailMessage] = useState<string | null>(null);
-  // Under the button: a failure of the call itself, or the Two-step note.
+  // Under the button: a failure of the call itself.
   const [formError, setFormError] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -72,6 +77,12 @@ export default function ForgotPassword() {
   const [sendLimited, setSendLimited] = useState(false);
   // Reset attempts have their own limit, counted apart from Resend's wait.
   const [lockSeconds, setLockSeconds] = useCountdown();
+  // The second code, asked for once the server said this User has Two-step verification.
+  const [twoStep, setTwoStep] = useState(false);
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [secondCode, setSecondCode] = useState("");
+  const [twoStepMessage, setTwoStepMessage] = useState<string | null>(null);
+  const twoStepReady = !twoStep || secondCodeReady(useRecoveryCode, secondCode, twoStepMessage);
   const waiting = secondsToResend > 0;
   const waitingForTyped = waiting && countdownFor === email.trim().toLowerCase();
   const locked = lockSeconds > 0;
@@ -87,6 +98,13 @@ export default function ForgotPassword() {
     setCodeMessage(null);
     setCodeRejected(false);
     setExpired(false);
+  }
+
+  /** Swaps the Sign-in code boxes for the Recovery code field, or back; what was typed and said about it goes. */
+  function switchSecondCode(recovery: boolean) {
+    setUseRecoveryCode(recovery);
+    setSecondCode("");
+    setTwoStepMessage(null);
   }
 
   /** Asks for a code. Answers true when it is on its way. */
@@ -134,6 +152,8 @@ export default function ForgotPassword() {
     clearCode();
     setPassword("");
     setPasswordMessage(null);
+    setTwoStep(false);
+    switchSecondCode(false);
     setNotice(null);
     startCountdown(address, RESEND_WAIT_SECONDS);
     setStep("code");
@@ -152,7 +172,7 @@ export default function ForgotPassword() {
 
   async function submitReset() {
     // Nothing to send once the code is gone: that would only spend a try on a dead code.
-    if (code.length < CODE_LENGTH || checking || expired || locked) return;
+    if (code.length < CODE_LENGTH || !twoStepReady || checking || expired || locked) return;
     const tooShort = passwordError(password);
     setPasswordMessage(tooShort);
     if (tooShort) return;
@@ -160,9 +180,15 @@ export default function ForgotPassword() {
     setNotice(null);
     setCodeMessage(null);
     setCodeRejected(false);
+    setTwoStepMessage(null);
     setChecking(true);
+    const second = !twoStep
+      ? {}
+      : useRecoveryCode
+        ? { recoveryCode: secondCode }
+        : { twoStepCode: secondCode };
     try {
-      await api.resetPassword({ email, code, newPassword: password });
+      await api.resetPassword({ email, code, newPassword: password, ...second });
       backToSignIn(email);
     } catch (failure) {
       showResetFailure(failure);
@@ -180,7 +206,11 @@ export default function ForgotPassword() {
       setCodeMessage("This code has expired.");
       setExpired(true);
     } else if (failure.code === "two_step_required") {
-      setFormError(TWO_STEP_NOT_YET);
+      setTwoStep(true);
+    } else if (failure.code === "invalid_two_step_code") {
+      setTwoStepMessage(useRecoveryCode ? WRONG_RECOVERY_CODE : WRONG_SIGN_IN_CODE);
+      // The boxes empty for the next code; a Recovery code stays, to correct a typo.
+      if (!useRecoveryCode) setSecondCode("");
     } else if (failure.status === 429) {
       if (failure.retryAfterSeconds) setLockSeconds(failure.retryAfterSeconds);
       else setFormError(tooManyAttemptsMessage(null));
@@ -207,6 +237,8 @@ export default function ForgotPassword() {
     clearCode();
     setPassword("");
     setPasswordMessage(null);
+    setTwoStep(false);
+    switchSecondCode(false);
     setSentTo(null);
     back();
   }
@@ -315,11 +347,39 @@ export default function ForgotPassword() {
             kind={passwordMessage ? "error" : "hint"}
             indent
           />
+          {twoStep ? (
+            <View style={styles.secondCode}>
+              <Text muted size={14} style={styles.body}>
+                {useRecoveryCode
+                  ? "Two-step verification is on. Enter one of the recovery codes you saved."
+                  : "Two-step verification is on. Enter the 6-digit code from your authenticator app."}
+              </Text>
+              <SecondCodeField
+                recovery={useRecoveryCode}
+                value={secondCode}
+                onChangeText={(value) => {
+                  setSecondCode(value);
+                  setTwoStepMessage(null);
+                }}
+                refused={twoStepMessage !== null}
+                disabled={checking || locked}
+              />
+              {twoStepMessage ? <FormMessage message={twoStepMessage} /> : null}
+              {/* Off while a code is checked, so its answer can't land under the other kind of field. */}
+              <View style={styles.switch}>
+                <LinkButton
+                  label={switchSecondCodeLabel(useRecoveryCode)}
+                  disabled={checking}
+                  onPress={() => switchSecondCode(!useRecoveryCode)}
+                />
+              </View>
+            </View>
+          ) : null}
           {formError ? <FormMessage message={formError} /> : null}
           <Button
             label="Reset password"
             busy={checking}
-            disabled={code.length < CODE_LENGTH || locked}
+            disabled={code.length < CODE_LENGTH || !twoStepReady || locked}
             onPress={() => void submitReset()}
           />
         </>
@@ -352,4 +412,6 @@ const styles = StyleSheet.create({
   spacer: { flex: 1 },
   links: { flexDirection: "row", justifyContent: "space-between" },
   enterCode: { alignItems: "center" },
+  secondCode: { gap: 12 },
+  switch: { alignItems: "flex-start" },
 });

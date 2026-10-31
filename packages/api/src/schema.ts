@@ -549,7 +549,7 @@ export interface paths {
         put?: never;
         /**
          * Sign in with email and password
-         * @description For a User with Two-step verification a right password starts no session: the answer is `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code. A `two_step_remembered` cookie that remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code. The Mobile app (`X-Nimbus-Client: mobile`) gets the refresh token in the body as `refreshToken` and no refresh cookie.
+         * @description For a User with Two-step verification a right password starts no session: the answer is `{twoStepRequired: true}` with no token and no refresh cookie, and the `two_step_pending` cookie that `POST /api/auth/two-step` needs to finish the sign-in with a Sign-in code. A `two_step_remembered` cookie that remembers this User's browser (unexpired, see `POST /api/auth/two-step`) skips the code. The Mobile app (`X-Nimbus-Client: mobile`) gets the refresh token in the body as `refreshToken` and no refresh cookie; for a User with Two-step verification it gets `pendingToken` in the body instead of the pending cookie, and sends its remembered device as `rememberedToken` in the body instead of the cookie.
          */
         post: {
             parameters: {
@@ -578,6 +578,8 @@ export interface paths {
                         "application/json": components["schemas"]["AuthResponse"] | {
                             /** @constant */
                             twoStepRequired: true;
+                            /** @description Only for the Mobile app: the pending sign-in, for `POST /api/auth/two-step`. A browser gets the `two_step_pending` cookie instead. */
+                            pendingToken?: string;
                         };
                     };
                 };
@@ -611,14 +613,16 @@ export interface paths {
         put?: never;
         /**
          * Finish a password sign-in with a Sign-in code or a Recovery code
-         * @description Checks a Sign-in code from the User's authenticator app, or one of their Recovery codes, for the pending sign-in in the `two_step_pending` cookie. One 30-second step either side of now is accepted, but never the step that last signed the User in or an older one. A Recovery code is compared with capitals, spaces and the dash ignored, works once, and publishes `RecoveryCodeUsed` when used. A right code starts the session as `POST /api/auth/login` does and ends the pending sign-in. A pending sign-in lasts 5 minutes and allows 5 wrong codes. A refresh never comes here. With `rememberBrowser: true` a right code also sets `two_step_remembered` (HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age 30 days): password and Google/GitHub sign-ins of this User on this browser skip the code for a fixed 30 days, until a password change or reset, Remove, or "Sign out all other devices" elsewhere.
+         * @description Checks a Sign-in code from the User's authenticator app, or one of their Recovery codes, for the pending sign-in in the `two_step_pending` cookie. One 30-second step either side of now is accepted, but never the step that last signed the User in or an older one. A Recovery code is compared with capitals, spaces and the dash ignored, works once, and publishes `RecoveryCodeUsed` when used. A right code starts the session as `POST /api/auth/login` does and ends the pending sign-in. A pending sign-in lasts 5 minutes and allows 5 wrong codes. A refresh never comes here. With `rememberBrowser: true` a right code also sets `two_step_remembered` (HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age 30 days): password and Google/GitHub sign-ins of this User on this browser skip the code for a fixed 30 days, until a password change or reset, Remove, or "Sign out all other devices" elsewhere. The Mobile app (`X-Nimbus-Client: mobile`) sends `pendingToken` in the body instead of the cookie, which it ignores, gets `rememberedToken` in the body instead of `two_step_remembered`, and gets no cookies.
          */
         post: {
             parameters: {
                 query?: never;
-                header: {
-                    /** @description Must be `nimbus`. Cross-site forms can't set it, so other sites can't use the cookie. */
-                    "X-Requested-With": "nimbus";
+                header?: {
+                    /** @description Must be `nimbus` unless `X-Nimbus-Client` is `mobile`. Cross-site forms can't set either, so other sites can't use the cookie. */
+                    "X-Requested-With"?: "nimbus";
+                    /** @description `mobile` from the Mobile app (ADR 0010): it keeps the refresh token in the phone's secure storage, so the token travels in the body (`refreshToken`) instead of a cookie. */
+                    "X-Nimbus-Client"?: components["parameters"]["MobileClient"];
                 };
                 path?: never;
                 cookie?: never;
@@ -635,6 +639,8 @@ export interface paths {
                          * @default false
                          */
                         rememberBrowser?: boolean;
+                        /** @description Only from the Mobile app, the `pendingToken` from `POST /api/auth/login`. */
+                        pendingToken?: string;
                     };
                 };
             };
@@ -3355,6 +3361,8 @@ export interface components {
             /** @description Case-insensitive */
             email: string;
             password: string;
+            /** @description Only from the Mobile app: the `rememberedToken` a Two-step sign-in answered, to skip the code. A browser sends the `two_step_remembered` cookie instead; this field is ignored from one. */
+            rememberedToken?: string;
         };
         /** @description What a sign-in or connect in the system browser handed back to the Desktop app (ADR 0008). */
         DesktopCode: {
@@ -3368,6 +3376,8 @@ export interface components {
             accessToken: string;
             /** @description Only for the Mobile app (`X-Nimbus-Client: mobile`), which keeps it in secure storage; a browser gets it in the refresh cookie instead, and this field is left out. */
             refreshToken?: string;
+            /** @description Only for the Mobile app, after `POST /api/auth/two-step` with `rememberBrowser: true`: keep it and send it with the next `POST /api/auth/login` to skip the code for 30 days. */
+            rememberedToken?: string;
             user: components["schemas"]["User"];
         };
         RefreshTokenRequest: {

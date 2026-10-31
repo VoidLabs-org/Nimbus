@@ -1,3 +1,4 @@
+import { ApiError } from "@repo/api";
 import { Alert, Badge, Button, Group, Modal, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { ProfilePicture } from "@repo/ui/profile-picture";
@@ -5,7 +6,7 @@ import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, api, type Role, type RoleHolder } from "../api/client";
+import { api, type Role, type RoleHolder } from "../api/client";
 import { loadFailure, refreshFailed, useRoleHolders, useRolesChanged } from "../api/queries";
 import { useSession } from "../auth/useSession";
 import { HoldersSkeleton } from "./HoldersSkeleton";

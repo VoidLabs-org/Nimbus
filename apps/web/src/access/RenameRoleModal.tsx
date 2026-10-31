@@ -1,7 +1,8 @@
+import { ApiError } from "@repo/api";
 import { Alert, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
-import { ApiError, api, type Role } from "../api/client";
+import { api, type Role } from "../api/client";
 import { RoleFormFooter } from "./RoleFormParts";
 import { WindowFrame } from "./WindowFrame";
 import { descriptionClassNames, fieldClassNames, formClassName } from "./roleFormClassNames";

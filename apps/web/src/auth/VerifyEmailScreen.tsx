@@ -1,8 +1,8 @@
 import { Anchor, Loader, VisuallyHidden } from "@mantine/core";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
-import { api, ApiError } from "../api/client";
-import { clock, tooManyAttemptsMessage } from "@repo/api";
+import { api } from "../api/client";
+import { ApiError, clock, tooManyAttemptsMessage } from "@repo/api";
 import { AuthForm, AuthLayout, AuthSubmit } from "./AuthLayout";
 import { CODE_LENGTH, CodePinInput, PinnedSubmit } from "./CodeEntry";
 import classes from "./AuthLayout.module.css";

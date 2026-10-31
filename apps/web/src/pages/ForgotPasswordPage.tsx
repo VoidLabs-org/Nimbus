@@ -3,8 +3,9 @@ import { toast } from "@repo/ui/toast";
 import { useMutation } from "@tanstack/react-query";
 import { useState, type SyntheticEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
-import { api, ApiError } from "../api/client";
+import { api } from "../api/client";
 import {
+  ApiError,
   clock,
   GENERIC_ERROR,
   tooManyAttemptsIn,

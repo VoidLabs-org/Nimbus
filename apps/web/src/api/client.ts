@@ -1,85 +1,34 @@
 import { ApiError, apiErrorFrom, EMAIL_UNVERIFIED, NetworkError } from "@repo/api";
+import type { components } from "@repo/api/schema";
 import { sessionExpiredPath } from "../auth/returnPath";
 
-// The errors live in @repo/api, shared with the Mobile app; pages keep importing them from here.
-export { ApiError, EMAIL_UNVERIFIED, NetworkError };
+// What the API sends and takes, from the contract (docs/specs/openapi.yaml) through @repo/api's generated types, so a
+// contract change that breaks the web app fails type-checking here.
+type Schemas = components["schemas"];
 
-export type User = {
-  id: string;
-  email: string;
-  displayName: string;
-  avatarUrl: string | null;
-  /** False for Users who only sign in with Google or GitHub; they set a password without giving a current one. */
-  hasPassword: boolean;
-  /** False until the User enters the code emailed to them; until then the app shows only the verification screen. */
-  emailVerified: boolean;
-  /** When the password was last set; null without one, or when it was set before Nimbus kept the time. */
-  passwordChangedAt: string | null;
-  /** True when the User has an uploaded photo, whether or not it is the picture shown. */
-  hasUploadedPicture: boolean;
-  /** What the User shows; null for a picture from before connected accounts kept their own, which is none of these. */
-  pictureSource: PictureSource | null;
-  /** What the User may pick from; `avatarUrl` is the picture of the one shown. */
-  pictureOptions: PictureOptions;
-};
+export type User = Schemas["User"];
 
-export type PictureSource = "uploaded" | "google" | "github" | "initials";
+export type PictureSource = NonNullable<User["pictureSource"]>;
 
-export type PictureOptions = {
-  /** When the uploaded photo was added (ISO 8601), and its address for the thumbnail; null without an upload. */
-  uploadedAt: string | null;
-  uploadedUrl: string | null;
-  /** Each connected provider that has a picture, Google first. `label` is the Google email or the GitHub name. */
-  providers: { provider: "google" | "github"; pictureUrl: string; label: string }[];
-};
+export type PictureOptions = User["pictureOptions"];
 
-export type RegisterInput = { displayName: string; email: string; password: string };
+export type RegisterInput = Schemas["RegisterRequest"];
 
-export type Project = {
-  id: string;
-  key: string;
-  name: string;
-  description: string | null;
-  archived: boolean;
-  createdAt: string;
-};
+export type Project = Schemas["Project"];
 
-export type CreateProjectInput = { key: string; name: string; description?: string | null };
+export type CreateProjectInput = Schemas["CreateProjectRequest"];
 
-export type ChangePasswordInput = {
-  /** Required when the User has a password. */
-  currentPassword?: string;
-  newPassword: string;
-};
+export type ChangePasswordInput = Schemas["ChangePasswordRequest"];
 
-export type LoginInput = { email: string; password: string };
+export type LoginInput = Schemas["LoginRequest"];
 
-export type NotificationItem = {
-  id: string;
-  type:
-    | "SIGNED_IN"
-    | "PASSWORD_CHANGED"
-    | "LINKED_IDENTITY_CONNECTED"
-    | "LINKED_IDENTITY_DISCONNECTED"
-    | "OTHER_SESSIONS_SIGNED_OUT";
-  createdAt: string;
-  read: boolean;
-  /** `deviceLabel` for a new sign-in; every other alert has a `detail` line. */
-  snapshot: { title: string; deviceLabel?: string; detail?: string };
-  link: string;
-};
+export type NotificationItem = Schemas["NotificationItem"];
 
-export type NotificationPage = { items: NotificationItem[]; nextCursor: string | null };
+export type NotificationPage = Schemas["NotificationPage"];
 
-/** The Issue Notification types whose email can be switched. */
-export type IssueNotificationType =
-  | "ISSUE_ASSIGNED"
-  | "ISSUE_UNASSIGNED"
-  | "ISSUE_STATUS_CHANGED"
-  | "ISSUE_EDITED"
-  | "ISSUE_DELETED";
+export type IssueNotificationType = Schemas["IssueNotificationType"];
 
-export type NotificationSetting = { type: IssueNotificationType; email: boolean };
+export type NotificationSetting = Schemas["NotificationSetting"];
 
 /** A User with Two-step verification also sends a Sign-in code or a Recovery code (`two_step_required`). */
 export type ResetPasswordInput = {
@@ -95,89 +44,22 @@ export type Kind = "platform" | "project";
 
 export type Scope = "own" | "project" | "all";
 
-/** One Permission in the catalog, as the Roles pages show it. */
-export type CatalogPermission = {
-  key: string;
-  /** The module heading it is grouped under, e.g. "Projects". */
-  heading: string;
-  description: string;
-  kind: Kind;
-  /** The Scopes it may have in project roles; empty for platform permissions. */
-  scopes: Scope[];
-  /** What Scope Own means for it; null when Own isn't allowed. */
-  ownHint: string | null;
-  /** Only Platform admin may hold it. */
-  reserved: boolean;
-};
+export type CatalogPermission = Schemas["CatalogPermission"];
 
-export type RoleSummary = {
-  key: string;
-  name: string;
-  description: string;
-  kind: Kind;
-  builtIn: boolean;
-  customised: boolean;
-  /** How many Permissions it grants. */
-  permissions: number;
-  /** How many Users hold it; null for Everyone, which every signed-in User holds. */
-  holders: number | null;
-};
+export type RoleSummary = Schemas["RoleSummary"];
 
-export type Grant = {
-  permission: string;
-  /** Null for platform permissions. */
-  scope: Scope | null;
-};
+export type Grant = Schemas["Grant"];
 
-export type RoleGrant = Grant & {
-  /** The Role must always hold it. */
-  locked: boolean;
-};
+export type RoleGrant = Role["grants"][number];
 
-export type Role = Omit<RoleSummary, "permissions"> & {
-  /** Changes on every edit; edits send the version they started from. */
-  version: number;
-  /** Nothing about it can be edited (Platform admin). */
-  locked: boolean;
-  grants: RoleGrant[];
-  /** For a customised built-in Role: defaults it lacks that appeared after it was customised. */
-  newPermissions: string[];
-};
+export type Role = Schemas["Role"];
 
-/** A User holding a platform role. */
-export type RoleHolder = {
-  id: string;
-  /** Null, like the name, for a User who no longer exists. */
-  email: string | null;
-  displayName: string | null;
-  avatarUrl: string | null;
-  /** When they were given the Role (ISO 8601). */
-  since: string;
-};
+export type RoleHolder = Schemas["RoleHolder"];
 
-export type NewRoleInput = { key: string; name: string; description: string; kind: Kind };
+export type NewRoleInput = Schemas["CreateRoleRequest"];
 
-/** One change in the audit log. */
-export type AuditEntry = {
-  id: string;
-  /** When it happened (ISO 8601). */
-  at: string;
-  /** Who did it; null when the system did (e.g. a warning at startup). Name and email are null for a User who no longer exists. */
-  actor: {
-    id: string;
-    displayName: string | null;
-    email: string | null;
-    avatarUrl: string | null;
-  } | null;
-  /** e.g. role.created, role.renamed, role.grants_changed, role.reset, role.deleted, role.assigned, role.unassigned, catalog.unknown_grant */
-  action: string;
-  /** `exists` is false once the Role has been deleted. */
-  target: { type: string; key: string; exists: boolean };
-  /** The state before; null when there was none (created). */
-  before: Record<string, unknown> | null;
-  /** The state after; null when there is none (deleted). */
-  after: Record<string, unknown> | null;
-};
+/** One change in the audit log. `action` stays open: an action newer than this app shows as its own name. */
+export type AuditEntry = Omit<Schemas["AuditEntry"], "action"> & { action: string };
 
 export type AuditPage = {
   entries: AuditEntry[];
@@ -188,40 +70,11 @@ export type AuditPage = {
   asOf: number;
 };
 
-/**
- * One running sign-in of the signed-in User, for the Security page. Named apart from `Session`, which is this app's own
- * signed-in state.
- */
-export type SessionInfo = {
-  id: string;
-  /** Browser and system, e.g. "Chrome on Windows"; "Unknown browser" when the server can't tell. */
-  device: string;
-  /** True for the browser making the request. */
-  current: boolean;
-  /** When it was signed in (ISO 8601). */
-  startedAt: string;
-  /** How many seconds ago it last renewed its sign-in, by the server's clock; accurate to about 15 minutes. */
-  idleSeconds: number;
-};
+export type SessionInfo = Schemas["SessionInfo"];
 
-/** A Google or GitHub account that can sign in as the signed-in User, for the Connected accounts card. */
-export type LinkedIdentity = {
-  /** The provider's id, e.g. "google" or "github". */
-  provider: string;
-  /** The Google email or GitHub username; null for an account linked before names were kept. */
-  accountName: string | null;
-  /** When it was connected (ISO 8601). */
-  connectedAt: string;
-};
+export type LinkedIdentity = Schemas["LinkedIdentityInfo"];
 
-/** Whether the signed-in User has Two-step verification, for its card on the Security page. */
-export type TwoStepStatus = {
-  enabled: boolean;
-  /** When it was turned on (ISO 8601); null when off. */
-  enabledAt: string | null;
-  /** Recovery codes not used yet; null when off. */
-  recoveryCodesLeft: number | null;
-};
+export type TwoStepStatus = Schemas["TwoStepStatus"];
 
 /** What finishes a pending sign-in: a Sign-in code, or one of the User's Recovery codes when they lost their phone. */
 export type TwoStepAnswer = { code: string } | { recoveryCode: string };

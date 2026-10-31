@@ -1,8 +1,8 @@
 import { Anchor, Checkbox } from "@mantine/core";
 import { useState, type SyntheticEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ApiError } from "../api/client";
 import {
+  ApiError,
   GENERIC_ERROR,
   SIGN_IN_TIMED_OUT,
   tooManyAttemptsIn,

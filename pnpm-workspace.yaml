@@ -1,8 +1,3 @@
 packages:
   - "apps/*"
   - "packages/*"
-
-overrides:
-  # openapi-typescript (packages/api's type generator) builds its output with TypeScript's JavaScript API, which
-  # TypeScript 7 no longer has; it gets TypeScript 5 while everything else stays on 7.
-  "openapi-typescript>typescript": "5.9.3"

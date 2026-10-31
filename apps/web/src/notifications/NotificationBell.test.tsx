@@ -110,7 +110,12 @@ it("shows the other Security alerts with their detail and opens Security on clic
   vi.spyOn(api, "notificationUnreadCount").mockResolvedValue({ count: 4 });
   vi.spyOn(api, "readNotification").mockResolvedValue(undefined);
   const at = new Date().toISOString();
-  const alert = (id: string, type: NotificationItem["type"], title: string, detail: string) => ({
+  const alert = (
+    id: string,
+    type: NotificationItem["type"],
+    title: string,
+    detail: string,
+  ): NotificationItem => ({
     id,
     type,
     createdAt: at,

@@ -1,7 +1,8 @@
+import { ApiError } from "@repo/api";
 import { Button, Group, Loader, VisuallyHidden } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { ApiError, api } from "../api/client";
+import { api } from "../api/client";
 import { useProviders } from "../api/queries";
 import { BrowserSignInWait } from "./BrowserSignInWait";
 import { browserSignInBridge, useBrowserSignIn } from "./useBrowserSignIn";

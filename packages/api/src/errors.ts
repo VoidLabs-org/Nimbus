@@ -39,26 +39,36 @@ export class NetworkError extends Error {
 
 /**
  * The ApiError for a response that wasn't OK: its status, the problem details in its JSON body (undefined when the
- * body wasn't JSON) and its Retry-After header (null when it sent none).
+ * body wasn't JSON) and its Retry-After header (null when it sent none). A field of the wrong kind, as a proxy's own
+ * error page might send, counts as missing.
  */
 export function apiErrorFrom(
   status: number,
   body: unknown,
   retryAfterHeader: string | null,
 ): ApiError {
-  const problem = (body ?? {}) as {
-    detail?: string;
-    errors?: Record<string, string>;
-    code?: unknown;
-    triesLeft?: unknown;
-  };
+  const problem: Record<string, unknown> = isObject(body) ? body : {};
   const retryAfter = Number(retryAfterHeader);
   return new ApiError(
     status,
-    problem.detail,
-    problem.errors,
+    typeof problem.detail === "string" ? problem.detail : undefined,
+    fieldErrors(problem.errors),
     retryAfter > 0 ? retryAfter : null,
     typeof problem.code === "string" ? problem.code : null,
     typeof problem.triesLeft === "number" ? problem.triesLeft : null,
+  );
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The problem's `errors`, one message per field; anything that isn't text is left out. */
+function fieldErrors(errors: unknown): Record<string, string> {
+  if (!isObject(errors)) return {};
+  return Object.fromEntries(
+    Object.entries(errors).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
   );
 }

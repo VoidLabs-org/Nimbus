@@ -1,3 +1,4 @@
+import { ApiError } from "@repo/api";
 import { IconDeviceMobile, IconKey } from "@tabler/icons-react";
 import { Button } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,7 +8,7 @@ import { Glyph } from "@repo/ui/glyph";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
-import { ApiError, api, type TwoStepSetup } from "../api/client";
+import { api, type TwoStepSetup } from "../api/client";
 import { queryKeys, useTwoStep } from "../api/queries";
 import { useSignInAgain } from "../auth/useSignInAgain";
 import { NewRecoveryCodesDialog } from "./NewRecoveryCodesDialog";

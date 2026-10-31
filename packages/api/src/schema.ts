@@ -3420,7 +3420,7 @@ export interface components {
             /** @description What Scope Own means for it; null when Own isn't allowed */
             ownHint: string | null;
             /** @description Only Platform admin may hold it */
-            reserved?: boolean;
+            reserved: boolean;
         };
         RoleSummary: {
             /** @example project_admin */
@@ -3490,9 +3490,11 @@ export interface components {
                 id: string;
                 displayName: string | null;
                 email: string | null;
+                /** @description The picture they show; null without one or for a User who no longer exists */
+                avatarUrl: string | null;
             };
             /** @enum {string} */
-            action: "role.created" | "role.renamed" | "role.described" | "role.grants_changed" | "role.reset" | "role.deleted" | "role.defaults_applied" | "role.locked_grants_restored" | "catalog.unknown_grant" | "catalog.unknown_grant_resolved";
+            action: "role.created" | "role.renamed" | "role.described" | "role.grants_changed" | "role.reset" | "role.deleted" | "role.assigned" | "role.unassigned" | "role.defaults_applied" | "role.locked_grants_restored" | "catalog.unknown_grant" | "catalog.unknown_grant_resolved";
             target: {
                 /** @enum {string} */
                 type: "role";
@@ -3501,9 +3503,13 @@ export interface components {
                 exists: boolean;
             };
             /** @description The state before the change; null when there was none */
-            before: Record<string, never> | null;
+            before: {
+                [key: string]: unknown;
+            } | null;
             /** @description The state after the change; null when there is none */
-            after: Record<string, never> | null;
+            after: {
+                [key: string]: unknown;
+            } | null;
         };
         CreateRoleRequest: {
             /** @description Fixed forever */

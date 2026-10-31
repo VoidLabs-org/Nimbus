@@ -1,3 +1,4 @@
+import { ApiError } from "@repo/api";
 import { Alert, Box, Button, Container, Group, Modal, Stack, Text, Title } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
 import { PillTabs } from "@repo/ui/pill-tabs";
@@ -13,7 +14,7 @@ import { RoleHolders } from "../access/RoleHolders";
 import { RoleSummary } from "../access/RoleSummary";
 import { useGrantsDraft } from "../access/useGrantsDraft";
 import { usePlatformPermissions } from "../access/usePlatformPermissions";
-import { ApiError, api, type CatalogPermission, type Role } from "../api/client";
+import { api, type CatalogPermission, type Role } from "../api/client";
 import {
   loadFailure,
   usePermissionCatalog,

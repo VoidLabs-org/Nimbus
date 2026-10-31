@@ -5,8 +5,8 @@ import { useSearchParams } from "react-router";
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
-import { ApiError, api } from "../api/client";
-import { connectErrorMessage } from "@repo/api";
+import { api, type LinkedIdentity } from "../api/client";
+import { ApiError, connectErrorMessage } from "@repo/api";
 import { BrowserSignInWait } from "../auth/BrowserSignInWait";
 import { browserSignInBridge, useBrowserSignIn } from "../auth/useBrowserSignIn";
 import { PROVIDERS } from "../auth/providers";
@@ -184,7 +184,9 @@ export function ConnectedAccountsCard() {
   }
 
   const enabled = providers.data ?? [];
-  const connected = new Map(identities.data.map((identity) => [identity.provider, identity]));
+  const connected = new Map<string, LinkedIdentity>(
+    identities.data.map((identity) => [identity.provider, identity]),
+  );
   const rows = PROVIDERS.filter(
     (provider) => enabled.includes(provider.id) || connected.has(provider.id),
   );

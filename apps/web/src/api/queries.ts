@@ -159,6 +159,14 @@ export function useIssueCreated() {
   };
 }
 
+/** Refresh the project's lists after an Issue is deleted. The Issue's own queries are left alone: the page showing it is leaving. */
+export function useIssueDeleted() {
+  const client = useQueryClient();
+  return (issueKey: string) => {
+    void client.invalidateQueries({ queryKey: projectIssueLists(issueKey) });
+  };
+}
+
 /** Keep the server's edited Issue, and refresh its history and its project's lists. */
 export function useIssueChanged() {
   const client = useQueryClient();

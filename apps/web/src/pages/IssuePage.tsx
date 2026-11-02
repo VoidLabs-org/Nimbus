@@ -25,6 +25,7 @@ import {
   useProjectStatuses,
 } from "../api/queries";
 import { useSession } from "../auth/useSession";
+import { DeleteIssueDialog } from "../issues/DeleteIssueDialog";
 import { IssueHistory } from "../issues/IssueHistory";
 import { TypeBadge } from "../issues/IssueMarks";
 import { timeAgo } from "../issues/timeAgo";
@@ -50,7 +51,7 @@ export default function IssuePage() {
 
 /**
  * Issue details with inline editing: title and description (guarded by the version), and type, priority and Assignee
- * (saved as soon as they are chosen), and the Status, which moves the Issue. Deleting belongs to a following ticket.
+ * (saved as soon as they are chosen), and the Status, which moves the Issue. Deleting asks first.
  */
 function IssueDetails({ issueKey }: { issueKey: string }) {
   const query = useIssue(issueKey);
@@ -63,6 +64,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
   const [quickSaving, setQuickSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Someone else changed the text being edited (a refresh saw it), or our save was refused. A change to the other
   // text does not matter: the save then goes with the latest version.
@@ -183,19 +185,35 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                   {issue.key} · {issue.type}
                 </span>
               </div>
-              <Button
-                variant="default"
-                radius="xl"
-                size="compact-md"
-                onClick={() =>
-                  void navigator.clipboard
-                    ?.writeText(window.location.href)
-                    .then(() => toast.success("Link copied."))
-                }
-              >
-                Copy link
-              </Button>
+              <Group gap="xs" wrap="nowrap">
+                <Button
+                  variant="default"
+                  radius="xl"
+                  size="compact-md"
+                  onClick={() =>
+                    void navigator.clipboard
+                      ?.writeText(window.location.href)
+                      .then(() => toast.success("Link copied."))
+                  }
+                >
+                  Copy link
+                </Button>
+                <Button
+                  variant="default"
+                  color="red"
+                  radius="xl"
+                  size="compact-md"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  Delete Issue
+                </Button>
+              </Group>
             </Group>
+            <DeleteIssueDialog
+              issue={issue}
+              opened={deleteOpen}
+              onClose={() => setDeleteOpen(false)}
+            />
             <div className={classes.layout}>
               <div className={classes.main}>
                 {stale && (

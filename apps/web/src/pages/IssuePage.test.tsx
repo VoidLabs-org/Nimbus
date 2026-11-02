@@ -88,6 +88,7 @@ function showAt(path: string) {
           <MemoryRouter initialEntries={[path]}>
             <Routes>
               <Route path="/issues/:issueKey" element={<IssuePage />} />
+              <Route path="/projects/:key/issues" element={<p>Project Issues</p>} />
             </Routes>
           </MemoryRouter>
         </SessionContext>
@@ -226,5 +227,36 @@ describe("an Issue's page", () => {
     showAt("/issues/NIM-99");
 
     expect(await screen.findByText("Issue not found.")).toBeTruthy();
+  });
+
+  it("deletes the Issue after a confirmation and goes back to the project's Issues", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    const deleteIssue = vi.spyOn(api, "deleteIssue").mockResolvedValue(undefined);
+    showAt("/issues/NIM-12");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Issue" }));
+    expect(deleteIssue).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("Project Issues")).toBeTruthy();
+    expect(deleteIssue).toHaveBeenCalledWith("NIM-12");
+  });
+
+  it("keeps the Issue when the confirmation is cancelled or the delete fails", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    const deleteIssue = vi
+      .spyOn(api, "deleteIssue")
+      .mockRejectedValue(new ApiError(409, "This project is archived"));
+    showAt("/issues/NIM-12");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Issue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(deleteIssue).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Issue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(deleteIssue).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Project Issues")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Crash on save" })).toBeTruthy();
   });
 });

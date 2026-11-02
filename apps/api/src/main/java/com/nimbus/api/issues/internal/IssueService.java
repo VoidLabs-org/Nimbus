@@ -17,6 +17,7 @@ import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
 import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
+import com.nimbus.api.issues.IssueDeleted;
 import com.nimbus.api.issues.Issues;
 import com.nimbus.api.issues.ProjectStatus;
 import com.nimbus.api.projects.ProjectSummary;
@@ -157,6 +158,33 @@ class IssueService implements Issues {
 		});
 	}
 
+	/**
+	 * Removes the Issue and its history for good and keeps a deletion record. Locks the Issue row like every edit,
+	 * so a delete never races an edit; the number stays used because {@code issue_counters} only goes up.
+	 */
+	@Transactional
+	void delete(UUID actor, String issueKey) {
+		var target = resolve(actor, issueKey, IssueAccess.Action.DELETE);
+		var project = target.project();
+		var found = jdbc.sql("SELECT id, title FROM issues WHERE project_id = :project AND number = :number FOR UPDATE")
+			.param("project", project.id()).param("number", target.number())
+			.query((row, index) -> new Deletable(row.getObject("id", UUID.class), row.getString("title"))).optional()
+			.orElseThrow(() -> new NotFound("Issue not found"));
+		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
+		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be deleted", null);
+
+		var key = IssueKeys.format(project.key(), target.number());
+		jdbc.sql("""
+				INSERT INTO issue_deletions (id, project_id, issue_key, title, actor_id, deleted_at)
+				VALUES (:id, :project, :key, :title, :actor, :at)
+				""")
+			.param("id", UUID.randomUUID()).param("project", project.id()).param("key", key)
+			.param("title", found.title()).param("actor", actor)
+			.param("at", Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS))).update();
+		jdbc.sql("DELETE FROM issues WHERE id = :id").param("id", found.id()).update();
+		events.publishEvent(new IssueDeleted(project.id(), key));
+	}
+
 	@Override
 	public List<ProjectStatus> statuses(UUID actor, UUID projectId) {
 		access.require(actor, projectId, IssueAccess.Action.VIEW);
@@ -192,6 +220,8 @@ class IssueService implements Issues {
 					row.getTimestamp("at").toInstant(), row.getString("field"), row.getString("before_value"),
 					row.getString("after_value")))
 			.list();
+		// Every Issue has a "created" entry, so none means the Issue does not exist (or is deleted).
+		if (rows.isEmpty()) throw new NotFound("Issue not found");
 		var ids = new java.util.HashSet<UUID>();
 		for (var row : rows) {
 			if (row.actorId() != null) ids.add(row.actorId());
@@ -420,6 +450,9 @@ class IssueService implements Issues {
 	}
 
 	private record Target(ProjectSummary project, int number) {
+	}
+
+	private record Deletable(UUID id, String title) {
 	}
 
 	private record Current(UUID id, UUID projectId, String title, String description, String type, String priority,

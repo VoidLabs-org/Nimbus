@@ -440,6 +440,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/issues/{issueKey}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Move an Issue to any Status of its project */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    issueKey: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: uuid
+                         * @description Must be a Status of the Issue's project; no version is needed
+                         */
+                        statusId: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The Issue after the move */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Issue"];
+                    };
+                };
+                400: components["responses"]["InvalidFields"];
+                401: components["responses"]["Unauthorized"];
+                /** @description Unknown key, or an Issue in a project the User is not a Member of */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The project is Archived */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{key}/statuses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's Statuses in order */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The Statuses, first to last (none until the project has an Issue) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectStatus"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Unknown project, or a project the User is not a Member of */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/issues/{issueKey}/history": {
         parameters: {
             query?: never;
@@ -3764,6 +3880,13 @@ export interface components {
              */
             version?: number;
         };
+        ProjectStatus: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            category: components["schemas"]["StatusCategory"];
+            position: number;
+        };
         IssueHistoryEntry: {
             /** Format: uuid */
             id: string;
@@ -3771,10 +3894,10 @@ export interface components {
             /** Format: date-time */
             at: string;
             /** @enum {string} */
-            field: "created" | "title" | "description" | "type" | "priority" | "assignee";
-            /** @description The old value; for `assignee`, the previous Assignee's name */
+            field: "created" | "title" | "description" | "type" | "priority" | "assignee" | "status";
+            /** @description The old value; for `assignee`, the previous Assignee's name; for `status`, the Status's name */
             before: string | null;
-            /** @description The new value; for `assignee`, the new Assignee's name */
+            /** @description The new value; for `assignee`, the new Assignee's name; for `status`, the Status's name */
             after: string | null;
         };
         IssuePage: {

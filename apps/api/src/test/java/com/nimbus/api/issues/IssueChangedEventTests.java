@@ -68,5 +68,16 @@ class IssueChangedEventTests {
 		assertThat(published).hasSize(1);
 		assertThat(published.iterator().next())
 			.isEqualTo(new IssueChanged(projectId, "ICH-1", List.of("title", "priority")));
+
+		// A move publishes once with "status"; moving to the Status it is already in publishes nothing.
+		var statuses = client.get().uri("/api/projects/ICH/statuses").header("Authorization", "Bearer " + token)
+			.exchange().expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody();
+		String done = ((List<String>) JsonPath.read(statuses, "$[?(@.name=='Done')].id")).getFirst();
+		client.put().uri("/api/issues/ICH-1/status").header("Authorization", "Bearer " + token)
+			.body(Map.of("statusId", done)).exchange().expectStatus().isOk();
+		client.put().uri("/api/issues/ICH-1/status").header("Authorization", "Bearer " + token)
+			.body(Map.of("statusId", done)).exchange().expectStatus().isOk();
+		assertThat(events.ofType(IssueChanged.class)).hasSize(2)
+			.last().isEqualTo(new IssueChanged(projectId, "ICH-1", List.of("status")));
 	}
 }

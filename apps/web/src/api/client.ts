@@ -39,6 +39,7 @@ export type CreateIssueInput = Schemas["CreateIssueRequest"];
 
 export type EditIssueInput = Schemas["EditIssueRequest"];
 
+export type ProjectStatus = Schemas["ProjectStatus"];
 export type IssueHistoryEntry = Schemas["IssueHistoryEntry"];
 
 export type ChangePasswordInput = Schemas["ChangePasswordRequest"];
@@ -428,6 +429,17 @@ export function createApiClient(
         method: "PUT",
         body: JSON.stringify({ userId }),
       }),
+
+    /** Moves the Issue to any Status of its project; no version is needed. */
+    moveIssue: (issueKey: string, statusId: string) =>
+      request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ statusId }),
+      }),
+
+    /** The project's Statuses in order. */
+    projectStatuses: (projectKey: string) =>
+      request<ProjectStatus[]>(`/api/projects/${encodeURIComponent(projectKey)}/statuses`),
 
     /** The Issue's history, newest first. */
     issueHistory: (issueKey: string) =>

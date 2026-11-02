@@ -8,6 +8,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 import com.nimbus.api.identity.CurrentUser;
+import com.nimbus.api.issues.ProjectStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -103,6 +104,17 @@ class IssuesController {
 		return issues.assign(currentUser.id(), issueKey, request.userId());
 	}
 
+	/** Any Status of the Issue's project; no version needed. */
+	@PutMapping("/api/issues/{issueKey}/status")
+	IssueService.IssueView move(@PathVariable String issueKey, @RequestBody MoveIssue request) {
+		return issues.move(currentUser.id(), issueKey, request.statusId());
+	}
+
+	@GetMapping("/api/projects/{key}/statuses")
+	List<ProjectStatus> statuses(@PathVariable String key) {
+		return issues.statuses(currentUser.id(), key);
+	}
+
 	@GetMapping("/api/issues/{issueKey}/history")
 	List<IssueService.HistoryEntryView> history(@PathVariable String issueKey) {
 		return issues.history(currentUser.id(), issueKey);
@@ -121,6 +133,9 @@ class IssuesController {
 	}
 
 	record AssignIssue(UUID userId) {
+	}
+
+	record MoveIssue(UUID statusId) {
 	}
 
 	/** The title is trimmed before it is checked, so pasted surrounding whitespace is not an error. */

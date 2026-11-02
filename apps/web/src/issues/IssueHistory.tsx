@@ -1,7 +1,8 @@
-import { Stack, Text, Title } from "@mantine/core";
-import { Panel } from "@repo/ui/panel";
+import { Group, Stack, Text, Title } from "@mantine/core";
+import { ProfilePicture } from "@repo/ui/profile-picture";
 import { useIssueHistory } from "../api/queries";
 import type { IssueHistoryEntry } from "../api/client";
+import { timeAgo } from "./timeAgo";
 
 const FIELD_NAMES: Record<string, string> = {
   title: "the title",
@@ -30,25 +31,32 @@ function describe(entry: IssueHistoryEntry): string {
 export function IssueHistory({ issueKey }: { issueKey: string }) {
   const { data, isError } = useIssueHistory(issueKey);
   return (
-    <Panel p="xl">
-      <Stack gap="sm">
-        <Title order={2} fz={20}>
-          History
-        </Title>
-        {isError && !data && <Text c="dimmed">Couldn't load the history.</Text>}
-        {data && (
-          <Stack gap="xs" component="ul" m={0} p={0} style={{ listStyle: "none" }}>
-            {data.map((entry) => (
-              <li key={entry.id}>
-                <Text span>{describe(entry)}</Text>{" "}
-                <Text span c="dimmed" size="sm" title={new Date(entry.at).toLocaleString()}>
-                  {new Date(entry.at).toLocaleString()}
+    <Stack gap="sm">
+      <Title order={2} fz={20}>
+        History
+      </Title>
+      {isError && !data && <Text c="dimmed">Couldn't load the history.</Text>}
+      {data && (
+        <Stack gap="sm" component="ul" m={0} p={0} style={{ listStyle: "none" }}>
+          {data.map((entry) => (
+            <li key={entry.id}>
+              <Group gap="sm" wrap="nowrap" align="flex-start">
+                <ProfilePicture
+                  name={entry.actor?.displayName ?? null}
+                  src={entry.actor?.avatarUrl}
+                  size={24}
+                />
+                <Text span size="sm" style={{ flex: 1 }}>
+                  {describe(entry)}
                 </Text>
-              </li>
-            ))}
-          </Stack>
-        )}
-      </Stack>
-    </Panel>
+                <Text span c="dimmed" size="xs" title={new Date(entry.at).toLocaleString()}>
+                  {timeAgo(entry.at)} ago
+                </Text>
+              </Group>
+            </li>
+          ))}
+        </Stack>
+      )}
+    </Stack>
   );
 }

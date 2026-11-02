@@ -7,14 +7,12 @@ import {
   Select,
   Stack,
   Text,
-  Textarea,
   TextInput,
   Title,
 } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { Bone, Loading } from "@repo/ui/skeleton";
-import { Tag } from "@repo/ui/tag";
 import { toast } from "@repo/ui/toast";
 import { useState } from "react";
 import { useParams } from "react-router";
@@ -28,16 +26,14 @@ import {
 } from "../api/queries";
 import { useSession } from "../auth/useSession";
 import { IssueHistory } from "../issues/IssueHistory";
+import { TypeBadge } from "../issues/IssueMarks";
+import { timeAgo } from "../issues/timeAgo";
 import { IssueMarkdown } from "../issues/IssueMarkdown";
+import { MarkdownField } from "../issues/MarkdownField";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
-
-const CATEGORY_LABELS: Record<Issue["status"]["category"], string> = {
-  TODO: "To do",
-  IN_PROGRESS: "In progress",
-  DONE: "Done",
-};
+import classes from "./IssuePage.module.css";
 
 const TYPES = ["Story", "Bug", "Chore"] as const;
 const PRIORITIES = ["Urgent", "High", "Medium", "Low"] as const;
@@ -180,86 +176,51 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                 </Button>
               </Alert>
             )}
-            <Group gap="sm">
-              <Tag>{issue.key}</Tag>
-              <Tag>{issue.type}</Tag>
+            <Group justify="space-between" wrap="nowrap">
+              <div className={classes.id}>
+                <TypeBadge type={issue.type} />
+                <span>
+                  {issue.key} · {issue.type}
+                </span>
+              </div>
+              <Button
+                variant="default"
+                radius="xl"
+                size="compact-md"
+                onClick={() =>
+                  void navigator.clipboard
+                    ?.writeText(window.location.href)
+                    .then(() => toast.success("Link copied."))
+                }
+              >
+                Copy link
+              </Button>
             </Group>
-            {stale && (
-              <Alert color="yellow" title="This Issue changed since you opened it" role="alert">
-                Someone else saved a change to this {editing?.field}. Load the latest to see it;
-                your unsaved edit will be discarded.{" "}
-                <Button
-                  variant="subtle"
-                  size="compact-sm"
-                  onClick={() => {
-                    setEditing(null);
-                    setConflict(false);
-                    void query.refetch();
-                  }}
-                >
-                  Load the latest
-                </Button>
-              </Alert>
-            )}
-            {editing?.field === "title" ? (
-              <Stack gap="xs">
-                <TextInput
-                  aria-label="Title"
-                  autoFocus
-                  maxLength={255}
-                  value={editing.draft}
-                  error={fieldError}
-                  disabled={saving}
-                  onChange={(event) => setEditing({ ...editing, draft: event.currentTarget.value })}
-                />
-                <EditButtons
-                  saving={saving}
-                  disabled={stale}
-                  onSave={() => void saveText()}
-                  onCancel={() => setEditing(null)}
-                />
-              </Stack>
-            ) : (
-              <Group align="flex-start" justify="space-between" wrap="nowrap">
-                <Title order={1} fz={40} lh={1.1} style={{ overflowWrap: "anywhere" }}>
-                  {issue.title}
-                </Title>
-                <Button
-                  variant="subtle"
-                  size="compact-sm"
-                  disabled={editing !== null}
-                  onClick={() => startEditing("title")}
-                >
-                  Edit title
-                </Button>
-              </Group>
-            )}
-            <Panel p="xl">
-              <Stack gap="sm">
-                <Group justify="space-between">
-                  <Title order={2} fz={20}>
-                    Description
-                  </Title>
-                  {editing?.field !== "description" && (
+            <div className={classes.layout}>
+              <div className={classes.main}>
+                {stale && (
+                  <Alert color="yellow" title="This Issue changed since you opened it" role="alert">
+                    Someone else saved a change to this {editing?.field}. Load the latest to see it;
+                    your unsaved edit will be discarded.{" "}
                     <Button
                       variant="subtle"
                       size="compact-sm"
-                      disabled={editing !== null}
-                      onClick={() => startEditing("description")}
+                      onClick={() => {
+                        setEditing(null);
+                        setConflict(false);
+                        void query.refetch();
+                      }}
                     >
-                      Edit description
+                      Load the latest
                     </Button>
-                  )}
-                </Group>
-                {editing?.field === "description" ? (
+                  </Alert>
+                )}
+                {editing?.field === "title" ? (
                   <Stack gap="xs">
-                    <Textarea
-                      aria-label="Description"
+                    <TextInput
+                      aria-label="Title"
                       autoFocus
-                      autosize
-                      minRows={6}
-                      maxRows={20}
-                      maxLength={50000}
+                      maxLength={255}
                       value={editing.draft}
                       error={fieldError}
                       disabled={saving}
@@ -274,77 +235,136 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                       onCancel={() => setEditing(null)}
                     />
                   </Stack>
-                ) : issue.description ? (
-                  <IssueMarkdown>{issue.description}</IssueMarkdown>
                 ) : (
-                  <Text c="dimmed">No description yet.</Text>
+                  <Group align="flex-start" justify="space-between" wrap="nowrap">
+                    <Title order={1} fz={40} lh={1.1} style={{ overflowWrap: "anywhere" }}>
+                      {issue.title}
+                    </Title>
+                    <Button
+                      variant="subtle"
+                      size="compact-sm"
+                      disabled={editing !== null}
+                      onClick={() => startEditing("title")}
+                    >
+                      Edit title
+                    </Button>
+                  </Group>
                 )}
-              </Stack>
-            </Panel>
-            <Panel p="xl">
-              <Stack gap="md" component="dl" m={0}>
-                <Detail label="Status">
-                  <Select
-                    aria-label="Status"
-                    allowDeselect={false}
-                    data={(statuses.data ?? [{ id: issue.status.id, name: issue.status.name }]).map(
-                      (status) => ({ value: status.id, label: status.name }),
+                <Panel p="xl">
+                  <Stack gap="sm">
+                    <Group justify="space-between">
+                      <Title order={2} fz={20}>
+                        Description
+                      </Title>
+                      {editing?.field !== "description" && (
+                        <Button
+                          variant="subtle"
+                          size="compact-sm"
+                          disabled={editing !== null}
+                          onClick={() => startEditing("description")}
+                        >
+                          Edit description
+                        </Button>
+                      )}
+                    </Group>
+                    {editing?.field === "description" ? (
+                      <Stack gap="xs">
+                        <MarkdownField
+                          label="Description"
+                          autoFocus
+                          maxLength={50000}
+                          value={editing.draft}
+                          error={fieldError}
+                          disabled={saving}
+                          onChange={(draft) => setEditing({ ...editing, draft })}
+                        />
+                        <EditButtons
+                          saving={saving}
+                          disabled={stale}
+                          onSave={() => void saveText()}
+                          onCancel={() => setEditing(null)}
+                        />
+                      </Stack>
+                    ) : issue.description ? (
+                      <IssueMarkdown>{issue.description}</IssueMarkdown>
+                    ) : (
+                      <Text c="dimmed">No description yet.</Text>
                     )}
-                    value={issue.status.id}
-                    disabled={quickSaving}
-                    onChange={(value) =>
-                      value && void quickChange(() => api.moveIssue(issue.key, value))
-                    }
-                  />
-                  <Text span c="dimmed" size="sm">
-                    Category: {CATEGORY_LABELS[issue.status.category]}
-                  </Text>
-                </Detail>
-                <Detail label="Issue type">
-                  <Select
-                    aria-label="Issue type"
-                    allowDeselect={false}
-                    data={[...TYPES]}
-                    value={issue.type}
-                    disabled={quickSaving}
-                    onChange={(value) =>
-                      value && void changeField({ type: value as Issue["type"] })
-                    }
-                  />
-                </Detail>
-                <Detail label="Priority">
-                  <Select
-                    aria-label="Priority"
-                    allowDeselect={false}
-                    data={[...PRIORITIES]}
-                    value={issue.priority}
-                    disabled={quickSaving}
-                    onChange={(value) =>
-                      value && void changeField({ priority: value as Issue["priority"] })
-                    }
-                  />
-                </Detail>
-                <Detail label="Reporter">
-                  <Person person={issue.reporter} />
-                </Detail>
-                <Detail label="Assignee">
-                  <Select
-                    aria-label="Assignee"
-                    allowDeselect={false}
-                    data={assignees}
-                    value={issue.assignee?.id ?? UNASSIGNED}
-                    disabled={quickSaving}
-                    onChange={(value) =>
-                      value &&
-                      void quickChange(() =>
-                        api.assignIssue(issue.key, value === UNASSIGNED ? null : value),
-                      )
-                    }
-                  />
-                </Detail>
-              </Stack>
-            </Panel>
-            <IssueHistory issueKey={issue.key} />
+                  </Stack>
+                </Panel>
+                <IssueHistory issueKey={issue.key} />
+              </div>
+              <aside className={classes.side}>
+                <Panel p="xl">
+                  <Stack gap={0} component="dl" m={0}>
+                    <Detail label="Status">
+                      <Select
+                        aria-label="Status"
+                        allowDeselect={false}
+                        data={(
+                          statuses.data ?? [{ id: issue.status.id, name: issue.status.name }]
+                        ).map((status) => ({ value: status.id, label: status.name }))}
+                        value={issue.status.id}
+                        disabled={quickSaving}
+                        onChange={(value) =>
+                          value && void quickChange(() => api.moveIssue(issue.key, value))
+                        }
+                      />
+                    </Detail>
+                    <Detail label="Issue type">
+                      <Select
+                        aria-label="Issue type"
+                        allowDeselect={false}
+                        data={[...TYPES]}
+                        value={issue.type}
+                        disabled={quickSaving}
+                        onChange={(value) =>
+                          value && void changeField({ type: value as Issue["type"] })
+                        }
+                      />
+                    </Detail>
+                    <Detail label="Priority">
+                      <Select
+                        aria-label="Priority"
+                        allowDeselect={false}
+                        data={[...PRIORITIES]}
+                        value={issue.priority}
+                        disabled={quickSaving}
+                        onChange={(value) =>
+                          value && void changeField({ priority: value as Issue["priority"] })
+                        }
+                      />
+                    </Detail>
+                    <Detail label="Reporter">
+                      <Person person={issue.reporter} />
+                    </Detail>
+                    <Detail label="Assignee">
+                      <Select
+                        aria-label="Assignee"
+                        allowDeselect={false}
+                        data={assignees}
+                        value={issue.assignee?.id ?? UNASSIGNED}
+                        disabled={quickSaving}
+                        onChange={(value) =>
+                          value &&
+                          void quickChange(() =>
+                            api.assignIssue(issue.key, value === UNASSIGNED ? null : value),
+                          )
+                        }
+                      />
+                    </Detail>
+                    <div className={classes.dates}>
+                      <div title={new Date(issue.createdAt).toLocaleString()}>
+                        Created {new Date(issue.createdAt).toLocaleDateString()}
+                      </div>
+                      <div title={new Date(issue.updatedAt).toLocaleString()}>
+                        Updated {timeAgo(issue.updatedAt)} ago
+                      </div>
+                    </div>
+                  </Stack>
+                </Panel>
+              </aside>
+            </div>
           </>
         )}
       </Stack>
@@ -377,14 +397,14 @@ function EditButtons({
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <Group gap="md" wrap="nowrap" align="center">
-      <Text component="dt" fw={600} w={110} style={{ flexShrink: 0 }}>
+    <>
+      <Text component="dt" className={classes.label}>
         {label}
       </Text>
-      <Text component="dd" m={0}>
+      <Text component="dd" className={classes.value}>
         {children}
       </Text>
-    </Group>
+    </>
   );
 }
 

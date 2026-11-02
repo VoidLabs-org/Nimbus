@@ -27,6 +27,8 @@ export type IssueSearch = {
   category?: Issue["status"]["category"];
   type?: Issue["type"];
   priority?: Issue["priority"];
+  /** A Status name, ignoring case. */
+  status?: string;
   /** A User id, "me" or "none". */
   assignee?: string;
   q?: string;

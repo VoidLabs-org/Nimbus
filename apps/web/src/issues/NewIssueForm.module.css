@@ -1,0 +1,82 @@
+/* The Create Issue window's contents, from the "Nimbus Themes" design (34c). The frame is WindowFrame's. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.types {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--seg);
+}
+
+.type {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.type[aria-checked="true"] {
+  background: var(--seg-on);
+  color: var(--seg-on-fg);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.count {
+  font-size: 11px;
+  color: var(--color-accent-2-500);
+}
+
+.fieldLabel {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.note {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-accent-2-500);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 36em) {
+  .pair {
+    grid-template-columns: 1fr;
+  }
+}

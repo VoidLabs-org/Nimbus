@@ -1,10 +1,18 @@
 import {
   keepPreviousData,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { api, type Issue, type IssueSearch, type Project, type Role } from "./client";
+import {
+  api,
+  type Issue,
+  type IssueSearch,
+  type Project,
+  type ProjectStatus,
+  type Role,
+} from "./client";
 import { failedLoad, type FailedLoad } from "@repo/api";
 import { storedKey } from "../projects/projectKey";
 
@@ -99,13 +107,40 @@ export function useProjectStatuses(projectKey: string | undefined) {
 }
 
 /** One page of a project's Issues. The previous page stays on screen while the next filter or page loads. */
-export function useIssues(projectKey: string, search: IssueSearch) {
+export function useIssues(projectKey: string, search: IssueSearch, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: queryKeys.issueList(projectKey, search),
     queryFn: () => api.issues(storedKey(projectKey), search),
     // Only another filter or page of the same project; another project's list is never shown in its place.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[2] === storedKey(projectKey) ? previous : undefined,
+  });
+}
+
+/** The most Issues the server sends for one Status; the Board, Swimlanes and grouped List show this many a column. */
+export const COLUMN_SIZE = 100;
+
+/**
+ * The project's Issues one Status at a time, in the Statuses' order, for the Board, Swimlanes and the grouped List.
+ * Each column is its own list under "issues", so any change to an Issue refreshes them all with the lists.
+ */
+export function useStatusColumns(
+  projectKey: string,
+  statuses: ProjectStatus[],
+  search: IssueSearch,
+  enabled = true,
+) {
+  return useQueries({
+    queries: statuses.map((status) => {
+      const columnSearch: IssueSearch = { ...search, status: status.name, size: COLUMN_SIZE };
+      return {
+        queryKey: queryKeys.issueList(projectKey, columnSearch),
+        queryFn: () => api.issues(storedKey(projectKey), columnSearch),
+        enabled,
+        placeholderData: keepPreviousData,
+      };
+    }),
   });
 }
 

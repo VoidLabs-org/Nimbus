@@ -1,0 +1,79 @@
+/* The small marks an Issue wears in the list, on its page and in its history, from the "Nimbus Themes" design (34).
+   Colours come only from the theme variables, except the red of Bugs and Urgent, which no theme changes. */
+.type {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.story {
+  background: var(--color-accent-2-500);
+}
+
+.bug {
+  background: #e5484d;
+}
+
+.chore {
+  background: var(--color-accent-2-800);
+}
+
+.status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--seg);
+  color: var(--color-text);
+}
+
+.inProgress {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+
+.done {
+  background: var(--seg-on);
+  color: var(--seg-on-fg);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.priority {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  font-size: 10px;
+  letter-spacing: -1px;
+  color: var(--color-accent-500);
+}
+
+.urgent {
+  color: #e5484d;
+}
+
+.medium,
+.low {
+  color: var(--color-accent-2-500);
+}
+
+.medium {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.priorityRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

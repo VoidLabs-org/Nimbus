@@ -53,6 +53,7 @@ export default function IssuePage() {
   const issueChanged = useIssueChanged();
   const [editing, setEditing] = useState<Editing | null>(null);
   const [saving, setSaving] = useState(false);
+  const [quickSaving, setQuickSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
 
@@ -90,11 +91,15 @@ export default function IssuePage() {
     }
   }
 
+  // One quick change at a time, so a slower response never overwrites a newer one with an older Issue.
   async function quickChange(change: () => Promise<Issue>) {
+    setQuickSaving(true);
     try {
       issueChanged(await change());
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Couldn't save your change.");
+    } finally {
+      setQuickSaving(false);
     }
   }
 
@@ -205,7 +210,12 @@ export default function IssuePage() {
                 <Title order={1} fz={40} lh={1.1} style={{ overflowWrap: "anywhere" }}>
                   {issue.title}
                 </Title>
-                <Button variant="subtle" size="compact-sm" onClick={() => startEditing("title")}>
+                <Button
+                  variant="subtle"
+                  size="compact-sm"
+                  disabled={editing !== null}
+                  onClick={() => startEditing("title")}
+                >
                   Edit title
                 </Button>
               </Group>
@@ -220,6 +230,7 @@ export default function IssuePage() {
                     <Button
                       variant="subtle"
                       size="compact-sm"
+                      disabled={editing !== null}
                       onClick={() => startEditing("description")}
                     >
                       Edit description
@@ -271,6 +282,7 @@ export default function IssuePage() {
                     allowDeselect={false}
                     data={[...TYPES]}
                     value={issue.type}
+                    disabled={quickSaving}
                     onChange={(value) =>
                       value && void changeField({ type: value as Issue["type"] })
                     }
@@ -282,6 +294,7 @@ export default function IssuePage() {
                     allowDeselect={false}
                     data={[...PRIORITIES]}
                     value={issue.priority}
+                    disabled={quickSaving}
                     onChange={(value) =>
                       value && void changeField({ priority: value as Issue["priority"] })
                     }
@@ -296,6 +309,7 @@ export default function IssuePage() {
                     allowDeselect={false}
                     data={assignees}
                     value={issue.assignee?.id ?? UNASSIGNED}
+                    disabled={quickSaving}
                     onChange={(value) =>
                       value &&
                       void quickChange(() =>

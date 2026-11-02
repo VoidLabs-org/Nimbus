@@ -102,7 +102,7 @@ class IssueService {
 	 */
 	@Transactional
 	IssueView edit(UUID actor, String issueKey, IssueEdit edit) {
-		return change(actor, issueKey, edit.version(), edit.title() != null || edit.description() != null, current -> {
+		return change(actor, issueKey, edit.version(), current -> {
 			var changes = new ArrayList<Change>();
 			if (edit.title() != null) changes.add(new Change("title", current.title(), edit.title()));
 			if (edit.description() != null) {
@@ -118,7 +118,7 @@ class IssueService {
 	/** Sets or clears ({@code null}) the Assignee, who must be a Member. Never conflicts. */
 	@Transactional
 	IssueView assign(UUID actor, String issueKey, UUID assigneeId) {
-		return change(actor, issueKey, null, false, current -> {
+		return change(actor, issueKey, null, current -> {
 			if (assigneeId != null && !projects.isMember(current.projectId(), assigneeId)) {
 				throw new InvalidField("userId", "The Assignee must be a Member of the project");
 			}
@@ -134,7 +134,7 @@ class IssueService {
 				SELECT h.id, h.actor_id, h.at, h.field, h.before_value, h.after_value
 				FROM issue_history h JOIN issues i ON i.id = h.issue_id
 				WHERE i.project_id = :project AND i.number = :number
-				ORDER BY h.at DESC, h.id DESC
+				ORDER BY h.at DESC, h.field DESC, h.id DESC
 				""")
 			.param("project", target.project().id()).param("number", target.number())
 			.query((row, index) -> new HistoryRow(row.getObject("id", UUID.class), row.getObject("actor_id", UUID.class),
@@ -145,19 +145,37 @@ class IssueService {
 		for (var row : rows) {
 			if (row.actorId() != null) ids.add(row.actorId());
 			if (row.field().equals("assignee")) {
-				if (row.before() != null) ids.add(UUID.fromString(row.before()));
-				if (row.after() != null) ids.add(UUID.fromString(row.after()));
+				var before = parseId(row.before());
+				var after = parseId(row.after());
+				if (before != null) ids.add(before);
+				if (after != null) ids.add(after);
 			}
 		}
 		var people = users.findAllById(ids).stream().collect(Collectors.toMap(UserSummary::id, Function.identity()));
-		Function<String, String> name = id -> id == null ? null
-				: people.containsKey(UUID.fromString(id)) ? people.get(UUID.fromString(id)).displayName() : "Unknown user";
+		Function<String, String> name = value -> {
+			if (value == null) return null;
+			var id = parseId(value);
+			return id != null && people.containsKey(id) ? people.get(id).displayName() : "Unknown user";
+		};
 		return rows.stream().map(row -> {
 			var assignee = row.field().equals("assignee");
+			var description = row.field().equals("description");
 			var actorUser = row.actorId() == null ? null : people.get(row.actorId());
 			return new HistoryEntryView(row.id(), actorUser == null ? null : person(actorUser), row.at(), row.field(),
-					assignee ? name.apply(row.before()) : row.before(), assignee ? name.apply(row.after()) : row.after());
+					assignee ? name.apply(row.before()) : description ? null : row.before(),
+					assignee ? name.apply(row.after()) : description ? null : row.after());
 		}).toList();
+	}
+
+	/** The id in a history value, or {@code null} if it isn't one. */
+	private static UUID parseId(String value) {
+		if (value == null) return null;
+		try {
+			return UUID.fromString(value);
+		}
+		catch (IllegalArgumentException e) {
+			return null;
+		}
 	}
 
 	private Target resolve(UUID actor, String issueKey, IssueAccess.Action action) {
@@ -173,16 +191,16 @@ class IssueService {
 	}
 
 	/**
-	 * The shared path of every edit: not found, archived, then (for {@code guarded} edits) the version, then the
-	 * changes that really differ are written with one history entry each and published as one event. The Issue row
-	 * is locked meanwhile, so two edits never both pass the same version. Only title and description changes raise
-	 * the version, so quick changes never make someone's open text edit stale.
+	 * The shared path of every edit: not found, then the Issue row is locked, then archived (read again under the
+	 * lock, so an archive that committed meanwhile is seen), then the changes that really differ are found. If one
+	 * of them is a title or description change, the version must match; an edit that changes nothing never
+	 * conflicts. The differing changes are written with one history entry each and published as one event. The lock
+	 * means two edits never both pass the same version. Only title and description changes raise the version, so
+	 * quick changes never make someone's open text edit stale.
 	 */
-	private IssueView change(UUID actor, String issueKey, Long version, boolean guarded,
-			Function<Current, List<Change>> changes) {
+	private IssueView change(UUID actor, String issueKey, Long version, Function<Current, List<Change>> changes) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
 		var project = target.project();
-		if (project.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
 		var current = jdbc.sql("""
 				SELECT id, project_id, title, description, type, priority, assignee_id, version
 				FROM issues WHERE project_id = :project AND number = :number FOR UPDATE
@@ -192,14 +210,16 @@ class IssueService {
 					row.getString("title"), row.getString("description"), row.getString("type"),
 					row.getString("priority"), row.getObject("assignee_id", UUID.class), row.getLong("version")))
 			.optional().orElseThrow(() -> new NotFound("Issue not found"));
-		if (guarded) {
+		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
+		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
+
+		var differing = changes.apply(current).stream().filter(c -> !Objects.equals(c.before(), c.after())).toList();
+		if (differing.stream().anyMatch(c -> c.field().equals("title") || c.field().equals("description"))) {
 			if (version == null) throw new InvalidField("version", "Send the version you opened");
 			if (version != current.version()) {
 				throw new Conflict("This Issue changed since you opened it", "issue_changed");
 			}
 		}
-
-		var differing = changes.apply(current).stream().filter(c -> !Objects.equals(c.before(), c.after())).toList();
 		if (!differing.isEmpty()) {
 			var now = Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS));
 			var update = new StringBuilder("UPDATE issues SET updated_at = :at");
@@ -216,13 +236,15 @@ class IssueService {
 			}
 			jdbc.sql(update + " WHERE id = :id").params(params).update();
 			for (var c : differing) {
+				// Descriptions are up to 50,000 characters and the history only says they changed, so no values are kept.
+				var keepValues = !c.field().equals("description");
 				jdbc.sql("""
 						INSERT INTO issue_history (id, issue_id, actor_id, at, field, before_value, after_value)
 						VALUES (:id, :issue, :actor, :at, :field, :before, :after)
 						""")
 					.param("id", UUID.randomUUID()).param("issue", current.id()).param("actor", actor)
-					.param("at", now).param("field", c.field()).param("before", c.before()).param("after", c.after())
-					.update();
+					.param("at", now).param("field", c.field()).param("before", keepValues ? c.before() : null)
+					.param("after", keepValues ? c.after() : null).update();
 			}
 			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), target.number()),
 					differing.stream().map(Change::field).toList()));

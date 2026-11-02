@@ -99,15 +99,18 @@ export function useIssues(projectKey: string, search: IssueSearch) {
   });
 }
 
+/** The key prefix of all of an Issue's project's lists (the Issue key is the project key, a dash and a number). */
+function projectIssueLists(issueKey: string) {
+  return ["issues", "list", issueKey.slice(0, issueKey.lastIndexOf("-"))] as const;
+}
+
 /** Keep the server's created Issue, so opening it right after shows it at once (it is then refreshed). */
 export function useIssueCreated() {
   const client = useQueryClient();
   return (issue: Issue) => {
     client.setQueryData(queryKeys.issue(issue.key), issue);
     // The project's lists have a new Issue.
-    void client.invalidateQueries({
-      queryKey: ["issues", "list", issue.key.slice(0, issue.key.lastIndexOf("-"))],
-    });
+    void client.invalidateQueries({ queryKey: projectIssueLists(issue.key) });
   };
 }
 
@@ -117,9 +120,7 @@ export function useIssueChanged() {
   return (issue: Issue) => {
     client.setQueryData(queryKeys.issue(issue.key), issue);
     void client.invalidateQueries({ queryKey: queryKeys.issueHistory(issue.key) });
-    void client.invalidateQueries({
-      queryKey: ["issues", "list", issue.key.slice(0, issue.key.lastIndexOf("-"))],
-    });
+    void client.invalidateQueries({ queryKey: projectIssueLists(issue.key) });
   };
 }
 

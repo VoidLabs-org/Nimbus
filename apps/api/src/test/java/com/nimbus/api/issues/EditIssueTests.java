@@ -160,8 +160,18 @@ class EditIssueTests {
 			.isEqualTo("Original");
 		org.assertj.core.api.Assertions.assertThat(((java.util.List<String>) JsonPath.read(body, "$[?(@.field=='title')].after")).getFirst())
 			.isEqualTo("Second");
+		// Descriptions are too long to keep: the entry only says they changed.
 		org.assertj.core.api.Assertions.assertThat(((java.util.List<String>) JsonPath.read(body, "$[?(@.field=='description')].after")).getFirst())
-			.isEqualTo("Words");
+			.isNull();
+	}
+
+	@Test
+	void anEditThatChangesNothingNeedsNoVersion() {
+		var dana = register("Dana");
+		var issue = createIssue(dana, project(dana));
+
+		patch(dana, issue, Map.of("title", "Original")).expectStatus().isOk();
+		patch(dana, issue, Map.of("title", "Original", "version", 99)).expectStatus().isOk();
 	}
 
 	@Test

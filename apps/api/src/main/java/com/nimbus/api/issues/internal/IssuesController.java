@@ -71,8 +71,14 @@ class IssuesController {
 				errors.put("assignee", "Use a User id, me or none");
 			}
 		}
-		List<String> words = q == null ? List.of() : Arrays.stream(q.strip().split("\\s+")).filter(w -> !w.isEmpty()).toList();
-		if (q != null && (q.length() > 200 || words.size() > 10)) errors.put("q", "Use at most 10 words and 200 characters");
+		// Status names are the project's own, so any name is allowed; only its length is bounded, like the column.
+		if (status != null && status.length() > 255) errors.put("status", "Use at most 255 characters");
+		List<String> words = List.of();
+		if (q != null && q.length() > 200) errors.put("q", "Use at most 10 words and 200 characters");
+		else if (q != null) {
+			words = Arrays.stream(q.strip().split("\\s+")).filter(w -> !w.isEmpty()).toList();
+			if (words.size() > 10) errors.put("q", "Use at most 10 words and 200 characters");
+		}
 		if (!errors.isEmpty()) throw new IssueService.InvalidFields(errors);
 
 		return issues.find(me, key, new IssueService.IssueFilter(status, category, type, priority, assigneeId,

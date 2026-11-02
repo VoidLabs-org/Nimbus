@@ -8,6 +8,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /** Problem details for the issues module's endpoints, with invalid fields under {@code errors} like projects'. */
 @RestControllerAdvice(basePackageClasses = IssueErrors.class)
@@ -26,6 +27,16 @@ class IssueErrors {
 	@ExceptionHandler
 	ProblemDetail invalidField(IssueService.InvalidField e) {
 		return invalid(Map.of(e.field(), e.getMessage()));
+	}
+
+	@ExceptionHandler
+	ProblemDetail invalidFields(IssueService.InvalidFields e) {
+		return invalid(e.errors());
+	}
+
+	@ExceptionHandler
+	ProblemDetail wrongType(MethodArgumentTypeMismatchException e) {
+		return invalid(Map.of(e.getName(), "Use a whole number"));
 	}
 
 	@ExceptionHandler

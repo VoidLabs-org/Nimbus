@@ -1,5 +1,10 @@
 package com.nimbus.api.issues.internal;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import com.nimbus.api.identity.CurrentUser;
@@ -12,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,6 +38,43 @@ class IssuesController {
 		return issues.create(currentUser.id(), key,
 				new IssueService.NewIssue(request.type(), request.title(), request.description(),
 						request.priority() == null ? "Medium" : request.priority(), request.assigneeId()));
+	}
+
+	/** Invalid filters are refused with {@code 400} and {@code errors} keyed by parameter, like invalid fields. */
+	@GetMapping("/api/projects/{key}/issues")
+	IssueService.IssuePageView find(@PathVariable String key, @RequestParam(required = false) String status,
+			@RequestParam(required = false) String category, @RequestParam(required = false) String type,
+			@RequestParam(required = false) String priority, @RequestParam(required = false) String assignee,
+			@RequestParam(required = false) String q, @RequestParam(defaultValue = "updated") String sort,
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
+		var me = currentUser.id();
+		Map<String, String> errors = new TreeMap<>();
+		if (category != null && !Set.of("TODO", "IN_PROGRESS", "DONE").contains(category)) {
+			errors.put("category", "Choose TODO, IN_PROGRESS or DONE");
+		}
+		if (type != null && !Set.of("Story", "Bug", "Chore").contains(type)) errors.put("type", CreateIssue.TYPE_RULE);
+		if (priority != null && !Set.of("Urgent", "High", "Medium", "Low").contains(priority)) {
+			errors.put("priority", CreateIssue.PRIORITY_RULE);
+		}
+		if (!Set.of("updated", "created", "priority").contains(sort)) errors.put("sort", "Choose updated, created or priority");
+		if (page < 0) errors.put("page", "Use 0 or more");
+		if (size < 1 || size > 100) errors.put("size", "Use 1 to 100");
+		UUID assigneeId = null;
+		if (assignee != null && assignee.equals("me")) assigneeId = me;
+		else if (assignee != null && !assignee.equals("none")) {
+			try {
+				assigneeId = UUID.fromString(assignee);
+			}
+			catch (IllegalArgumentException e) {
+				errors.put("assignee", "Use a User id, me or none");
+			}
+		}
+		List<String> words = q == null ? List.of() : Arrays.stream(q.strip().split("\\s+")).filter(w -> !w.isEmpty()).toList();
+		if (q != null && (q.length() > 200 || words.size() > 10)) errors.put("q", "Use at most 10 words and 200 characters");
+		if (!errors.isEmpty()) throw new IssueService.InvalidFields(errors);
+
+		return issues.find(me, key, new IssueService.IssueFilter(status, category, type, priority, assigneeId,
+				"none".equals(assignee), words, sort, page, size));
 	}
 
 	@GetMapping("/api/issues/{issueKey}")

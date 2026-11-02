@@ -4,7 +4,7 @@ import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { Tag } from "@repo/ui/tag";
 import { useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { loadFailure, refreshFailed, useProject } from "../api/queries";
 import { NewIssueForm } from "../issues/NewIssueForm";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
@@ -73,10 +73,19 @@ export default function ProjectPage() {
                 <Tag>{project.key}</Tag>
                 {project.archived && <Tag>Archived</Tag>}
               </Group>
-              {/* An Archived project takes no new Issues. */}
-              {!project.archived && !creatingIssue && (
-                <Button onClick={() => setCreatingIssueIn(project.key)}>Create Issue</Button>
-              )}
+              <Group gap="sm">
+                <Button
+                  variant="default"
+                  component={Link}
+                  to={`/projects/${encodeURIComponent(project.key)}/issues`}
+                >
+                  View Issues
+                </Button>
+                {/* An Archived project takes no new Issues. */}
+                {!project.archived && !creatingIssue && (
+                  <Button onClick={() => setCreatingIssueIn(project.key)}>Create Issue</Button>
+                )}
+              </Group>
             </Group>
             {creatingIssue && (
               <NewIssueForm projectKey={project.key} onCancel={() => setCreatingIssueIn(null)} />

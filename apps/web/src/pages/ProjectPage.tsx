@@ -82,14 +82,17 @@ export default function ProjectPage() {
                   View Issues
                 </Button>
                 {/* An Archived project takes no new Issues. */}
-                {!project.archived && !creatingIssue && (
+                {!project.archived && (
                   <Button onClick={() => setCreatingIssueIn(project.key)}>Create Issue</Button>
                 )}
               </Group>
             </Group>
-            {creatingIssue && (
-              <NewIssueForm projectKey={project.key} onCancel={() => setCreatingIssueIn(null)} />
-            )}
+            <NewIssueForm
+              opened={creatingIssue}
+              projectKey={project.key}
+              projectName={project.name}
+              onClose={() => setCreatingIssueIn(null)}
+            />
             <Title order={1} fz={40} lh={1.1} style={{ overflowWrap: "anywhere" }}>
               {project.name}
             </Title>

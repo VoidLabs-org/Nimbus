@@ -1,0 +1,311 @@
+/* The Board, Swimlanes, grouped List and Table of the Issues page, from the "Nimbus Themes" design (37a–37e). Colours
+   come only from the theme variables. */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 160px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 24px;
+  background: var(--seg);
+}
+
+/* Where the dragged card would land. */
+.over {
+  border-color: var(--color-accent-500);
+}
+
+.columnHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 4px;
+  font-size: 12px;
+  color: var(--color-accent-2-700);
+}
+
+.cardLink {
+  display: block;
+  color: var(--color-text);
+  text-decoration: none;
+  touch-action: manipulation;
+  cursor: grab;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.cardLink:hover .card {
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.cardLink:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+  border-radius: 16px;
+}
+
+/* The card on its way: lifted, outlined in orange, a little tilted. */
+.lifted {
+  box-shadow:
+    0 0 0 1px var(--color-accent-500),
+    var(--shadow-lg);
+  cursor: grabbing;
+}
+
+/* Where the card was, while it is being carried. */
+.placeholder .card {
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--color-accent-500);
+  border-style: dashed;
+  opacity: 0.4;
+}
+
+.cardTitle {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardKey {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--color-accent-2-700);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.nobody {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 50%;
+}
+
+.more {
+  padding: 4px;
+  font-size: 12px;
+  color: var(--color-accent-2-700);
+}
+
+/* Swimlanes: a heading column for the lane, then one cell per Status. */
+.lanes {
+  display: grid;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.laneHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.laneCount {
+  font-weight: 400;
+  color: var(--color-accent-2-700);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 56px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: var(--seg);
+}
+
+.statusHead {
+  justify-content: flex-start;
+}
+
+/* The grouped List: a Status pill and its count, then its rows. */
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--color-accent-2-700);
+}
+
+.groupRows {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 18px;
+  background: var(--seg);
+}
+
+.groupRow {
+  display: grid;
+  grid-template-columns: 20px 64px minmax(0, 1fr) 96px 28px 28px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 14px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.groupRow:hover {
+  background: var(--row-hover);
+}
+
+.rowKey {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--color-accent-2-700);
+}
+
+.rowTitle {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The Table. */
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--color-accent-2-700);
+}
+
+.table td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.table tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.sortButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sortButton[aria-pressed="true"] {
+  color: var(--color-text);
+}
+
+.titleLink {
+  display: block;
+  max-width: 360px;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.titleLink:hover {
+  text-decoration: underline;
+}
+
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The view switcher beside Create Issue. */
+.switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--seg);
+}
+
+.switch button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.switch button[aria-pressed="true"] {
+  background: var(--seg-on);
+  color: var(--seg-on-fg);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+@media (max-width: 48em) {
+  .groupRow {
+    grid-template-columns: 20px minmax(0, 1fr) 28px 28px;
+  }
+
+  .rowKey,
+  .rowStatus {
+    display: none;
+  }
+}

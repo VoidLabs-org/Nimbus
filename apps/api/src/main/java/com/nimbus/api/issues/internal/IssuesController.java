@@ -14,6 +14,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -96,6 +97,12 @@ class IssuesController {
 	IssueService.IssueView edit(@PathVariable String issueKey, @Valid @RequestBody EditIssue request) {
 		return issues.edit(currentUser.id(), issueKey, new IssueService.IssueEdit(request.title(), request.description(),
 				request.type(), request.priority(), request.version()));
+	}
+
+	@DeleteMapping("/api/issues/{issueKey}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	void delete(@PathVariable String issueKey) {
+		issues.delete(currentUser.id(), issueKey);
 	}
 
 	/** {@code {"userId": null}} unassigns. */

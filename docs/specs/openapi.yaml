@@ -306,6 +306,35 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    delete:
+      tags: [issues]
+      summary: Delete an Issue for good
+      description: >-
+        Removes the Issue and its history. Its number is never used again, and a deletion record (key, title, who,
+        when) stays with the project. Publishes `IssueDeleted`.
+      parameters:
+        - name: issueKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown or already deleted key, or an Issue in a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The project is Archived
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/issues/{issueKey}/assignee:
     put:
       tags: [issues]

@@ -439,6 +439,10 @@ export function createApiClient(
         body: JSON.stringify({ statusId }),
       }),
 
+    /** Deletes the Issue for good. */
+    deleteIssue: (issueKey: string) =>
+      request<void>(`/api/issues/${encodeURIComponent(issueKey)}`, { method: "DELETE" }),
+
     /** The project's Statuses in order. */
     projectStatuses: (projectKey: string) =>
       request<ProjectStatus[]>(`/api/projects/${encodeURIComponent(projectKey)}/statuses`),

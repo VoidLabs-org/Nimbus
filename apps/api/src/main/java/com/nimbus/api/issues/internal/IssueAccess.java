@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 class IssueAccess {
 
 	enum Action {
-		VIEW, CREATE, EDIT
+		VIEW, CREATE, EDIT, DELETE
 	}
 
 	private final Projects projects;
@@ -26,7 +26,7 @@ class IssueAccess {
 	void require(UUID actor, UUID projectId, Action action) {
 		// Exhaustive on purpose: a new Action fails to compile here until it is given a rule.
 		var allowed = switch (action) {
-			case VIEW, CREATE, EDIT -> projects.isMember(projectId, actor);
+			case VIEW, CREATE, EDIT, DELETE -> projects.isMember(projectId, actor);
 		};
 		if (!allowed) throw new IssueService.NotFound("Project not found");
 	}

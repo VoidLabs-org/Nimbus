@@ -144,9 +144,14 @@ export function useStatusColumns(
   });
 }
 
-/** The key prefix of all of an Issue's project's lists (the Issue key is the project key, a dash and a number). */
+/** The project key of an Issue key (the Issue key is the project key, a dash and a number). */
+export function projectKeyOf(issueKey: string) {
+  return issueKey.slice(0, issueKey.lastIndexOf("-"));
+}
+
+/** The key prefix of all of an Issue's project's lists. */
 function projectIssueLists(issueKey: string) {
-  return ["issues", "list", issueKey.slice(0, issueKey.lastIndexOf("-"))] as const;
+  return ["issues", "list", projectKeyOf(issueKey)] as const;
 }
 
 /** Keep the server's created Issue, so opening it right after shows it at once (it is then refreshed). */
@@ -159,10 +164,11 @@ export function useIssueCreated() {
   };
 }
 
-/** Refresh the project's lists after an Issue is deleted. The Issue's own queries are left alone: the page showing it is leaving. */
+/** Drop the deleted Issue's own queries (so nothing refetches a 404) and refresh the project's lists. */
 export function useIssueDeleted() {
   const client = useQueryClient();
   return (issueKey: string) => {
+    client.removeQueries({ queryKey: queryKeys.issue(issueKey) });
     void client.invalidateQueries({ queryKey: projectIssueLists(issueKey) });
   };
 }

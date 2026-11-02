@@ -4,7 +4,7 @@ import { toast } from "@repo/ui/toast";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { api, type Issue } from "../api/client";
-import { useIssueDeleted } from "../api/queries";
+import { projectKeyOf, useIssueDeleted } from "../api/queries";
 
 /**
  * "Delete NIM-12?", asked before an Issue is deleted: it says the delete is for good, deletes on its button and goes
@@ -27,14 +27,20 @@ export function DeleteIssueDialog({
     setDeleting(true);
     try {
       await api.deleteIssue(issue.key);
-      toast.success(`${issue.key} deleted.`);
-      void navigate(`/projects/${issue.key.slice(0, issue.key.lastIndexOf("-"))}/issues`);
-      issueDeleted(issue.key);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "Couldn't delete the Issue.");
-      onClose();
-      setDeleting(false);
+      // Already deleted by someone else: the Issue is gone, which is what was asked for.
+      if (!(error instanceof ApiError && error.status === 404)) {
+        toast.error(error instanceof ApiError ? error.message : "Couldn't delete the Issue.");
+        onClose();
+        setDeleting(false);
+        return;
+      }
     }
+    toast.success(`${issue.key} deleted.`);
+    setDeleting(false);
+    onClose();
+    void navigate(`/projects/${projectKeyOf(issue.key)}/issues`);
+    issueDeleted(issue.key);
   }
 
   return (

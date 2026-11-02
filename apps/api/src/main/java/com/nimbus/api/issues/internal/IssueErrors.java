@@ -21,7 +21,9 @@ class IssueErrors {
 
 	@ExceptionHandler
 	ProblemDetail conflict(IssueService.Conflict e) {
-		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+		if (e.code() != null) problem.setProperty("code", e.code());
+		return problem;
 	}
 
 	@ExceptionHandler

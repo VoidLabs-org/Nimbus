@@ -14,8 +14,10 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -80,6 +82,39 @@ class IssuesController {
 	@GetMapping("/api/issues/{issueKey}")
 	IssueService.IssueView open(@PathVariable String issueKey) {
 		return issues.open(currentUser.id(), issueKey);
+	}
+
+	/** Only the fields sent change; an empty {@code description} clears it. Title and description need {@code version}. */
+	@PatchMapping("/api/issues/{issueKey}")
+	IssueService.IssueView edit(@PathVariable String issueKey, @Valid @RequestBody EditIssue request) {
+		return issues.edit(currentUser.id(), issueKey, new IssueService.IssueEdit(request.title(), request.description(),
+				request.type(), request.priority(), request.version()));
+	}
+
+	/** {@code {"userId": null}} unassigns. */
+	@PutMapping("/api/issues/{issueKey}/assignee")
+	IssueService.IssueView assign(@PathVariable String issueKey, @RequestBody AssignIssue request) {
+		return issues.assign(currentUser.id(), issueKey, request.userId());
+	}
+
+	@GetMapping("/api/issues/{issueKey}/history")
+	List<IssueService.HistoryEntryView> history(@PathVariable String issueKey) {
+		return issues.history(currentUser.id(), issueKey);
+	}
+
+	record EditIssue(
+			@Pattern(regexp = "Story|Bug|Chore", message = CreateIssue.TYPE_RULE) String type,
+			@Pattern(regexp = "\\P{Cc}{1,255}", message = CreateIssue.TITLE_RULE) String title,
+			@Size(max = 50_000, message = "Use at most 50,000 characters") String description,
+			@Pattern(regexp = "Urgent|High|Medium|Low", message = CreateIssue.PRIORITY_RULE) String priority,
+			Long version) {
+
+		EditIssue {
+			title = title == null ? null : title.strip();
+		}
+	}
+
+	record AssignIssue(UUID userId) {
 	}
 
 	/** The title is trimmed before it is checked, so pasted surrounding whitespace is not an error. */

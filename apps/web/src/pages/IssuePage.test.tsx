@@ -3,12 +3,33 @@ import { ApiError } from "@repo/api";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, type Issue } from "../api/client";
+import { api, type Issue, type IssueHistoryEntry } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
+import { SessionContext, type Session } from "../auth/useSession";
 import IssuePage from "./IssuePage";
+
+const session = { user: { id: "u1", displayName: "Dana" } } as unknown as Session;
+const history: IssueHistoryEntry[] = [
+  {
+    id: "h2",
+    actor: { id: "u1", displayName: "Dana", avatarUrl: null },
+    at: "2026-11-02T01:00:00Z",
+    field: "priority",
+    before: "Medium",
+    after: "High",
+  },
+  {
+    id: "h1",
+    actor: { id: "u1", displayName: "Dana", avatarUrl: null },
+    at: "2026-11-02T00:00:00Z",
+    field: "created",
+    before: null,
+    after: null,
+  },
+];
 
 const issue: Issue = {
   id: "i1",
@@ -30,10 +51,27 @@ const issue: Issue = {
 let restoreMatchMedia: () => void;
 beforeEach(() => {
   restoreMatchMedia = stubMatchMedia();
+  Element.prototype.scrollIntoView = () => {};
+  // Mantine's autosizing Textarea listens to the document's fonts, which jsdom lacks.
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: { addEventListener() {}, removeEventListener() {} },
+  });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(api, "issueHistory").mockResolvedValue(history);
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  Reflect.deleteProperty(document, "fonts");
   restoreMatchMedia();
 });
 
@@ -41,11 +79,13 @@ function showAt(path: string) {
   return render(
     <NimbusThemeProvider>
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path="/issues/:issueKey" element={<IssuePage />} />
-          </Routes>
-        </MemoryRouter>
+        <SessionContext value={session}>
+          <MemoryRouter initialEntries={[path]}>
+            <Routes>
+              <Route path="/issues/:issueKey" element={<IssuePage />} />
+            </Routes>
+          </MemoryRouter>
+        </SessionContext>
       </QueryClientProvider>
     </NimbusThemeProvider>,
   );
@@ -58,11 +98,17 @@ describe("an Issue's page", () => {
 
     expect(await screen.findByRole("heading", { name: "Crash on save" })).toBeTruthy();
     expect(screen.getAllByText("NIM-12").length).toBeGreaterThan(0);
-    expect(screen.getByText("Bug")).toBeTruthy();
     expect(screen.getByText("(To do)")).toBeTruthy();
-    expect(screen.getByText("High")).toBeTruthy();
-    expect(screen.getByText("Dana")).toBeTruthy();
-    expect(screen.getByText("Unassigned")).toBeTruthy();
+    expect((screen.getByRole("combobox", { name: "Priority" }) as HTMLInputElement).value).toBe(
+      "High",
+    );
+    expect((screen.getByRole("combobox", { name: "Issue type" }) as HTMLInputElement).value).toBe(
+      "Bug",
+    );
+    expect(screen.getAllByText("Dana").length).toBeGreaterThan(0);
+    expect((screen.getByRole("combobox", { name: "Assignee" }) as HTMLInputElement).value).toBe(
+      "Unassigned",
+    );
   });
 
   it("renders the description as Markdown without running scripts or unsafe links", async () => {
@@ -75,6 +121,71 @@ describe("an Issue's page", () => {
     expect(screen.getByText(/window\.hacked/)).toBeTruthy();
     const link = screen.getByText("bad").closest("a");
     expect(link?.getAttribute("href") ?? "").not.toMatch(/^javascript:/i);
+  });
+
+  it("lists the history newest first", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    showAt("/issues/NIM-12");
+
+    const changed = await screen.findByText("Dana changed the priority from “Medium” to “High”");
+    const created = screen.getByText("Dana created this Issue");
+    expect(
+      changed.compareDocumentPosition(created) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("saves a new title with the version the page was opened at", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    const edit = vi
+      .spyOn(api, "editIssue")
+      .mockResolvedValue({ ...issue, title: "Fixed", version: 1 });
+    showAt("/issues/NIM-12");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit title" }));
+    const input = screen.getByLabelText("Title");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.change(input, { target: { value: "Fixed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(edit).toHaveBeenCalledWith("NIM-12", { title: "Fixed", version: 0 }),
+    );
+    expect(await screen.findByRole("heading", { name: "Fixed" })).toBeTruthy();
+  });
+
+  it("says the Issue changed since it was opened when the save is refused as stale", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    vi.spyOn(api, "editIssue").mockRejectedValue(
+      new ApiError(409, "This Issue changed since you opened it", {}, null, "issue_changed"),
+    );
+    showAt("/issues/NIM-12");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit description" }));
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Mine" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("This Issue changed since you opened it")).toBeTruthy();
+    expect((screen.getByLabelText("Description") as HTMLTextAreaElement).value).toBe("Mine");
+  });
+
+  it("changes the priority and the Assignee without a version", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    const edit = vi.spyOn(api, "editIssue").mockResolvedValue({ ...issue, priority: "Low" });
+    const assign = vi
+      .spyOn(api, "assignIssue")
+      .mockResolvedValue({
+        ...issue,
+        assignee: { id: "u1", displayName: "Dana", avatarUrl: null },
+      });
+    showAt("/issues/NIM-12");
+
+    fireEvent.click(await screen.findByRole("combobox", { name: "Priority" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Low", hidden: true }));
+    await waitFor(() => expect(edit).toHaveBeenCalledWith("NIM-12", { priority: "Low" }));
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Assignee" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Dana", hidden: true }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("NIM-12", "u1"));
   });
 
   it("says the Issue is not found for an unknown key", async () => {

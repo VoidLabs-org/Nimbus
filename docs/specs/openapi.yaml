@@ -262,6 +262,122 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    patch:
+      tags: [issues]
+      summary: Edit an Issue's title, description, type or priority
+      description: >-
+        Only the fields sent change; an empty `description` clears it. Validated like creating. `version` is required
+        when `title` or `description` is sent and must be the Issue's current one, otherwise `409` with code
+        `issue_changed`. Type and priority need no version. Only title and description changes raise the version.
+        Each changed field is recorded in the history; sending the current value changes nothing. The Reporter can't
+        be changed. Archived projects refuse with `409`.
+      parameters:
+        - name: issueKey
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditIssueRequest"
+      responses:
+        "200":
+          description: The Issue after the change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown key, or an Issue in a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "The project is Archived, or the version is stale (code: issue_changed)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/issues/{issueKey}/assignee:
+    put:
+      tags: [issues]
+      summary: Assign an Issue to a Member, or unassign it
+      parameters:
+        - name: issueKey
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: [string, "null"]
+                  format: uuid
+                  description: Must be a Member of the project; `null` unassigns
+      responses:
+        "200":
+          description: The Issue after the change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown key, or an Issue in a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The project is Archived
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/issues/{issueKey}/history:
+    get:
+      tags: [issues]
+      summary: The Issue's history, newest first
+      parameters:
+        - name: issueKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One entry per changed field, and the `created` entry
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IssueHistoryEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown key, or an Issue in a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/notifications:
     get:
       tags: [notifications]
@@ -2730,6 +2846,47 @@ components:
         version:
           type: integer
           format: int64
+    EditIssueRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Surrounding whitespace is removed, then 1 to 255 characters without control characters
+        description:
+          type: string
+          maxLength: 50000
+          description: Markdown; empty clears it
+        type:
+          $ref: "#/components/schemas/IssueType"
+        priority:
+          $ref: "#/components/schemas/IssuePriority"
+        version:
+          type: integer
+          format: int64
+          description: The Issue's version as opened; required with `title` or `description`
+    IssueHistoryEntry:
+      type: object
+      required: [id, actor, at, field, before, after]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor:
+          oneOf:
+            - $ref: "#/components/schemas/IssuePerson"
+            - type: "null"
+        at:
+          type: string
+          format: date-time
+        field:
+          type: string
+          enum: [created, title, description, type, priority, assignee]
+        before:
+          type: [string, "null"]
+          description: The old value; for `assignee`, the previous Assignee's name
+        after:
+          type: [string, "null"]
+          description: The new value; for `assignee`, the new Assignee's name
     IssuePage:
       type: object
       required: [items, total, page, size]

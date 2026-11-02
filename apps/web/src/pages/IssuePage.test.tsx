@@ -171,12 +171,10 @@ describe("an Issue's page", () => {
   it("changes the priority and the Assignee without a version", async () => {
     vi.spyOn(api, "issue").mockResolvedValue(issue);
     const edit = vi.spyOn(api, "editIssue").mockResolvedValue({ ...issue, priority: "Low" });
-    const assign = vi
-      .spyOn(api, "assignIssue")
-      .mockResolvedValue({
-        ...issue,
-        assignee: { id: "u1", displayName: "Dana", avatarUrl: null },
-      });
+    const assign = vi.spyOn(api, "assignIssue").mockResolvedValue({
+      ...issue,
+      assignee: { id: "u1", displayName: "Dana", avatarUrl: null },
+    });
     showAt("/issues/NIM-12");
 
     fireEvent.click(await screen.findByRole("combobox", { name: "Priority" }));

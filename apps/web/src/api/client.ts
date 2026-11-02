@@ -20,6 +20,21 @@ export type CreateProjectInput = Schemas["CreateProjectRequest"];
 
 export type Issue = Schemas["Issue"];
 
+export type IssuePage = Schemas["IssuePage"];
+
+/** The filters, sort and page of the Issues list; the server's defaults apply to what is left out. */
+export type IssueSearch = {
+  category?: Issue["status"]["category"];
+  type?: Issue["type"];
+  priority?: Issue["priority"];
+  /** A User id, "me" or "none". */
+  assignee?: string;
+  q?: string;
+  sort?: "updated" | "created" | "priority";
+  page?: number;
+  size?: number;
+};
+
 export type CreateIssueInput = Schemas["CreateIssueRequest"];
 
 export type ChangePasswordInput = Schemas["ChangePasswordRequest"];
@@ -380,6 +395,18 @@ export function createApiClient(
         method: "POST",
         body: JSON.stringify(input),
       }),
+
+    /** One page of a project's Issues, filtered and sorted by the server. */
+    issues: (projectKey: string, search: IssueSearch) => {
+      const params = new URLSearchParams();
+      for (const [name, value] of Object.entries(search)) {
+        if (value !== undefined && value !== "") params.set(name, String(value));
+      }
+      const query = params.toString();
+      return request<IssuePage>(
+        `/api/projects/${encodeURIComponent(projectKey)}/issues${query ? `?${query}` : ""}`,
+      );
+    },
 
     /** Opens an Issue by key, in any case. Unknown keys and projects the User is not in both return 404. */
     issue: (issueKey: string) => request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}`),

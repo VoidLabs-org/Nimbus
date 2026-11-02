@@ -163,7 +163,59 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Find the Issues of a project
+         * @description Any Member may, until permissions are integrated. Filters combine; an empty result is a normal `200`. Ordered by `sort`, then newest number first, so paging is stable. Requires a verified email.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Status name, matched ignoring case */
+                    status?: string;
+                    category?: components["schemas"]["StatusCategory"];
+                    type?: components["schemas"]["IssueType"];
+                    priority?: components["schemas"]["IssuePriority"];
+                    /** @description A User id, `me` for the caller, or `none` for unassigned Issues */
+                    assignee?: string;
+                    /** @description Words of the title; every word must appear in it, in any case */
+                    q?: string;
+                    /** @description `updated` and `created` are newest first; `priority` is Urgent first, then most recently updated */
+                    sort?: "updated" | "created" | "priority";
+                    /** @description Zero-based page number */
+                    page?: number;
+                    size?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of matching Issues and the total across all pages */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IssuePage"];
+                    };
+                };
+                400: components["responses"]["InvalidFields"];
+                401: components["responses"]["Unauthorized"];
+                /** @description Project not found (also returned for a non-Member) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         put?: never;
         /**
          * Create an Issue in a project
@@ -3533,6 +3585,16 @@ export interface components {
             updatedAt: string;
             /** Format: int64 */
             version: number;
+        };
+        IssuePage: {
+            items: components["schemas"]["Issue"][];
+            /**
+             * Format: int64
+             * @description Matching Issues across all pages
+             */
+            total: number;
+            page: number;
+            size: number;
         };
         /** @enum {string} */
         IssueNotificationType: "ISSUE_ASSIGNED" | "ISSUE_UNASSIGNED" | "ISSUE_STATUS_CHANGED" | "ISSUE_EDITED" | "ISSUE_DELETED";

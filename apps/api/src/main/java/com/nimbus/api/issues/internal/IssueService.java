@@ -101,6 +101,57 @@ class IssueService {
 		return found.getFirst();
 	}
 
+	/** One page of the project's Issues that match the filters. Unknown and non-Member projects are both "not found". */
+	IssuePageView find(UUID actor, String projectKey, IssueFilter filter) {
+		var project = projects.findByKey(projectKey).orElseThrow(() -> new NotFound("Project not found"));
+		access.require(actor, project.id(), IssueAccess.Action.VIEW);
+
+		var where = new StringBuilder("WHERE i.project_id = :project");
+		var params = new java.util.HashMap<String, Object>();
+		params.put("project", project.id());
+		if (filter.status() != null) {
+			where.append(" AND lower(s.name) = lower(:status)");
+			params.put("status", filter.status());
+		}
+		if (filter.category() != null) {
+			where.append(" AND s.category = :category");
+			params.put("category", filter.category());
+		}
+		if (filter.type() != null) {
+			where.append(" AND i.type = :type");
+			params.put("type", filter.type());
+		}
+		if (filter.priority() != null) {
+			where.append(" AND i.priority = :priority");
+			params.put("priority", filter.priority());
+		}
+		if (filter.unassigned()) {
+			where.append(" AND i.assignee_id IS NULL");
+		}
+		else if (filter.assigneeId() != null) {
+			where.append(" AND i.assignee_id = :assignee");
+			params.put("assignee", filter.assigneeId());
+		}
+		var words = filter.words();
+		for (int index = 0; index < words.size(); index++) {
+			where.append(" AND i.title ILIKE :word").append(index).append(" ESCAPE '\\'");
+			params.put("word" + index, "%" + words.get(index).replaceAll("([\\\\%_])", "\\\\$1") + "%");
+		}
+
+		var total = jdbc.sql("SELECT count(*) FROM issues i JOIN issue_statuses s ON s.id = i.status_id " + where)
+			.params(params).query(Long.class).single();
+		var order = switch (filter.sort()) {
+			case "created" -> "i.created_at DESC, i.number DESC";
+			case "priority" -> "CASE i.priority WHEN 'Urgent' THEN 0 WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END, "
+					+ "i.updated_at DESC, i.number DESC";
+			default -> "i.updated_at DESC, i.number DESC";
+		};
+		params.put("limit", filter.size());
+		params.put("offset", (long) filter.page() * filter.size());
+		var items = load(SELECT + where + " ORDER BY " + order + " LIMIT :limit OFFSET :offset", params, project);
+		return new IssuePageView(items, total, filter.page(), filter.size());
+	}
+
 	/**
 	 * Takes the next number under a row lock that is held until the transaction ends, so concurrent creates queue
 	 * up and get distinct numbers. The first Statuses are created while holding it, so they are created once.
@@ -150,6 +201,14 @@ class IssueService {
 		return new PersonView(user.id(), user.displayName(), user.avatarUrl());
 	}
 
+	/** {@code unassigned} wins over {@code assigneeId}; the controller sets at most one of them. */
+	record IssueFilter(String status, String category, String type, String priority, UUID assigneeId,
+			boolean unassigned, List<String> words, String sort, int page, int size) {
+	}
+
+	record IssuePageView(List<IssueView> items, long total, int page, int size) {
+	}
+
 	record NewIssue(String type, String title, String description, String priority, UUID assigneeId) {
 	}
 
@@ -177,6 +236,19 @@ class IssueService {
 	static class Conflict extends RuntimeException {
 		Conflict(String message) {
 			super(message);
+		}
+	}
+
+	static class InvalidFields extends RuntimeException {
+		private final Map<String, String> errors;
+
+		InvalidFields(Map<String, String> errors) {
+			super("Some fields are invalid");
+			this.errors = errors;
+		}
+
+		Map<String, String> errors() {
+			return errors;
 		}
 	}
 

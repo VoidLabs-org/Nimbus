@@ -115,6 +115,84 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
   /api/projects/{key}/issues:
+    get:
+      tags: [issues]
+      summary: Find the Issues of a project
+      description: >-
+        Any Member may, until permissions are integrated. Filters combine; an empty result is a normal `200`. Ordered
+        by `sort`, then newest number first, so paging is stable. Requires a verified email.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Status name, matched ignoring case
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            $ref: "#/components/schemas/StatusCategory"
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/IssueType"
+        - name: priority
+          in: query
+          schema:
+            $ref: "#/components/schemas/IssuePriority"
+        - name: assignee
+          in: query
+          description: A User id, `me` for the caller, or `none` for unassigned Issues
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Words of the title; every word must appear in it, in any case
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: "`updated` and `created` are newest first; `priority` is Urgent first, then most recently updated"
+          schema:
+            type: string
+            enum: [updated, created, priority]
+            default: updated
+        - name: page
+          in: query
+          description: Zero-based page number
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: One page of matching Issues and the total across all pages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuePage"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Project not found (also returned for a non-Member)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
     post:
       tags: [issues]
       summary: Create an Issue in a project
@@ -2652,6 +2730,22 @@ components:
         version:
           type: integer
           format: int64
+    IssuePage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Issue"
+        total:
+          type: integer
+          format: int64
+          description: Matching Issues across all pages
+        page:
+          type: integer
+        size:
+          type: integer
     IssueNotificationType:
       type: string
       enum: [ISSUE_ASSIGNED, ISSUE_UNASSIGNED, ISSUE_STATUS_CHANGED, ISSUE_EDITED, ISSUE_DELETED]

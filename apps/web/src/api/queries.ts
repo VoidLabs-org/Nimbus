@@ -4,7 +4,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { api, type Issue, type Project, type Role } from "./client";
+import { api, type Issue, type IssueSearch, type Project, type Role } from "./client";
 import { failedLoad, type FailedLoad } from "@repo/api";
 import { storedKey } from "../projects/projectKey";
 
@@ -26,6 +26,9 @@ export const queryKeys = {
   project: (key: string) => ["projects", storedKey(key)] as const,
   // Issue keys match in any case, so the cache holds one entry per Issue, under the uppercase key.
   issue: (key: string) => ["issues", key.toUpperCase()] as const,
+  // A project's list under "issues" too, so creating an Issue refreshes it with one invalidation.
+  issueList: (projectKey: string, search: IssueSearch) =>
+    ["issues", "list", storedKey(projectKey), search] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -79,10 +82,27 @@ export function useIssue(key: string) {
   return useQuery({ queryKey: queryKeys.issue(key), queryFn: () => api.issue(key) });
 }
 
+/** One page of a project's Issues. The previous page stays on screen while the next filter or page loads. */
+export function useIssues(projectKey: string, search: IssueSearch) {
+  return useQuery({
+    queryKey: queryKeys.issueList(projectKey, search),
+    queryFn: () => api.issues(storedKey(projectKey), search),
+    // Only another filter or page of the same project; another project's list is never shown in its place.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === storedKey(projectKey) ? previous : undefined,
+  });
+}
+
 /** Keep the server's created Issue, so opening it right after shows it at once (it is then refreshed). */
 export function useIssueCreated() {
   const client = useQueryClient();
-  return (issue: Issue) => client.setQueryData(queryKeys.issue(issue.key), issue);
+  return (issue: Issue) => {
+    client.setQueryData(queryKeys.issue(issue.key), issue);
+    // The project's lists have a new Issue.
+    void client.invalidateQueries({
+      queryKey: ["issues", "list", issue.key.slice(0, issue.key.lastIndexOf("-"))],
+    });
+  };
 }
 
 /** A refresh failed while older data is still on screen: say so, since the data may be out of date. */

@@ -320,6 +320,171 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Edit an Issue's title, description, type or priority
+         * @description Only the fields sent change; an empty `description` clears it. Validated like creating. `version` is required when `title` or `description` is sent and must be the Issue's current one, otherwise `409` with code `issue_changed`. Type and priority need no version. Only title and description changes raise the version. Each changed field is recorded in the history; sending the current value changes nothing. The Reporter can't be changed. Archived projects refuse with `409`.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    issueKey: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["EditIssueRequest"];
+                };
+            };
+            responses: {
+                /** @description The Issue after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Issue"];
+                    };
+                };
+                400: components["responses"]["InvalidFields"];
+                401: components["responses"]["Unauthorized"];
+                /** @description Unknown key, or an Issue in a project the User is not a Member of */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The project is Archived, or the version is stale (code: issue_changed) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/issues/{issueKey}/assignee": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Assign an Issue to a Member, or unassign it */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    issueKey: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: uuid
+                         * @description Must be a Member of the project; `null` unassigns
+                         */
+                        userId: string | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description The Issue after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Issue"];
+                    };
+                };
+                400: components["responses"]["InvalidFields"];
+                401: components["responses"]["Unauthorized"];
+                /** @description Unknown key, or an Issue in a project the User is not a Member of */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The project is Archived */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/issues/{issueKey}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Issue's history, newest first */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    issueKey: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One entry per changed field, and the `created` entry */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IssueHistoryEntry"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Unknown key, or an Issue in a project the User is not a Member of */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -3585,6 +3750,32 @@ export interface components {
             updatedAt: string;
             /** Format: int64 */
             version: number;
+        };
+        EditIssueRequest: {
+            /** @description Surrounding whitespace is removed, then 1 to 255 characters without control characters */
+            title?: string;
+            /** @description Markdown; empty clears it */
+            description?: string;
+            type?: components["schemas"]["IssueType"];
+            priority?: components["schemas"]["IssuePriority"];
+            /**
+             * Format: int64
+             * @description The Issue's version as opened; required with `title` or `description`
+             */
+            version?: number;
+        };
+        IssueHistoryEntry: {
+            /** Format: uuid */
+            id: string;
+            actor: components["schemas"]["IssuePerson"] | null;
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            field: "created" | "title" | "description" | "type" | "priority" | "assignee";
+            /** @description The old value; for `assignee`, the previous Assignee's name */
+            before: string | null;
+            /** @description The new value; for `assignee`, the new Assignee's name */
+            after: string | null;
         };
         IssuePage: {
             items: components["schemas"]["Issue"][];

@@ -37,6 +37,10 @@ export type IssueSearch = {
 
 export type CreateIssueInput = Schemas["CreateIssueRequest"];
 
+export type EditIssueInput = Schemas["EditIssueRequest"];
+
+export type IssueHistoryEntry = Schemas["IssueHistoryEntry"];
+
 export type ChangePasswordInput = Schemas["ChangePasswordRequest"];
 
 export type LoginInput = Schemas["LoginRequest"];
@@ -410,6 +414,24 @@ export function createApiClient(
 
     /** Opens an Issue by key, in any case. Unknown keys and projects the User is not in both return 404. */
     issue: (issueKey: string) => request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}`),
+
+    /** Changes the fields sent. Title and description need the `version` the User opened; a stale one is a 409. */
+    editIssue: (issueKey: string, input: EditIssueInput) =>
+      request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+
+    /** Sets the Assignee to a project Member, or `null` to unassign. */
+    assignIssue: (issueKey: string, userId: string | null) =>
+      request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}/assignee`, {
+        method: "PUT",
+        body: JSON.stringify({ userId }),
+      }),
+
+    /** The Issue's history, newest first. */
+    issueHistory: (issueKey: string) =>
+      request<IssueHistoryEntry[]>(`/api/issues/${encodeURIComponent(issueKey)}/history`),
 
     /**
      * The ids of the "Continue with ..." providers the server has switched on, in the order to show them

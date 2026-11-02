@@ -4,6 +4,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -14,6 +15,7 @@ import java.util.stream.Stream;
 
 import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
+import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
 import com.nimbus.api.projects.ProjectSummary;
 import com.nimbus.api.projects.Projects;
@@ -59,7 +61,7 @@ class IssueService {
 	IssueView create(UUID actor, String projectKey, NewIssue input) {
 		var project = projects.findByKey(projectKey).orElseThrow(() -> new NotFound("Project not found"));
 		access.require(actor, project.id(), IssueAccess.Action.CREATE);
-		if (project.archived()) throw new Conflict("This project is archived, so it takes no new Issues");
+		if (project.archived()) throw new Conflict("This project is archived, so it takes no new Issues", null);
 		if (input.assigneeId() != null && !projects.isMember(project.id(), input.assigneeId())) {
 			throw new InvalidField("assigneeId", "The Assignee must be a Member of the project");
 		}
@@ -87,18 +89,167 @@ class IssueService {
 
 	/** Unknown keys and Issues of projects the actor is not a Member of are both "not found". */
 	IssueView open(UUID actor, String issueKey) {
+		var target = resolve(actor, issueKey, IssueAccess.Action.VIEW);
+		var found = load(SELECT + "WHERE i.project_id = :project AND i.number = :number",
+				Map.of("project", target.project().id(), "number", target.number()), target.project());
+		if (found.isEmpty()) throw new NotFound("Issue not found");
+		return found.getFirst();
+	}
+
+	/**
+	 * Edits title, description, type and priority; what is {@code null} stays as it is, and an empty description
+	 * clears it. Title and description are guarded by {@code version}: a stale one is a {@code 409}.
+	 */
+	@Transactional
+	IssueView edit(UUID actor, String issueKey, IssueEdit edit) {
+		return change(actor, issueKey, edit.version(), current -> {
+			var changes = new ArrayList<Change>();
+			if (edit.title() != null) changes.add(new Change("title", current.title(), edit.title()));
+			if (edit.description() != null) {
+				changes.add(new Change("description", current.description(),
+						edit.description().isEmpty() ? null : edit.description()));
+			}
+			if (edit.type() != null) changes.add(new Change("type", current.type(), edit.type()));
+			if (edit.priority() != null) changes.add(new Change("priority", current.priority(), edit.priority()));
+			return changes;
+		});
+	}
+
+	/** Sets or clears ({@code null}) the Assignee, who must be a Member. Never conflicts. */
+	@Transactional
+	IssueView assign(UUID actor, String issueKey, UUID assigneeId) {
+		return change(actor, issueKey, null, current -> {
+			if (assigneeId != null && !projects.isMember(current.projectId(), assigneeId)) {
+				throw new InvalidField("userId", "The Assignee must be a Member of the project");
+			}
+			return List.of(new Change("assignee", Objects.toString(current.assigneeId(), null),
+					Objects.toString(assigneeId, null)));
+		});
+	}
+
+	/** The Issue's history, newest first. Assignee changes carry the Users' names. */
+	List<HistoryEntryView> history(UUID actor, String issueKey) {
+		var target = resolve(actor, issueKey, IssueAccess.Action.VIEW);
+		var rows = jdbc.sql("""
+				SELECT h.id, h.actor_id, h.at, h.field, h.before_value, h.after_value
+				FROM issue_history h JOIN issues i ON i.id = h.issue_id
+				WHERE i.project_id = :project AND i.number = :number
+				ORDER BY h.at DESC, h.field DESC, h.id DESC
+				""")
+			.param("project", target.project().id()).param("number", target.number())
+			.query((row, index) -> new HistoryRow(row.getObject("id", UUID.class), row.getObject("actor_id", UUID.class),
+					row.getTimestamp("at").toInstant(), row.getString("field"), row.getString("before_value"),
+					row.getString("after_value")))
+			.list();
+		var ids = new java.util.HashSet<UUID>();
+		for (var row : rows) {
+			if (row.actorId() != null) ids.add(row.actorId());
+			if (row.field().equals("assignee")) {
+				var before = parseId(row.before());
+				var after = parseId(row.after());
+				if (before != null) ids.add(before);
+				if (after != null) ids.add(after);
+			}
+		}
+		var people = users.findAllById(ids).stream().collect(Collectors.toMap(UserSummary::id, Function.identity()));
+		Function<String, String> name = value -> {
+			if (value == null) return null;
+			var id = parseId(value);
+			return id != null && people.containsKey(id) ? people.get(id).displayName() : "Unknown user";
+		};
+		return rows.stream().map(row -> {
+			var assignee = row.field().equals("assignee");
+			var description = row.field().equals("description");
+			var actorUser = row.actorId() == null ? null : people.get(row.actorId());
+			return new HistoryEntryView(row.id(), actorUser == null ? null : person(actorUser), row.at(), row.field(),
+					assignee ? name.apply(row.before()) : description ? null : row.before(),
+					assignee ? name.apply(row.after()) : description ? null : row.after());
+		}).toList();
+	}
+
+	/** The id in a history value, or {@code null} if it isn't one. */
+	private static UUID parseId(String value) {
+		if (value == null) return null;
+		try {
+			return UUID.fromString(value);
+		}
+		catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	private Target resolve(UUID actor, String issueKey, IssueAccess.Action action) {
 		var parsed = IssueKeys.parse(issueKey).orElseThrow(() -> new NotFound("Issue not found"));
 		var project = projects.findByKey(parsed.projectKey()).orElseThrow(() -> new NotFound("Issue not found"));
 		try {
-			access.require(actor, project.id(), IssueAccess.Action.VIEW);
+			access.require(actor, project.id(), action);
 		}
 		catch (NotFound e) {
 			throw new NotFound("Issue not found");
 		}
-		var found = load(SELECT + "WHERE i.project_id = :project AND i.number = :number",
-				Map.of("project", project.id(), "number", parsed.number()), project);
-		if (found.isEmpty()) throw new NotFound("Issue not found");
-		return found.getFirst();
+		return new Target(project, parsed.number());
+	}
+
+	/**
+	 * The shared path of every edit: not found, then the Issue row is locked, then archived (read again under the
+	 * lock, so an archive that committed meanwhile is seen), then the changes that really differ are found. If one
+	 * of them is a title or description change, the version must match; an edit that changes nothing never
+	 * conflicts. The differing changes are written with one history entry each and published as one event. The lock
+	 * means two edits never both pass the same version. Only title and description changes raise the version, so
+	 * quick changes never make someone's open text edit stale.
+	 */
+	private IssueView change(UUID actor, String issueKey, Long version, Function<Current, List<Change>> changes) {
+		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
+		var project = target.project();
+		var current = jdbc.sql("""
+				SELECT id, project_id, title, description, type, priority, assignee_id, version
+				FROM issues WHERE project_id = :project AND number = :number FOR UPDATE
+				""")
+			.param("project", project.id()).param("number", target.number())
+			.query((row, index) -> new Current(row.getObject("id", UUID.class), row.getObject("project_id", UUID.class),
+					row.getString("title"), row.getString("description"), row.getString("type"),
+					row.getString("priority"), row.getObject("assignee_id", UUID.class), row.getLong("version")))
+			.optional().orElseThrow(() -> new NotFound("Issue not found"));
+		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
+		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
+
+		var differing = changes.apply(current).stream().filter(c -> !Objects.equals(c.before(), c.after())).toList();
+		if (differing.stream().anyMatch(c -> c.field().equals("title") || c.field().equals("description"))) {
+			if (version == null) throw new InvalidField("version", "Send the version you opened");
+			if (version != current.version()) {
+				throw new Conflict("This Issue changed since you opened it", "issue_changed");
+			}
+		}
+		if (!differing.isEmpty()) {
+			var now = Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS));
+			var update = new StringBuilder("UPDATE issues SET updated_at = :at");
+			var params = new java.util.HashMap<String, Object>();
+			params.put("at", now);
+			params.put("id", current.id());
+			for (var c : differing) {
+				var assignee = c.field().equals("assignee");
+				update.append(", ").append(assignee ? "assignee_id" : c.field()).append(" = :").append(c.field());
+				params.put(c.field(), assignee && c.after() != null ? UUID.fromString(c.after()) : c.after());
+			}
+			if (differing.stream().anyMatch(c -> c.field().equals("title") || c.field().equals("description"))) {
+				update.append(", version = version + 1");
+			}
+			jdbc.sql(update + " WHERE id = :id").params(params).update();
+			for (var c : differing) {
+				// Descriptions are up to 50,000 characters and the history only says they changed, so no values are kept.
+				var keepValues = !c.field().equals("description");
+				jdbc.sql("""
+						INSERT INTO issue_history (id, issue_id, actor_id, at, field, before_value, after_value)
+						VALUES (:id, :issue, :actor, :at, :field, :before, :after)
+						""")
+					.param("id", UUID.randomUUID()).param("issue", current.id()).param("actor", actor)
+					.param("at", now).param("field", c.field()).param("before", keepValues ? c.before() : null)
+					.param("after", keepValues ? c.after() : null).update();
+			}
+			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), target.number()),
+					differing.stream().map(Change::field).toList()));
+		}
+		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), project).getFirst();
 	}
 
 	/** One page of the project's Issues that match the filters. Unknown and non-Member projects are both "not found". */
@@ -209,6 +360,26 @@ class IssueService {
 	record IssuePageView(List<IssueView> items, long total, int page, int size) {
 	}
 
+	/** {@code null} leaves a field as it is; an empty description clears it. */
+	record IssueEdit(String title, String description, String type, String priority, Long version) {
+	}
+
+	record HistoryEntryView(UUID id, PersonView actor, Instant at, String field, String before, String after) {
+	}
+
+	private record Target(ProjectSummary project, int number) {
+	}
+
+	private record Current(UUID id, UUID projectId, String title, String description, String type, String priority,
+			UUID assigneeId, long version) {
+	}
+
+	private record Change(String field, String before, String after) {
+	}
+
+	private record HistoryRow(UUID id, UUID actorId, Instant at, String field, String before, String after) {
+	}
+
 	record NewIssue(String type, String title, String description, String priority, UUID assigneeId) {
 	}
 
@@ -234,8 +405,16 @@ class IssueService {
 	}
 
 	static class Conflict extends RuntimeException {
-		Conflict(String message) {
+		private final String code;
+
+		Conflict(String message, String code) {
 			super(message);
+			this.code = code;
+		}
+
+		/** The machine-readable reason sent to clients, or {@code null}. */
+		String code() {
+			return code;
 		}
 	}
 

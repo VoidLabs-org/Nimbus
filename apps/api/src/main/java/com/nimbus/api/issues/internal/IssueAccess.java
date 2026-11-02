@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 class IssueAccess {
 
 	enum Action {
-		VIEW, CREATE
+		VIEW, CREATE, EDIT
 	}
 
 	private final Projects projects;

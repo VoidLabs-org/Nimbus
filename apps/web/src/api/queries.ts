@@ -26,6 +26,7 @@ export const queryKeys = {
   project: (key: string) => ["projects", storedKey(key)] as const,
   // Issue keys match in any case, so the cache holds one entry per Issue, under the uppercase key.
   issue: (key: string) => ["issues", key.toUpperCase()] as const,
+  issueHistory: (key: string) => ["issues", key.toUpperCase(), "history"] as const,
   // A project's list under "issues" too, so creating an Issue refreshes it with one invalidation.
   issueList: (projectKey: string, search: IssueSearch) =>
     ["issues", "list", storedKey(projectKey), search] as const,
@@ -82,6 +83,11 @@ export function useIssue(key: string) {
   return useQuery({ queryKey: queryKeys.issue(key), queryFn: () => api.issue(key) });
 }
 
+/** One Issue's history, newest first. */
+export function useIssueHistory(key: string) {
+  return useQuery({ queryKey: queryKeys.issueHistory(key), queryFn: () => api.issueHistory(key) });
+}
+
 /** One page of a project's Issues. The previous page stays on screen while the next filter or page loads. */
 export function useIssues(projectKey: string, search: IssueSearch) {
   return useQuery({
@@ -93,15 +99,28 @@ export function useIssues(projectKey: string, search: IssueSearch) {
   });
 }
 
+/** The key prefix of all of an Issue's project's lists (the Issue key is the project key, a dash and a number). */
+function projectIssueLists(issueKey: string) {
+  return ["issues", "list", issueKey.slice(0, issueKey.lastIndexOf("-"))] as const;
+}
+
 /** Keep the server's created Issue, so opening it right after shows it at once (it is then refreshed). */
 export function useIssueCreated() {
   const client = useQueryClient();
   return (issue: Issue) => {
     client.setQueryData(queryKeys.issue(issue.key), issue);
     // The project's lists have a new Issue.
-    void client.invalidateQueries({
-      queryKey: ["issues", "list", issue.key.slice(0, issue.key.lastIndexOf("-"))],
-    });
+    void client.invalidateQueries({ queryKey: projectIssueLists(issue.key) });
+  };
+}
+
+/** Keep the server's edited Issue, and refresh its history and its project's lists. */
+export function useIssueChanged() {
+  const client = useQueryClient();
+  return (issue: Issue) => {
+    client.setQueryData(queryKeys.issue(issue.key), issue);
+    void client.invalidateQueries({ queryKey: queryKeys.issueHistory(issue.key) });
+    void client.invalidateQueries({ queryKey: projectIssueLists(issue.key) });
   };
 }
 

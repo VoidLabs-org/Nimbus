@@ -66,6 +66,11 @@ beforeEach(() => {
     },
   );
   vi.spyOn(api, "issueHistory").mockResolvedValue(history);
+  vi.spyOn(api, "projectStatuses").mockResolvedValue([
+    { id: "s1", name: "To do", category: "TODO", position: 0 },
+    { id: "s2", name: "In progress", category: "IN_PROGRESS", position: 1 },
+    { id: "s3", name: "Done", category: "DONE", position: 2 },
+  ]);
 });
 afterEach(() => {
   cleanup();
@@ -98,7 +103,9 @@ describe("an Issue's page", () => {
 
     expect(await screen.findByRole("heading", { name: "Crash on save" })).toBeTruthy();
     expect(screen.getAllByText("NIM-12").length).toBeGreaterThan(0);
-    expect(screen.getByText("(To do)")).toBeTruthy();
+    expect((screen.getByRole("combobox", { name: "Status" }) as HTMLInputElement).value).toBe(
+      "To do",
+    );
     expect((screen.getByRole("combobox", { name: "Priority" }) as HTMLInputElement).value).toBe(
       "High",
     );
@@ -184,6 +191,34 @@ describe("an Issue's page", () => {
     fireEvent.click(screen.getByRole("combobox", { name: "Assignee" }));
     fireEvent.click(await screen.findByRole("option", { name: "Dana", hidden: true }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("NIM-12", "u1"));
+  });
+
+  it("lists the project's Statuses in order and moves the Issue to the one chosen", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    const move = vi.spyOn(api, "moveIssue").mockResolvedValue({
+      ...issue,
+      status: { id: "s3", name: "Done", category: "DONE" },
+    });
+    showAt("/issues/NIM-12");
+
+    fireEvent.click(await screen.findByRole("combobox", { name: "Status" }));
+    const statusNames = () =>
+      screen
+        .getAllByRole("option", { hidden: true })
+        .map((option) => option.textContent)
+        .filter((name) => ["To do", "In progress", "Done"].includes(name ?? ""));
+    await waitFor(() => expect(statusNames()).toHaveLength(3));
+    const names = statusNames();
+    expect(names.indexOf("To do")).toBeLessThan(names.indexOf("In progress"));
+    expect(names.indexOf("In progress")).toBeLessThan(names.indexOf("Done"));
+    fireEvent.click(await screen.findByRole("option", { name: "Done", hidden: true }));
+
+    await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-12", "s3"));
+    await waitFor(() =>
+      expect((screen.getByRole("combobox", { name: "Status" }) as HTMLInputElement).value).toBe(
+        "Done",
+      ),
+    );
   });
 
   it("says the Issue is not found for an unknown key", async () => {

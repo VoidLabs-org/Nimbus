@@ -19,7 +19,13 @@ import { toast } from "@repo/ui/toast";
 import { useState } from "react";
 import { useParams } from "react-router";
 import { api, type EditIssueInput, type Issue } from "../api/client";
-import { loadFailure, refreshFailed, useIssue, useIssueChanged } from "../api/queries";
+import {
+  loadFailure,
+  refreshFailed,
+  useIssue,
+  useIssueChanged,
+  useProjectStatuses,
+} from "../api/queries";
 import { useSession } from "../auth/useSession";
 import { IssueHistory } from "../issues/IssueHistory";
 import { IssueMarkdown } from "../issues/IssueMarkdown";
@@ -42,7 +48,7 @@ type Editing = { field: "title" | "description"; draft: string; baseVersion: num
 
 /**
  * Issue details with inline editing: title and description (guarded by the version), and type, priority and Assignee
- * (saved as soon as they are chosen). Moving and deleting belong to the following tickets.
+ * (saved as soon as they are chosen), and the Status, which moves the Issue. Deleting belongs to a following ticket.
  */
 export default function IssuePage() {
   const { issueKey = "" } = useParams();
@@ -103,6 +109,8 @@ export default function IssuePage() {
     }
   }
 
+  const projectKey = issue?.key.slice(0, issue.key.lastIndexOf("-"));
+  const statuses = useProjectStatuses(projectKey);
   const changeField = (input: EditIssueInput) =>
     issue && quickChange(() => api.editIssue(issue.key, input));
   // Until the project's Members can be listed, the choices are the User themself and no one.
@@ -128,8 +136,6 @@ export default function IssuePage() {
     );
   }
   if (failure) return <FailedLoadPage failure={failure} onRetry={() => void query.refetch()} />;
-
-  const projectKey = issue?.key.slice(0, issue.key.lastIndexOf("-"));
 
   return (
     <Container size="md" px={0} py="xl">
@@ -270,10 +276,20 @@ export default function IssuePage() {
             <Panel p="xl">
               <Stack gap="md" component="dl" m={0}>
                 <Detail label="Status">
-                  {issue.status.name}
-                  <Text span c="dimmed">
-                    {" "}
-                    ({CATEGORY_LABELS[issue.status.category]})
+                  <Select
+                    aria-label="Status"
+                    allowDeselect={false}
+                    data={(statuses.data ?? [{ id: issue.status.id, name: issue.status.name }]).map(
+                      (status) => ({ value: status.id, label: status.name }),
+                    )}
+                    value={issue.status.id}
+                    disabled={quickSaving}
+                    onChange={(value) =>
+                      value && void quickChange(() => api.moveIssue(issue.key, value))
+                    }
+                  />
+                  <Text span c="dimmed" size="sm">
+                    Category: {CATEGORY_LABELS[issue.status.category]}
                   </Text>
                 </Detail>
                 <Detail label="Issue type">

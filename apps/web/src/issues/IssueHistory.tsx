@@ -9,6 +9,7 @@ const FIELD_NAMES: Record<string, string> = {
   type: "the Issue type",
   priority: "the priority",
   assignee: "the Assignee",
+  status: "the Status",
 };
 
 /** What happened, in words. Titles, types and priorities show both values; descriptions are too long to. */

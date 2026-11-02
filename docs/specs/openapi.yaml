@@ -351,6 +351,78 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/issues/{issueKey}/status:
+    put:
+      tags: [issues]
+      summary: Move an Issue to any Status of its project
+      parameters:
+        - name: issueKey
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [statusId]
+              properties:
+                statusId:
+                  type: string
+                  format: uuid
+                  description: Must be a Status of the Issue's project; no version is needed
+      responses:
+        "200":
+          description: The Issue after the move
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown key, or an Issue in a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The project is Archived
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/statuses:
+    get:
+      tags: [issues]
+      summary: The project's Statuses in order
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The Statuses, first to last (none until the project has an Issue)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown project, or a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/issues/{issueKey}/history:
     get:
       tags: [issues]
@@ -2864,6 +2936,19 @@ components:
           type: integer
           format: int64
           description: The Issue's version as opened; required with `title` or `description`
+    ProjectStatus:
+      type: object
+      required: [id, name, category, position]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          $ref: "#/components/schemas/StatusCategory"
+        position:
+          type: integer
     IssueHistoryEntry:
       type: object
       required: [id, actor, at, field, before, after]
@@ -2880,13 +2965,13 @@ components:
           format: date-time
         field:
           type: string
-          enum: [created, title, description, type, priority, assignee]
+          enum: [created, title, description, type, priority, assignee, status]
         before:
           type: [string, "null"]
-          description: The old value; for `assignee`, the previous Assignee's name
+          description: The old value; for `assignee`, the previous Assignee's name; for `status`, the Status's name
         after:
           type: [string, "null"]
-          description: The new value; for `assignee`, the new Assignee's name
+          description: The new value; for `assignee`, the new Assignee's name; for `status`, the Status's name
     IssuePage:
       type: object
       required: [items, total, page, size]

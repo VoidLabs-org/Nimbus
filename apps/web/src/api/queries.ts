@@ -27,6 +27,7 @@ export const queryKeys = {
   // Issue keys match in any case, so the cache holds one entry per Issue, under the uppercase key.
   issue: (key: string) => ["issues", key.toUpperCase()] as const,
   issueHistory: (key: string) => ["issues", key.toUpperCase(), "history"] as const,
+  projectStatuses: (projectKey: string) => ["projects", storedKey(projectKey), "statuses"] as const,
   // A project's list under "issues" too, so creating an Issue refreshes it with one invalidation.
   issueList: (projectKey: string, search: IssueSearch) =>
     ["issues", "list", storedKey(projectKey), search] as const,
@@ -86,6 +87,15 @@ export function useIssue(key: string) {
 /** One Issue's history, newest first. */
 export function useIssueHistory(key: string) {
   return useQuery({ queryKey: queryKeys.issueHistory(key), queryFn: () => api.issueHistory(key) });
+}
+
+/** A project's Statuses in order, for choosing where to move an Issue. */
+export function useProjectStatuses(projectKey: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.projectStatuses(projectKey ?? ""),
+    queryFn: () => api.projectStatuses(storedKey(projectKey ?? "")),
+    enabled: projectKey !== undefined,
+  });
 }
 
 /** One page of a project's Issues. The previous page stays on screen while the next filter or page loads. */

@@ -17,6 +17,8 @@ import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
 import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
+import com.nimbus.api.issues.Issues;
+import com.nimbus.api.issues.ProjectStatus;
 import com.nimbus.api.projects.ProjectSummary;
 import com.nimbus.api.projects.Projects;
 import org.springframework.context.ApplicationEventPublisher;
@@ -27,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 /** Creates and opens Issues. See {@code docs/specs/issues.md} for the rules. */
 @Service
 @Transactional(readOnly = true)
-class IssueService {
+class IssueService implements Issues {
 
 	private static final String SELECT = """
 			SELECT i.id, i.number, i.type, i.title, i.description, i.priority, i.reporter_id, i.assignee_id,
@@ -127,6 +129,52 @@ class IssueService {
 		});
 	}
 
+	/** Moves to any Status of the Issue's project; a Status of another project is a {@code 400}. Never conflicts. */
+	@Override
+	@Transactional
+	public ProjectStatus changeStatus(UUID actor, String issueKey, UUID statusId) {
+		var status = move(actor, issueKey, statusId).status();
+		return new ProjectStatus(status.id(), status.name(), status.category(), position(status.id()));
+	}
+
+	/** The one move, for the endpoint and {@link #changeStatus}. */
+	@Transactional
+	IssueView move(UUID actor, String issueKey, UUID statusId) {
+		return change(actor, issueKey, null, current -> {
+			var target = statusId == null ? null : statusesOf(current.projectId()).stream()
+				.filter(status -> status.id().equals(statusId)).findFirst().orElse(null);
+			if (target == null) throw new InvalidField("statusId", "Choose a Status of the Issue's project");
+			// Compared by id, so only a move to another Status counts as a change, whatever the names are.
+			if (target.id().equals(current.statusId())) return List.of();
+			return List.of(new Change("status", current.statusName(), target.name(), target.id()));
+		});
+	}
+
+	private int position(UUID statusId) {
+		return jdbc.sql("SELECT position FROM issue_statuses WHERE id = :id").param("id", statusId)
+			.query(Integer.class).single();
+	}
+
+	@Override
+	public List<ProjectStatus> statuses(UUID projectId) {
+		return statusesOf(projectId);
+	}
+
+	/** The project's Statuses in order, for a Member. Unknown and non-Member projects are both "not found". */
+	List<ProjectStatus> statuses(UUID actor, String projectKey) {
+		var project = projects.findByKey(projectKey).orElseThrow(() -> new NotFound("Project not found"));
+		access.require(actor, project.id(), IssueAccess.Action.VIEW);
+		return statusesOf(project.id());
+	}
+
+	private List<ProjectStatus> statusesOf(UUID projectId) {
+		return jdbc.sql("SELECT id, name, category, position FROM issue_statuses WHERE project_id = :project ORDER BY position")
+			.param("project", projectId)
+			.query((row, index) -> new ProjectStatus(row.getObject("id", UUID.class), row.getString("name"),
+					row.getString("category"), row.getInt("position")))
+			.list();
+	}
+
 	/** The Issue's history, newest first. Assignee changes carry the Users' names. */
 	List<HistoryEntryView> history(UUID actor, String issueKey) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.VIEW);
@@ -202,13 +250,15 @@ class IssueService {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
 		var project = target.project();
 		var current = jdbc.sql("""
-				SELECT id, project_id, title, description, type, priority, assignee_id, version
-				FROM issues WHERE project_id = :project AND number = :number FOR UPDATE
+				SELECT i.id, i.project_id, i.title, i.description, i.type, i.priority, i.assignee_id, i.version, i.status_id,
+				       (SELECT s.name FROM issue_statuses s WHERE s.id = i.status_id) AS status_name
+				FROM issues i WHERE i.project_id = :project AND i.number = :number FOR UPDATE
 				""")
 			.param("project", project.id()).param("number", target.number())
 			.query((row, index) -> new Current(row.getObject("id", UUID.class), row.getObject("project_id", UUID.class),
 					row.getString("title"), row.getString("description"), row.getString("type"),
-					row.getString("priority"), row.getObject("assignee_id", UUID.class), row.getLong("version")))
+					row.getString("priority"), row.getObject("assignee_id", UUID.class), row.getLong("version"),
+					row.getObject("status_id", UUID.class), row.getString("status_name")))
 			.optional().orElseThrow(() -> new NotFound("Issue not found"));
 		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
 		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
@@ -228,8 +278,11 @@ class IssueService {
 			params.put("id", current.id());
 			for (var c : differing) {
 				var assignee = c.field().equals("assignee");
-				update.append(", ").append(assignee ? "assignee_id" : c.field()).append(" = :").append(c.field());
-				params.put(c.field(), assignee && c.after() != null ? UUID.fromString(c.after()) : c.after());
+				var status = c.field().equals("status");
+				update.append(", ").append(assignee ? "assignee_id" : status ? "status_id" : c.field()).append(" = :")
+					.append(c.field());
+				params.put(c.field(), status ? c.value()
+						: assignee && c.after() != null ? UUID.fromString(c.after()) : c.after());
 			}
 			if (differing.stream().anyMatch(c -> c.field().equals("title") || c.field().equals("description"))) {
 				update.append(", version = version + 1");
@@ -371,10 +424,14 @@ class IssueService {
 	}
 
 	private record Current(UUID id, UUID projectId, String title, String description, String type, String priority,
-			UUID assigneeId, long version) {
+			UUID assigneeId, long version, UUID statusId, String statusName) {
 	}
 
-	private record Change(String field, String before, String after) {
+	/** {@code value} is what the column is set to when it isn't {@code after}: a Status keeps its name in history. */
+	private record Change(String field, String before, String after, Object value) {
+		Change(String field, String before, String after) {
+			this(field, before, after, null);
+		}
 	}
 
 	private record HistoryRow(UUID id, UUID actorId, Instant at, String field, String before, String after) {

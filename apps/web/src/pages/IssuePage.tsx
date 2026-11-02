@@ -70,7 +70,8 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
 
   // Someone else changed the text being edited (a refresh saw it), or our save was refused. A change to the other
   // text does not matter: the save then goes with the latest version.
-  const stale = editing !== null && (conflict || (issue?.[editing.field] ?? "") !== editing.original);
+  const stale =
+    editing !== null && (conflict || (issue?.[editing.field] ?? "") !== editing.original);
 
   function startEditing(field: Editing["field"]) {
     if (!issue) return;
@@ -185,8 +186,8 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
             </Group>
             {stale && (
               <Alert color="yellow" title="This Issue changed since you opened it" role="alert">
-                Someone else saved a change to this {editing?.field}. Load the latest to see it; your
-                unsaved edit will be discarded.{" "}
+                Someone else saved a change to this {editing?.field}. Load the latest to see it;
+                your unsaved edit will be discarded.{" "}
                 <Button
                   variant="subtle"
                   size="compact-sm"

@@ -3,8 +3,10 @@ import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/co
 import { Panel } from "@repo/ui/panel";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { Tag } from "@repo/ui/tag";
+import { useState } from "react";
 import { useParams } from "react-router";
 import { loadFailure, refreshFailed, useProject } from "../api/queries";
+import { NewIssueForm } from "../issues/NewIssueForm";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
@@ -15,6 +17,9 @@ export default function ProjectPage() {
   const query = useProject(key);
   const project = query.data;
   const failure = loadFailure(query);
+  // The project the form is open for, so a form opened on one project is not still open on another.
+  const [creatingIssueIn, setCreatingIssueIn] = useState<string | null>(null);
+  const creatingIssue = project !== undefined && creatingIssueIn === project.key;
 
   // A project that is unknown and one the User cannot see have exactly the same page.
   if (query.error instanceof ApiError && query.error.status === 404 && !query.isFetching) {
@@ -63,10 +68,19 @@ export default function ProjectPage() {
                 </Button>
               </Alert>
             )}
-            <Group gap="sm">
-              <Tag>{project.key}</Tag>
-              {project.archived && <Tag>Archived</Tag>}
+            <Group gap="sm" justify="space-between">
+              <Group gap="sm">
+                <Tag>{project.key}</Tag>
+                {project.archived && <Tag>Archived</Tag>}
+              </Group>
+              {/* An Archived project takes no new Issues. */}
+              {!project.archived && !creatingIssue && (
+                <Button onClick={() => setCreatingIssueIn(project.key)}>Create Issue</Button>
+              )}
             </Group>
+            {creatingIssue && (
+              <NewIssueForm projectKey={project.key} onCancel={() => setCreatingIssueIn(null)} />
+            )}
             <Title order={1} fz={40} lh={1.1} style={{ overflowWrap: "anywhere" }}>
               {project.name}
             </Title>

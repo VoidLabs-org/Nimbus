@@ -23,6 +23,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import RolePage from "./pages/RolePage";
 import ProfilePage from "./pages/ProfilePage";
+import IssuePage from "./pages/IssuePage";
 import ProjectPage from "./pages/ProjectPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import RolesPage from "./pages/RolesPage";
@@ -204,6 +205,7 @@ export function AppRoutes() {
             <Route path="/" element={<HomePage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:key" element={<ProjectPage />} />
+            <Route path="/issues/:issueKey" element={<IssuePage />} />
             {/* Settings: the overview list, and the pages it opens. */}
             <Route path="/settings" element={<SettingsOverview />} />
             {SETTINGS_PAGES}

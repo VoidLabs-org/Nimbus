@@ -13,6 +13,8 @@ security:
 tags:
   - name: projects
     description: Projects and project membership
+  - name: issues
+    description: Issues in a project (issues module)
   - name: auth
     description: Registration, sign-in and sessions (identity module)
   - name: users
@@ -108,6 +110,76 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "404":
           description: Project not found (also returned for a non-Member)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/issues:
+    post:
+      tags: [issues]
+      summary: Create an Issue in a project
+      description: >-
+        Any Member may, until permissions are integrated. The Reporter is the caller, the Issue gets the project's next
+        number and starts in its first To do Status (the project's default Statuses are made if it has none). Requires
+        a verified email.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIssueRequest"
+      responses:
+        "201":
+          description: Issue created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Project not found (also returned for a non-Member)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The project is Archived and takes no new Issues
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/issues/{issueKey}:
+    get:
+      tags: [issues]
+      summary: Open an Issue in a project the User is a Member of
+      parameters:
+        - name: issueKey
+          in: path
+          required: true
+          description: Issue key like `NIM-12`, matched in any case
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The Issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown key, or an Issue in a project the User is not a Member of
           content:
             application/problem+json:
               schema:
@@ -2475,6 +2547,111 @@ components:
         createdAt:
           type: string
           format: date-time
+    IssueType:
+      type: string
+      enum: [Story, Bug, Chore]
+    IssuePriority:
+      type: string
+      enum: [Urgent, High, Medium, Low]
+    StatusCategory:
+      type: string
+      enum: [TODO, IN_PROGRESS, DONE]
+    CreateIssueRequest:
+      type: object
+      required: [type, title]
+      properties:
+        type:
+          $ref: "#/components/schemas/IssueType"
+        title:
+          type: string
+          description: Surrounding whitespace is removed, then 1 to 255 characters without control characters
+        description:
+          type: [string, "null"]
+          maxLength: 50000
+          description: Markdown, stored as typed (the web app sanitises it when rendering)
+        priority:
+          allOf:
+            - $ref: "#/components/schemas/IssuePriority"
+          description: Medium when omitted
+        assigneeId:
+          type: [string, "null"]
+          format: uuid
+          description: Must be a Member of the project
+    IssuePerson:
+      type: object
+      required: [id, displayName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: [string, "null"]
+    IssueStatus:
+      type: object
+      required: [id, name, category]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          $ref: "#/components/schemas/StatusCategory"
+    Issue:
+      type: object
+      required:
+        [
+          id,
+          key,
+          number,
+          type,
+          title,
+          description,
+          priority,
+          status,
+          reporter,
+          assignee,
+          createdAt,
+          updatedAt,
+          version,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          pattern: "^[A-Z][A-Z0-9]{1,9}-[0-9]+$"
+          description: The Project key, a dash and the number; never changes
+        number:
+          type: integer
+        type:
+          $ref: "#/components/schemas/IssueType"
+        title:
+          type: string
+        description:
+          type: [string, "null"]
+        priority:
+          $ref: "#/components/schemas/IssuePriority"
+        status:
+          $ref: "#/components/schemas/IssueStatus"
+        reporter:
+          $ref: "#/components/schemas/IssuePerson"
+        assignee:
+          oneOf:
+            - $ref: "#/components/schemas/IssuePerson"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     IssueNotificationType:
       type: string
       enum: [ISSUE_ASSIGNED, ISSUE_UNASSIGNED, ISSUE_STATUS_CHANGED, ISSUE_EDITED, ISSUE_DELETED]

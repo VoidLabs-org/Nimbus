@@ -18,6 +18,10 @@ export type Project = Schemas["Project"];
 
 export type CreateProjectInput = Schemas["CreateProjectRequest"];
 
+export type Issue = Schemas["Issue"];
+
+export type CreateIssueInput = Schemas["CreateIssueRequest"];
+
 export type ChangePasswordInput = Schemas["ChangePasswordRequest"];
 
 export type LoginInput = Schemas["LoginRequest"];
@@ -369,6 +373,16 @@ export function createApiClient(
 
     /** Opens a project by key. Unknown and non-Member projects both return 404. */
     project: (key: string) => request<Project>(`/api/projects/${encodeURIComponent(key)}`),
+
+    /** Creates an Issue in a project; the caller becomes its Reporter. */
+    createIssue: (projectKey: string, input: CreateIssueInput) =>
+      request<Issue>(`/api/projects/${encodeURIComponent(projectKey)}/issues`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    /** Opens an Issue by key, in any case. Unknown keys and projects the User is not in both return 404. */
+    issue: (issueKey: string) => request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}`),
 
     /**
      * The ids of the "Continue with ..." providers the server has switched on, in the order to show them

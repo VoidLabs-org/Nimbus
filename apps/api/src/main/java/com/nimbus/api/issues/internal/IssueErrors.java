@@ -5,6 +5,7 @@ import java.util.TreeMap;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -46,6 +47,11 @@ class IssueErrors {
 		Map<String, String> errors = new TreeMap<>();
 		e.getBindingResult().getFieldErrors().forEach(error -> errors.putIfAbsent(error.getField(), error.getDefaultMessage()));
 		return invalid(errors);
+	}
+
+	@ExceptionHandler
+	ProblemDetail unreadableBody(HttpMessageNotReadableException e) {
+		return invalid(Map.of("body", "Send a valid JSON body"));
 	}
 
 	private static ProblemDetail invalid(Map<String, String> errors) {

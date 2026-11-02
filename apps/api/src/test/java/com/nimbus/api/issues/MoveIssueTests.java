@@ -145,7 +145,7 @@ class MoveIssueTests {
 
 		assertThat(moved.name()).isEqualTo("In progress");
 		assertThat(moved.category()).isEqualTo("IN_PROGRESS");
-		assertThat(issues.statuses(projectId(key))).extracting(ProjectStatus::name)
+		assertThat(issues.statuses(danaId, projectId(key))).extracting(ProjectStatus::name)
 			.containsExactly("To do", "In progress", "Done");
 		for (var issue : List.of(viaEndpoint, viaApi)) {
 			var history = body(client.get().uri("/api/issues/{key}/history", issue)

@@ -16,6 +16,6 @@ public interface Issues {
 	 */
 	ProjectStatus changeStatus(UUID actor, String issueKey, UUID statusId);
 
-	/** The project's Statuses in order. Does not check who is asking. */
-	List<ProjectStatus> statuses(UUID projectId);
+	/** The project's Statuses in order. The actor must be a Member; a non-Member gets the same "not found" as elsewhere. */
+	List<ProjectStatus> statuses(UUID actor, UUID projectId);
 }

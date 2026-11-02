@@ -24,6 +24,10 @@ class IssueAccess {
 	}
 
 	void require(UUID actor, UUID projectId, Action action) {
-		if (!projects.isMember(projectId, actor)) throw new IssueService.NotFound("Project not found");
+		// Exhaustive on purpose: a new Action fails to compile here until it is given a rule.
+		var allowed = switch (action) {
+			case VIEW, CREATE, EDIT -> projects.isMember(projectId, actor);
+		};
+		if (!allowed) throw new IssueService.NotFound("Project not found");
 	}
 }

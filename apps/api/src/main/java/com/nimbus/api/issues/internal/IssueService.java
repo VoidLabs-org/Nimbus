@@ -106,13 +106,13 @@ class IssueService implements Issues {
 	IssueView edit(UUID actor, String issueKey, IssueEdit edit) {
 		return change(actor, issueKey, edit.version(), current -> {
 			var changes = new ArrayList<Change>();
-			if (edit.title() != null) changes.add(new Change("title", current.title(), edit.title()));
+			if (edit.title() != null) changes.add(new Change(Field.TITLE, current.title(), edit.title()));
 			if (edit.description() != null) {
-				changes.add(new Change("description", current.description(),
+				changes.add(new Change(Field.DESCRIPTION, current.description(),
 						edit.description().isEmpty() ? null : edit.description()));
 			}
-			if (edit.type() != null) changes.add(new Change("type", current.type(), edit.type()));
-			if (edit.priority() != null) changes.add(new Change("priority", current.priority(), edit.priority()));
+			if (edit.type() != null) changes.add(new Change(Field.TYPE, current.type(), edit.type()));
+			if (edit.priority() != null) changes.add(new Change(Field.PRIORITY, current.priority(), edit.priority()));
 			return changes;
 		});
 	}
@@ -124,7 +124,7 @@ class IssueService implements Issues {
 			if (assigneeId != null && !projects.isMember(current.projectId(), assigneeId)) {
 				throw new InvalidField("userId", "The Assignee must be a Member of the project");
 			}
-			return List.of(new Change("assignee", Objects.toString(current.assigneeId(), null),
+			return List.of(new Change(Field.ASSIGNEE, Objects.toString(current.assigneeId(), null),
 					Objects.toString(assigneeId, null)));
 		});
 	}
@@ -133,30 +133,33 @@ class IssueService implements Issues {
 	@Override
 	@Transactional
 	public ProjectStatus changeStatus(UUID actor, String issueKey, UUID statusId) {
-		var status = move(actor, issueKey, statusId).status();
-		return new ProjectStatus(status.id(), status.name(), status.category(), position(status.id()));
+		var target = new ProjectStatus[1];
+		move(actor, issueKey, statusId, target);
+		return target[0];
 	}
 
 	/** The one move, for the endpoint and {@link #changeStatus}. */
 	@Transactional
 	IssueView move(UUID actor, String issueKey, UUID statusId) {
+		return move(actor, issueKey, statusId, new ProjectStatus[1]);
+	}
+
+	/** Also hands back the Status moved to (with its position) in {@code moved[0]}, found in the one read of them. */
+	private IssueView move(UUID actor, String issueKey, UUID statusId, ProjectStatus[] moved) {
 		return change(actor, issueKey, null, current -> {
 			var target = statusId == null ? null : statusesOf(current.projectId()).stream()
 				.filter(status -> status.id().equals(statusId)).findFirst().orElse(null);
 			if (target == null) throw new InvalidField("statusId", "Choose a Status of the Issue's project");
+			moved[0] = target;
 			// Compared by id, so only a move to another Status counts as a change, whatever the names are.
 			if (target.id().equals(current.statusId())) return List.of();
-			return List.of(new Change("status", current.statusName(), target.name(), target.id()));
+			return List.of(new Change(Field.STATUS, current.statusName(), target.name(), target.id()));
 		});
 	}
 
-	private int position(UUID statusId) {
-		return jdbc.sql("SELECT position FROM issue_statuses WHERE id = :id").param("id", statusId)
-			.query(Integer.class).single();
-	}
-
 	@Override
-	public List<ProjectStatus> statuses(UUID projectId) {
+	public List<ProjectStatus> statuses(UUID actor, UUID projectId) {
+		access.require(actor, projectId, IssueAccess.Action.VIEW);
 		return statusesOf(projectId);
 	}
 
@@ -264,7 +267,8 @@ class IssueService implements Issues {
 		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
 
 		var differing = changes.apply(current).stream().filter(c -> !Objects.equals(c.before(), c.after())).toList();
-		if (differing.stream().anyMatch(c -> c.field().equals("title") || c.field().equals("description"))) {
+		var versioned = differing.stream().anyMatch(c -> c.field().versioned());
+		if (versioned) {
 			if (version == null) throw new InvalidField("version", "Send the version you opened");
 			if (version != current.version()) {
 				throw new Conflict("This Issue changed since you opened it", "issue_changed");
@@ -277,30 +281,25 @@ class IssueService implements Issues {
 			params.put("at", now);
 			params.put("id", current.id());
 			for (var c : differing) {
-				var assignee = c.field().equals("assignee");
-				var status = c.field().equals("status");
-				update.append(", ").append(assignee ? "assignee_id" : status ? "status_id" : c.field()).append(" = :")
-					.append(c.field());
-				params.put(c.field(), status ? c.value()
-						: assignee && c.after() != null ? UUID.fromString(c.after()) : c.after());
+				var name = c.field().label();
+				update.append(", ").append(c.field().column()).append(" = :").append(name);
+				params.put(name, c.field() == Field.STATUS ? c.value()
+						: c.field() == Field.ASSIGNEE && c.after() != null ? UUID.fromString(c.after()) : c.after());
 			}
-			if (differing.stream().anyMatch(c -> c.field().equals("title") || c.field().equals("description"))) {
-				update.append(", version = version + 1");
-			}
+			if (versioned) update.append(", version = version + 1");
 			jdbc.sql(update + " WHERE id = :id").params(params).update();
 			for (var c : differing) {
-				// Descriptions are up to 50,000 characters and the history only says they changed, so no values are kept.
-				var keepValues = !c.field().equals("description");
+				var keepValues = c.field().keepsValues();
 				jdbc.sql("""
 						INSERT INTO issue_history (id, issue_id, actor_id, at, field, before_value, after_value)
 						VALUES (:id, :issue, :actor, :at, :field, :before, :after)
 						""")
 					.param("id", UUID.randomUUID()).param("issue", current.id()).param("actor", actor)
-					.param("at", now).param("field", c.field()).param("before", keepValues ? c.before() : null)
+					.param("at", now).param("field", c.field().label()).param("before", keepValues ? c.before() : null)
 					.param("after", keepValues ? c.after() : null).update();
 			}
 			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), target.number()),
-					differing.stream().map(Change::field).toList()));
+					differing.stream().map(c -> c.field().label()).toList()));
 		}
 		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), project).getFirst();
 	}
@@ -428,9 +427,45 @@ class IssueService implements Issues {
 	}
 
 	/** {@code value} is what the column is set to when it isn't {@code after}: a Status keeps its name in history. */
-	private record Change(String field, String before, String after, Object value) {
-		Change(String field, String before, String after) {
+	private record Change(Field field, String before, String after, Object value) {
+		Change(Field field, String before, String after) {
 			this(field, before, after, null);
+		}
+	}
+
+	/**
+	 * What an edit can change: the column it sets, whether it is guarded by (and raises) the version, and whether its
+	 * history keeps the values. Descriptions are up to 50,000 characters and the history only says they changed.
+	 */
+	private enum Field {
+		TITLE("title", true, true), DESCRIPTION("description", true, false), TYPE("type", false, true),
+		PRIORITY("priority", false, true), ASSIGNEE("assignee_id", false, true), STATUS("status_id", false, true);
+
+		private final String column;
+		private final boolean versioned;
+		private final boolean keepsValues;
+
+		Field(String column, boolean versioned, boolean keepsValues) {
+			this.column = column;
+			this.versioned = versioned;
+			this.keepsValues = keepsValues;
+		}
+
+		/** The name in history, events and the API: {@code title}, {@code assignee}, {@code status}. */
+		String label() {
+			return name().toLowerCase(java.util.Locale.ROOT);
+		}
+
+		String column() {
+			return column;
+		}
+
+		boolean versioned() {
+			return versioned;
+		}
+
+		boolean keepsValues() {
+			return keepsValues;
 		}
 	}
 

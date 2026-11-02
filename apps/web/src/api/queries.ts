@@ -4,7 +4,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { api, type Project, type Role } from "./client";
+import { api, type Issue, type Project, type Role } from "./client";
 import { failedLoad, type FailedLoad } from "@repo/api";
 import { storedKey } from "../projects/projectKey";
 
@@ -24,6 +24,8 @@ export const queryKeys = {
   // The list, and one project under it (as the Roles are). Refreshing only the list takes `exact`.
   projects: ["projects"] as const,
   project: (key: string) => ["projects", storedKey(key)] as const,
+  // Issue keys match in any case, so the cache holds one entry per Issue, under the uppercase key.
+  issue: (key: string) => ["issues", key.toUpperCase()] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -70,6 +72,17 @@ export function useProjectCreated() {
     client.setQueryData(queryKeys.project(project.key), project);
     void client.invalidateQueries({ queryKey: queryKeys.projects, exact: true });
   };
+}
+
+/** One Issue, for its page. */
+export function useIssue(key: string) {
+  return useQuery({ queryKey: queryKeys.issue(key), queryFn: () => api.issue(key) });
+}
+
+/** Keep the server's created Issue, so opening it right after shows it at once (it is then refreshed). */
+export function useIssueCreated() {
+  const client = useQueryClient();
+  return (issue: Issue) => client.setQueryData(queryKeys.issue(issue.key), issue);
 }
 
 /** A refresh failed while older data is still on screen: say so, since the data may be out of date. */

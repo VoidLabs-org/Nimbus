@@ -156,6 +156,121 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{key}/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an Issue in a project
+         * @description Any Member may, until permissions are integrated. The Reporter is the caller, the Issue gets the project's next number and starts in its first To do Status (the project's default Statuses are made if it has none). Requires a verified email.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateIssueRequest"];
+                };
+            };
+            responses: {
+                /** @description Issue created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Issue"];
+                    };
+                };
+                400: components["responses"]["InvalidFields"];
+                401: components["responses"]["Unauthorized"];
+                /** @description Project not found (also returned for a non-Member) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The project is Archived and takes no new Issues */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/issues/{issueKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open an Issue in a project the User is a Member of */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Issue key like `NIM-12`, matched in any case */
+                    issueKey: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The Issue */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Issue"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Unknown key, or an Issue in a project the User is not a Member of */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/notifications": {
         parameters: {
             query?: never;
@@ -3366,6 +3481,58 @@ export interface components {
             archived: boolean;
             /** Format: date-time */
             createdAt: string;
+        };
+        /** @enum {string} */
+        IssueType: "Story" | "Bug" | "Chore";
+        /** @enum {string} */
+        IssuePriority: "Urgent" | "High" | "Medium" | "Low";
+        /** @enum {string} */
+        StatusCategory: "TODO" | "IN_PROGRESS" | "DONE";
+        CreateIssueRequest: {
+            type: components["schemas"]["IssueType"];
+            /** @description Surrounding whitespace is removed, then 1 to 255 characters without control characters */
+            title: string;
+            /** @description Markdown, stored as typed (the web app sanitises it when rendering) */
+            description?: string | null;
+            /** @description Medium when omitted */
+            priority?: components["schemas"]["IssuePriority"];
+            /**
+             * Format: uuid
+             * @description Must be a Member of the project
+             */
+            assigneeId?: string | null;
+        };
+        IssuePerson: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            avatarUrl: string | null;
+        };
+        IssueStatus: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            category: components["schemas"]["StatusCategory"];
+        };
+        Issue: {
+            /** Format: uuid */
+            id: string;
+            /** @description The Project key, a dash and the number; never changes */
+            key: string;
+            number: number;
+            type: components["schemas"]["IssueType"];
+            title: string;
+            description: string | null;
+            priority: components["schemas"]["IssuePriority"];
+            status: components["schemas"]["IssueStatus"];
+            reporter: components["schemas"]["IssuePerson"];
+            assignee: components["schemas"]["IssuePerson"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: int64 */
+            version: number;
         };
         /** @enum {string} */
         IssueNotificationType: "ISSUE_ASSIGNED" | "ISSUE_UNASSIGNED" | "ISSUE_STATUS_CHANGED" | "ISSUE_EDITED" | "ISSUE_DELETED";

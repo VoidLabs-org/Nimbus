@@ -79,5 +79,20 @@ class IssueChangedEventTests {
 			.body(Map.of("statusId", done)).exchange().expectStatus().isOk();
 		assertThat(events.ofType(IssueChanged.class)).hasSize(2)
 			.last().isEqualTo(new IssueChanged(projectId, "ICH-1", List.of("status")));
+
+		// Deleting a Status publishes once for each Issue it moves, and nothing when a refused delete moves none.
+		var review = client.post().uri("/api/projects/ICH/statuses").header("Authorization", "Bearer " + token)
+			.body(Map.of("name", "Review", "category", "IN_PROGRESS")).exchange().expectStatus().isCreated()
+			.expectBody(String.class).returnResult().getResponseBody();
+		String reviewId = JsonPath.read(review, "$.id");
+		client.put().uri("/api/issues/ICH-1/status").header("Authorization", "Bearer " + token)
+			.body(Map.of("statusId", reviewId)).exchange().expectStatus().isOk();
+		client.delete().uri("/api/projects/ICH/statuses/{id}", reviewId).header("Authorization", "Bearer " + token)
+			.exchange().expectStatus().isBadRequest();
+		assertThat(events.ofType(IssueChanged.class)).hasSize(3);
+		client.delete().uri("/api/projects/ICH/statuses/{id}?moveTo={to}", reviewId, done)
+			.header("Authorization", "Bearer " + token).exchange().expectStatus().isNoContent();
+		assertThat(events.ofType(IssueChanged.class)).hasSize(4)
+			.last().isEqualTo(new IssueChanged(projectId, "ICH-1", List.of("status")));
 	}
 }

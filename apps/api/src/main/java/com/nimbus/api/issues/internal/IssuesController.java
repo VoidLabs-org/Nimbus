@@ -29,10 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 class IssuesController {
 
 	private final IssueService issues;
+	private final StatusService statuses;
 	private final CurrentUser currentUser;
 
-	IssuesController(IssueService issues, CurrentUser currentUser) {
+	IssuesController(IssueService issues, StatusService statuses, CurrentUser currentUser) {
 		this.issues = issues;
+		this.statuses = statuses;
 		this.currentUser = currentUser;
 	}
 
@@ -122,6 +124,50 @@ class IssuesController {
 		return issues.statuses(currentUser.id(), key);
 	}
 
+	@PostMapping("/api/projects/{key}/statuses")
+	@ResponseStatus(HttpStatus.CREATED)
+	ProjectStatus addStatus(@PathVariable String key, @Valid @RequestBody AddStatus request) {
+		return statuses.add(currentUser.id(), key, request.name(), request.category());
+	}
+
+	@PatchMapping("/api/projects/{key}/statuses/{statusId}")
+	ProjectStatus editStatus(@PathVariable String key, @PathVariable UUID statusId,
+			@Valid @RequestBody EditStatus request) {
+		return statuses.edit(currentUser.id(), key, statusId, request.name(), request.category());
+	}
+
+	/** All of the project's Statuses, in the new order. */
+	@PutMapping("/api/projects/{key}/statuses/order")
+	List<ProjectStatus> reorderStatuses(@PathVariable String key, @RequestBody ReorderStatuses request) {
+		List<UUID> ids = null;
+		if (request.statusIds() != null) {
+			try {
+				ids = request.statusIds().stream().map(UUID::fromString).toList();
+			}
+			catch (IllegalArgumentException | NullPointerException e) {
+				throw new IssueService.InvalidField("statusIds", "Send each of the project's Statuses once");
+			}
+		}
+		return statuses.reorder(currentUser.id(), key, ids);
+	}
+
+	/** {@code moveTo} is where the deleted Status's Issues go; it is required when it has any. */
+	@DeleteMapping("/api/projects/{key}/statuses/{statusId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	void deleteStatus(@PathVariable String key, @PathVariable UUID statusId,
+			@RequestParam(required = false) String moveTo) {
+		UUID target = null;
+		if (moveTo != null) {
+			try {
+				target = UUID.fromString(moveTo);
+			}
+			catch (IllegalArgumentException e) {
+				throw new IssueService.InvalidField("moveTo", "Choose another Status of the project");
+			}
+		}
+		statuses.delete(currentUser.id(), key, statusId, target);
+	}
+
 	@GetMapping("/api/issues/{issueKey}/history")
 	List<IssueService.HistoryEntryView> history(@PathVariable String issueKey) {
 		return issues.history(currentUser.id(), issueKey);
@@ -137,6 +183,30 @@ class IssuesController {
 		EditIssue {
 			title = title == null ? null : title.strip();
 		}
+	}
+
+	static final String NAME_RULE = "Use 1 to 30 characters without control characters";
+	static final String CATEGORY_RULE = "Choose TODO, IN_PROGRESS or DONE";
+
+	/** The name is trimmed before it is checked, like an Issue's title. */
+	record AddStatus(
+			@NotNull(message = NAME_RULE) @Pattern(regexp = "\\P{Cc}{1,30}", message = NAME_RULE) String name,
+			@NotNull(message = CATEGORY_RULE) @Pattern(regexp = "TODO|IN_PROGRESS|DONE", message = CATEGORY_RULE) String category) {
+
+		AddStatus {
+			name = name == null ? null : name.strip();
+		}
+	}
+
+	record EditStatus(@Pattern(regexp = "\\P{Cc}{1,30}", message = NAME_RULE) String name,
+			@Pattern(regexp = "TODO|IN_PROGRESS|DONE", message = CATEGORY_RULE) String category) {
+
+		EditStatus {
+			name = name == null ? null : name.strip();
+		}
+	}
+
+	record ReorderStatuses(List<String> statusIds) {
 	}
 
 	record AssignIssue(UUID userId) {

@@ -39,9 +39,6 @@ class IssueService implements Issues {
 			FROM issues i JOIN issue_statuses s ON s.id = i.status_id
 			""";
 
-	private static final List<String[]> DEFAULT_STATUSES = List.of(new String[] { "To do", "TODO" },
-			new String[] { "In progress", "IN_PROGRESS" }, new String[] { "Done", "DONE" });
-
 	private final JdbcClient jdbc;
 	private final Projects projects;
 	private final Users users;
@@ -398,16 +395,7 @@ class IssueService implements Issues {
 
 	/** The first Status, in order, in the To do category; the project's default Statuses are made if it has none. */
 	private UUID firstToDoStatus(UUID projectId) {
-		var existing = jdbc.sql("SELECT count(*) FROM issue_statuses WHERE project_id = :project")
-			.param("project", projectId).query(Long.class).single();
-		if (existing == 0) {
-			for (int position = 0; position < DEFAULT_STATUSES.size(); position++) {
-				jdbc.sql("INSERT INTO issue_statuses (id, project_id, name, category, position) VALUES (:id, :project, :name, :category, :position)")
-					.param("id", UUID.randomUUID()).param("project", projectId)
-					.param("name", DEFAULT_STATUSES.get(position)[0]).param("category", DEFAULT_STATUSES.get(position)[1])
-					.param("position", position).update();
-			}
-		}
+		DefaultStatuses.ensure(jdbc, projectId);
 		return jdbc.sql("SELECT id FROM issue_statuses WHERE project_id = :project AND category = 'TODO' ORDER BY position LIMIT 1")
 			.param("project", projectId).query(UUID.class).single();
 	}

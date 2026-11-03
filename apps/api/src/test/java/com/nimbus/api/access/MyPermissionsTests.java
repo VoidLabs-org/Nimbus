@@ -43,7 +43,9 @@ class MyPermissionsTests {
 
 		assertThat((Map<String, String>) JsonPath.read(body, "$.project")).isEqualTo(Map.of(
 				"projects:project:update", "project", "projects:project:archive", "project",
-				"projects:member:manage", "project"));
+				"projects:member:manage", "project", "issues:issue:create", "project",
+				"issues:issue:edit", "project", "issues:issue:delete", "project",
+				"issues:status:manage", "project"));
 		assertThat((java.util.List<String>) JsonPath.read(body, "$.platform")).containsExactly("projects:project:create");
 		assertThat((Map<String, String>) JsonPath.read(mine(token, UUID.randomUUID()), "$.project")).isEmpty();
 	}

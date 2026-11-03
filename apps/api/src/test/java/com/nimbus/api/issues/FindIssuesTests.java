@@ -223,6 +223,7 @@ class FindIssuesTests {
 	private void addMember(String projectKey, Person person) {
 		jdbc.sql("INSERT INTO project_members (project_id, user_id, added_at) SELECT id, :user, now() FROM projects WHERE key = :key")
 			.param("user", UUID.fromString(person.id())).param("key", projectKey).update();
+		IssueRoles.give(jdbc, projectKey, person.id(), "developer");
 	}
 
 	private static List<String> titles(String body) {
@@ -252,6 +253,7 @@ class FindIssuesTests {
 			.collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append);
 		client.post().uri("/api/projects").header("Authorization", "Bearer " + owner.token())
 			.body(Map.of("key", key, "name", "Project " + key)).exchange().expectStatus().isCreated();
+		IssueRoles.give(jdbc, key, owner.id(), "project_admin");
 		return key;
 	}
 

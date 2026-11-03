@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type Project } from "../api/client";
 import { queryKeys } from "../api/queries";
 import { createQueryClient } from "../api/queryClient";
+import { SessionContext, type Session } from "../auth/useSession";
 import ProjectPage from "./ProjectPage";
 
 const apple: Project = {
@@ -20,9 +21,18 @@ const apple: Project = {
   createdAt: "2026-10-19T00:00:00Z",
 };
 
+const fullAccess = {
+  "issues:issue:create": "project",
+  "issues:issue:edit": "project",
+  "issues:issue:delete": "project",
+  "issues:status:manage": "project",
+} as const;
+const session = { user: { id: "u1", displayName: "Dana" } } as unknown as Session;
+
 let restoreMatchMedia: () => void;
 beforeEach(() => {
   restoreMatchMedia = stubMatchMedia();
+  vi.spyOn(api, "myProjectPermissions").mockResolvedValue(fullAccess);
 });
 afterEach(() => {
   cleanup();
@@ -35,11 +45,13 @@ function showAt(path: string, client = createQueryClient()) {
   return render(
     <NimbusThemeProvider>
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path="/projects/:key" element={<ProjectPage />} />
-          </Routes>
-        </MemoryRouter>
+        <SessionContext value={session}>
+          <MemoryRouter initialEntries={[path]}>
+            <Routes>
+              <Route path="/projects/:key" element={<ProjectPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SessionContext>
       </QueryClientProvider>
     </NimbusThemeProvider>,
   );
@@ -53,6 +65,16 @@ describe("a project's page", () => {
     expect((await screen.findAllByText("apple")).length).toBeGreaterThan(0);
     expect(screen.getByText("APP")).toBeTruthy();
     expect(screen.getByText("Fruit stand")).toBeTruthy();
+  });
+
+  it("hides Create Issue and Manage Statuses from a User who may not use them", async () => {
+    vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+    vi.spyOn(api, "project").mockResolvedValue(apple);
+    showAt("/projects/app");
+
+    await screen.findByRole("link", { name: "View Issues" });
+    expect(screen.queryByRole("button", { name: "Create Issue" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Manage Statuses" })).toBeNull();
   });
 
   it("says there is no description when it has none", async () => {

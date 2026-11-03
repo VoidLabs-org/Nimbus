@@ -58,12 +58,14 @@ class RolesTests {
 
 		var projectAdmin = role("project_admin", admin);
 		assertThat((List<String>) JsonPath.read(projectAdmin, "$.grants[*].permission"))
-			.containsExactlyInAnyOrder("projects:project:update", "projects:project:archive", "projects:member:manage");
+			.containsExactlyInAnyOrder("projects:project:update", "projects:project:archive", "projects:member:manage",
+					"issues:issue:create", "issues:issue:edit", "issues:issue:delete", "issues:status:manage");
 		assertThat((List<String>) JsonPath.read(projectAdmin, "$.grants[*].scope")).containsOnly("project");
 
 		assertThat((List<String>) JsonPath.read(role("everyone", admin), "$.grants[*].permission"))
 			.containsExactly("projects:project:create");
-		assertThat((List<?>) JsonPath.read(role("developer", admin), "$.grants")).isEmpty();
+		assertThat((List<String>) JsonPath.read(role("developer", admin), "$.grants[*].permission"))
+			.containsExactlyInAnyOrder("issues:issue:create", "issues:issue:edit", "issues:issue:delete");
 		assertThat((List<?>) JsonPath.read(role("viewer", admin), "$.grants")).isEmpty();
 	}
 

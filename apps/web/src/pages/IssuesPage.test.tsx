@@ -20,6 +20,7 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
 });
 import { api, type Issue, type IssuePage, type Project, type ProjectStatus } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
+import { SessionContext, type Session } from "../auth/useSession";
 import IssuesPage from "./IssuesPage";
 
 const project: Project = {
@@ -67,9 +68,18 @@ function byStatus(all: Issue[]) {
 }
 const inProgress = { id: "s2", name: "In progress", category: "IN_PROGRESS" as const };
 
+const fullAccess = {
+  "issues:issue:create": "project",
+  "issues:issue:edit": "project",
+  "issues:issue:delete": "project",
+  "issues:status:manage": "project",
+} as const;
+const session = { user: { id: "u1", displayName: "Dana" } } as unknown as Session;
+
 let restoreMatchMedia: () => void;
 beforeEach(() => {
   restoreMatchMedia = stubMatchMedia();
+  vi.spyOn(api, "myProjectPermissions").mockResolvedValue(fullAccess);
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -97,11 +107,13 @@ function show(url = "/projects/NIM/issues") {
   return render(
     <NimbusThemeProvider>
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter initialEntries={[url]}>
-          <Routes>
-            <Route path="/projects/:key/issues" element={<IssuesPage />} />
-          </Routes>
-        </MemoryRouter>
+        <SessionContext value={session}>
+          <MemoryRouter initialEntries={[url]}>
+            <Routes>
+              <Route path="/projects/:key/issues" element={<IssuesPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SessionContext>
       </QueryClientProvider>
     </NimbusThemeProvider>,
   );
@@ -185,6 +197,15 @@ describe("IssuesPage", () => {
 
   it("hides Create Issue for an Archived project", async () => {
     vi.spyOn(api, "project").mockResolvedValue({ ...project, archived: true });
+    vi.spyOn(api, "issues").mockResolvedValue(page([]));
+    show();
+
+    await screen.findByText("No Issues yet");
+    expect(screen.queryByRole("button", { name: "Create Issue" })).toBeNull();
+  });
+
+  it("hides Create Issue from a User who may not create Issues", async () => {
+    vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
     vi.spyOn(api, "issues").mockResolvedValue(page([]));
     show();
 

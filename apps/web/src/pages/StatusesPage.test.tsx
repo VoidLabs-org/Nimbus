@@ -21,6 +21,7 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
 });
 import { api, type IssuePage, type Project, type ProjectStatus } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
+import { SessionContext, type Session } from "../auth/useSession";
 import StatusesPage from "./StatusesPage";
 
 const project: Project = {
@@ -38,9 +39,18 @@ const statuses: ProjectStatus[] = [
 ];
 const issuesIn = (total: number): IssuePage => ({ items: [], total, page: 0, size: 1 });
 
+const fullAccess = {
+  "issues:issue:create": "project",
+  "issues:issue:edit": "project",
+  "issues:issue:delete": "project",
+  "issues:status:manage": "project",
+} as const;
+const session = { user: { id: "u1", displayName: "Dana" } } as unknown as Session;
+
 let restoreMatchMedia: () => void;
 beforeEach(() => {
   restoreMatchMedia = stubMatchMedia();
+  vi.spyOn(api, "myProjectPermissions").mockResolvedValue(fullAccess);
   Element.prototype.scrollIntoView = () => {};
   vi.stubGlobal(
     "ResizeObserver",
@@ -65,11 +75,13 @@ function show() {
   return render(
     <NimbusThemeProvider>
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter initialEntries={["/projects/NIM/settings/statuses"]}>
-          <Routes>
-            <Route path="/projects/:key/settings/statuses" element={<StatusesPage />} />
-          </Routes>
-        </MemoryRouter>
+        <SessionContext value={session}>
+          <MemoryRouter initialEntries={["/projects/NIM/settings/statuses"]}>
+            <Routes>
+              <Route path="/projects/:key/settings/statuses" element={<StatusesPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SessionContext>
       </QueryClientProvider>
     </NimbusThemeProvider>,
   );
@@ -200,5 +212,13 @@ describe("StatusesPage", () => {
     expect(await screen.findByText("This project is archived")).toBeTruthy();
     expect(screen.getByLabelText("Name of To do")).toHaveProperty("disabled", true);
     expect(screen.queryByRole("button", { name: "Add Status" })).toBeNull();
+  });
+
+  it("tells a User who may not manage Statuses so", async () => {
+    vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+    show();
+
+    expect(await screen.findByText("You can't manage Statuses.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /add/i })).toBeNull();
   });
 });

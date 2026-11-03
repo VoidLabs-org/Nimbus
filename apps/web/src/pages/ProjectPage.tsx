@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { loadFailure, refreshFailed, useProject } from "../api/queries";
 import { NewIssueForm } from "../issues/NewIssueForm";
+import { useIssuePermissions } from "../issues/useIssuePermissions";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
@@ -16,6 +17,7 @@ export default function ProjectPage() {
   const { key = "" } = useParams();
   const query = useProject(key);
   const project = query.data;
+  const permissions = useIssuePermissions(project?.key);
   const failure = loadFailure(query);
   // The project the form is open for, so a form opened on one project is not still open on another.
   const [creatingIssueIn, setCreatingIssueIn] = useState<string | null>(null);
@@ -81,15 +83,17 @@ export default function ProjectPage() {
                 >
                   View Issues
                 </Button>
-                <Button
-                  variant="default"
-                  component={Link}
-                  to={`/projects/${encodeURIComponent(project.key)}/settings/statuses`}
-                >
-                  Manage Statuses
-                </Button>
+                {permissions.canManageStatuses && (
+                  <Button
+                    variant="default"
+                    component={Link}
+                    to={`/projects/${encodeURIComponent(project.key)}/settings/statuses`}
+                  >
+                    Manage Statuses
+                  </Button>
+                )}
                 {/* An Archived project takes no new Issues. */}
-                {!project.archived && (
+                {!project.archived && permissions.canCreate && (
                   <Button onClick={() => setCreatingIssueIn(project.key)}>Create Issue</Button>
                 )}
               </Group>

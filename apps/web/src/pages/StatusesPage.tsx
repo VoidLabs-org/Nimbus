@@ -46,6 +46,7 @@ import {
   useStatusesChanged,
 } from "../api/queries";
 import { DeleteStatusDialog } from "../issues/DeleteStatusDialog";
+import { useIssuePermissions } from "../issues/useIssuePermissions";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
@@ -178,6 +179,7 @@ export default function StatusesPage() {
   const projectQuery = useProject(key);
   const project = projectQuery.data;
   const statusesQuery = useProjectStatuses(project?.key);
+  const permissions = useIssuePermissions(project?.key);
   const statuses = statusesQuery.data ?? [];
   const client = useQueryClient();
   const statusesChanged = useStatusesChanged();
@@ -207,6 +209,22 @@ export default function StatusesPage() {
         code="404"
         name="Not found"
         actions={<PrimaryAction to="/projects">Go to Projects</PrimaryAction>}
+      />
+    );
+  }
+  if (permissions.loaded && !permissions.canManageStatuses) {
+    return (
+      <StatusPage
+        eyebrow="Error 403"
+        title="You can't manage Statuses."
+        body="Only a project admin can add, rename, reorder or remove this project's Statuses."
+        code="403"
+        name="Forbidden"
+        actions={
+          <PrimaryAction to={`/projects/${encodeURIComponent(key)}`}>
+            Back to the project
+          </PrimaryAction>
+        }
       />
     );
   }

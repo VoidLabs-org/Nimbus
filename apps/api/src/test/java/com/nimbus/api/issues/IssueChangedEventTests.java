@@ -70,8 +70,16 @@ class IssueChangedEventTests {
 
 		var published = events.ofType(IssueChanged.class);
 		assertThat(published).hasSize(1);
-		assertThat(published.iterator().next())
-			.isEqualTo(new IssueChanged(projectId, "ICH-1", List.of("title", "priority")));
+		var first = published.iterator().next();
+		assertThat(first.projectId()).isEqualTo(projectId);
+		assertThat(first.issueKey()).isEqualTo("ICH-1");
+		assertThat(first.actorId()).isEqualTo(creator);
+		assertThat(first.reporterId()).isEqualTo(creator);
+		assertThat(first.assigneeId()).isNull();
+		assertThat(first.title()).isEqualTo("After");
+		assertThat(first.at()).isNotNull();
+		assertThat(first.changes()).containsExactly(new IssueChanged.Change("title", "Before", "After"),
+			new IssueChanged.Change("priority", "Medium", "High"));
 
 		// A move publishes once with "status"; moving to the Status it is already in publishes nothing.
 		var statuses = client.get().uri("/api/projects/ICH/statuses").header("Authorization", "Bearer " + token)
@@ -81,8 +89,8 @@ class IssueChangedEventTests {
 			.body(Map.of("statusId", done)).exchange().expectStatus().isOk();
 		client.put().uri("/api/issues/ICH-1/status").header("Authorization", "Bearer " + token)
 			.body(Map.of("statusId", done)).exchange().expectStatus().isOk();
-		assertThat(events.ofType(IssueChanged.class)).hasSize(2)
-			.last().isEqualTo(new IssueChanged(projectId, "ICH-1", List.of("status")));
+		assertThat(events.ofType(IssueChanged.class)).hasSize(2).last().satisfies(
+			e -> assertThat(e.changes()).containsExactly(new IssueChanged.Change("status", "To do", "Done")));
 
 		// Deleting a Status publishes once for each Issue it moves, and nothing when a refused delete moves none.
 		var review = client.post().uri("/api/projects/ICH/statuses").header("Authorization", "Bearer " + token)
@@ -96,7 +104,10 @@ class IssueChangedEventTests {
 		assertThat(events.ofType(IssueChanged.class)).hasSize(3);
 		client.delete().uri("/api/projects/ICH/statuses/{id}?moveTo={to}", reviewId, done)
 			.header("Authorization", "Bearer " + token).exchange().expectStatus().isNoContent();
-		assertThat(events.ofType(IssueChanged.class)).hasSize(4)
-			.last().isEqualTo(new IssueChanged(projectId, "ICH-1", List.of("status")));
+		assertThat(events.ofType(IssueChanged.class)).hasSize(4).last().satisfies(e -> {
+			assertThat(e.changes()).extracting(IssueChanged.Change::field).containsExactly("status");
+			assertThat(e.title()).isEqualTo("After");
+			assertThat(e.actorId()).isEqualTo(creator);
+		});
 	}
 }

@@ -2,12 +2,15 @@ package com.nimbus.api.notifications;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.RecordingMailer;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,6 +81,121 @@ class IssueNotificationTests {
 			.jsonPath("$.items[0].snapshot.issueKey").isEqualTo("NIM-12")
 			.jsonPath("$.items[0].snapshot.title").isEqualTo("Fix the login")
 			.jsonPath("$.items[0].link").isEqualTo("/issues/NIM-12");
+	}
+
+	static IssueChanged.Change change(String field, String before, String after) {
+		return new IssueChanged.Change(field, before, after);
+	}
+
+	IssueChanged changed(String key, String title, Person actor, Person reporter, Person assignee,
+			IssueChanged.Change... changes) {
+		return new IssueChanged(UUID.randomUUID(), key, actor.id(), title, reporter.id(),
+			assignee == null ? null : assignee.id(), List.of(changes), Instant.now());
+	}
+
+	List<Map<String, Object>> notifications(Person p, String type) {
+		return jdbc.sql("SELECT type, snapshot::text AS snapshot FROM notifications WHERE user_id = :user AND type = :type")
+			.param("user", p.id()).param("type", type).query().listOfRows();
+	}
+
+	/** Waits until a sentinel Assignee is told, which happens after the events published before it are handled. */
+	void settle(Scenario scenario, Person actor) {
+		var sentinel = person("Sentinel");
+		scenario.publish(created("NIM-S" + UUID.randomUUID().toString().substring(0, 6), "Sentinel", actor, sentinel))
+			.andWaitForStateChange(() -> count(sentinel), n -> n == 1);
+	}
+
+	@Test
+	void reassigningTellsTheOldAssigneeTheNewOneAndOnlyListsTheChangeForTheReporter(Scenario scenario) {
+		var maya = person("Maya");
+		var sam = person("Sam");
+		var alex = person("Alex");
+		var riley = person("Riley");
+		var event = changed("NIM-40", "Reassign me", maya, riley, alex,
+			change("assignee", sam.id().toString(), alex.id().toString()));
+		scenario.publish(event).andWaitForStateChange(() -> count(alex), n -> n == 1);
+		// A redelivered event is still one Notification each.
+		scenario.publish(event);
+		settle(scenario, maya);
+		assertThat(notifications(sam, "ISSUE_UNASSIGNED")).hasSize(1);
+		assertThat(notifications(alex, "ISSUE_ASSIGNED")).hasSize(1);
+		var edited = notifications(riley, "ISSUE_EDITED");
+		assertThat(edited).hasSize(1);
+		assertThat((String) edited.getFirst().get("snapshot")).contains("changed the Assignee").contains("NIM-40")
+			.contains("Reassign me");
+		assertThat(count(sam)).isEqualTo(1);
+		assertThat(count(alex)).isEqualTo(1);
+		assertThat(count(riley)).isEqualTo(1);
+		assertThat(count(maya)).isZero();
+		// The old Assignee's email follows their switch (on by default); the Reporter's Edited email is off by default.
+		assertThat(RecordingMailer.sentTo(sam.email()).stream()
+			.filter(m -> m.subject().equals("Maya unassigned you from NIM-40"))).hasSize(1);
+		assertThat(RecordingMailer.sentTo(alex.email()).stream()
+			.filter(m -> m.subject().equals("Maya assigned you NIM-40"))).hasSize(1);
+		assertThat(RecordingMailer.sentTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-40"))).isEmpty();
+	}
+
+	@Test
+	void clearingTheAssigneeTellsTheOldAssigneeAndTheReporter(Scenario scenario) {
+		var maya = person("Maya");
+		var sam = person("Sam");
+		var riley = person("Riley");
+		scenario.publish(changed("NIM-41", "Clear me", maya, riley, null, change("assignee", sam.id().toString(), null)))
+			.andWaitForStateChange(() -> count(sam), n -> n == 1);
+		settle(scenario, maya);
+		assertThat(notifications(sam, "ISSUE_UNASSIGNED")).hasSize(1);
+		assertThat(notifications(riley, "ISSUE_EDITED")).hasSize(1);
+		assertThat(count(maya)).isZero();
+	}
+
+	@Test
+	void severalEditsInOneSaveGiveEachRecipientOneNotificationNamingEveryField(Scenario scenario) {
+		var maya = person("Maya");
+		var riley = person("Riley");
+		var sam = person("Sam");
+		scenario.publish(changed("NIM-42", "New title", maya, riley, sam, change("title", "Old", "New title"),
+			change("description", null, null), change("priority", "Low", "High"), change("type", "Story", "Bug"),
+			change("status", "To do", "Done"))).andWaitForStateChange(() -> count(sam), n -> n == 1);
+		settle(scenario, maya);
+		for (var recipient : List.of(riley, sam)) {
+			var edited = notifications(recipient, "ISSUE_EDITED");
+			assertThat(edited).hasSize(1);
+			assertThat((String) edited.getFirst().get("snapshot")).contains("edited title, description and priority")
+				.doesNotContain("Old\"").doesNotContain("High");
+			assertThat(count(recipient)).isEqualTo(1);
+		}
+		assertThat(count(maya)).isZero();
+	}
+
+	@Test
+	void aReporterWhoIsAlsoTheAssigneeGetsOneNotificationAndNobodyHearsAboutTheirOwnChange(Scenario scenario) {
+		var maya = person("Maya");
+		var sam = person("Sam");
+		scenario.publish(changed("NIM-43", "Mine", maya, sam, sam, change("priority", "Low", "High")))
+			.andWaitForStateChange(() -> count(sam), n -> n == 1);
+		// Maya is the Reporter and the Assignee and edits it herself: nobody is told.
+		scenario.publish(changed("NIM-44", "Hers", maya, maya, maya, change("title", "A", "Hers")));
+		settle(scenario, maya);
+		assertThat(count(sam)).isEqualTo(1);
+		assertThat(count(maya)).isZero();
+	}
+
+	@Test
+	void statusAndTypeOnlyChangesAreNotEditsAndTheEditedEmailFollowsTheSwitch(Scenario scenario) {
+		var maya = person("Maya");
+		var riley = person("Riley");
+		var sam = person("Sam");
+		scenario.publish(changed("NIM-45", "Moved", maya, riley, sam, change("status", "To do", "Done"),
+			change("type", "Story", "Bug")));
+		client.put().uri("/api/users/me/notification-settings/ISSUE_EDITED").headers(h -> h.setBearerAuth(sam.token()))
+			.body(Map.of("email", true)).exchange().expectStatus().isNoContent();
+		scenario.publish(changed("NIM-46", "Edited", maya, riley, sam, change("title", "A", "Edited")))
+			.andWaitForStateChange(() -> RecordingMailer.sentTo(sam.email()).stream()
+				.filter(m -> m.subject().equals("Maya edited title on NIM-46")).toList(), mails -> mails.size() == 1)
+			.andVerify(mails -> assertThat(mails.getFirst().text()).contains("Maya edited title on NIM-46 · Edited"));
+		assertThat(count(sam)).isEqualTo(1);
+		assertThat(count(riley)).isEqualTo(1);
+		assertThat(RecordingMailer.sentTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-46"))).isEmpty();
 	}
 
 	@Test

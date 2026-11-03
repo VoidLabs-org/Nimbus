@@ -103,9 +103,10 @@ class StatusService {
 		var target = moveTo == null ? null : all.stream().filter(status -> status.id().equals(moveTo)).findFirst()
 			.filter(status -> !status.id().equals(statusId)).orElseThrow(
 					() -> new IssueService.InvalidField("moveTo", "Choose another Status of the project"));
-		var issues = jdbc.sql("SELECT id, number FROM issues WHERE status_id = :status ORDER BY number FOR UPDATE")
+		var issues = jdbc.sql("SELECT id, number, title, reporter_id, assignee_id FROM issues WHERE status_id = :status ORDER BY number FOR UPDATE")
 			.param("status", statusId)
-			.query((row, index) -> new Moved(row.getObject("id", UUID.class), row.getInt("number"))).list();
+			.query((row, index) -> new Moved(row.getObject("id", UUID.class), row.getInt("number"), row.getString("title"),
+				row.getObject("reporter_id", UUID.class), row.getObject("assignee_id", UUID.class))).list();
 		if (!issues.isEmpty() && target == null) {
 			throw new IssueService.InvalidField("moveTo", "Choose where to move this Status's Issues");
 		}
@@ -122,8 +123,10 @@ class StatusService {
 			jdbc.sql("UPDATE issues SET status_id = :to, updated_at = :at WHERE status_id = :from")
 				.param("to", target.id()).param("at", now).param("from", statusId).update();
 		}
+		var at = clock.instant();
 		var changed = issues.stream().map(issue -> new IssueChanged(project.id(),
-				IssueKeys.format(project.key(), issue.number()), List.of("status"))).toList();
+				IssueKeys.format(project.key(), issue.number()), actor, issue.title(), issue.reporterId(),
+				issue.assigneeId(), List.of(new IssueChanged.Change("status", current.name(), target.name())), at)).toList();
 		try {
 			jdbc.sql("DELETE FROM issue_statuses WHERE id = :id").param("id", statusId).update();
 		}
@@ -198,6 +201,6 @@ class StatusService {
 		}
 	}
 
-	private record Moved(UUID id, int number) {
+	private record Moved(UUID id, int number, String title, UUID reporterId, UUID assigneeId) {
 	}
 }

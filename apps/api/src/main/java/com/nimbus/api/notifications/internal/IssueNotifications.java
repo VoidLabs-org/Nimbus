@@ -1,13 +1,16 @@
 package com.nimbus.api.notifications.internal;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
+import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
 import com.nimbus.api.mail.Mail;
 import com.nimbus.api.mail.MailAssets;
@@ -56,27 +59,78 @@ class IssueNotifications {
 	@ApplicationModuleListener
 	void on(IssueCreated event) {
 		if (event.assigneeId() == null || event.assigneeId().equals(event.actorId())) return;
-		var actor = users.findAllById(List.of(event.actorId())).stream().findFirst();
+		var actor = actor(event.actorId());
 		deliver(event.assigneeId(), NotificationSettings.IssueType.ISSUE_ASSIGNED,
 			"ISSUE_ASSIGNED:" + event.projectId() + ":" + event.issueKey() + ":created", event.projectId(),
-			event.issueKey(), event.actorId(), event.title(), actor.map(UserSummary::displayName).orElse("Someone"),
-			actor.map(UserSummary::avatarUrl).orElse(null));
+			event.actorId(), clock.instant(), event.issueKey(), event.title(), actor, "");
 	}
 
-	private void deliver(UUID recipientId, NotificationSettings.IssueType type, String dedupeKey, UUID projectId,
-			String issueKey, UUID actorId, String title, String actorName, String actorAvatarUrl) {
+	/**
+	 * A reassignment tells the old Assignee and the new one; every edit of the title, description, priority or
+	 * Assignee gives the Reporter and the current Assignee one {@code ISSUE_EDITED} naming all of them. Nobody gets
+	 * more than one Notification per event, nor one about their own change. Status and type changes are not edits.
+	 */
+	@ApplicationModuleListener
+	void on(IssueChanged event) {
+		var assignee = event.changes().stream().filter(c -> c.field().equals("assignee")).findFirst().orElse(null);
+		var edited = event.changes().stream().map(IssueChanged.Change::field)
+			.filter(f -> List.of("title", "description", "priority", "assignee").contains(f)).toList();
+		// Status and type changes notify nobody, so they skip the lookups.
+		if (assignee == null && edited.isEmpty()) return;
+		var actor = actor(event.actorId());
+		var told = new LinkedHashSet<UUID>();
+		told.add(event.actorId());
+		if (assignee != null) {
+			var before = assignee.before() == null ? null : UUID.fromString(assignee.before());
+			var after = assignee.after() == null ? null : UUID.fromString(assignee.after());
+			if (before != null && told.add(before)) {
+				deliver(before, NotificationSettings.IssueType.ISSUE_UNASSIGNED, key("ISSUE_UNASSIGNED", before, event),
+					event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, "");
+			}
+			if (after != null && told.add(after)) {
+				deliver(after, NotificationSettings.IssueType.ISSUE_ASSIGNED, key("ISSUE_ASSIGNED", after, event),
+					event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, "");
+			}
+		}
+		if (edited.isEmpty()) return;
+		var summary = edited.equals(List.of("assignee")) ? "changed the Assignee"
+			: "edited " + names(edited.stream().map(f -> f.equals("assignee") ? "Assignee" : f).toList());
+		for (var recipient : new UUID[] { event.reporterId(), event.assigneeId() }) {
+			if (recipient == null || !told.add(recipient)) continue;
+			deliver(recipient, NotificationSettings.IssueType.ISSUE_EDITED, key("ISSUE_EDITED", recipient, event),
+				event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, summary);
+		}
+	}
+
+	private static String key(String type, UUID recipient, IssueChanged event) {
+		return type + ":" + event.projectId() + ":" + event.issueKey() + ":" + recipient + ":" + event.at();
+	}
+
+	/** "title", "title and priority", "title, description and priority". */
+	private static String names(List<String> names) {
+		if (names.size() == 1) return names.getFirst();
+		return String.join(", ", names.subList(0, names.size() - 1)) + " and " + names.getLast();
+	}
+
+	private Optional<UserSummary> actor(UUID actorId) {
+		return users.findAllById(List.of(actorId)).stream().findFirst();
+	}
+
+	private void deliver(UUID recipientId, NotificationSettings.IssueType type, String dedupeKey,
+			UUID projectId, UUID actorId, Instant at, String issueKey, String title, Optional<UserSummary> actor, String summary) {
 		var recipient = users.findAllById(List.of(recipientId)).stream().findFirst();
 		// An unverified address may belong to someone else, and they can't open the inbox anyway.
 		if (recipient.isEmpty() || !recipient.get().emailVerified()) return;
+		var actorName = actor.map(UserSummary::displayName).orElse("Someone");
 		var snapshot = new LinkedHashMap<String, String>();
 		snapshot.put("actorName", actorName);
-		if (actorAvatarUrl != null) snapshot.put("actorAvatarUrl", actorAvatarUrl);
+		actor.map(UserSummary::avatarUrl).ifPresent(url -> snapshot.put("actorAvatarUrl", url));
 		snapshot.put("issueKey", issueKey);
 		snapshot.put("title", title);
-		// The event carries no time, so the Notification is dated when it is handled.
-		if (!inbox.add(recipientId, type.name(), dedupeKey, snapshot, clock.instant(), projectId, issueKey, actorId)) return;
+		if (type == NotificationSettings.IssueType.ISSUE_EDITED) snapshot.put("summary", summary);
+		if (!inbox.add(recipientId, type.name(), dedupeKey, snapshot, at, projectId, issueKey, actorId)) return;
 		if (!settings.emailOn(recipientId, type)) return;
-		var message = assigned(recipient.get().email(), actorName, issueKey, title);
+		var message = mail(type, recipient.get().email(), actorName, issueKey, title, summary);
 		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 			@Override
 			public void afterCommit() {
@@ -90,13 +144,24 @@ class IssueNotifications {
 		});
 	}
 
-	private Mail assigned(String to, String actorName, String issueKey, String title) {
-		var subject = actorName + " assigned you " + issueKey;
-		var line = actorName + " assigned you " + issueKey + " · " + title + ".";
+	private Mail mail(NotificationSettings.IssueType type, String to, String actorName, String issueKey, String title,
+			String summary) {
+		var phrase = switch (type) {
+			case ISSUE_ASSIGNED -> "assigned you";
+			case ISSUE_UNASSIGNED -> "unassigned you from";
+			default -> summary + " on";
+		};
+		var heading = switch (type) {
+			case ISSUE_ASSIGNED -> "Assigned to you";
+			case ISSUE_UNASSIGNED -> "Unassigned from you";
+			default -> "Issue edited";
+		};
+		var subject = actorName + " " + phrase + " " + issueKey;
+		var line = subject + " · " + title + ".";
 		var button = "Open " + issueKey;
 		var url = publicUrl + "/issues/" + issueKey;
 		return new Mail(to, subject,
-			NoticeMail.html(subject, "Assigned to you", line, Optional.empty(), button, url, FOOTER,
+			NoticeMail.html(subject, heading, line, Optional.empty(), button, url, FOOTER,
 				assets.url(MailAssets.NIMBUS_ICON_DARK)),
 			line + "\n\n" + button + ": " + url + "\n\n" + FOOTER);
 	}

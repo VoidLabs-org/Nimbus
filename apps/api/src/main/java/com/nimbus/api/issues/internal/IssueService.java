@@ -330,8 +330,15 @@ class IssueService implements Issues {
 					.param("at", now).param("field", c.field().label()).param("before", keepValues ? c.before() : null)
 					.param("after", keepValues ? c.after() : null).update();
 			}
-			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), target.number()),
-					differing.stream().map(c -> c.field().label()).toList()));
+			var titleAfter = differing.stream().filter(c -> c.field() == Field.TITLE).map(Change::after).findFirst()
+				.orElse(current.title());
+			var assigneeAfter = differing.stream().filter(c -> c.field() == Field.ASSIGNEE).findFirst()
+				.map(c -> parseId(c.after())).orElse(current.assigneeId());
+			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), target.number()), actor,
+					titleAfter, current.reporterId(), assigneeAfter,
+					differing.stream().map(c -> new IssueChanged.Change(c.field().label(),
+							c.field().keepsValues() ? c.before() : null, c.field().keepsValues() ? c.after() : null)).toList(),
+					now.toInstant()));
 		}
 		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), project).getFirst();
 	}

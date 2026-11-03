@@ -43,14 +43,21 @@ class NotificationInbox {
 	 * @return whether this call created it
 	 */
 	boolean add(UUID userId, String type, String dedupeKey, Map<String, String> snapshot, Instant at) {
+		return add(userId, type, dedupeKey, snapshot, at, null, null, null);
+	}
+
+	/** Like {@link #add(UUID, String, String, Map, Instant)}, for a Notification about an Issue, which links to it. */
+	boolean add(UUID userId, String type, String dedupeKey, Map<String, String> snapshot, Instant at, UUID projectId,
+			String issueKey, UUID actorId) {
 		return jdbc.sql("""
-			INSERT INTO notifications(id, user_id, type, dedupe_key, snapshot, created_at)
-			VALUES (:id, :user, :type, :dedupe, CAST(:snapshot AS jsonb), :at)
+			INSERT INTO notifications(id, user_id, type, dedupe_key, snapshot, created_at, project_id, issue_key, actor_id)
+			VALUES (:id, :user, :type, :dedupe, CAST(:snapshot AS jsonb), :at, :project, :issueKey, :actor)
 			ON CONFLICT (dedupe_key) DO NOTHING
 			""")
 			.param("id", UUID.randomUUID()).param("user", userId).param("type", type).param("dedupe", dedupeKey)
 			.param("snapshot", json.writeValueAsString(snapshot))
-			.param("at", Timestamp.from(at)).update() == 1;
+			.param("at", Timestamp.from(at)).param("project", projectId).param("issueKey", issueKey)
+			.param("actor", actorId).update() == 1;
 	}
 
 	Page list(UUID userId, String before, int limit) {
@@ -58,7 +65,7 @@ class NotificationInbox {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be between 1 and 100");
 		}
 		var cursor = before == null ? null : Cursor.parse(before);
-		var query = jdbc.sql("SELECT id, type, created_at, read_at, snapshot::text FROM notifications WHERE user_id = :user"
+		var query = jdbc.sql("SELECT id, type, created_at, read_at, snapshot::text, issue_key FROM notifications WHERE user_id = :user"
 			+ (cursor == null ? "" : " AND (created_at, id) < (:at, :id)")
 			+ " ORDER BY created_at DESC, id DESC LIMIT :limit").param("user", userId).param("limit", limit + 1);
 		if (cursor != null) {
@@ -66,7 +73,8 @@ class NotificationInbox {
 		}
 		var found = query.query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getString("type"),
 			rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("read_at") != null,
-			json.readTree(rs.getString("snapshot")), SECURITY_LINK)).list();
+			json.readTree(rs.getString("snapshot")),
+			rs.getString("issue_key") == null ? SECURITY_LINK : "/issues/" + rs.getString("issue_key"))).list();
 		var items = found.stream().limit(limit).toList();
 		var last = items.isEmpty() ? null : items.getLast();
 		return new Page(items, found.size() > limit ? new Cursor(last.createdAt(), last.id()).encode() : null);

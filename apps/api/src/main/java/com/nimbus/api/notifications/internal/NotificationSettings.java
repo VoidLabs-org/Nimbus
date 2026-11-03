@@ -50,6 +50,12 @@ class NotificationSettings {
 			.map(t -> new Setting(t.name(), saved.getOrDefault(t.name(), t.emailByDefault))).toList();
 	}
 
+	/** Whether the User wants this type emailed: their saved switch, else the type's default. */
+	boolean emailOn(UUID userId, IssueType type) {
+		return jdbc.sql("SELECT email FROM notification_settings WHERE user_id = :user AND type = :type")
+			.param("user", userId).param("type", type.name()).query(Boolean.class).optional().orElse(type.emailByDefault);
+	}
+
 	void save(UUID userId, IssueType type, boolean email) {
 		if (email == type.emailByDefault) {
 			jdbc.sql("DELETE FROM notification_settings WHERE user_id = :user AND type = :type")

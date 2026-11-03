@@ -1,6 +1,6 @@
 # issues
 
-Owns **Issues**, their **Statuses** and (later) their history views. So far it implements creating an Issue, opening it by key, finding a project's Issues, editing an Issue (fields, Assignee and history), moving it between Statuses, deleting it and managing a project's Statuses; permissions are not implemented yet. Feature spec #51, tickets #53, #54, #55, #56, #57 and #58. Terms are in [GLOSSARY.md](../../GLOSSARY.md).
+Owns **Issues**, their **Statuses** and (later) their history views. So far it implements creating an Issue, opening it by key, finding a project's Issues, editing an Issue (fields, Assignee and history), moving it between Statuses, deleting it, managing a project's Statuses, and the Permissions that guard them. Feature spec #51, tickets #53, #54, #55, #56, #57, #58 and #59. Terms are in [GLOSSARY.md](../../GLOSSARY.md).
 
 ## Public interface
 

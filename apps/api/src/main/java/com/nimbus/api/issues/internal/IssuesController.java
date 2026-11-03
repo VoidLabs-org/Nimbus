@@ -139,15 +139,9 @@ class IssuesController {
 	/** All of the project's Statuses, in the new order. */
 	@PutMapping("/api/projects/{key}/statuses/order")
 	List<ProjectStatus> reorderStatuses(@PathVariable String key, @RequestBody ReorderStatuses request) {
-		List<UUID> ids = null;
-		if (request.statusIds() != null) {
-			try {
-				ids = request.statusIds().stream().map(UUID::fromString).toList();
-			}
-			catch (IllegalArgumentException | NullPointerException e) {
-				throw new IssueService.InvalidField("statusIds", "Send each of the project's Statuses once");
-			}
-		}
+		List<UUID> ids = request.statusIds() == null ? null
+				: request.statusIds().stream()
+					.map(id -> parseUuid("statusIds", id, "Send each of the project's Statuses once")).toList();
 		return statuses.reorder(currentUser.id(), key, ids);
 	}
 
@@ -156,16 +150,16 @@ class IssuesController {
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	void deleteStatus(@PathVariable String key, @PathVariable UUID statusId,
 			@RequestParam(required = false) String moveTo) {
-		UUID target = null;
-		if (moveTo != null) {
-			try {
-				target = UUID.fromString(moveTo);
-			}
-			catch (IllegalArgumentException e) {
-				throw new IssueService.InvalidField("moveTo", "Choose another Status of the project");
-			}
-		}
+		UUID target = moveTo == null ? null : parseUuid("moveTo", moveTo, "Choose another Status of the project");
 		statuses.delete(currentUser.id(), key, statusId, target);
+	}
+
+	/** Strict: a UUID in its canonical 36-character form, or the field is invalid. */
+	private static UUID parseUuid(String field, String value, String message) {
+		if (value == null || !UUID_FORM.matcher(value).matches()) {
+			throw new IssueService.InvalidField(field, message);
+		}
+		return UUID.fromString(value);
 	}
 
 	@GetMapping("/api/issues/{issueKey}/history")
@@ -185,6 +179,8 @@ class IssuesController {
 		}
 	}
 
+	private static final java.util.regex.Pattern UUID_FORM = java.util.regex.Pattern
+		.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 	static final String NAME_RULE = "Use 1 to 30 characters without control characters";
 	static final String CATEGORY_RULE = "Choose TODO, IN_PROGRESS or DONE";
 

@@ -16,8 +16,9 @@ export type IssuePermissions = {
 };
 
 /**
- * Reads `GET /api/access/me/permissions?project=`. Nothing is allowed until the server answers, and when it can't
- * be asked: the server checks every action anyway.
+ * Reads `GET /api/access/me/permissions?project=`. Nothing is allowed until the server answers. If it can't be
+ * asked (the request failed), everything is shown rather than hidden: the server checks every action anyway, and a
+ * hidden button can't be retried.
  */
 export function useIssuePermissions(projectKey: string | undefined): IssuePermissions {
   const { user } = useSession();
@@ -31,17 +32,20 @@ export function useIssuePermissions(projectKey: string | undefined): IssuePermis
     staleTime: 60_000,
   });
   const held = query.data ?? {};
+  const unknown = query.isError;
   return {
-    loaded: query.isSuccess,
-    canCreate: held["issues:issue:create"] !== undefined,
-    canManageStatuses: held["issues:status:manage"] !== undefined,
+    loaded: query.isSuccess || unknown,
+    canCreate: unknown || held["issues:issue:create"] !== undefined,
+    canManageStatuses: unknown || held["issues:status:manage"] !== undefined,
     canEdit: (issue) =>
-      held["issues:issue:edit"] === "own"
+      unknown ||
+      (held["issues:issue:edit"] === "own"
         ? issue.reporter.id === userId || issue.assignee?.id === userId
-        : held["issues:issue:edit"] !== undefined,
+        : held["issues:issue:edit"] !== undefined),
     canDelete: (issue) =>
-      held["issues:issue:delete"] === "own"
+      unknown ||
+      (held["issues:issue:delete"] === "own"
         ? issue.reporter.id === userId
-        : held["issues:issue:delete"] !== undefined,
+        : held["issues:issue:delete"] !== undefined),
   };
 }

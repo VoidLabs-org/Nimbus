@@ -34,7 +34,7 @@ import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
 import { IconGripVertical, IconTrash } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router";
 import { api, type ProjectStatus } from "../api/client";
 import {
@@ -193,6 +193,9 @@ export default function StatusesPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  // Reorders go to the server one at a time, each built on the one before.
+  const reorderQueue = useRef<Promise<void>>(Promise.resolve());
+  const reordersPending = useRef(0);
   const failure = loadFailure(statusesQuery) ?? loadFailure(projectQuery);
   const archived = project?.archived ?? false;
 
@@ -285,24 +288,33 @@ export default function StatusesPage() {
 
   async function dropped(event: DragEndEvent) {
     if (!project || !event.over || event.active.id === event.over.id) return;
-    const from = statuses.findIndex((status) => status.id === event.active.id);
-    const to = statuses.findIndex((status) => status.id === event.over?.id);
+    const key = queryKeys.projectStatuses(project.key);
+    // The newest list, which already has any drag still being saved.
+    const current = client.getQueryData<ProjectStatus[]>(key) ?? statuses;
+    const from = current.findIndex((status) => status.id === event.active.id);
+    const to = current.findIndex((status) => status.id === event.over?.id);
     if (from < 0 || to < 0) return;
-    const reordered = arrayMove(statuses, from, to).map((status, position) => ({
+    const reordered = arrayMove(current, from, to).map((status, position) => ({
       ...status,
       position,
     }));
-    // Shown at once; put right by the refresh if the server refuses.
-    client.setQueryData(queryKeys.projectStatuses(project.key), reordered);
-    try {
-      await api.reorderStatuses(
-        project.key,
-        reordered.map((status) => status.id),
-      );
-    } catch (error) {
-      toast.error(failureMessage(error, "Couldn't save the new order."));
-    }
-    statusesChanged(project.key);
+    // Shown at once; put right by the refresh if the server refuses. A refresh in flight would show the old order.
+    await client.cancelQueries({ queryKey: key });
+    client.setQueryData(key, reordered);
+    reordersPending.current += 1;
+    reorderQueue.current = reorderQueue.current.then(async () => {
+      try {
+        await api.reorderStatuses(
+          project.key,
+          reordered.map((status) => status.id),
+        );
+      } catch (error) {
+        toast.error(failureMessage(error, "Couldn't save the new order."));
+      }
+      reordersPending.current -= 1;
+      // Only the last one refreshes, so an earlier answer can't undo a later drag.
+      if (reordersPending.current === 0) statusesChanged(project.key);
+    });
   }
 
   return (

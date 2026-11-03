@@ -28,6 +28,9 @@ class IssueDeletedEventTests {
 	@Autowired
 	RestTestClient client;
 
+	@Autowired
+	org.springframework.jdbc.core.simple.JdbcClient jdbc;
+
 	@AfterEach
 	void clearCaller() {
 		SecurityContextHolder.clearContext();
@@ -49,6 +52,7 @@ class IssueDeletedEventTests {
 			.exchange().expectStatus().isCreated()
 			.expectBody(String.class).returnResult().getResponseBody();
 		UUID projectId = UUID.fromString(JsonPath.read(project, "$.id"));
+		IssueRoles.give(jdbc, JsonPath.read(project, "$.key"), creator.toString(), "project_admin");
 		client.post().uri("/api/projects/IDL/issues").header("Authorization", "Bearer " + token)
 			.body(Map.of("type", "Story", "title", "Gone")).exchange().expectStatus().isCreated();
 

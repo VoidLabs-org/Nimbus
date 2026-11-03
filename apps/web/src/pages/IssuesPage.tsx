@@ -31,6 +31,7 @@ import { IssueBoard, IssueSwimlanes, type Column } from "../issues/IssueBoard";
 import { IssueGroups, IssueTable } from "../issues/IssueTable";
 import viewClasses from "../issues/IssueViews.module.css";
 import { NewIssueForm } from "../issues/NewIssueForm";
+import { useIssuePermissions } from "../issues/useIssuePermissions";
 import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
@@ -105,6 +106,7 @@ export default function IssuesPage() {
   const search = searchFrom(params);
   const projectQuery = useProject(key);
   const project = projectQuery.data;
+  const permissions = useIssuePermissions(project?.key);
   // The view is in the address (so it can be shared) and remembered per project; the List groups by Status.
   const view: View =
     VIEWS.find((option) => option.value === params.get("view"))?.value ?? storedView(key) ?? "list";
@@ -215,7 +217,7 @@ export default function IssuesPage() {
   const filtered = Boolean(
     search.category || search.type || search.priority || search.assignee || search.q,
   );
-  const canCreate = project && !project.archived;
+  const canCreate = project && !project.archived && permissions.canCreate;
   const loaded = grouped
     ? statuses.data !== undefined && columnQueries.every((q) => q.data)
     : Boolean(data);
@@ -355,9 +357,17 @@ export default function IssuesPage() {
         ) : total === 0 && page === 0 ? (
           <p className={classes.empty}>No Issues match these filters.</p>
         ) : view === "board" ? (
-          <IssueBoard columns={columns} onMove={(key, status) => void move(key, status)} />
+          <IssueBoard
+            columns={columns}
+            onMove={(key, status) => void move(key, status)}
+            canMove={permissions.canEdit}
+          />
         ) : view === "swimlanes" ? (
-          <IssueSwimlanes columns={columns} onMove={(key, status) => void move(key, status)} />
+          <IssueSwimlanes
+            columns={columns}
+            onMove={(key, status) => void move(key, status)}
+            canMove={permissions.canEdit}
+          />
         ) : view === "list" ? (
           <IssueGroups columns={columns} />
         ) : (

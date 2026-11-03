@@ -47,6 +47,8 @@ export const queryKeys = {
   auditPage: (page: number, asOf?: number) => ["audit", page, asOf] as const,
   permissions: ["permissions"] as const,
   myPermissions: (userId: string) => ["permissions", userId] as const,
+  myProjectPermissions: (userId: string, projectId: string) =>
+    ["permissions", userId, projectId] as const,
 };
 
 /** The projects the signed-in User is a Member of, for the Projects page. */
@@ -59,11 +61,12 @@ export function useProjects() {
  * from it, without a skeleton, and is then refreshed like any cached page (stale time 0). Only used when the project
  * has no entry of its own, so it never replaces newer data.
  */
-export function useProject(key: string) {
+export function useProject(key: string, enabled = true) {
   const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.project(key),
     queryFn: () => api.project(key),
+    enabled,
     initialData: () =>
       client
         .getQueryData<Project[]>(queryKeys.projects)

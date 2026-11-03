@@ -26,6 +26,7 @@ import {
 } from "../api/queries";
 import { useSession } from "../auth/useSession";
 import { DeleteIssueDialog } from "../issues/DeleteIssueDialog";
+import { useIssuePermissions } from "../issues/useIssuePermissions";
 import { IssueHistory } from "../issues/IssueHistory";
 import { TypeBadge } from "../issues/IssueMarks";
 import { timeAgo } from "../issues/timeAgo";
@@ -117,6 +118,9 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
 
   const projectKey = issue?.key.slice(0, issue.key.lastIndexOf("-"));
   const statuses = useProjectStatuses(projectKey);
+  const permissions = useIssuePermissions(projectKey);
+  const canEdit = issue !== undefined && permissions.canEdit(issue);
+  const canDelete = issue !== undefined && permissions.canDelete(issue);
   const changeField = (input: EditIssueInput) =>
     issue && quickChange(() => api.editIssue(issue.key, input));
   // Until the project's Members can be listed, the choices are the User themself and no one.
@@ -198,15 +202,17 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                 >
                   Copy link
                 </Button>
-                <Button
-                  variant="default"
-                  color="red"
-                  radius="xl"
-                  size="compact-md"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  Delete Issue
-                </Button>
+                {canDelete && (
+                  <Button
+                    variant="default"
+                    color="red"
+                    radius="xl"
+                    size="compact-md"
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    Delete Issue
+                  </Button>
+                )}
               </Group>
             </Group>
             <DeleteIssueDialog
@@ -258,14 +264,16 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                     <Title order={1} fz={40} lh={1.1} style={{ overflowWrap: "anywhere" }}>
                       {issue.title}
                     </Title>
-                    <Button
-                      variant="subtle"
-                      size="compact-sm"
-                      disabled={editing !== null}
-                      onClick={() => startEditing("title")}
-                    >
-                      Edit title
-                    </Button>
+                    {canEdit && (
+                      <Button
+                        variant="subtle"
+                        size="compact-sm"
+                        disabled={editing !== null}
+                        onClick={() => startEditing("title")}
+                      >
+                        Edit title
+                      </Button>
+                    )}
                   </Group>
                 )}
                 <Panel p="xl">
@@ -274,7 +282,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                       <Title order={2} fz={20}>
                         Description
                       </Title>
-                      {editing?.field !== "description" && (
+                      {canEdit && editing?.field !== "description" && (
                         <Button
                           variant="subtle"
                           size="compact-sm"
@@ -323,7 +331,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                           statuses.data ?? [{ id: issue.status.id, name: issue.status.name }]
                         ).map((status) => ({ value: status.id, label: status.name }))}
                         value={issue.status.id}
-                        disabled={quickSaving}
+                        disabled={quickSaving || !canEdit}
                         onChange={(value) =>
                           value && void quickChange(() => api.moveIssue(issue.key, value))
                         }
@@ -335,7 +343,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                         allowDeselect={false}
                         data={[...TYPES]}
                         value={issue.type}
-                        disabled={quickSaving}
+                        disabled={quickSaving || !canEdit}
                         onChange={(value) =>
                           value && void changeField({ type: value as Issue["type"] })
                         }
@@ -347,7 +355,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                         allowDeselect={false}
                         data={[...PRIORITIES]}
                         value={issue.priority}
-                        disabled={quickSaving}
+                        disabled={quickSaving || !canEdit}
                         onChange={(value) =>
                           value && void changeField({ priority: value as Issue["priority"] })
                         }
@@ -362,7 +370,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                         allowDeselect={false}
                         data={assignees}
                         value={issue.assignee?.id ?? UNASSIGNED}
-                        disabled={quickSaving}
+                        disabled={quickSaving || !canEdit}
                         onChange={(value) =>
                           value &&
                           void quickChange(() =>

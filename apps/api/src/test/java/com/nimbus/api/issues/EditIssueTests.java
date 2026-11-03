@@ -250,6 +250,7 @@ class EditIssueTests {
 			.collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append);
 		client.post().uri("/api/projects").header("Authorization", "Bearer " + owner.token())
 			.body(Map.of("key", key, "name", "Project " + key)).exchange().expectStatus().isCreated();
+		IssueRoles.give(jdbc, key, owner.id(), "project_admin");
 		return key;
 	}
 

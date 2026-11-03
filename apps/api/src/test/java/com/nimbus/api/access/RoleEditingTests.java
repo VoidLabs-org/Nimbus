@@ -170,7 +170,9 @@ class RoleEditingTests {
 		reset("developer");
 		var reset = role("developer");
 		assertThat((Boolean) JsonPath.read(reset, "$.customised")).isFalse();
-		assertThat((List<?>) JsonPath.read(reset, "$.grants")).isEmpty();
+		// Back to the Developer defaults: create and edit in the project, delete only their own.
+		assertThat((List<String>) JsonPath.read(reset, "$.grants[*].permission"))
+			.containsExactlyInAnyOrder("issues:issue:create", "issues:issue:edit", "issues:issue:delete");
 	}
 
 	@Test

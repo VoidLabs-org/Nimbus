@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/core";
 import { VisuallyHidden } from "@mantine/core";
 import { ProfilePicture } from "@repo/ui/profile-picture";
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import type { Issue, ProjectStatus } from "../api/client";
 import { PriorityMark, StatusPill, TypeBadge } from "./IssueMarks";
@@ -27,6 +27,11 @@ import classes from "./IssueViews.module.css";
 export type Column = { status: ProjectStatus; items: Issue[]; total: number };
 
 export type MoveIssue = (issueKey: string, status: ProjectStatus) => void;
+
+/** Whether the User may move an Issue; a card they can't move is not draggable. Everything is allowed by default. */
+export type CanMove = (issue: Issue) => boolean;
+
+const CanMoveContext = createContext<CanMove>(() => true);
 
 /** Under the pointer when there is one; the nearest drop area otherwise (the keyboard has no pointer). */
 const collisionDetection: CollisionDetection = (args) => {
@@ -80,10 +85,12 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (
 function DragBoard({
   issues,
   onMove,
+  canMove,
   children,
 }: {
   issues: Issue[];
   onMove: MoveIssue;
+  canMove: CanMove;
   children: ReactNode;
 }) {
   const [lifted, setLifted] = useState<Issue | null>(null);
@@ -105,16 +112,18 @@ function DragBoard({
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={collisionDetection}
-      onDragStart={start}
-      onDragEnd={end}
-      onDragCancel={() => setLifted(null)}
-    >
-      {children}
-      <DragOverlay>{lifted && <CardBody issue={lifted} lifted />}</DragOverlay>
-    </DndContext>
+    <CanMoveContext value={canMove}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={collisionDetection}
+        onDragStart={start}
+        onDragEnd={end}
+        onDragCancel={() => setLifted(null)}
+      >
+        {children}
+        <DragOverlay>{lifted && <CardBody issue={lifted} lifted />}</DragOverlay>
+      </DndContext>
+    </CanMoveContext>
   );
 }
 
@@ -154,7 +163,11 @@ function CardBody({ issue, lifted = false }: { issue: Issue; lifted?: boolean })
 
 /** An Issue as a card that opens the Issue and can be dragged; where it was shows as a dashed outline meanwhile. */
 function IssueCard({ issue }: { issue: Issue }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: issue.key });
+  const canMove = useContext(CanMoveContext);
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: issue.key,
+    disabled: !canMove(issue),
+  });
   return (
     <Link
       ref={setNodeRef}
@@ -176,9 +189,17 @@ function useStatusArea(id: string, status: ProjectStatus) {
 }
 
 /** The Board: a column for each Status, in order. Dropping a card on a column moves the Issue to that Status. */
-export function IssueBoard({ columns, onMove }: { columns: Column[]; onMove: MoveIssue }) {
+export function IssueBoard({
+  columns,
+  onMove,
+  canMove = () => true,
+}: {
+  columns: Column[];
+  onMove: MoveIssue;
+  canMove?: CanMove;
+}) {
   return (
-    <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove}>
+    <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove} canMove={canMove}>
       <div className={classes.board}>
         {columns.map((column) => (
           <BoardColumn key={column.status.id} column={column} />
@@ -237,10 +258,18 @@ function lanesOf(columns: Column[]): Lane[] {
 }
 
 /** Swimlanes: the Board, grouped by Assignee. Dropping on a cell changes the Status only, never the Assignee. */
-export function IssueSwimlanes({ columns, onMove }: { columns: Column[]; onMove: MoveIssue }) {
+export function IssueSwimlanes({
+  columns,
+  onMove,
+  canMove = () => true,
+}: {
+  columns: Column[];
+  onMove: MoveIssue;
+  canMove?: CanMove;
+}) {
   const lanes = lanesOf(columns);
   return (
-    <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove}>
+    <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove} canMove={canMove}>
       <div
         className={classes.lanes}
         style={{ gridTemplateColumns: `140px repeat(${columns.length}, minmax(200px, 1fr))` }}

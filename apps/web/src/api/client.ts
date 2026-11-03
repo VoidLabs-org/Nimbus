@@ -573,6 +573,12 @@ export function createApiClient(
         (response) => response.platform,
       ),
 
+    /** The signed-in User's widest Scope for each project permission they hold in the project, by key. */
+    myProjectPermissions: (projectId: string) =>
+      request<{ project?: Record<string, "own" | "project" | "all"> }>(
+        `/api/access/me/permissions?project=${encodeURIComponent(projectId)}`,
+      ).then((response) => response.project ?? {}),
+
     /** Every Permission in the catalog, sorted by heading and key. Needs access:role:manage. */
     permissionCatalog: () =>
       request<{ permissions: CatalogPermission[] }>("/api/access/permissions").then(

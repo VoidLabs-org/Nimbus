@@ -12,6 +12,12 @@ import { SessionContext, type Session } from "../auth/useSession";
 import IssuePage from "./IssuePage";
 
 const session = { user: { id: "u1", displayName: "Dana" } } as unknown as Session;
+const fullAccess = {
+  "issues:issue:create": "project",
+  "issues:issue:edit": "project",
+  "issues:issue:delete": "project",
+  "issues:status:manage": "project",
+} as const;
 const history: IssueHistoryEntry[] = [
   {
     id: "h2",
@@ -65,6 +71,15 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+  vi.spyOn(api, "project").mockResolvedValue({
+    id: "p1",
+    key: "NIM",
+    name: "Nimbus",
+    description: null,
+    archived: false,
+    createdAt: "2026-10-19T00:00:00Z",
+  });
+  vi.spyOn(api, "myProjectPermissions").mockResolvedValue(fullAccess);
   vi.spyOn(api, "issueHistory").mockResolvedValue(history);
   vi.spyOn(api, "projectStatuses").mockResolvedValue([
     { id: "s1", name: "To do", category: "TODO", position: 0 },
@@ -117,6 +132,36 @@ describe("an Issue's page", () => {
     expect((screen.getByRole("combobox", { name: "Assignee" }) as HTMLInputElement).value).toBe(
       "Unassigned",
     );
+  });
+
+  it("hides editing and deleting from a Viewer and keeps the details read-only", async () => {
+    vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    showAt("/issues/NIM-12");
+
+    await screen.findByRole("heading", { name: "Crash on save" });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Edit title" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Edit description" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete Issue" })).toBeNull();
+    expect((screen.getByRole("combobox", { name: "Priority" }) as HTMLInputElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("lets a User with Scope Own edit an Issue they reported but not delete one they didn't", async () => {
+    vi.spyOn(api, "myProjectPermissions").mockResolvedValue({
+      "issues:issue:edit": "own",
+      "issues:issue:delete": "own",
+    });
+    vi.spyOn(api, "issue").mockResolvedValue({
+      ...issue,
+      reporter: { id: "u2", displayName: "Eve", avatarUrl: null },
+      assignee: { id: "u1", displayName: "Dana", avatarUrl: null },
+    });
+    showAt("/issues/NIM-12");
+
+    expect(await screen.findByRole("button", { name: "Edit title" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete Issue" })).toBeNull();
   });
 
   it("renders the description as Markdown without running scripts or unsafe links", async () => {

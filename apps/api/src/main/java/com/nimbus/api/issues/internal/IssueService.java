@@ -13,6 +13,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.nimbus.api.access.Scope;
 import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
 import com.nimbus.api.issues.IssueChanged;
@@ -163,10 +164,12 @@ class IssueService implements Issues {
 	void delete(UUID actor, String issueKey) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.DELETE);
 		var project = target.project();
-		var found = jdbc.sql("SELECT id, title FROM issues WHERE project_id = :project AND number = :number FOR UPDATE")
+		var found = jdbc.sql("SELECT id, title, reporter_id FROM issues WHERE project_id = :project AND number = :number FOR UPDATE")
 			.param("project", project.id()).param("number", target.number())
-			.query((row, index) -> new Deletable(row.getObject("id", UUID.class), row.getString("title"))).optional()
+			.query((row, index) -> new Deletable(row.getObject("id", UUID.class), row.getString("title"),
+					row.getObject("reporter_id", UUID.class))).optional()
 			.orElseThrow(() -> new NotFound("Issue not found"));
+		access.requireOwn(target.scope(), IssueAccess.Action.DELETE, actor, found.reporterId(), null);
 		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
 		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be deleted", null);
 
@@ -260,12 +263,11 @@ class IssueService implements Issues {
 		var parsed = IssueKeys.parse(issueKey).orElseThrow(() -> new NotFound("Issue not found"));
 		var project = projects.findByKey(parsed.projectKey()).orElseThrow(() -> new NotFound("Issue not found"));
 		try {
-			access.require(actor, project.id(), action);
+			return new Target(project, parsed.number(), access.require(actor, project.id(), action));
 		}
 		catch (NotFound e) {
 			throw new NotFound("Issue not found");
 		}
-		return new Target(project, parsed.number());
 	}
 
 	/**
@@ -280,16 +282,18 @@ class IssueService implements Issues {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
 		var project = target.project();
 		var current = jdbc.sql("""
-				SELECT i.id, i.project_id, i.title, i.description, i.type, i.priority, i.assignee_id, i.version, i.status_id,
+				SELECT i.id, i.project_id, i.reporter_id, i.title, i.description, i.type, i.priority, i.assignee_id, i.version, i.status_id,
 				       (SELECT s.name FROM issue_statuses s WHERE s.id = i.status_id) AS status_name
 				FROM issues i WHERE i.project_id = :project AND i.number = :number FOR UPDATE
 				""")
 			.param("project", project.id()).param("number", target.number())
 			.query((row, index) -> new Current(row.getObject("id", UUID.class), row.getObject("project_id", UUID.class),
+					row.getObject("reporter_id", UUID.class),
 					row.getString("title"), row.getString("description"), row.getString("type"),
 					row.getString("priority"), row.getObject("assignee_id", UUID.class), row.getLong("version"),
 					row.getObject("status_id", UUID.class), row.getString("status_name")))
 			.optional().orElseThrow(() -> new NotFound("Issue not found"));
+		access.requireOwn(target.scope(), IssueAccess.Action.EDIT, actor, current.reporterId(), current.assigneeId());
 		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
 		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
 
@@ -437,13 +441,13 @@ class IssueService implements Issues {
 	record HistoryEntryView(UUID id, PersonView actor, Instant at, String field, String before, String after) {
 	}
 
-	private record Target(ProjectSummary project, int number) {
+	private record Target(ProjectSummary project, int number, Scope scope) {
 	}
 
-	private record Deletable(UUID id, String title) {
+	private record Deletable(UUID id, String title, UUID reporterId) {
 	}
 
-	private record Current(UUID id, UUID projectId, String title, String description, String type, String priority,
+	private record Current(UUID id, UUID projectId, UUID reporterId, String title, String description, String type, String priority,
 			UUID assigneeId, long version, UUID statusId, String statusName) {
 	}
 

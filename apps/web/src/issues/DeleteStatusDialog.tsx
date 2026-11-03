@@ -10,7 +10,7 @@ import { useStatusesChanged } from "../api/queries";
  * "Delete In review?", asked before a Status is deleted. A Status with Issues asks where they go (**Move Issues
  * to**, the first other Status of the same category chosen); one without just goes. The last Status of a category
  * can't be deleted, which the server also enforces. While deleting it can't be closed; a refusal is shown and the
- * Status stays.
+ * dialog stays open to try again.
  */
 export function DeleteStatusDialog({
   projectKey,
@@ -53,9 +53,14 @@ export function DeleteStatusDialog({
       await api.deleteStatus(projectKey, status.id, hasIssues ? (moveTo ?? undefined) : undefined);
       toast.success(`${status.name} deleted.`);
     } catch (error) {
+      setDeleting(false);
       // Already deleted by someone else: it is gone, which is what was asked for.
       if (!(error instanceof ApiError && error.status === 404)) {
+        // Stays open, with the choice made, so it can be retried; the counts are read again.
         toast.error(error instanceof ApiError ? error.message : "Couldn't delete the Status.");
+        statusesChanged(projectKey);
+        void count.refetch();
+        return;
       }
     }
     setDeleting(false);
@@ -103,6 +108,14 @@ export function DeleteStatusDialog({
             : count.data
               ? "No Issues are in this Status."
               : "Checking for Issues…"}
+          {count.isError && (
+            <>
+              {" "}
+              <Button variant="subtle" size="compact-sm" onClick={() => void count.refetch()}>
+                Try again
+              </Button>
+            </>
+          )}
         </Text>
       )}
       <Group justify="flex-end">

@@ -119,7 +119,8 @@ class StartupSyncTests {
 		startup.run();
 
 		assertThat(roles.require("developer").grants()).extracting(Roles.GrantView::permission)
-			.containsExactly("projects:project:update");
+			.containsExactlyInAnyOrder("issues:issue:create", "issues:issue:delete", "issues:issue:edit",
+					"projects:project:update");
 		assertThat(roles.require("viewer").grants()).isEmpty();
 
 		reset("developer");

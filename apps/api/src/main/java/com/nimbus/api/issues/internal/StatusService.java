@@ -56,9 +56,9 @@ class StatusService {
 		jdbc.sql("UPDATE issue_statuses SET position = position + 1 WHERE project_id = :project AND position >= :position")
 			.param("project", project.id()).param("position", position).update();
 		var id = UUID.randomUUID();
-		jdbc.sql("INSERT INTO issue_statuses (id, project_id, name, category, position) VALUES (:id, :project, :name, :category, :position)")
+		nameTaken(name, () -> jdbc.sql("INSERT INTO issue_statuses (id, project_id, name, category, position) VALUES (:id, :project, :name, :category, :position)")
 			.param("id", id).param("project", project.id()).param("name", name).param("category", category)
-			.param("position", position).update();
+			.param("position", position).update());
 		return new ProjectStatus(id, name, category, position);
 	}
 
@@ -71,8 +71,8 @@ class StatusService {
 		var newCategory = category == null ? current.category() : category;
 		if (!newName.equals(current.name())) requireFreeName(all, newName, statusId);
 		if (!newCategory.equals(current.category())) requireOtherInCategory(all, current);
-		jdbc.sql("UPDATE issue_statuses SET name = :name, category = :category WHERE id = :id")
-			.param("name", newName).param("category", newCategory).param("id", statusId).update();
+		nameTaken(newName, () -> jdbc.sql("UPDATE issue_statuses SET name = :name, category = :category WHERE id = :id")
+			.param("name", newName).param("category", newCategory).param("id", statusId).update());
 		return new ProjectStatus(statusId, newName, newCategory, current.position());
 	}
 
@@ -109,20 +109,21 @@ class StatusService {
 		if (!issues.isEmpty() && target == null) {
 			throw new IssueService.InvalidField("moveTo", "Choose where to move this Status's Issues");
 		}
-		var now = Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS));
-		var changed = new java.util.ArrayList<IssueChanged>();
-		for (var issue : issues) {
-			jdbc.sql("UPDATE issues SET status_id = :to, updated_at = :at WHERE id = :id")
-				.param("to", target.id()).param("at", now).param("id", issue.id()).update();
+		if (!issues.isEmpty()) {
+			var now = Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS));
+			// The Issues are locked above, so the same set is read, logged and moved.
 			jdbc.sql("""
 					INSERT INTO issue_history (id, issue_id, actor_id, at, field, before_value, after_value)
-					VALUES (:id, :issue, :actor, :at, 'status', :before, :after)
+					SELECT gen_random_uuid(), id, :actor, :at, 'status', :before, :after
+					FROM issues WHERE status_id = :from
 					""")
-				.param("id", UUID.randomUUID()).param("issue", issue.id()).param("actor", actor).param("at", now)
-				.param("before", current.name()).param("after", target.name()).update();
-			changed.add(new IssueChanged(project.id(), IssueKeys.format(project.key(), issue.number()),
-					List.of("status")));
+				.param("actor", actor).param("at", now).param("before", current.name()).param("after", target.name())
+				.param("from", statusId).update();
+			jdbc.sql("UPDATE issues SET status_id = :to, updated_at = :at WHERE status_id = :from")
+				.param("to", target.id()).param("at", now).param("from", statusId).update();
 		}
+		var changed = issues.stream().map(issue -> new IssueChanged(project.id(),
+				IssueKeys.format(project.key(), issue.number()), List.of("status"))).toList();
 		try {
 			jdbc.sql("DELETE FROM issue_statuses WHERE id = :id").param("id", statusId).update();
 		}
@@ -167,6 +168,19 @@ class StatusService {
 	private static ProjectStatus find(List<ProjectStatus> all, UUID statusId) {
 		return all.stream().filter(status -> status.id().equals(statusId)).findFirst()
 			.orElseThrow(() -> new IssueService.NotFound("Status not found"));
+	}
+
+	/**
+	 * The unique index on {@code lower(name)} is the final word on names: Java and Postgres can fold some characters
+	 * differently, so a violation that {@link #requireFreeName} let through is the same refusal.
+	 */
+	private static void nameTaken(String name, Runnable write) {
+		try {
+			write.run();
+		}
+		catch (DataIntegrityViolationException e) {
+			throw new IssueService.Conflict("A Status named " + name + " already exists", "status_name_taken");
+		}
 	}
 
 	private static void requireFreeName(List<ProjectStatus> all, String name, UUID except) {

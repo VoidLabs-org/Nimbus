@@ -226,3 +226,29 @@ it("opens a dismissible sheet on phones", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Close Notifications" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });
+
+it("shows an Assigned to you row with the actor, key and title, and opens the Issue", async () => {
+  vi.spyOn(api, "notificationUnreadCount").mockResolvedValue({ count: 1 });
+  const read = vi.spyOn(api, "readNotification").mockResolvedValue(undefined);
+  vi.spyOn(api, "notifications").mockResolvedValue({
+    items: [
+      {
+        id: "a",
+        type: "ISSUE_ASSIGNED",
+        createdAt: new Date().toISOString(),
+        read: false,
+        snapshot: { title: "Fix the login", actorName: "Maya", issueKey: "NIM-12" },
+        link: "/issues/NIM-12",
+      },
+    ],
+    nextCursor: null,
+  });
+  drawBell();
+  fireEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
+  const row = await screen.findByRole("button", {
+    name: /Maya assigned you NIM-12 · Fix the login.*Just now/,
+  });
+  fireEvent.click(row);
+  await waitFor(() => expect(read).toHaveBeenCalledWith("a"));
+  await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/issues/NIM-12"));
+});

@@ -64,6 +64,6 @@ class IssueCreatedEventTests {
 
 		var published = events.ofType(IssueCreated.class);
 		assertThat(published).hasSize(1);
-		assertThat(published.iterator().next()).isEqualTo(new IssueCreated(projectId, "IEV-1"));
+		assertThat(published.iterator().next()).isEqualTo(new IssueCreated(projectId, "IEV-1", creator, "Published", creator, null));
 	}
 }

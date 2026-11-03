@@ -3250,6 +3250,7 @@ components:
             - LINKED_IDENTITY_CONNECTED
             - LINKED_IDENTITY_DISCONNECTED
             - OTHER_SESSIONS_SIGNED_OUT
+            - ISSUE_ASSIGNED
         createdAt:
           type: string
           format: date-time
@@ -3261,6 +3262,7 @@ components:
           properties:
             title:
               type: string
+              description: The title of a Security alert, or of the Issue for Issue types
               example: New sign-in to your account
             deviceLabel:
               type: string
@@ -3268,11 +3270,23 @@ components:
               example: Safari on iPhone
             detail:
               type: string
-              description: The line under the title for every other type
+              description: The line under the title for every Security alert other than SIGNED_IN
               example: If this wasn't you, reset it now.
+            actorName:
+              type: string
+              description: Only for Issue types. Who acted, as they were called then.
+              example: Maya
+            actorAvatarUrl:
+              type: string
+              description: Only for Issue types, when the actor had a picture.
+            issueKey:
+              type: string
+              description: Only for Issue types
+              example: NIM-12
         link:
           type: string
-          const: /settings/security
+          description: /settings/security for Security alerts, /issues/{issueKey} for Issue types
+          example: /issues/NIM-12
 
     RegisterRequest:
       type: object

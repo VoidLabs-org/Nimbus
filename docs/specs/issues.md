@@ -10,7 +10,7 @@ Owns **Issues**, their **Statuses** and (later) their history views. So far it i
 
 `IssueChanged(projectId, issueKey, changedFields)` is published once per edit that changed something, in the same transaction. `changedFields` lists the fields that really changed, among `title`, `description`, `type`, `priority`, `assignee` and `status`. Edits that change nothing (the same values again), and refused edits (validation, stale version, not a Member, Archived project), publish nothing. Consumers should handle it after commit.
 
-`IssueCreated(projectId, issueKey)` is published once, in the transaction that inserts the Issue. The key is uppercase, like `NIM-12`. Reads and refused creates (validation, not a Member, Archived project) publish nothing. Consumers should handle it after commit.
+`IssueCreated(projectId, issueKey, actorId, title, reporterId, assigneeId)` is published once, in the transaction that inserts the Issue. The key is uppercase, like `NIM-12`. `actorId` is who created it (the Reporter too); `assigneeId` is null when unassigned; `title` is the title at creation. Reads and refused creates (validation, not a Member, Archived project) publish nothing. Consumers should handle it after commit.
 
 `IssueDeleted(projectId, issueKey)` is published once, in the transaction that deletes an Issue. Refused deletes (not a Member, unknown or already deleted key, Archived project) publish nothing. Consumers should handle it after commit.
 

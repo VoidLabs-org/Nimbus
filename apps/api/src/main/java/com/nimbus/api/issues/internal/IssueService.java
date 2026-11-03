@@ -84,7 +84,8 @@ class IssueService implements Issues {
 		jdbc.sql("INSERT INTO issue_history (id, issue_id, actor_id, at, field) VALUES (:id, :issue, :actor, :at, 'created')")
 			.param("id", UUID.randomUUID()).param("issue", id).param("actor", actor).param("at", Timestamp.from(now))
 			.update();
-		events.publishEvent(new IssueCreated(project.id(), IssueKeys.format(project.key(), number)));
+		events.publishEvent(new IssueCreated(project.id(), IssueKeys.format(project.key(), number), actor,
+			input.title(), actor, input.assigneeId()));
 		return load(SELECT + "WHERE i.id = :id", Map.of("id", id), project).getFirst();
 	}
 

@@ -4206,12 +4206,15 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            type: "SIGNED_IN" | "PASSWORD_CHANGED" | "LINKED_IDENTITY_CONNECTED" | "LINKED_IDENTITY_DISCONNECTED" | "OTHER_SESSIONS_SIGNED_OUT";
+            type: "SIGNED_IN" | "PASSWORD_CHANGED" | "LINKED_IDENTITY_CONNECTED" | "LINKED_IDENTITY_DISCONNECTED" | "OTHER_SESSIONS_SIGNED_OUT" | "ISSUE_ASSIGNED";
             /** Format: date-time */
             createdAt: string;
             read: boolean;
             snapshot: {
-                /** @example New sign-in to your account */
+                /**
+                 * @description The title of a Security alert, or of the Issue for Issue types
+                 * @example New sign-in to your account
+                 */
                 title: string;
                 /**
                  * @description Only for SIGNED_IN
@@ -4219,13 +4222,28 @@ export interface components {
                  */
                 deviceLabel?: string;
                 /**
-                 * @description The line under the title for every other type
+                 * @description The line under the title for every Security alert other than SIGNED_IN
                  * @example If this wasn't you, reset it now.
                  */
                 detail?: string;
+                /**
+                 * @description Only for Issue types. Who acted, as they were called then.
+                 * @example Maya
+                 */
+                actorName?: string;
+                /** @description Only for Issue types, when the actor had a picture. */
+                actorAvatarUrl?: string;
+                /**
+                 * @description Only for Issue types
+                 * @example NIM-12
+                 */
+                issueKey?: string;
             };
-            /** @constant */
-            link: "/settings/security";
+            /**
+             * @description /settings/security for Security alerts, /issues/{issueKey} for Issue types
+             * @example /issues/NIM-12
+             */
+            link: string;
         };
         RegisterRequest: {
             /** @description Surrounding whitespace (no-break and other Unicode spaces included) is removed; at least one visible character; at most 100 characters (an emoji counts as one); no control, line-separator, private-use or invisible format characters (zero-width space, word joiner, byte order mark, soft hyphen), no bidirectional marks, overrides or isolates, and no combining grapheme joiner. U+200D and U+200C are allowed only between two visible characters (emoji sequences, Persian and Indic scripts). Tag characters are allowed only in a flag sequence, variation selectors only after emoji, keycaps and Han characters, and at most 5 combining marks may stack on one character */

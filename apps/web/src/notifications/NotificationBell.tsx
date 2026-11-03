@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Anchor,
+  Avatar,
   Button,
   Drawer,
   Group,
@@ -155,12 +156,32 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
                     navigate(item.link);
                   }}
                 >
-                  <span className={classes.securityIcon}>
-                    <Glyph icon={IconShieldLock} size={20} />
-                  </span>
+                  {item.type === "ISSUE_ASSIGNED" ? (
+                    <Avatar
+                      src={item.snapshot.actorAvatarUrl}
+                      name={item.snapshot.actorName}
+                      color="initials"
+                      size={36}
+                    />
+                  ) : (
+                    <span className={classes.securityIcon}>
+                      <Glyph icon={IconShieldLock} size={20} />
+                    </span>
+                  )}
                   <span className={classes.rowText}>
-                    <strong>{item.snapshot.title}</strong>
-                    <span>{item.snapshot.detail ?? item.snapshot.deviceLabel}</span>
+                    {item.type === "ISSUE_ASSIGNED" ? (
+                      <span>
+                        <strong>{item.snapshot.actorName}</strong> assigned you{" "}
+                        <strong>
+                          {item.snapshot.issueKey} · {item.snapshot.title}
+                        </strong>
+                      </span>
+                    ) : (
+                      <>
+                        <strong>{item.snapshot.title}</strong>
+                        <span>{item.snapshot.detail ?? item.snapshot.deviceLabel}</span>
+                      </>
+                    )}
                     <time
                       dateTime={item.createdAt}
                       title={new Date(item.createdAt).toLocaleString()}

@@ -106,6 +106,18 @@ export function useProjectStatuses(projectKey: string | undefined) {
   });
 }
 
+/**
+ * A Status was added, renamed, moved or deleted: refresh the project's Statuses and every Issue (a delete moves
+ * Issues and a rename changes the name shown on them).
+ */
+export function useStatusesChanged() {
+  const client = useQueryClient();
+  return (projectKey: string) => {
+    void client.invalidateQueries({ queryKey: queryKeys.projectStatuses(projectKey) });
+    void client.invalidateQueries({ queryKey: ["issues"] });
+  };
+}
+
 /** One page of a project's Issues. The previous page stays on screen while the next filter or page loads. */
 export function useIssues(projectKey: string, search: IssueSearch, enabled = true) {
   return useQuery({

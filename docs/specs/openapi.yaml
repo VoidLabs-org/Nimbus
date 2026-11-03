@@ -452,6 +452,199 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    post:
+      tags: [issues]
+      summary: Add a Status to the project
+      description: |
+        The Status goes after the last Status of its category. A project has at most 20 Statuses. A project without
+        Statuses gets its default ones first.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, category]
+              properties:
+                name:
+                  type: string
+                  description: Surrounding whitespace is removed, then 1 to 30 characters without control characters, unique in the project ignoring case
+                category:
+                  $ref: "#/components/schemas/StatusCategory"
+      responses:
+        "201":
+          description: The new Status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStatus"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown project, or a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "The project is Archived (no code), the name is taken (code: status_name_taken) or the project has 20 Statuses (code: status_limit)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/statuses/order:
+    put:
+      tags: [issues]
+      summary: Set the order of the project's Statuses
+      description: "`statusIds` must be every Status of the project exactly once, first to last."
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [statusIds]
+              properties:
+                statusIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: The Statuses in the new order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectStatus"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown project, or a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "The project is Archived"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/statuses/{statusId}:
+    patch:
+      tags: [issues]
+      summary: Rename a Status or change its category
+      description: Only the fields sent change. The Status keeps its id and its Issues.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: statusId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Surrounding whitespace is removed, then 1 to 30 characters without control characters, unique in the project ignoring case
+                category:
+                  $ref: "#/components/schemas/StatusCategory"
+      responses:
+        "200":
+          description: The Status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStatus"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown project or Status, or a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "The project is Archived (no code), the name is taken (code: status_name_taken), or the change would leave a category without a Status (code: category_needs_status)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags: [issues]
+      summary: Delete a Status, moving its Issues
+      description: |
+        A Status with Issues needs `moveTo`, another Status of the project; each moved Issue gets a `status` history
+        entry and `IssueChanged` is published for it.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: statusId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: moveTo
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Required when the Status has Issues; another Status of the project
+      responses:
+        "204":
+          description: The Status is gone and its Issues moved
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown project or Status, or a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "The project is Archived (no code), or it would leave a category without a Status (code: category_needs_status)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/issues/{issueKey}/history:
     get:
       tags: [issues]

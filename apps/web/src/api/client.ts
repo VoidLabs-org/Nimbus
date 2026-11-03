@@ -447,6 +447,40 @@ export function createApiClient(
     projectStatuses: (projectKey: string) =>
       request<ProjectStatus[]>(`/api/projects/${encodeURIComponent(projectKey)}/statuses`),
 
+    /** Adds a Status after the last one of its category. */
+    addStatus: (projectKey: string, input: { name: string; category: ProjectStatus["category"] }) =>
+      request<ProjectStatus>(`/api/projects/${encodeURIComponent(projectKey)}/statuses`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    /** Renames a Status or changes its category; it keeps its id and its Issues. */
+    editStatus: (
+      projectKey: string,
+      statusId: string,
+      change: { name?: string; category?: ProjectStatus["category"] },
+    ) =>
+      request<ProjectStatus>(
+        `/api/projects/${encodeURIComponent(projectKey)}/statuses/${encodeURIComponent(statusId)}`,
+        { method: "PATCH", body: JSON.stringify(change) },
+      ),
+
+    /** Sets the order; `statusIds` is every Status of the project once. */
+    reorderStatuses: (projectKey: string, statusIds: string[]) =>
+      request<ProjectStatus[]>(`/api/projects/${encodeURIComponent(projectKey)}/statuses/order`, {
+        method: "PUT",
+        body: JSON.stringify({ statusIds }),
+      }),
+
+    /** Deletes a Status; its Issues move to `moveTo`, which a Status with Issues needs. */
+    deleteStatus: (projectKey: string, statusId: string, moveTo?: string) =>
+      request<void>(
+        `/api/projects/${encodeURIComponent(projectKey)}/statuses/${encodeURIComponent(statusId)}${
+          moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ""
+        }`,
+        { method: "DELETE" },
+      ),
+
     /** The Issue's history, newest first. */
     issueHistory: (issueKey: string) =>
       request<IssueHistoryEntry[]>(`/api/issues/${encodeURIComponent(issueKey)}/history`),

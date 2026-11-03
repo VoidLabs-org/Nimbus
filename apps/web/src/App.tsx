@@ -25,6 +25,7 @@ import RolePage from "./pages/RolePage";
 import ProfilePage from "./pages/ProfilePage";
 import IssuePage from "./pages/IssuePage";
 import IssuesPage from "./pages/IssuesPage";
+import StatusesPage from "./pages/StatusesPage";
 import ProjectPage from "./pages/ProjectPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import RolesPage from "./pages/RolesPage";
@@ -207,6 +208,7 @@ export function AppRoutes() {
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:key" element={<ProjectPage />} />
             <Route path="/projects/:key/issues" element={<IssuesPage />} />
+            <Route path="/projects/:key/settings/statuses" element={<StatusesPage />} />
             <Route path="/issues/:issueKey" element={<IssuePage />} />
             {/* Settings: the overview list, and the pages it opens. */}
             <Route path="/settings" element={<SettingsOverview />} />

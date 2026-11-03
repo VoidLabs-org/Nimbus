@@ -81,6 +81,13 @@ export default function ProjectPage() {
                 >
                   View Issues
                 </Button>
+                <Button
+                  variant="default"
+                  component={Link}
+                  to={`/projects/${encodeURIComponent(project.key)}/settings/statuses`}
+                >
+                  Manage Statuses
+                </Button>
                 {/* An Archived project takes no new Issues. */}
                 {!project.archived && (
                   <Button onClick={() => setCreatingIssueIn(project.key)}>Create Issue</Button>

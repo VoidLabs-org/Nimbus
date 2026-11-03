@@ -3251,6 +3251,8 @@ components:
             - LINKED_IDENTITY_DISCONNECTED
             - OTHER_SESSIONS_SIGNED_OUT
             - ISSUE_ASSIGNED
+            - ISSUE_UNASSIGNED
+            - ISSUE_EDITED
         createdAt:
           type: string
           format: date-time
@@ -3283,6 +3285,10 @@ components:
               type: string
               description: Only for Issue types
               example: NIM-12
+            summary:
+              type: string
+              description: Only for ISSUE_EDITED. What the actor changed, never the values.
+              example: edited title and priority
         link:
           type: string
           description: /settings/security for Security alerts, /issues/{issueKey} for Issue types

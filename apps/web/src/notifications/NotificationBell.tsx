@@ -156,7 +156,7 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
                     navigate(item.link);
                   }}
                 >
-                  {item.type === "ISSUE_ASSIGNED" ? (
+                  {isIssueRow(item.type) ? (
                     <Avatar
                       src={item.snapshot.actorAvatarUrl}
                       name={item.snapshot.actorName}
@@ -169,9 +169,9 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
                     </span>
                   )}
                   <span className={classes.rowText}>
-                    {item.type === "ISSUE_ASSIGNED" ? (
+                    {isIssueRow(item.type) ? (
                       <span>
-                        <strong>{item.snapshot.actorName}</strong> assigned you{" "}
+                        <strong>{item.snapshot.actorName}</strong> {issueVerb(item)}{" "}
                         <strong>
                           {item.snapshot.issueKey} · {item.snapshot.title}
                         </strong>
@@ -262,6 +262,18 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
       </Popover.Dropdown>
     </Popover>
   );
+}
+
+const issueRowTypes = ["ISSUE_ASSIGNED", "ISSUE_UNASSIGNED", "ISSUE_EDITED"];
+
+function isIssueRow(type: string) {
+  return issueRowTypes.includes(type);
+}
+
+function issueVerb(item: { type: string; snapshot: Record<string, string> }) {
+  if (item.type === "ISSUE_UNASSIGNED") return "unassigned you from";
+  if (item.type === "ISSUE_EDITED") return item.snapshot.summary ?? "edited";
+  return "assigned you";
 }
 
 function dayLabel(at: string) {

@@ -252,3 +252,41 @@ it("shows an Assigned to you row with the actor, key and title, and opens the Is
   await waitFor(() => expect(read).toHaveBeenCalledWith("a"));
   await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/issues/NIM-12"));
 });
+
+it("shows unassigned and edited rows with the actor, what changed, key and title", async () => {
+  vi.spyOn(api, "notificationUnreadCount").mockResolvedValue({ count: 2 });
+  vi.spyOn(api, "notifications").mockResolvedValue({
+    items: [
+      {
+        id: "a",
+        type: "ISSUE_UNASSIGNED",
+        createdAt: new Date().toISOString(),
+        read: false,
+        snapshot: { title: "Fix the login", actorName: "Maya", issueKey: "NIM-12" },
+        link: "/issues/NIM-12",
+      },
+      {
+        id: "b",
+        type: "ISSUE_EDITED",
+        createdAt: new Date().toISOString(),
+        read: false,
+        snapshot: {
+          title: "Fix the login",
+          actorName: "Maya",
+          issueKey: "NIM-12",
+          summary: "edited title and priority",
+        },
+        link: "/issues/NIM-12",
+      },
+    ],
+    nextCursor: null,
+  });
+  drawBell();
+  fireEvent.click(await screen.findByRole("button", { name: "Notifications, 2 unread" }));
+  expect(
+    await screen.findByRole("button", { name: /Maya unassigned you from NIM-12 · Fix the login/ }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: /Maya edited title and priority NIM-12 · Fix the login/ }),
+  ).toBeTruthy();
+});

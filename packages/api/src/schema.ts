@@ -4206,7 +4206,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            type: "SIGNED_IN" | "PASSWORD_CHANGED" | "LINKED_IDENTITY_CONNECTED" | "LINKED_IDENTITY_DISCONNECTED" | "OTHER_SESSIONS_SIGNED_OUT" | "ISSUE_ASSIGNED";
+            type: "SIGNED_IN" | "PASSWORD_CHANGED" | "LINKED_IDENTITY_CONNECTED" | "LINKED_IDENTITY_DISCONNECTED" | "OTHER_SESSIONS_SIGNED_OUT" | "ISSUE_ASSIGNED" | "ISSUE_UNASSIGNED" | "ISSUE_EDITED";
             /** Format: date-time */
             createdAt: string;
             read: boolean;
@@ -4238,6 +4238,11 @@ export interface components {
                  * @example NIM-12
                  */
                 issueKey?: string;
+                /**
+                 * @description Only for ISSUE_EDITED. What the actor changed, never the values.
+                 * @example edited title and priority
+                 */
+                summary?: string;
             };
             /**
              * @description /settings/security for Security alerts, /issues/{issueKey} for Issue types

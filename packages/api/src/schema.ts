@@ -4206,7 +4206,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            type: "SIGNED_IN" | "PASSWORD_CHANGED" | "LINKED_IDENTITY_CONNECTED" | "LINKED_IDENTITY_DISCONNECTED" | "OTHER_SESSIONS_SIGNED_OUT" | "ISSUE_ASSIGNED" | "ISSUE_UNASSIGNED" | "ISSUE_EDITED" | "ISSUE_STATUS_CHANGED";
+            type: "SIGNED_IN" | "PASSWORD_CHANGED" | "LINKED_IDENTITY_CONNECTED" | "LINKED_IDENTITY_DISCONNECTED" | "OTHER_SESSIONS_SIGNED_OUT" | "ISSUE_ASSIGNED" | "ISSUE_UNASSIGNED" | "ISSUE_EDITED" | "ISSUE_STATUS_CHANGED" | "ISSUE_DELETED";
             /** Format: date-time */
             createdAt: string;
             read: boolean;
@@ -4265,7 +4265,7 @@ export interface components {
                 toCategory?: "TODO" | "IN_PROGRESS" | "DONE";
             };
             /**
-             * @description /settings/security for Security alerts, /issues/{issueKey} for Issue types
+             * @description /settings/security for Security alerts, /issues/{issueKey} for Issue types, or /projects/{projectKey} once that Issue is deleted
              * @example /issues/NIM-12
              */
             link: string;

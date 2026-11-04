@@ -322,3 +322,27 @@ it("shows a Status move as from → to", async () => {
     }),
   ).toBeTruthy();
 });
+
+it("shows a Deleted row with the actor, key and title, and opens the project", async () => {
+  vi.spyOn(api, "notificationUnreadCount").mockResolvedValue({ count: 1 });
+  vi.spyOn(api, "notifications").mockResolvedValue({
+    items: [
+      {
+        id: "a",
+        type: "ISSUE_DELETED",
+        createdAt: new Date().toISOString(),
+        read: false,
+        snapshot: { title: "Old audit filter", actorName: "Maya", issueKey: "NIM-120" },
+        link: "/projects/NIM",
+      },
+    ],
+    nextCursor: null,
+  });
+  vi.spyOn(api, "readNotification").mockResolvedValue(undefined as never);
+  drawBell();
+  fireEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Maya deleted NIM-120 · Old audit filter/ }),
+  );
+  await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/projects/NIM"));
+});

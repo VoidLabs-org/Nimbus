@@ -3254,6 +3254,7 @@ components:
             - ISSUE_UNASSIGNED
             - ISSUE_EDITED
             - ISSUE_STATUS_CHANGED
+            - ISSUE_DELETED
         createdAt:
           type: string
           format: date-time
@@ -3308,7 +3309,7 @@ components:
               description: Only for ISSUE_STATUS_CHANGED. The category of the Status it moved to.
         link:
           type: string
-          description: /settings/security for Security alerts, /issues/{issueKey} for Issue types
+          description: /settings/security for Security alerts, /issues/{issueKey} for Issue types, or /projects/{projectKey} once that Issue is deleted
           example: /issues/NIM-12
 
     RegisterRequest:

@@ -277,6 +277,7 @@ const issueRowTypes = [
   "ISSUE_UNASSIGNED",
   "ISSUE_EDITED",
   "ISSUE_STATUS_CHANGED",
+  "ISSUE_DELETED",
 ];
 
 function isIssueRow(type: string) {
@@ -287,6 +288,7 @@ function issueVerb(item: { type: string; snapshot: Record<string, string> }) {
   if (item.type === "ISSUE_UNASSIGNED") return "unassigned you from";
   if (item.type === "ISSUE_EDITED") return item.snapshot.summary ?? "edited";
   if (item.type === "ISSUE_STATUS_CHANGED") return "moved";
+  if (item.type === "ISSUE_DELETED") return "deleted";
   return "assigned you";
 }
 

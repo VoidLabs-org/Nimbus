@@ -65,19 +65,41 @@ class NotificationInbox {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be between 1 and 100");
 		}
 		var cursor = before == null ? null : Cursor.parse(before);
-		var query = jdbc.sql("SELECT id, type, created_at, read_at, snapshot::text, issue_key FROM notifications WHERE user_id = :user"
-			+ (cursor == null ? "" : " AND (created_at, id) < (:at, :id)")
-			+ " ORDER BY created_at DESC, id DESC LIMIT :limit").param("user", userId).param("limit", limit + 1);
+		var query = jdbc.sql("""
+				SELECT n.id, n.type, n.created_at, n.read_at, n.snapshot::text AS snapshot, n.issue_key, d.project_key
+				FROM notifications n
+				LEFT JOIN notification_deleted_issues d ON d.project_id = n.project_id AND d.issue_key = n.issue_key
+				WHERE n.user_id = :user"""
+			+ (cursor == null ? "" : " AND (n.created_at, n.id) < (:at, :id)")
+			+ " ORDER BY n.created_at DESC, n.id DESC LIMIT :limit").param("user", userId).param("limit", limit + 1);
 		if (cursor != null) {
 			query.param("at", Timestamp.from(cursor.at())).param("id", cursor.id());
 		}
 		var found = query.query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getString("type"),
 			rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("read_at") != null,
 			json.readTree(rs.getString("snapshot")),
-			rs.getString("issue_key") == null ? SECURITY_LINK : "/issues/" + rs.getString("issue_key"))).list();
+			link(rs.getString("issue_key"), rs.getString("project_key")))).list();
 		var items = found.stream().limit(limit).toList();
 		var last = items.isEmpty() ? null : items.getLast();
 		return new Page(items, found.size() > limit ? new Cursor(last.createdAt(), last.id()).encode() : null);
+	}
+
+	/**
+	 * Remembers that an Issue is gone, so every Notification about it, older ones included, links to its project.
+	 * Repeating it changes nothing.
+	 */
+	void issueDeleted(UUID projectId, String issueKey, String projectKey) {
+		jdbc.sql("""
+			INSERT INTO notification_deleted_issues(project_id, issue_key, project_key) VALUES (:project, :issueKey, :projectKey)
+			ON CONFLICT DO NOTHING
+			""").param("project", projectId).param("issueKey", issueKey).param("projectKey", projectKey).update();
+	}
+
+	/** A deleted Issue can't be opened, so a Notification about one takes the User to its project instead. */
+	private static String link(String issueKey, String deletedFromProject) {
+		if (issueKey == null) return SECURITY_LINK;
+		if (deletedFromProject != null) return "/projects/" + deletedFromProject;
+		return "/issues/" + issueKey;
 	}
 
 	long unreadCount(UUID userId) {

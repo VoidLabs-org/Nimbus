@@ -65,7 +65,12 @@ class IssueDeletedEventTests {
 		client.delete().uri("/api/issues/IDL-1").header("Authorization", "Bearer " + token).exchange()
 			.expectStatus().isNotFound();
 
-		assertThat(events.ofType(IssueDeleted.class)).hasSize(1)
-			.first().isEqualTo(new IssueDeleted(projectId, "IDL-1"));
+		assertThat(events.ofType(IssueDeleted.class)).hasSize(1).first()
+			.usingRecursiveComparison().ignoringFields("at")
+			.isEqualTo(new IssueDeleted(projectId, "IDL", "Issue deletes", "IDL-1", creator, "Gone", creator, null, null));
+		// The event's time is the one kept in the deletion record.
+		var deletedAt = jdbc.sql("SELECT deleted_at FROM issue_deletions WHERE issue_key = 'IDL-1'")
+			.query(java.sql.Timestamp.class).single().toInstant();
+		assertThat(events.ofType(IssueDeleted.class).iterator().next().at()).isEqualTo(deletedAt);
 	}
 }

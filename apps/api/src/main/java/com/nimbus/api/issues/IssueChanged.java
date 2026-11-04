@@ -18,7 +18,13 @@ public record IssueChanged(UUID projectId, String issueKey, UUID actorId, String
 	 * One changed field. {@code before} and {@code after} are the values for {@code title}, {@code type},
 	 * {@code priority} and {@code status} (its name), and User ids for {@code assignee} ({@code null} for nobody).
 	 * A {@code description} change is only a flag: both values are {@code null}, as its text is never carried.
+	 * {@code beforeCategory} and {@code afterCategory} are the Status categories ({@code TODO}, {@code IN_PROGRESS}
+	 * or {@code DONE}) of a {@code status} change and {@code null} for every other field.
 	 */
-	public record Change(String field, String before, String after) {
+	public record Change(String field, String before, String after, String beforeCategory, String afterCategory) {
+
+		public Change(String field, String before, String after) {
+			this(field, before, after, null, null);
+		}
 	}
 }

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -62,21 +63,23 @@ class IssueNotifications {
 		var actor = actor(event.actorId());
 		deliver(event.assigneeId(), NotificationSettings.IssueType.ISSUE_ASSIGNED,
 			"ISSUE_ASSIGNED:" + event.projectId() + ":" + event.issueKey() + ":created", event.projectId(),
-			event.actorId(), clock.instant(), event.issueKey(), event.title(), actor, "");
+			event.actorId(), clock.instant(), event.issueKey(), event.title(), actor, "", Map.of());
 	}
 
 	/**
 	 * A reassignment tells the old Assignee and the new one; every edit of the title, description, priority or
-	 * Assignee gives the Reporter and the current Assignee one {@code ISSUE_EDITED} naming all of them. Nobody gets
-	 * more than one Notification per event, nor one about their own change. Status and type changes are not edits.
+	 * Assignee gives the Reporter and the current Assignee one {@code ISSUE_EDITED} naming all of them, and a Status
+	 * move gives them one {@code ISSUE_STATUS_CHANGED} instead, which also covers any edits in the same save. Nobody gets
+	 * more than one Notification per event, nor one about their own change. Type changes notify nobody.
 	 */
 	@ApplicationModuleListener
 	void on(IssueChanged event) {
 		var assignee = event.changes().stream().filter(c -> c.field().equals("assignee")).findFirst().orElse(null);
+		var status = event.changes().stream().filter(c -> c.field().equals("status")).findFirst().orElse(null);
 		var edited = event.changes().stream().map(IssueChanged.Change::field)
 			.filter(f -> List.of("title", "description", "priority", "assignee").contains(f)).toList();
-		// Status and type changes notify nobody, so they skip the lookups.
-		if (assignee == null && edited.isEmpty()) return;
+		// Type changes notify nobody, so they skip the lookups.
+		if (assignee == null && status == null && edited.isEmpty()) return;
 		var actor = actor(event.actorId());
 		var told = new LinkedHashSet<UUID>();
 		told.add(event.actorId());
@@ -85,11 +88,26 @@ class IssueNotifications {
 			var after = assignee.after() == null ? null : UUID.fromString(assignee.after());
 			if (before != null && told.add(before)) {
 				deliver(before, NotificationSettings.IssueType.ISSUE_UNASSIGNED, key("ISSUE_UNASSIGNED", before, event),
-					event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, "");
+					event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, "", Map.of());
 			}
 			if (after != null && told.add(after)) {
 				deliver(after, NotificationSettings.IssueType.ISSUE_ASSIGNED, key("ISSUE_ASSIGNED", after, event),
-					event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, "");
+					event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, "", Map.of());
+			}
+		}
+		if (status != null) {
+			var move = status.before() + " → " + status.after();
+			var extra = new LinkedHashMap<String, String>();
+			extra.put("fromStatus", status.before());
+			extra.put("toStatus", status.after());
+			if (status.beforeCategory() != null) extra.put("fromCategory", status.beforeCategory());
+			if (status.afterCategory() != null) extra.put("toCategory", status.afterCategory());
+			// A save that also edits fields still gives one Notification, which shows the move.
+			for (var recipient : new UUID[] { event.reporterId(), event.assigneeId() }) {
+				if (recipient == null || !told.add(recipient)) continue;
+				deliver(recipient, NotificationSettings.IssueType.ISSUE_STATUS_CHANGED,
+					key("ISSUE_STATUS_CHANGED", recipient, event), event.projectId(), event.actorId(), event.at(),
+					event.issueKey(), event.title(), actor, move, extra);
 			}
 		}
 		if (edited.isEmpty()) return;
@@ -98,7 +116,7 @@ class IssueNotifications {
 		for (var recipient : new UUID[] { event.reporterId(), event.assigneeId() }) {
 			if (recipient == null || !told.add(recipient)) continue;
 			deliver(recipient, NotificationSettings.IssueType.ISSUE_EDITED, key("ISSUE_EDITED", recipient, event),
-				event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, summary);
+				event.projectId(), event.actorId(), event.at(), event.issueKey(), event.title(), actor, summary, Map.of());
 		}
 	}
 
@@ -117,7 +135,7 @@ class IssueNotifications {
 	}
 
 	private void deliver(UUID recipientId, NotificationSettings.IssueType type, String dedupeKey,
-			UUID projectId, UUID actorId, Instant at, String issueKey, String title, Optional<UserSummary> actor, String summary) {
+			UUID projectId, UUID actorId, Instant at, String issueKey, String title, Optional<UserSummary> actor, String summary, Map<String, String> extra) {
 		var recipient = users.findAllById(List.of(recipientId)).stream().findFirst();
 		// An unverified address may belong to someone else, and they can't open the inbox anyway.
 		if (recipient.isEmpty() || !recipient.get().emailVerified()) return;
@@ -128,6 +146,7 @@ class IssueNotifications {
 		snapshot.put("issueKey", issueKey);
 		snapshot.put("title", title);
 		if (type == NotificationSettings.IssueType.ISSUE_EDITED) snapshot.put("summary", summary);
+		snapshot.putAll(extra);
 		if (!inbox.add(recipientId, type.name(), dedupeKey, snapshot, at, projectId, issueKey, actorId)) return;
 		if (!settings.emailOn(recipientId, type)) return;
 		var message = mail(type, recipient.get().email(), actorName, issueKey, title, summary);
@@ -149,14 +168,17 @@ class IssueNotifications {
 		var phrase = switch (type) {
 			case ISSUE_ASSIGNED -> "assigned you";
 			case ISSUE_UNASSIGNED -> "unassigned you from";
+			case ISSUE_STATUS_CHANGED -> "moved";
 			default -> summary + " on";
 		};
 		var heading = switch (type) {
 			case ISSUE_ASSIGNED -> "Assigned to you";
 			case ISSUE_UNASSIGNED -> "Unassigned from you";
+			case ISSUE_STATUS_CHANGED -> "Status changed";
 			default -> "Issue edited";
 		};
-		var subject = actorName + " " + phrase + " " + issueKey;
+		var subject = actorName + " " + phrase + " " + issueKey
+			+ (type == NotificationSettings.IssueType.ISSUE_STATUS_CHANGED ? " " + summary : "");
 		var line = subject + " · " + title + ".";
 		var button = "Open " + issueKey;
 		var url = publicUrl + "/issues/" + issueKey;

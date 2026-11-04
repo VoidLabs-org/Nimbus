@@ -154,8 +154,8 @@ class IssueNotificationTests {
 		var riley = person("Riley");
 		var sam = person("Sam");
 		scenario.publish(changed("NIM-42", "New title", maya, riley, sam, change("title", "Old", "New title"),
-			change("description", null, null), change("priority", "Low", "High"), change("type", "Story", "Bug"),
-			change("status", "To do", "Done"))).andWaitForStateChange(() -> count(sam), n -> n == 1);
+			change("description", null, null), change("priority", "Low", "High"), change("type", "Story", "Bug")))
+			.andWaitForStateChange(() -> count(sam), n -> n == 1);
 		settle(scenario, maya);
 		for (var recipient : List.of(riley, sam)) {
 			var edited = notifications(recipient, "ISSUE_EDITED");
@@ -180,13 +180,86 @@ class IssueNotificationTests {
 		assertThat(count(maya)).isZero();
 	}
 
+	static IssueChanged.Change move(String from, String fromCategory, String to, String toCategory) {
+		return new IssueChanged.Change("status", from, to, fromCategory, toCategory);
+	}
+
 	@Test
-	void statusAndTypeOnlyChangesAreNotEditsAndTheEditedEmailFollowsTheSwitch(Scenario scenario) {
+	void aStatusMoveTellsTheReporterAndTheAssigneeButNotTheMover(Scenario scenario) {
 		var maya = person("Maya");
 		var riley = person("Riley");
 		var sam = person("Sam");
-		scenario.publish(changed("NIM-45", "Moved", maya, riley, sam, change("status", "To do", "Done"),
-			change("type", "Story", "Bug")));
+		var event = changed("NIM-50", "Ship it", maya, riley, sam,
+			move("In progress", "IN_PROGRESS", "In review", "IN_PROGRESS"));
+		scenario.publish(event).andWaitForStateChange(() -> RecordingMailer.sentTo(sam.email()).stream()
+			.filter(m -> m.subject().equals("Maya moved NIM-50 In progress → In review")).toList(), mails -> mails.size() == 1)
+			.andVerify(mails -> assertThat(mails.getFirst().text())
+				.contains("Maya moved NIM-50 In progress → In review · Ship it").contains("/issues/NIM-50"));
+		// A redelivered event is still one Notification each.
+		scenario.publish(event);
+		settle(scenario, maya);
+		for (var recipient : List.of(riley, sam)) {
+			var moved = notifications(recipient, "ISSUE_STATUS_CHANGED");
+			assertThat(moved).hasSize(1);
+			assertThat((String) moved.getFirst().get("snapshot")).contains("\"fromStatus\": \"In progress\"")
+				.contains("\"toStatus\": \"In review\"").contains("\"fromCategory\": \"IN_PROGRESS\"")
+				.contains("\"toCategory\": \"IN_PROGRESS\"");
+			assertThat(count(recipient)).isEqualTo(1);
+		}
+		assertThat(count(maya)).isZero();
+		assertThat(RecordingMailer.sentTo(riley.email()).stream()
+			.filter(m -> m.subject().equals("Maya moved NIM-50 In progress → In review"))).hasSize(1);
+	}
+
+	@Test
+	void aReporterWhoIsTheAssigneeGetsOneAndNobodyHearsAboutTheirOwnMove(Scenario scenario) {
+		var maya = person("Maya");
+		var sam = person("Sam");
+		scenario.publish(changed("NIM-51", "Mine", maya, sam, sam, move("To do", "TODO", "Done", "DONE")))
+			.andWaitForStateChange(() -> count(sam), n -> n == 1);
+		scenario.publish(changed("NIM-52", "Hers", maya, maya, maya, move("To do", "TODO", "Done", "DONE")));
+		settle(scenario, maya);
+		assertThat(count(sam)).isEqualTo(1);
+		assertThat(count(maya)).isZero();
+	}
+
+	@Test
+	void aSaveThatMovesTheStatusAndEditsGivesEachRecipientOneNotificationShowingTheMove(Scenario scenario) {
+		var maya = person("Maya");
+		var riley = person("Riley");
+		var sam = person("Sam");
+		scenario.publish(changed("NIM-53", "New title", maya, riley, sam, change("title", "Old", "New title"),
+			move("To do", "TODO", "Done", "DONE"))).andWaitForStateChange(() -> count(sam), n -> n == 1);
+		settle(scenario, maya);
+		for (var recipient : List.of(riley, sam)) {
+			assertThat(notifications(recipient, "ISSUE_STATUS_CHANGED")).hasSize(1);
+			assertThat(notifications(recipient, "ISSUE_EDITED")).isEmpty();
+			assertThat(count(recipient)).isEqualTo(1);
+		}
+	}
+
+	@Test
+	void theStatusChangedEmailFollowsTheSwitch(Scenario scenario) {
+		var maya = person("Maya");
+		var sam = person("Sam");
+		var other = person("Other");
+		client.put().uri("/api/users/me/notification-settings/ISSUE_STATUS_CHANGED")
+			.headers(h -> h.setBearerAuth(sam.token())).body(Map.of("email", false)).exchange().expectStatus().isNoContent();
+		scenario.publish(changed("NIM-54", "Quiet", maya, maya, sam, move("To do", "TODO", "Done", "DONE")))
+			.andWaitForStateChange(() -> count(sam), n -> n == 1);
+		scenario.publish(changed("NIM-55", "Loud", maya, maya, other, move("To do", "TODO", "Done", "DONE")))
+			.andWaitForStateChange(() -> RecordingMailer.sentTo(other.email()).stream()
+				.filter(m -> m.subject().contains("NIM-55")).toList(), mails -> mails.size() == 1)
+			.andVerify(mails -> assertThat(RecordingMailer.sentTo(sam.email()).stream()
+				.filter(m -> m.subject().contains("moved NIM-54"))).isEmpty());
+	}
+
+	@Test
+	void typeOnlyChangesAreNotEditsAndTheEditedEmailFollowsTheSwitch(Scenario scenario) {
+		var maya = person("Maya");
+		var riley = person("Riley");
+		var sam = person("Sam");
+		scenario.publish(changed("NIM-45", "Typed", maya, riley, sam, change("type", "Story", "Bug")));
 		client.put().uri("/api/users/me/notification-settings/ISSUE_EDITED").headers(h -> h.setBearerAuth(sam.token()))
 			.body(Map.of("email", true)).exchange().expectStatus().isNoContent();
 		scenario.publish(changed("NIM-46", "Edited", maya, riley, sam, change("title", "A", "Edited")))

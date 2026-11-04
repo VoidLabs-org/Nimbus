@@ -4206,7 +4206,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            type: "SIGNED_IN" | "PASSWORD_CHANGED" | "LINKED_IDENTITY_CONNECTED" | "LINKED_IDENTITY_DISCONNECTED" | "OTHER_SESSIONS_SIGNED_OUT" | "ISSUE_ASSIGNED" | "ISSUE_UNASSIGNED" | "ISSUE_EDITED";
+            type: "SIGNED_IN" | "PASSWORD_CHANGED" | "LINKED_IDENTITY_CONNECTED" | "LINKED_IDENTITY_DISCONNECTED" | "OTHER_SESSIONS_SIGNED_OUT" | "ISSUE_ASSIGNED" | "ISSUE_UNASSIGNED" | "ISSUE_EDITED" | "ISSUE_STATUS_CHANGED";
             /** Format: date-time */
             createdAt: string;
             read: boolean;
@@ -4243,6 +4243,26 @@ export interface components {
                  * @example edited title and priority
                  */
                 summary?: string;
+                /**
+                 * @description Only for ISSUE_STATUS_CHANGED. The Status name it left.
+                 * @example In progress
+                 */
+                fromStatus?: string;
+                /**
+                 * @description Only for ISSUE_STATUS_CHANGED. The Status name it moved to.
+                 * @example In review
+                 */
+                toStatus?: string;
+                /**
+                 * @description Only for ISSUE_STATUS_CHANGED. The category of the Status it left.
+                 * @enum {string}
+                 */
+                fromCategory?: "TODO" | "IN_PROGRESS" | "DONE";
+                /**
+                 * @description Only for ISSUE_STATUS_CHANGED. The category of the Status it moved to.
+                 * @enum {string}
+                 */
+                toCategory?: "TODO" | "IN_PROGRESS" | "DONE";
             };
             /**
              * @description /settings/security for Security alerts, /issues/{issueKey} for Issue types

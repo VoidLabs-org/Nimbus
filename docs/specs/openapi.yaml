@@ -3253,6 +3253,7 @@ components:
             - ISSUE_ASSIGNED
             - ISSUE_UNASSIGNED
             - ISSUE_EDITED
+            - ISSUE_STATUS_CHANGED
         createdAt:
           type: string
           format: date-time
@@ -3289,6 +3290,22 @@ components:
               type: string
               description: Only for ISSUE_EDITED. What the actor changed, never the values.
               example: edited title and priority
+            fromStatus:
+              type: string
+              description: Only for ISSUE_STATUS_CHANGED. The Status name it left.
+              example: In progress
+            toStatus:
+              type: string
+              description: Only for ISSUE_STATUS_CHANGED. The Status name it moved to.
+              example: In review
+            fromCategory:
+              type: string
+              enum: [TODO, IN_PROGRESS, DONE]
+              description: Only for ISSUE_STATUS_CHANGED. The category of the Status it left.
+            toCategory:
+              type: string
+              enum: [TODO, IN_PROGRESS, DONE]
+              description: Only for ISSUE_STATUS_CHANGED. The category of the Status it moved to.
         link:
           type: string
           description: /settings/security for Security alerts, /issues/{issueKey} for Issue types

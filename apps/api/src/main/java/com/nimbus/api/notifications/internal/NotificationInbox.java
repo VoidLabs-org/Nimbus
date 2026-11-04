@@ -2,6 +2,7 @@ package com.nimbus.api.notifications.internal;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -58,6 +59,57 @@ class NotificationInbox {
 			.param("snapshot", json.writeValueAsString(snapshot))
 			.param("at", Timestamp.from(at)).param("project", projectId).param("issueKey", issueKey)
 			.param("actor", actorId).update() == 1;
+	}
+
+	/** A change is emailed this long after the last change to the same Issue for the same User. */
+	static final Duration EMAIL_QUIET = Duration.ofMinutes(3);
+
+	/** ...but never later than this long after the first change of the group. */
+	static final Duration EMAIL_CAP = Duration.ofMinutes(10);
+
+	/**
+	 * Queues the email of a stored Notification with the User's unsent changes to the same Issue: the whole group is
+	 * due {@link #EMAIL_QUIET} after {@code now}, but not later than {@link #EMAIL_CAP} after the group's first change.
+	 */
+	void scheduleEmail(UUID userId, UUID projectId, String issueKey, String dedupeKey, Instant now) {
+		// Concurrent events for the same User and Issue would each read the group before the other commits.
+		jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:group, 0))")
+			.param("group", userId + "/" + projectId + "/" + issueKey).query().singleRow();
+		var started = jdbc.sql("""
+			SELECT min(email_group_started_at) FROM notifications
+			WHERE user_id = :user AND project_id = :project AND issue_key = :issueKey
+				AND emailed_at IS NULL AND email_due_at IS NOT NULL
+			""").param("user", userId).param("project", projectId).param("issueKey", issueKey)
+			.query(Timestamp.class).optional().map(Timestamp::toInstant).orElse(now);
+		var quiet = now.plus(EMAIL_QUIET);
+		var cap = started.plus(EMAIL_CAP);
+		jdbc.sql("""
+			UPDATE notifications SET email_due_at = :due, email_group_started_at = :started
+			WHERE dedupe_key = :dedupe OR (user_id = :user AND project_id = :project AND issue_key = :issueKey
+				AND emailed_at IS NULL AND email_due_at IS NOT NULL)
+			""").param("due", Timestamp.from(quiet.isBefore(cap) ? quiet : cap)).param("started", Timestamp.from(started))
+			.param("dedupe", dedupeKey).param("user", userId).param("project", projectId).param("issueKey", issueKey)
+			.update();
+	}
+
+	/** One Notification of a group whose email is due. */
+	record Change(UUID userId, UUID projectId, String issueKey, String type, Instant at, JsonNode snapshot) {
+	}
+
+	/**
+	 * Marks every group that is due at {@code now} as emailed and returns its changes, oldest first. Claiming and
+	 * marking is one statement, so a group is returned to one caller even when instances run this together.
+	 */
+	List<Change> claimDueEmails(Instant now) {
+		return jdbc.sql("""
+			UPDATE notifications SET emailed_at = :now
+			WHERE emailed_at IS NULL AND email_due_at <= :now
+			RETURNING user_id, project_id, issue_key, type, created_at, id, snapshot::text AS snapshot
+			""").param("now", Timestamp.from(now))
+			.query((rs, n) -> new Change(rs.getObject("user_id", UUID.class), rs.getObject("project_id", UUID.class),
+				rs.getString("issue_key"), rs.getString("type"), rs.getTimestamp("created_at").toInstant(),
+				json.readTree(rs.getString("snapshot"))))
+			.list().stream().sorted(java.util.Comparator.comparing(Change::at)).toList();
 	}
 
 	Page list(UUID userId, String before, int limit) {

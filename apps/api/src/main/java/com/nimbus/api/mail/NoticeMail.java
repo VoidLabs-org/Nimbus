@@ -127,6 +127,38 @@ public final class NoticeMail {
 		return MailFrame.html(title, line, heading, logoUrl, card, footer);
 	}
 
+	/**
+	 * Renders a notice that lists details and then offers a button, such as several changes to one Issue. All content
+	 * is plain text and escaped; the line is also the inbox preview.
+	 * @param details the labelled facts, in order; at least one
+	 * @see #html(String, String, String, List, Optional, String, Optional)
+	 * @see #html(String, String, String, Optional, String, String, String, Optional)
+	 */
+	public static String html(String title, String heading, String line, List<Detail> details, String button, String url,
+			String footer, Optional<String> logoUrl) {
+		Objects.requireNonNull(title, "title");
+		Objects.requireNonNull(heading, "heading");
+		Objects.requireNonNull(line, "line");
+		Objects.requireNonNull(details, "details");
+		Objects.requireNonNull(button, "button");
+		Objects.requireNonNull(url, "url");
+		Objects.requireNonNull(footer, "footer");
+		Objects.requireNonNull(logoUrl, "logoUrl");
+		if (details.isEmpty()) {
+			throw new IllegalArgumentException("details must not be empty");
+		}
+		validateUrl(url);
+		var rows = new StringBuilder();
+		details.forEach(detail -> rows.append(DETAIL.formatted(escape(detail.label()), escape(detail.value()))));
+		var card = """
+				<p class="muted" style="margin:0 0 20px 0;%1$s">%2$s</p>
+				<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%" class="rule" style="margin:0 0 24px 0;border-top:1px solid #e8e4df">
+				%3$s</table>
+				<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#ff6b3d" style="border-radius:999px;background:#ff6b3d"><a href="%4$s" style="display:inline-block;padding:14px 28px;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:20px;font-weight:bold;color:#201d1a;text-decoration:none">%5$s</a></td></tr></table>"""
+			.formatted(MUTED_STYLE, escape(line), rows, escape(url), escape(button));
+		return MailFrame.html(title, line, heading, logoUrl, card, footer);
+	}
+
 	private static void validateUrl(String url) {
 		try {
 			var uri = URI.create(url);

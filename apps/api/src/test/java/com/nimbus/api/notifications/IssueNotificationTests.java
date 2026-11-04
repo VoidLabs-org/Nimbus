@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.jayway.jsonpath.JsonPath;
 import com.nimbus.api.RecordingMailer;
 import com.nimbus.api.TestcontainersConfiguration;
+import com.nimbus.api.identity.MovableClock;
 import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
 import com.nimbus.api.issues.IssueDeleted;
@@ -22,13 +23,24 @@ import org.springframework.modulith.test.Scenario;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 /** Publishes hand-made {@code IssueCreated} events, as {@code issues} would, and checks what the module does. */
-@Import({ TestcontainersConfiguration.class, RecordingMailer.class })
+@Import({ TestcontainersConfiguration.class, RecordingMailer.class, MovableClock.Configuration.class })
 @ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.ALL_DEPENDENCIES,
 	webEnvironment = org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
+@org.springframework.test.context.TestPropertySource(properties = "nimbus.notifications.email-cron=* * * * * *")
 class IssueNotificationTests {
 
 	@Autowired RestTestClient client;
+	@Autowired MovableClock clock;
+
+	/**
+	 * What was emailed to the address. Grouped emails wait for a quiet period, which this lets pass each time it is
+	 * asked; the Notifications of these tests are not meant to be gathered.
+	 */
+	List<com.nimbus.api.mail.Mail> mailsTo(String email) {
+		clock.advance(java.time.Duration.ofMinutes(11));
+		return RecordingMailer.sentTo(email);
+	}
 	@Autowired org.springframework.jdbc.core.simple.JdbcClient jdbc;
 
 	record Person(String email, String token, UUID id) {
@@ -88,7 +100,7 @@ class IssueNotificationTests {
 		var maya = person("Maya");
 		var sam = person("Sam");
 		var event = created("NIM-12", "Fix the login", maya, sam);
-		scenario.publish(event).andWaitForStateChange(() -> RecordingMailer.sentTo(sam.email()).stream()
+		scenario.publish(event).andWaitForStateChange(() -> mailsTo(sam.email()).stream()
 			.filter(m -> m.subject().equals("Maya assigned you NIM-12")).toList(), mails -> mails.size() == 1)
 			.andVerify(mails -> {
 				var mail = mails.getFirst();
@@ -158,11 +170,11 @@ class IssueNotificationTests {
 		assertThat(count(riley)).isEqualTo(1);
 		assertThat(count(maya)).isZero();
 		// The old Assignee's email follows their switch (on by default); the Reporter's Edited email is off by default.
-		assertThat(RecordingMailer.sentTo(sam.email()).stream()
-			.filter(m -> m.subject().equals("Maya unassigned you from NIM-40"))).hasSize(1);
-		assertThat(RecordingMailer.sentTo(alex.email()).stream()
+		org.awaitility.Awaitility.await().untilAsserted(() -> assertThat(mailsTo(sam.email()).stream()
+			.filter(m -> m.subject().equals("Maya unassigned you from NIM-40"))).hasSize(1));
+		assertThat(mailsTo(alex.email()).stream()
 			.filter(m -> m.subject().equals("Maya assigned you NIM-40"))).hasSize(1);
-		assertThat(RecordingMailer.sentTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-40"))).isEmpty();
+		assertThat(mailsTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-40"))).isEmpty();
 	}
 
 	@Test
@@ -221,7 +233,7 @@ class IssueNotificationTests {
 		var sam = person("Sam");
 		var event = changed("NIM-50", "Ship it", maya, riley, sam,
 			move("In progress", "IN_PROGRESS", "In review", "IN_PROGRESS"));
-		scenario.publish(event).andWaitForStateChange(() -> RecordingMailer.sentTo(sam.email()).stream()
+		scenario.publish(event).andWaitForStateChange(() -> mailsTo(sam.email()).stream()
 			.filter(m -> m.subject().equals("Maya moved NIM-50 In progress → In review")).toList(), mails -> mails.size() == 1)
 			.andVerify(mails -> assertThat(mails.getFirst().text())
 				.contains("Maya moved NIM-50 In progress → In review · Ship it").contains("/issues/NIM-50"));
@@ -237,7 +249,7 @@ class IssueNotificationTests {
 			assertThat(count(recipient)).isEqualTo(1);
 		}
 		assertThat(count(maya)).isZero();
-		assertThat(RecordingMailer.sentTo(riley.email()).stream()
+		assertThat(mailsTo(riley.email()).stream()
 			.filter(m -> m.subject().equals("Maya moved NIM-50 In progress → In review"))).hasSize(1);
 	}
 
@@ -278,9 +290,9 @@ class IssueNotificationTests {
 		scenario.publish(changed("NIM-54", "Quiet", maya, maya, sam, move("To do", "TODO", "Done", "DONE")))
 			.andWaitForStateChange(() -> count(sam), n -> n == 1);
 		scenario.publish(changed("NIM-55", "Loud", maya, maya, other, move("To do", "TODO", "Done", "DONE")))
-			.andWaitForStateChange(() -> RecordingMailer.sentTo(other.email()).stream()
+			.andWaitForStateChange(() -> mailsTo(other.email()).stream()
 				.filter(m -> m.subject().contains("NIM-55")).toList(), mails -> mails.size() == 1)
-			.andVerify(mails -> assertThat(RecordingMailer.sentTo(sam.email()).stream()
+			.andVerify(mails -> assertThat(mailsTo(sam.email()).stream()
 				.filter(m -> m.subject().contains("moved NIM-54"))).isEmpty());
 	}
 
@@ -293,12 +305,12 @@ class IssueNotificationTests {
 		client.put().uri("/api/users/me/notification-settings/ISSUE_EDITED").headers(h -> h.setBearerAuth(sam.token()))
 			.body(Map.of("email", true)).exchange().expectStatus().isNoContent();
 		scenario.publish(changed("NIM-46", "Edited", maya, riley, sam, change("title", "A", "Edited")))
-			.andWaitForStateChange(() -> RecordingMailer.sentTo(sam.email()).stream()
+			.andWaitForStateChange(() -> mailsTo(sam.email()).stream()
 				.filter(m -> m.subject().equals("Maya edited title on NIM-46")).toList(), mails -> mails.size() == 1)
 			.andVerify(mails -> assertThat(mails.getFirst().text()).contains("Maya edited title on NIM-46 · Edited"));
 		assertThat(count(sam)).isEqualTo(1);
 		assertThat(count(riley)).isEqualTo(1);
-		assertThat(RecordingMailer.sentTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-46"))).isEmpty();
+		assertThat(mailsTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-46"))).isEmpty();
 	}
 
 	@Test
@@ -308,7 +320,7 @@ class IssueNotificationTests {
 		var sam = person("Sam");
 		scenario.publish(created("NIM-120", "Old audit filter", maya, sam)).andWaitForStateChange(() -> count(sam), n -> n == 1);
 		var event = deleted("NIM-120", "Old audit filter", maya, riley, sam);
-		scenario.publish(event).andWaitForStateChange(() -> RecordingMailer.sentTo(sam.email()).stream()
+		scenario.publish(event).andWaitForStateChange(() -> mailsTo(sam.email()).stream()
 			.filter(m -> m.subject().equals("Maya deleted NIM-120")).toList(), mails -> mails.size() == 1)
 			.andVerify(mails -> {
 				// Emails are on by default and open the project, since the Issue can't be opened.
@@ -356,7 +368,7 @@ class IssueNotificationTests {
 			.andWaitForStateChange(() -> count(sam), n -> n == 1);
 		settle(scenario, maya);
 		assertThat(count(riley)).isZero();
-		assertThat(RecordingMailer.sentTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-123"))).isEmpty();
+		assertThat(mailsTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-123"))).isEmpty();
 	}
 
 	@Test
@@ -367,7 +379,7 @@ class IssueNotificationTests {
 		scenario.publish(created("NIM-21", "Nobody's", maya, null));
 		scenario.publish(created("NIM-22", "Sentinel", maya, sam)).andWaitForStateChange(() -> count(sam), n -> n == 1)
 			.andVerify(n -> assertThat(count(maya)).isZero());
-		assertThat(RecordingMailer.sentTo(maya.email()).stream().filter(m -> m.subject().contains("assigned you"))).isEmpty();
+		assertThat(mailsTo(maya.email()).stream().filter(m -> m.subject().contains("assigned you"))).isEmpty();
 	}
 
 	@Test
@@ -380,9 +392,9 @@ class IssueNotificationTests {
 		scenario.publish(created("NIM-30", "Quiet", maya, sam)).andWaitForStateChange(() -> count(sam), n -> n == 1);
 		// The handler of the first event has committed, so a later event's email shows the earlier one was not sent.
 		scenario.publish(created("NIM-31", "Sentinel", maya, other)).andWaitForStateChange(
-			() -> RecordingMailer.sentTo(other.email()).stream().filter(m -> m.subject().contains("assigned you")).toList(),
+			() -> mailsTo(other.email()).stream().filter(m -> m.subject().contains("assigned you")).toList(),
 			mails -> mails.size() == 1).andVerify(mails -> {
-				assertThat(RecordingMailer.sentTo(sam.email()).stream().filter(m -> m.subject().contains("assigned you")))
+				assertThat(mailsTo(sam.email()).stream().filter(m -> m.subject().contains("assigned you")))
 					.isEmpty();
 			});
 	}

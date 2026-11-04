@@ -25,6 +25,14 @@ class NotificationSettings {
 			this.emailByDefault = emailByDefault;
 		}
 
+		/**
+		 * Whether its email waits to be gathered with the User's other changes to the same Issue; only
+		 * {@code ISSUE_ASSIGNED} is sent right away.
+		 */
+		boolean grouped() {
+			return this != ISSUE_ASSIGNED;
+		}
+
 		static IssueType parse(String type) {
 			return Arrays.stream(values()).filter(t -> t.name().equals(type)).findFirst()
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown or fixed Notification type"));

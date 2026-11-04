@@ -74,10 +74,17 @@ class NotificationInbox {
 		var found = query.query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getString("type"),
 			rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("read_at") != null,
 			json.readTree(rs.getString("snapshot")),
-			rs.getString("issue_key") == null ? SECURITY_LINK : "/issues/" + rs.getString("issue_key"))).list();
+			link(rs.getString("type"), rs.getString("issue_key")))).list();
 		var items = found.stream().limit(limit).toList();
 		var last = items.isEmpty() ? null : items.getLast();
 		return new Page(items, found.size() > limit ? new Cursor(last.createdAt(), last.id()).encode() : null);
+	}
+
+	/** A deleted Issue can't be opened, so its Notification takes the User to the project instead. */
+	private static String link(String type, String issueKey) {
+		if (issueKey == null) return SECURITY_LINK;
+		if (type.equals("ISSUE_DELETED")) return "/projects/" + issueKey.substring(0, issueKey.lastIndexOf('-'));
+		return "/issues/" + issueKey;
 	}
 
 	long unreadCount(UUID userId) {

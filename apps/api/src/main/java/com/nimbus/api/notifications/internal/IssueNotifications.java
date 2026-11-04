@@ -13,6 +13,7 @@ import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
 import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
+import com.nimbus.api.issues.IssueDeleted;
 import com.nimbus.api.mail.Mail;
 import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
@@ -123,6 +124,20 @@ class IssueNotifications {
 		}
 	}
 
+	/** The Reporter and the Assignee it had when it was deleted, never the person who deleted it. */
+	@ApplicationModuleListener
+	void on(IssueDeleted event) {
+		var source = new Source(event.projectId(), event.actorId(), clock.instant(), event.issueKey(), event.title(),
+			actor(event.actorId()));
+		var told = new LinkedHashSet<UUID>();
+		told.add(event.actorId());
+		for (var recipient : new UUID[] { event.reporterId(), event.assigneeId() }) {
+			if (recipient == null || !told.add(recipient)) continue;
+			deliver(recipient, NotificationSettings.IssueType.ISSUE_DELETED,
+				"ISSUE_DELETED:" + event.projectId() + ":" + event.issueKey() + ":" + recipient, source, "", Map.of());
+		}
+	}
+
 	private static String key(String type, UUID recipient, IssueChanged event) {
 		return type + ":" + event.projectId() + ":" + event.issueKey() + ":" + recipient + ":" + event.at();
 	}
@@ -197,19 +212,23 @@ class IssueNotifications {
 			case ISSUE_ASSIGNED -> "assigned you";
 			case ISSUE_UNASSIGNED -> "unassigned you from";
 			case ISSUE_STATUS_CHANGED -> "moved";
+			case ISSUE_DELETED -> "deleted";
 			default -> summary + " on";
 		};
 		var heading = switch (type) {
 			case ISSUE_ASSIGNED -> "Assigned to you";
 			case ISSUE_UNASSIGNED -> "Unassigned from you";
 			case ISSUE_STATUS_CHANGED -> "Status changed";
+			case ISSUE_DELETED -> "Issue deleted";
 			default -> "Issue edited";
 		};
 		var subject = actorName + " " + phrase + " " + issueKey
 			+ (type == NotificationSettings.IssueType.ISSUE_STATUS_CHANGED ? " " + summary : "");
 		var line = subject + " · " + title + (edits == null ? "" : " (also " + edits + ")") + ".";
-		var button = "Open " + issueKey;
-		var url = publicUrl + "/issues/" + issueKey;
+		var deleted = type == NotificationSettings.IssueType.ISSUE_DELETED;
+		var button = deleted ? "Open " + issueKey.substring(0, issueKey.lastIndexOf('-')) : "Open " + issueKey;
+		var url = publicUrl + (deleted ? "/projects/" + issueKey.substring(0, issueKey.lastIndexOf('-'))
+			: "/issues/" + issueKey);
 		return new Mail(to, subject,
 			NoticeMail.html(subject, heading, line, Optional.empty(), button, url, FOOTER,
 				assets.url(MailAssets.NIMBUS_ICON_DARK)),

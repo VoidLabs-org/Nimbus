@@ -66,6 +66,6 @@ class IssueDeletedEventTests {
 			.expectStatus().isNotFound();
 
 		assertThat(events.ofType(IssueDeleted.class)).hasSize(1)
-			.first().isEqualTo(new IssueDeleted(projectId, "IDL-1"));
+			.first().isEqualTo(new IssueDeleted(projectId, "IDL-1", creator, "Gone", creator, null));
 	}
 }

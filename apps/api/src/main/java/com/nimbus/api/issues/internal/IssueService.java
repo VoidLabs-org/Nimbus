@@ -166,10 +166,10 @@ class IssueService implements Issues {
 	void delete(UUID actor, String issueKey) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.DELETE);
 		var project = target.project();
-		var found = jdbc.sql("SELECT id, title, reporter_id FROM issues WHERE project_id = :project AND number = :number FOR UPDATE")
+		var found = jdbc.sql("SELECT id, title, reporter_id, assignee_id FROM issues WHERE project_id = :project AND number = :number FOR UPDATE")
 			.param("project", project.id()).param("number", target.number())
 			.query((row, index) -> new Deletable(row.getObject("id", UUID.class), row.getString("title"),
-					row.getObject("reporter_id", UUID.class))).optional()
+					row.getObject("reporter_id", UUID.class), row.getObject("assignee_id", UUID.class))).optional()
 			.orElseThrow(() -> new NotFound("Issue not found"));
 		access.requireOwn(target.scope(), IssueAccess.Action.DELETE, actor, found.reporterId(), null);
 		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
@@ -184,7 +184,7 @@ class IssueService implements Issues {
 			.param("title", found.title()).param("actor", actor)
 			.param("at", Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS))).update();
 		jdbc.sql("DELETE FROM issues WHERE id = :id").param("id", found.id()).update();
-		events.publishEvent(new IssueDeleted(project.id(), key));
+		events.publishEvent(new IssueDeleted(project.id(), key, actor, found.title(), found.reporterId(), found.assigneeId()));
 	}
 
 	@Override
@@ -456,7 +456,7 @@ class IssueService implements Issues {
 	private record Target(ProjectSummary project, int number, Scope scope) {
 	}
 
-	private record Deletable(UUID id, String title, UUID reporterId) {
+	private record Deletable(UUID id, String title, UUID reporterId, UUID assigneeId) {
 	}
 
 	private record Current(UUID id, UUID projectId, UUID reporterId, String title, String description, String type, String priority,

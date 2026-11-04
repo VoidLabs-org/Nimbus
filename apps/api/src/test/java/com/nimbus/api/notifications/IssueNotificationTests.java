@@ -12,6 +12,7 @@ import com.nimbus.api.RecordingMailer;
 import com.nimbus.api.TestcontainersConfiguration;
 import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
+import com.nimbus.api.issues.IssueDeleted;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -269,6 +270,41 @@ class IssueNotificationTests {
 		assertThat(count(sam)).isEqualTo(1);
 		assertThat(count(riley)).isEqualTo(1);
 		assertThat(RecordingMailer.sentTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-46"))).isEmpty();
+	}
+
+	@Test
+	void deletingTellsTheReporterAndAssigneeButNotTheDeleterAndKeepsTheTitleFromTheEvent(Scenario scenario) {
+		var maya = person("Maya");
+		var riley = person("Riley");
+		var sam = person("Sam");
+		var event = new IssueDeleted(UUID.randomUUID(), "NIM-120", maya.id(), "Old audit filter", riley.id(), sam.id());
+		scenario.publish(event).andWaitForStateChange(() -> count(sam), n -> n == 1);
+		// A redelivered event is still one Notification each.
+		scenario.publish(event);
+		settle(scenario, maya);
+		assertThat(notifications(riley, "ISSUE_DELETED")).hasSize(1);
+		assertThat((String) notifications(sam, "ISSUE_DELETED").getFirst().get("snapshot")).contains("Maya")
+			.contains("NIM-120").contains("Old audit filter");
+		assertThat(count(riley)).isEqualTo(1);
+		assertThat(count(sam)).isEqualTo(1);
+		assertThat(count(maya)).isZero();
+		// Emails are on by default; the row links to the project, since the Issue can't be opened.
+		assertThat(RecordingMailer.sentTo(sam.email()).stream()
+			.filter(m -> m.subject().equals("Maya deleted NIM-120"))).hasSize(1);
+		client.get().uri("/api/notifications").headers(h -> h.setBearerAuth(sam.token())).exchange().expectStatus().isOk()
+			.expectBody().jsonPath("$.items[0].link").isEqualTo("/projects/NIM");
+	}
+
+	@Test
+	void aReporterWhoIsAlsoTheAssigneeGetsOneDeletedNotificationAndSelfDeletesNotifyNobody(Scenario scenario) {
+		var maya = person("Maya");
+		var sam = person("Sam");
+		scenario.publish(new IssueDeleted(UUID.randomUUID(), "NIM-121", maya.id(), "Mine", sam.id(), sam.id()))
+			.andWaitForStateChange(() -> count(sam), n -> n == 1);
+		scenario.publish(new IssueDeleted(UUID.randomUUID(), "NIM-122", maya.id(), "Hers", maya.id(), null));
+		settle(scenario, maya);
+		assertThat(count(sam)).isEqualTo(1);
+		assertThat(count(maya)).isZero();
 	}
 
 	@Test

@@ -175,18 +175,14 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
                         <strong>
                           {item.snapshot.issueKey} · {item.snapshot.title}
                         </strong>
-                        {item.type === "ISSUE_STATUS_CHANGED" && (
-                          <>
-                            {" "}
-                            <span data-category={item.snapshot.fromCategory}>
-                              {item.snapshot.fromStatus}
-                            </span>{" "}
-                            →{" "}
-                            <span data-category={item.snapshot.toCategory}>
-                              {item.snapshot.toStatus}
-                            </span>
-                          </>
-                        )}
+                        {item.type === "ISSUE_STATUS_CHANGED" &&
+                          item.snapshot.fromStatus &&
+                          item.snapshot.toStatus && (
+                            <>
+                              {" "}
+                              {item.snapshot.fromStatus} → {item.snapshot.toStatus}
+                            </>
+                          )}
                       </span>
                     ) : (
                       <>

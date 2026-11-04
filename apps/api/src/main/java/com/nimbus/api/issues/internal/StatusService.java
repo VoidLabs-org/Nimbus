@@ -126,7 +126,7 @@ class StatusService {
 		var at = clock.instant();
 		var changed = issues.stream().map(issue -> new IssueChanged(project.id(),
 				IssueKeys.format(project.key(), issue.number()), actor, issue.title(), issue.reporterId(),
-				issue.assigneeId(), List.of(new IssueChanged.Change("status", current.name(), target.name(), current.category(), target.category())), at)).toList();
+				issue.assigneeId(), List.of(new IssueChanged.Change("status", current.name(), target.name(), new IssueChanged.Change.Categories(current.category(), target.category()))), at)).toList();
 		try {
 			jdbc.sql("DELETE FROM issue_statuses WHERE id = :id").param("id", statusId).update();
 		}

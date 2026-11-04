@@ -340,7 +340,8 @@ class IssueService implements Issues {
 					titleAfter, current.reporterId(), assigneeAfter,
 					differing.stream().map(c -> new IssueChanged.Change(c.field().label(),
 							c.field().keepsValues() ? c.before() : null, c.field().keepsValues() ? c.after() : null,
-							c.beforeCategory(), c.afterCategory())).toList(),
+							c.beforeCategory() == null ? null
+								: new IssueChanged.Change.Categories(c.beforeCategory(), c.afterCategory()))).toList(),
 					now.toInstant()));
 		}
 		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), project).getFirst();

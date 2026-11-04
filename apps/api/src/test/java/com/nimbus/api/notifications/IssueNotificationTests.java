@@ -181,7 +181,7 @@ class IssueNotificationTests {
 	}
 
 	static IssueChanged.Change move(String from, String fromCategory, String to, String toCategory) {
-		return new IssueChanged.Change("status", from, to, fromCategory, toCategory);
+		return new IssueChanged.Change("status", from, to, new IssueChanged.Change.Categories(fromCategory, toCategory));
 	}
 
 	@Test

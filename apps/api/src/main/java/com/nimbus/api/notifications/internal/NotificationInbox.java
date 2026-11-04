@@ -5,6 +5,7 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -75,12 +76,14 @@ class NotificationInbox {
 		// Concurrent events for the same User and Issue would each read the group before the other commits.
 		jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:group, 0))")
 			.param("group", userId + "/" + projectId + "/" + issueKey).query().singleRow();
+		// Locking the group's rows makes a claim wait for this update, or this read skip a group that was just claimed.
 		var started = jdbc.sql("""
-			SELECT min(email_group_started_at) FROM notifications
+			SELECT email_group_started_at FROM notifications
 			WHERE user_id = :user AND project_id = :project AND issue_key = :issueKey
 				AND emailed_at IS NULL AND email_due_at IS NOT NULL
+			FOR UPDATE
 			""").param("user", userId).param("project", projectId).param("issueKey", issueKey)
-			.query(Timestamp.class).optional().map(Timestamp::toInstant).orElse(now);
+			.query(Timestamp.class).list().stream().map(Timestamp::toInstant).min(Comparator.naturalOrder()).orElse(now);
 		var quiet = now.plus(EMAIL_QUIET);
 		var cap = started.plus(EMAIL_CAP);
 		jdbc.sql("""
@@ -93,23 +96,28 @@ class NotificationInbox {
 	}
 
 	/** One Notification of a group whose email is due. */
-	record Change(UUID userId, UUID projectId, String issueKey, String type, Instant at, JsonNode snapshot) {
+	record Change(UUID id, UUID userId, UUID projectId, String issueKey, String type, Instant at, JsonNode snapshot) {
 	}
 
 	/**
-	 * Marks every group that is due at {@code now} as emailed and returns its changes, oldest first. Claiming and
-	 * marking is one statement, so a group is returned to one caller even when instances run this together.
+	 * Marks one group that is due at {@code now} as emailed and returns its changes, oldest first; empty when none is
+	 * due. Claiming and marking is one statement, so a group is returned to one caller even when instances run this
+	 * together. Groups are claimed one at a time, so a crash while sending loses at most the email being sent.
 	 */
-	List<Change> claimDueEmails(Instant now) {
+	List<Change> claimDueEmail(Instant now) {
 		return jdbc.sql("""
 			UPDATE notifications SET emailed_at = :now
 			WHERE emailed_at IS NULL AND email_due_at <= :now
-			RETURNING user_id, project_id, issue_key, type, created_at, id, snapshot::text AS snapshot
+				AND (user_id, project_id, issue_key) = (
+					SELECT user_id, project_id, issue_key FROM notifications
+					WHERE emailed_at IS NULL AND email_due_at <= :now
+					ORDER BY email_due_at, id LIMIT 1)
+			RETURNING id, user_id, project_id, issue_key, type, created_at, snapshot::text AS snapshot
 			""").param("now", Timestamp.from(now))
-			.query((rs, n) -> new Change(rs.getObject("user_id", UUID.class), rs.getObject("project_id", UUID.class),
-				rs.getString("issue_key"), rs.getString("type"), rs.getTimestamp("created_at").toInstant(),
-				json.readTree(rs.getString("snapshot"))))
-			.list().stream().sorted(java.util.Comparator.comparing(Change::at)).toList();
+			.query((rs, n) -> new Change(rs.getObject("id", UUID.class), rs.getObject("user_id", UUID.class),
+				rs.getObject("project_id", UUID.class), rs.getString("issue_key"), rs.getString("type"),
+				rs.getTimestamp("created_at").toInstant(), json.readTree(rs.getString("snapshot"))))
+			.list().stream().sorted(Comparator.comparing(Change::at).thenComparing(Change::id)).toList();
 	}
 
 	Page list(UUID userId, String before, int limit) {

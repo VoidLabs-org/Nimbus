@@ -64,6 +64,11 @@ class NotificationSettings {
 			.param("user", userId).param("type", type.name()).query(Boolean.class).optional().orElse(type.emailByDefault);
 	}
 
+	/** Like {@link #emailOn}, and a move that also edited fields is mailed if the User wants either kind. */
+	boolean wantsEmail(UUID userId, IssueType type, boolean withEdits) {
+		return emailOn(userId, type) || withEdits && emailOn(userId, IssueType.ISSUE_EDITED);
+	}
+
 	void save(UUID userId, IssueType type, boolean email) {
 		if (email == type.emailByDefault) {
 			jdbc.sql("DELETE FROM notification_settings WHERE user_id = :user AND type = :type")

@@ -205,10 +205,7 @@ class IssueNotifications {
 		if (type == NotificationSettings.IssueType.ISSUE_EDITED) snapshot.put("summary", summary);
 		snapshot.putAll(extra);
 		if (!inbox.add(recipientId, type.name(), dedupeKey, snapshot, at, projectId, issueKey, actorId)) return;
-		// A move that also edited fields is mailed if the Recipient wants either kind.
-		var mailed = settings.emailOn(recipientId, type) || extra.containsKey("edits")
-			&& settings.emailOn(recipientId, NotificationSettings.IssueType.ISSUE_EDITED);
-		if (!mailed) return;
+		if (!settings.wantsEmail(recipientId, type, extra.containsKey("edits"))) return;
 		// A grouped type waits to be gathered with the User's other changes to this Issue; see IssueEmails.
 		if (type.grouped()) {
 			inbox.scheduleEmail(recipientId, projectId, issueKey, dedupeKey, clock.instant());

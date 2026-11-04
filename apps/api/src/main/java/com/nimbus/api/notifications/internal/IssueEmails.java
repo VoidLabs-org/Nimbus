@@ -1,7 +1,6 @@
 package com.nimbus.api.notifications.internal;
 
 import java.time.Clock;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,10 +28,8 @@ class IssueEmails {
 
 	private static final Logger log = LoggerFactory.getLogger(IssueEmails.class);
 
-	private record Group(UUID userId, UUID projectId, String issueKey) {
-	}
-
 	private final NotificationInbox inbox;
+	private final NotificationSettings settings;
 	private final Users users;
 	private final Projects projects;
 	private final Mailer mailer;
@@ -40,9 +37,10 @@ class IssueEmails {
 	private final Clock clock;
 	private final String publicUrl;
 
-	IssueEmails(NotificationInbox inbox, Users users, Projects projects, Mailer mailer, MailAssets assets, Clock clock,
-			@Value("${nimbus.auth.public-url}") String publicUrl) {
+	IssueEmails(NotificationInbox inbox, NotificationSettings settings, Users users, Projects projects, Mailer mailer,
+			MailAssets assets, Clock clock, @Value("${nimbus.auth.public-url}") String publicUrl) {
 		this.inbox = inbox;
+		this.settings = settings;
 		this.users = users;
 		this.projects = projects;
 		this.mailer = mailer;
@@ -58,50 +56,53 @@ class IssueEmails {
 	 */
 	@Scheduled(cron = "${nimbus.notifications.email-cron:0 * * * * *}", zone = "UTC")
 	void run() {
-		var groups = new LinkedHashMap<Group, List<NotificationInbox.Change>>();
-		for (var change : inbox.claimDueEmails(clock.instant())) {
-			groups.computeIfAbsent(new Group(change.userId(), change.projectId(), change.issueKey()),
-				g -> new java.util.ArrayList<>()).add(change);
-		}
-		groups.forEach((group, changes) -> {
+		// One group at a time: a crash while sending loses the email being sent, not every email that was due.
+		for (var changes = inbox.claimDueEmail(clock.instant()); !changes.isEmpty();
+				changes = inbox.claimDueEmail(clock.instant())) {
+			var first = changes.getFirst();
 			try {
-				users.findAllById(List.of(group.userId())).stream().findFirst()
-					.filter(user -> user.emailVerified() && projects.isMember(group.projectId(), user.id()))
-					.ifPresent(user -> mailer.send(mail(user.email(), group.issueKey(), changes)));
+				send(first.userId(), first.projectId(), first.issueKey(), changes);
 			}
 			catch (RuntimeException e) {
-				log.warn("Could not send the email about {} to {}", group.issueKey(), group.userId(), e);
+				log.warn("Could not send the email about {} to {}", first.issueKey(), first.userId(), e);
 			}
-		});
+		}
+	}
+
+	private void send(UUID userId, UUID projectId, String issueKey, List<NotificationInbox.Change> claimed) {
+		// A User may have switched a type off while the group waited.
+		var changes = claimed.stream().filter(c -> settings.wantsEmail(userId,
+			NotificationSettings.IssueType.valueOf(c.type()), c.snapshot().has("edits"))).toList();
+		if (changes.isEmpty()) return;
+		users.findAllById(List.of(userId)).stream().findFirst()
+			.filter(user -> user.emailVerified() && projects.isMember(projectId, user.id()))
+			.ifPresent(user -> mailer.send(mail(user.email(), issueKey, changes)));
 	}
 
 	private Mail mail(String to, String issueKey, List<NotificationInbox.Change> changes) {
-		var last = changes.getLast();
-		var title = last.snapshot().path("title").asString("");
 		var deleted = changes.stream().filter(c -> c.type().equals("ISSUE_DELETED")).findFirst();
+		// The title the Issue had when it was deleted, else the one of the latest change.
+		var last = changes.getLast();
+		var title = deleted.orElse(last).snapshot().path("title").asString("");
 		var button = deleted.map(d -> "Open project " + d.snapshot().path("projectName").asString(""))
 			.orElse("Open " + issueKey);
 		var url = publicUrl + deleted.map(d -> "/projects/" + d.snapshot().path("projectKey").asString(""))
 			.orElse("/issues/" + issueKey);
 		var logo = assets.url(MailAssets.NIMBUS_ICON_DARK);
-		if (changes.size() == 1) {
-			var subject = subject(last, issueKey);
-			var line = subject + " · " + title + extra(last.snapshot()) + ".";
-			return new Mail(to, subject,
-				NoticeMail.html(subject, heading(last.type()), line, Optional.empty(), button, url,
-					IssueNotifications.FOOTER, logo),
-				line + "\n\n" + button + ": " + url + "\n\n" + IssueNotifications.FOOTER);
-		}
-		var heading = changes.size() + " updates";
-		var subject = heading + " on " + issueKey;
-		var line = issueKey + " · " + title + ".";
-		var details = changes.stream().map(c -> new NoticeMail.Detail(what(c), NoticeMail.time(c.at()))).toList();
+		var single = changes.size() == 1;
+		var heading = single ? heading(last.type()) : changes.size() + " updates";
+		var subject = single ? subject(last, issueKey) : heading + " on " + issueKey;
+		var line = single ? subject + " · " + title + extra(last.snapshot()) + "." : issueKey + " · " + title + ".";
+		var details = single ? List.<NoticeMail.Detail>of()
+			: changes.stream().map(c -> new NoticeMail.Detail(what(c), NoticeMail.time(c.at()))).toList();
 		var text = new StringBuilder(line).append("\n\n");
 		details.forEach(d -> text.append("- ").append(d.label()).append(" (").append(d.value()).append(")\n"));
-		text.append("\n").append(button).append(": ").append(url).append("\n\n").append(IssueNotifications.FOOTER);
-		return new Mail(to, subject,
-			NoticeMail.html(subject, heading, line, details, button, url, IssueNotifications.FOOTER, logo),
-			text.toString());
+		if (!details.isEmpty()) text.append("\n");
+		text.append(button).append(": ").append(url).append("\n\n").append(IssueNotifications.FOOTER);
+		var html = single
+			? NoticeMail.html(subject, heading, line, Optional.empty(), button, url, IssueNotifications.FOOTER, logo)
+			: NoticeMail.html(subject, heading, line, details, button, url, IssueNotifications.FOOTER, logo);
+		return new Mail(to, subject, html, text.toString());
 	}
 
 	private static String heading(String type) {

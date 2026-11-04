@@ -42,11 +42,40 @@ class IssueNotificationTests {
 		String token = JsonPath.read(registered, "$.accessToken");
 		client.post().uri("/api/auth/verify-email").headers(h -> h.setBearerAuth(token))
 			.body(Map.of("code", RecordingMailer.lastCodeFor(email))).exchange().expectStatus().isOk();
-		return new Person(email, token, UUID.fromString(JsonPath.read(registered, "$.user.id")));
+		var person = new Person(email, token, UUID.fromString(JsonPath.read(registered, "$.user.id")));
+		join(person);
+		return person;
+	}
+
+	/** The project every event of a test happens in; only its Members are told about its Issues. */
+	UUID project;
+
+	/** There is no endpoint to add Members yet. */
+	void join(Person person) {
+		if (project == null) {
+			project = UUID.randomUUID();
+			jdbc.sql("INSERT INTO projects (id, key, name, created_at) VALUES (:id, :key, 'Notifications', now())")
+				.param("id", project).param("key", "N" + project.toString().replace("-", "").substring(0, 9).toUpperCase())
+				.update();
+		}
+		jdbc.sql("INSERT INTO project_members (project_id, user_id, added_at) VALUES (:project, :user, now())")
+			.param("project", project).param("user", person.id()).update();
+	}
+
+	void leave(Person person) {
+		jdbc.sql("DELETE FROM project_members WHERE project_id = :project AND user_id = :user")
+			.param("project", project).param("user", person.id()).update();
 	}
 
 	IssueCreated created(String key, String title, Person actor, Person assignee) {
-		return new IssueCreated(UUID.randomUUID(), key, actor.id(), title, actor.id(), assignee == null ? null : assignee.id());
+		return new IssueCreated(project, key, actor.id(), title, actor.id(), assignee == null ? null : assignee.id());
+	}
+
+	static final Instant DELETED_AT = Instant.parse("2026-11-01T09:00:00Z");
+
+	IssueDeleted deleted(String key, String title, Person actor, Person reporter, Person assignee) {
+		return new IssueDeleted(project, "NIM", "Payments", key, actor.id(), title, reporter.id(),
+			assignee == null ? null : assignee.id(), DELETED_AT);
 	}
 
 	long count(Person p) {
@@ -90,7 +119,7 @@ class IssueNotificationTests {
 
 	IssueChanged changed(String key, String title, Person actor, Person reporter, Person assignee,
 			IssueChanged.Change... changes) {
-		return new IssueChanged(UUID.randomUUID(), key, actor.id(), title, reporter.id(),
+		return new IssueChanged(project, key, actor.id(), title, reporter.id(),
 			assignee == null ? null : assignee.id(), List.of(changes), Instant.now());
 	}
 
@@ -277,8 +306,16 @@ class IssueNotificationTests {
 		var maya = person("Maya");
 		var riley = person("Riley");
 		var sam = person("Sam");
-		var event = new IssueDeleted(UUID.randomUUID(), "NIM-120", maya.id(), "Old audit filter", riley.id(), sam.id());
-		scenario.publish(event).andWaitForStateChange(() -> count(sam), n -> n == 1);
+		scenario.publish(created("NIM-120", "Old audit filter", maya, sam)).andWaitForStateChange(() -> count(sam), n -> n == 1);
+		var event = deleted("NIM-120", "Old audit filter", maya, riley, sam);
+		scenario.publish(event).andWaitForStateChange(() -> RecordingMailer.sentTo(sam.email()).stream()
+			.filter(m -> m.subject().equals("Maya deleted NIM-120")).toList(), mails -> mails.size() == 1)
+			.andVerify(mails -> {
+				// Emails are on by default and open the project, since the Issue can't be opened.
+				assertThat(mails.getFirst().text()).contains("Maya deleted NIM-120 · Old audit filter.")
+					.contains("Open project Payments: http").contains("/projects/NIM");
+				assertThat(mails.getFirst().html()).contains("Open project Payments");
+			});
 		// A redelivered event is still one Notification each.
 		scenario.publish(event);
 		settle(scenario, maya);
@@ -286,25 +323,40 @@ class IssueNotificationTests {
 		assertThat((String) notifications(sam, "ISSUE_DELETED").getFirst().get("snapshot")).contains("Maya")
 			.contains("NIM-120").contains("Old audit filter");
 		assertThat(count(riley)).isEqualTo(1);
-		assertThat(count(sam)).isEqualTo(1);
+		assertThat(count(sam)).isEqualTo(2);
 		assertThat(count(maya)).isZero();
-		// Emails are on by default; the row links to the project, since the Issue can't be opened.
-		assertThat(RecordingMailer.sentTo(sam.email()).stream()
-			.filter(m -> m.subject().equals("Maya deleted NIM-120"))).hasSize(1);
+		// The Notification is dated when the Issue was deleted, not when it was handled.
+		assertThat(jdbc.sql("SELECT created_at FROM notifications WHERE user_id = :user AND type = 'ISSUE_DELETED'")
+			.param("user", sam.id()).query(java.sql.Timestamp.class).single().toInstant()).isEqualTo(DELETED_AT);
+		// Both rows about the deleted Issue, the older one included, link to the project.
 		client.get().uri("/api/notifications").headers(h -> h.setBearerAuth(sam.token())).exchange().expectStatus().isOk()
-			.expectBody().jsonPath("$.items[0].link").isEqualTo("/projects/NIM");
+			.expectBody().jsonPath("$.items.length()").isEqualTo(2)
+			.jsonPath("$.items[0].link").isEqualTo("/projects/NIM")
+			.jsonPath("$.items[1].link").isEqualTo("/projects/NIM");
 	}
 
 	@Test
 	void aReporterWhoIsAlsoTheAssigneeGetsOneDeletedNotificationAndSelfDeletesNotifyNobody(Scenario scenario) {
 		var maya = person("Maya");
 		var sam = person("Sam");
-		scenario.publish(new IssueDeleted(UUID.randomUUID(), "NIM-121", maya.id(), "Mine", sam.id(), sam.id()))
-			.andWaitForStateChange(() -> count(sam), n -> n == 1);
-		scenario.publish(new IssueDeleted(UUID.randomUUID(), "NIM-122", maya.id(), "Hers", maya.id(), null));
+		scenario.publish(deleted("NIM-121", "Mine", maya, sam, sam)).andWaitForStateChange(() -> count(sam), n -> n == 1);
+		scenario.publish(deleted("NIM-122", "Hers", maya, maya, null));
 		settle(scenario, maya);
 		assertThat(count(sam)).isEqualTo(1);
 		assertThat(count(maya)).isZero();
+	}
+
+	@Test
+	void aReporterWhoLeftTheProjectIsNotToldItsIssueWasDeleted(Scenario scenario) {
+		var maya = person("Maya");
+		var riley = person("Riley");
+		var sam = person("Sam");
+		leave(riley);
+		scenario.publish(deleted("NIM-123", "Secret plan", maya, riley, sam))
+			.andWaitForStateChange(() -> count(sam), n -> n == 1);
+		settle(scenario, maya);
+		assertThat(count(riley)).isZero();
+		assertThat(RecordingMailer.sentTo(riley.email()).stream().filter(m -> m.subject().contains("NIM-123"))).isEmpty();
 	}
 
 	@Test

@@ -176,15 +176,17 @@ class IssueService implements Issues {
 		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be deleted", null);
 
 		var key = IssueKeys.format(project.key(), target.number());
+		var at = clock.instant().truncatedTo(ChronoUnit.MICROS);
 		jdbc.sql("""
 				INSERT INTO issue_deletions (id, project_id, issue_key, title, actor_id, deleted_at)
 				VALUES (:id, :project, :key, :title, :actor, :at)
 				""")
 			.param("id", UUID.randomUUID()).param("project", project.id()).param("key", key)
 			.param("title", found.title()).param("actor", actor)
-			.param("at", Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS))).update();
+			.param("at", Timestamp.from(at)).update();
 		jdbc.sql("DELETE FROM issues WHERE id = :id").param("id", found.id()).update();
-		events.publishEvent(new IssueDeleted(project.id(), key, actor, found.title(), found.reporterId(), found.assigneeId()));
+		events.publishEvent(new IssueDeleted(project.id(), fresh.key(), fresh.name(), key, actor, found.title(),
+			found.reporterId(), found.assigneeId(), at));
 	}
 
 	@Override

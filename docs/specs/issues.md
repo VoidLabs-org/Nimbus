@@ -12,7 +12,7 @@ Owns **Issues**, their **Statuses** and (later) their history views. So far it i
 
 `IssueCreated(projectId, issueKey, actorId, title, reporterId, assigneeId)` is published once, in the transaction that inserts the Issue. The key is uppercase, like `NIM-12`. `actorId` is who created it (the Reporter too); `assigneeId` is null when unassigned; `title` is the title at creation. Reads and refused creates (validation, not a Member, Archived project) publish nothing. Consumers should handle it after commit.
 
-`IssueDeleted(projectId, issueKey, actorId, title, reporterId, assigneeId)` is published once, in the transaction that deletes an Issue. `actorId` deleted it; `title`, `reporterId` and `assigneeId` (`null` when unassigned) are the Issue as it was. Refused deletes (not a Member, unknown or already deleted key, Archived project) publish nothing. Consumers should handle it after commit.
+`IssueDeleted(projectId, projectKey, projectName, issueKey, actorId, title, reporterId, assigneeId, at)` is published once, in the transaction that deletes an Issue. `actorId` deleted it at `at` (the `deleted_at` of its `issue_deletions` record); `title`, `reporterId` and `assigneeId` (`null` when unassigned) are the Issue as it was. Refused deletes (not a Member, unknown or already deleted key, Archived project) publish nothing. Consumers should handle it after commit.
 
 ## Rules
 

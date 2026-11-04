@@ -4265,7 +4265,7 @@ export interface components {
                 toCategory?: "TODO" | "IN_PROGRESS" | "DONE";
             };
             /**
-             * @description /settings/security for Security alerts, /projects/{projectKey} for ISSUE_DELETED, /issues/{issueKey} for other Issue types
+             * @description /settings/security for Security alerts, /issues/{issueKey} for Issue types, or /projects/{projectKey} once that Issue is deleted
              * @example /issues/NIM-12
              */
             link: string;

@@ -90,7 +90,7 @@ class IssueChangedEventTests {
 		client.put().uri("/api/issues/ICH-1/status").header("Authorization", "Bearer " + token)
 			.body(Map.of("statusId", done)).exchange().expectStatus().isOk();
 		assertThat(events.ofType(IssueChanged.class)).hasSize(2).last().satisfies(
-			e -> assertThat(e.changes()).containsExactly(new IssueChanged.Change("status", "To do", "Done")));
+			e -> assertThat(e.changes()).containsExactly(new IssueChanged.Change("status", "To do", "Done", new IssueChanged.Change.Categories("TODO", "DONE"))));
 
 		// Deleting a Status publishes once for each Issue it moves, and nothing when a refused delete moves none.
 		var review = client.post().uri("/api/projects/ICH/statuses").header("Authorization", "Bearer " + token)

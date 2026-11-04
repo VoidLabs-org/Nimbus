@@ -175,6 +175,14 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
                         <strong>
                           {item.snapshot.issueKey} · {item.snapshot.title}
                         </strong>
+                        {item.type === "ISSUE_STATUS_CHANGED" &&
+                          item.snapshot.fromStatus &&
+                          item.snapshot.toStatus && (
+                            <>
+                              {" "}
+                              {item.snapshot.fromStatus} → {item.snapshot.toStatus}
+                            </>
+                          )}
                       </span>
                     ) : (
                       <>
@@ -264,7 +272,12 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
   );
 }
 
-const issueRowTypes = ["ISSUE_ASSIGNED", "ISSUE_UNASSIGNED", "ISSUE_EDITED"];
+const issueRowTypes = [
+  "ISSUE_ASSIGNED",
+  "ISSUE_UNASSIGNED",
+  "ISSUE_EDITED",
+  "ISSUE_STATUS_CHANGED",
+];
 
 function isIssueRow(type: string) {
   return issueRowTypes.includes(type);
@@ -273,6 +286,7 @@ function isIssueRow(type: string) {
 function issueVerb(item: { type: string; snapshot: Record<string, string> }) {
   if (item.type === "ISSUE_UNASSIGNED") return "unassigned you from";
   if (item.type === "ISSUE_EDITED") return item.snapshot.summary ?? "edited";
+  if (item.type === "ISSUE_STATUS_CHANGED") return "moved";
   return "assigned you";
 }
 

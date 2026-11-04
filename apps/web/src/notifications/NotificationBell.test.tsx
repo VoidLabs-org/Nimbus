@@ -290,3 +290,35 @@ it("shows unassigned and edited rows with the actor, what changed, key and title
     screen.getByRole("button", { name: /Maya edited title and priority NIM-12 · Fix the login/ }),
   ).toBeTruthy();
 });
+
+it("shows a Status move as from → to", async () => {
+  vi.spyOn(api, "notificationUnreadCount").mockResolvedValue({ count: 1 });
+  vi.spyOn(api, "notifications").mockResolvedValue({
+    items: [
+      {
+        id: "a",
+        type: "ISSUE_STATUS_CHANGED",
+        createdAt: new Date().toISOString(),
+        read: false,
+        snapshot: {
+          title: "Fix the login",
+          actorName: "Jordan",
+          issueKey: "NIM-12",
+          fromStatus: "In progress",
+          toStatus: "In review",
+          fromCategory: "IN_PROGRESS",
+          toCategory: "IN_PROGRESS",
+        },
+        link: "/issues/NIM-12",
+      },
+    ],
+    nextCursor: null,
+  });
+  drawBell();
+  fireEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
+  expect(
+    await screen.findByRole("button", {
+      name: /Jordan moved NIM-12 · Fix the login In progress → In review/,
+    }),
+  ).toBeTruthy();
+});

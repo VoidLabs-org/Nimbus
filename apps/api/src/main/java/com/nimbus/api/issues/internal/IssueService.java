@@ -153,7 +153,8 @@ class IssueService implements Issues {
 			moved[0] = target;
 			// Compared by id, so only a move to another Status counts as a change, whatever the names are.
 			if (target.id().equals(current.statusId())) return List.of();
-			return List.of(new Change(Field.STATUS, current.statusName(), target.name(), target.id()));
+			return List.of(new Change(Field.STATUS, current.statusName(), target.name(), target.id(),
+					current.statusCategory(), target.category()));
 		});
 	}
 
@@ -284,7 +285,8 @@ class IssueService implements Issues {
 		var project = target.project();
 		var current = jdbc.sql("""
 				SELECT i.id, i.project_id, i.reporter_id, i.title, i.description, i.type, i.priority, i.assignee_id, i.version, i.status_id,
-				       (SELECT s.name FROM issue_statuses s WHERE s.id = i.status_id) AS status_name
+				       (SELECT s.name FROM issue_statuses s WHERE s.id = i.status_id) AS status_name,
+				       (SELECT s.category FROM issue_statuses s WHERE s.id = i.status_id) AS status_category
 				FROM issues i WHERE i.project_id = :project AND i.number = :number FOR UPDATE
 				""")
 			.param("project", project.id()).param("number", target.number())
@@ -292,7 +294,7 @@ class IssueService implements Issues {
 					row.getObject("reporter_id", UUID.class),
 					row.getString("title"), row.getString("description"), row.getString("type"),
 					row.getString("priority"), row.getObject("assignee_id", UUID.class), row.getLong("version"),
-					row.getObject("status_id", UUID.class), row.getString("status_name")))
+					row.getObject("status_id", UUID.class), row.getString("status_name"), row.getString("status_category")))
 			.optional().orElseThrow(() -> new NotFound("Issue not found"));
 		access.requireOwn(target.scope(), IssueAccess.Action.EDIT, actor, current.reporterId(), current.assigneeId());
 		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
@@ -337,7 +339,9 @@ class IssueService implements Issues {
 			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), target.number()), actor,
 					titleAfter, current.reporterId(), assigneeAfter,
 					differing.stream().map(c -> new IssueChanged.Change(c.field().label(),
-							c.field().keepsValues() ? c.before() : null, c.field().keepsValues() ? c.after() : null)).toList(),
+							c.field().keepsValues() ? c.before() : null, c.field().keepsValues() ? c.after() : null,
+							c.beforeCategory() == null ? null
+								: new IssueChanged.Change.Categories(c.beforeCategory(), c.afterCategory()))).toList(),
 					now.toInstant()));
 		}
 		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), project).getFirst();
@@ -456,13 +460,14 @@ class IssueService implements Issues {
 	}
 
 	private record Current(UUID id, UUID projectId, UUID reporterId, String title, String description, String type, String priority,
-			UUID assigneeId, long version, UUID statusId, String statusName) {
+			UUID assigneeId, long version, UUID statusId, String statusName, String statusCategory) {
 	}
 
 	/** {@code value} is what the column is set to when it isn't {@code after}: a Status keeps its name in history. */
-	private record Change(Field field, String before, String after, Object value) {
+	private record Change(Field field, String before, String after, Object value, String beforeCategory,
+			String afterCategory) {
 		Change(Field field, String before, String after) {
-			this(field, before, after, null);
+			this(field, before, after, null, null, null);
 		}
 	}
 

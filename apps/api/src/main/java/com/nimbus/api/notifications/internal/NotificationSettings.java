@@ -25,6 +25,14 @@ class NotificationSettings {
 			this.emailByDefault = emailByDefault;
 		}
 
+		/**
+		 * Whether its email waits to be gathered with the User's other changes to the same Issue; only
+		 * {@code ISSUE_ASSIGNED} is sent right away.
+		 */
+		boolean grouped() {
+			return this != ISSUE_ASSIGNED;
+		}
+
 		static IssueType parse(String type) {
 			return Arrays.stream(values()).filter(t -> t.name().equals(type)).findFirst()
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown or fixed Notification type"));
@@ -54,6 +62,11 @@ class NotificationSettings {
 	boolean emailOn(UUID userId, IssueType type) {
 		return jdbc.sql("SELECT email FROM notification_settings WHERE user_id = :user AND type = :type")
 			.param("user", userId).param("type", type.name()).query(Boolean.class).optional().orElse(type.emailByDefault);
+	}
+
+	/** Like {@link #emailOn}, and a move that also edited fields is mailed if the User wants either kind. */
+	boolean wantsEmail(UUID userId, IssueType type, boolean withEdits) {
+		return emailOn(userId, type) || withEdits && emailOn(userId, IssueType.ISSUE_EDITED);
 	}
 
 	void save(UUID userId, IssueType type, boolean email) {

@@ -141,7 +141,8 @@ class IssueNotifications {
 		for (var recipient : new UUID[] { event.reporterId(), event.assigneeId() }) {
 			if (recipient == null || !told.add(recipient)) continue;
 			deliver(recipient, NotificationSettings.IssueType.ISSUE_DELETED,
-				"ISSUE_DELETED:" + event.projectId() + ":" + event.issueKey() + ":" + recipient, source, "", Map.of());
+				"ISSUE_DELETED:" + event.projectId() + ":" + event.issueKey() + ":" + recipient, source, "",
+				Map.of("projectKey", event.projectKey(), "projectName", clean(event.projectName())));
 		}
 	}
 
@@ -173,13 +174,13 @@ class IssueNotifications {
 	}
 
 	/** Status names are user-defined, so line breaks and length are dealt with before they reach a subject line. */
-	private static String clean(String value) {
+	static String clean(String value) {
 		var text = value == null ? "" : value.replaceAll("\\p{Cntrl}+", " ").strip();
 		return text.length() > 60 ? text.substring(0, 59) + "…" : text;
 	}
 
 	/**
-	 * {@code summary} is only for the email: for {@code ISSUE_EDITED} it is also kept in the snapshot, and for
+	 * {@code summary} is kept in the snapshot for {@code ISSUE_EDITED}, and for
 	 * {@code ISSUE_STATUS_CHANGED} the move is shown from {@code extra}, which is kept in the snapshot as it is.
 	 */
 	private void deliver(UUID recipientId, NotificationSettings.IssueType type, String dedupeKey, Source source,
@@ -204,11 +205,13 @@ class IssueNotifications {
 		if (type == NotificationSettings.IssueType.ISSUE_EDITED) snapshot.put("summary", summary);
 		snapshot.putAll(extra);
 		if (!inbox.add(recipientId, type.name(), dedupeKey, snapshot, at, projectId, issueKey, actorId)) return;
-		// A move that also edited fields is mailed if the Recipient wants either kind.
-		var mailed = settings.emailOn(recipientId, type) || extra.containsKey("edits")
-			&& settings.emailOn(recipientId, NotificationSettings.IssueType.ISSUE_EDITED);
-		if (!mailed) return;
-		var message = mail(type, recipient.get().email(), actorName, source, summary, extra.get("edits"));
+		if (!settings.wantsEmail(recipientId, type, extra.containsKey("edits"))) return;
+		// A grouped type waits to be gathered with the User's other changes to this Issue; see IssueEmails.
+		if (type.grouped()) {
+			inbox.scheduleEmail(recipientId, projectId, issueKey, dedupeKey, clock.instant());
+			return;
+		}
+		var message = mail(recipient.get().email(), actorName, source);
 		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 			@Override
 			public void afterCommit() {
@@ -222,30 +225,14 @@ class IssueNotifications {
 		});
 	}
 
-	private Mail mail(NotificationSettings.IssueType type, String to, String actorName, Source source, String summary,
-			String edits) {
-		var issueKey = source.issueKey();
-		var phrase = switch (type) {
-			case ISSUE_ASSIGNED -> "assigned you";
-			case ISSUE_UNASSIGNED -> "unassigned you from";
-			case ISSUE_STATUS_CHANGED -> "moved";
-			case ISSUE_DELETED -> "deleted";
-			default -> summary + " on";
-		};
-		var heading = switch (type) {
-			case ISSUE_ASSIGNED -> "Assigned to you";
-			case ISSUE_UNASSIGNED -> "Unassigned from you";
-			case ISSUE_STATUS_CHANGED -> "Status changed";
-			case ISSUE_DELETED -> "Issue deleted";
-			default -> "Issue edited";
-		};
-		var subject = actorName + " " + phrase + " " + issueKey
-			+ (type == NotificationSettings.IssueType.ISSUE_STATUS_CHANGED ? " " + summary : "");
-		var line = subject + " · " + source.title() + (edits == null ? "" : " (also " + edits + ")") + ".";
+	/** The email of {@code ISSUE_ASSIGNED}, the only type sent right away. */
+	private Mail mail(String to, String actorName, Source source) {
+		var subject = actorName + " assigned you " + source.issueKey();
+		var line = subject + " · " + source.title() + ".";
 		var button = source.button();
 		var url = publicUrl + source.path();
 		return new Mail(to, subject,
-			NoticeMail.html(subject, heading, line, Optional.empty(), button, url, FOOTER,
+			NoticeMail.html(subject, "Assigned to you", line, Optional.empty(), button, url, FOOTER,
 				assets.url(MailAssets.NIMBUS_ICON_DARK)),
 			line + "\n\n" + button + ": " + url + "\n\n" + FOOTER);
 	}

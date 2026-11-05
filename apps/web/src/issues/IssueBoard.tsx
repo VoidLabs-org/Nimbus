@@ -122,7 +122,9 @@ function DragBoard({
       >
         {children}
         {/* No drop animation: the card is already in its column (the move is optimistic), so it must not fly back. */}
-        <DragOverlay dropAnimation={null}>{lifted && <CardBody issue={lifted} lifted />}</DragOverlay>
+        <DragOverlay dropAnimation={null}>
+          {lifted && <CardBody issue={lifted} lifted />}
+        </DragOverlay>
       </DndContext>
     </CanMoveContext>
   );

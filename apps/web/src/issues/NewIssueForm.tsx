@@ -9,7 +9,7 @@ import { WindowFrame } from "../access/WindowFrame";
 import { api, type Issue } from "../api/client";
 import { useIssueCreated } from "../api/queries";
 import { useSession } from "../auth/useSession";
-import { TypeBadge } from "./IssueMarks";
+import { PriorityMark, TypeBadge } from "./IssueMarks";
 import { MarkdownField } from "./MarkdownField";
 import classes from "./NewIssueForm.module.css";
 
@@ -113,7 +113,7 @@ function CreateIssueWindow({
       opened={opened}
       onClose={close}
       title="Create Issue"
-      subtitle={projectName ? `${projectName} · starts in To do` : "Starts in To do"}
+      subtitle={projectName ? `In ${projectName}` : undefined}
     >
       <form onSubmit={(event) => form.onSubmit(submit)(event)}>
         <div className={classes.form}>
@@ -141,6 +141,7 @@ function CreateIssueWindow({
           <TextInput
             autoFocus
             label="Title"
+            placeholder="What needs doing?"
             required
             maxLength={TITLE_MAX}
             radius="xl"
@@ -156,7 +157,7 @@ function CreateIssueWindow({
           <div>
             <div className={classes.fieldLabel}>
               <span>Description</span>
-              <span className={classes.note}>Markdown · optional</span>
+              <span className={classes.note}>Optional · Markdown</span>
             </div>
             <MarkdownField
               label="Description"
@@ -173,6 +174,7 @@ function CreateIssueWindow({
               radius="xl"
               allowDeselect={false}
               data={[...PRIORITIES]}
+              leftSection={<PriorityMark priority={form.values.priority} />}
               disabled={form.submitting}
               {...form.getInputProps("priority")}
             />

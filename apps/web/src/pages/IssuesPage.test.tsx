@@ -144,7 +144,7 @@ describe("IssuesPage", () => {
     issues.mockResolvedValue(page([]));
     fireEvent.click(screen.getByText("Assigned to me"));
 
-    await screen.findByText("No Issues match these filters.");
+    await screen.findByText("No Issues match these filters");
     expect(issues).toHaveBeenLastCalledWith("NIM", expect.objectContaining({ assignee: "me" }));
   });
 

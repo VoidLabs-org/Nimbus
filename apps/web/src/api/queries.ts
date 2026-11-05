@@ -198,6 +198,41 @@ export function useIssueChanged() {
   };
 }
 
+/**
+ * Move an Issue to a Status with the Board updated at once: the card is taken out of its column and put at the top
+ * of the new one before the server answers, and put back if the move fails.
+ */
+export function useMoveIssue() {
+  const client = useQueryClient();
+  const changed = useIssueChanged();
+  return async (issue: Issue, status: ProjectStatus) => {
+    const lists = { queryKey: projectIssueLists(issue.key) };
+    await client.cancelQueries(lists);
+    const snapshot = client.getQueriesData<{ items: Issue[]; total: number }>(lists);
+    const moved = { ...issue, status };
+    for (const [key, data] of snapshot) {
+      if (!data) continue;
+      const search = key[key.length - 1] as IssueSearch | undefined;
+      const here = data.items.some((item) => item.key === issue.key);
+      if (search?.status === status.name && !here) {
+        client.setQueryData(key, { ...data, items: [moved, ...data.items], total: data.total + 1 });
+      } else if (search?.status === issue.status.name && here) {
+        client.setQueryData(key, {
+          ...data,
+          items: data.items.filter((item) => item.key !== issue.key),
+          total: data.total - 1,
+        });
+      }
+    }
+    try {
+      changed(await api.moveIssue(issue.key, status.id));
+    } catch (error) {
+      for (const [key, data] of snapshot) client.setQueryData(key, data);
+      throw error;
+    }
+  };
+}
+
 /** A refresh failed while older data is still on screen: say so, since the data may be out of date. */
 export function refreshFailed(query: UseQueryResult): boolean {
   return query.isRefetchError && !query.isFetching;

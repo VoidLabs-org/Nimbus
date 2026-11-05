@@ -1,5 +1,6 @@
 import { ApiError } from "@repo/api";
 import {
+  ActionIcon,
   Alert,
   Button,
   Container,
@@ -10,7 +11,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { Panel } from "@repo/ui/panel";
+import { IconCheck, IconPencil } from "@tabler/icons-react";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
@@ -28,7 +29,7 @@ import { useSession } from "../auth/useSession";
 import { DeleteIssueDialog } from "../issues/DeleteIssueDialog";
 import { useIssuePermissions } from "../issues/useIssuePermissions";
 import { IssueHistory } from "../issues/IssueHistory";
-import { TypeBadge } from "../issues/IssueMarks";
+import { NobodyMark, PriorityMark, StatusDot, StatusPill, TypeBadge } from "../issues/IssueMarks";
 import { timeAgo } from "../issues/timeAgo";
 import { IssueMarkdown } from "../issues/IssueMarkdown";
 import { MarkdownField } from "../issues/MarkdownField";
@@ -40,6 +41,11 @@ import classes from "./IssuePage.module.css";
 const TYPES = ["Story", "Bug", "Chore"] as const;
 const PRIORITIES = ["Urgent", "High", "Medium", "Low"] as const;
 const UNASSIGNED = "unassigned";
+const CATEGORY_NAMES: Record<Issue["status"]["category"], string> = {
+  TODO: "To do",
+  IN_PROGRESS: "In progress",
+  DONE: "Done",
+};
 
 /** A title or description being edited, and the text it was started from. */
 type Editing = { field: "title" | "description"; draft: string; original: string };
@@ -131,6 +137,10 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
       ? [{ value: issue.assignee.id, label: issue.assignee.displayName }]
       : []),
   ];
+  const pictureOf = (id: string) =>
+    id === user?.id ? user.avatarUrl : id === issue?.assignee?.id ? issue.assignee.avatarUrl : null;
+  const statusList = statuses.data ?? (issue ? [{ ...issue.status, position: 0 }] : []);
+  const selectClass = `${classes.select} ${canEdit ? "" : classes.readOnly}`;
 
   // An Issue that is unknown and one the User cannot see have exactly the same page.
   if (query.error instanceof ApiError && query.error.status === 404 && !query.isFetching) {
@@ -147,8 +157,14 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
   }
   if (failure) return <FailedLoadPage failure={failure} onRetry={() => void query.refetch()} />;
 
+  function loadLatest() {
+    setEditing(null);
+    setConflict(false);
+    void query.refetch();
+  }
+
   return (
-    <Container size="md" px={0} py="xl">
+    <Container size="lg" px={0} py="xl">
       <Stack gap="lg">
         <BreadcrumbTrail
           crumbs={[
@@ -163,13 +179,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
           <Loading>
             <Stack gap="lg">
               <Bone width="55%" height={44} />
-              <Panel p="xl">
-                <Stack>
-                  <Bone width={80} height={24} />
-                  <Bone height={18} />
-                  <Bone width="70%" height={18} />
-                </Stack>
-              </Panel>
+              <Bone height={96} />
             </Stack>
           </Loading>
         ) : (
@@ -182,39 +192,6 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                 </Button>
               </Alert>
             )}
-            <Group justify="space-between" wrap="nowrap">
-              <div className={classes.id}>
-                <TypeBadge type={issue.type} />
-                <span>
-                  {issue.key} · {issue.type}
-                </span>
-              </div>
-              <Group gap="xs" wrap="nowrap">
-                <Button
-                  variant="default"
-                  radius="xl"
-                  size="compact-md"
-                  onClick={() =>
-                    void navigator.clipboard
-                      ?.writeText(window.location.href)
-                      .then(() => toast.success("Link copied."))
-                  }
-                >
-                  Copy link
-                </Button>
-                {canDelete && (
-                  <Button
-                    variant="default"
-                    color="red"
-                    radius="xl"
-                    size="compact-md"
-                    onClick={() => setDeleteOpen(true)}
-                  >
-                    Delete Issue
-                  </Button>
-                )}
-              </Group>
-            </Group>
             <DeleteIssueDialog
               issue={issue}
               opened={deleteOpen}
@@ -222,29 +199,32 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
             />
             <div className={classes.layout}>
               <div className={classes.main}>
-                {stale && (
-                  <Alert color="yellow" title="This Issue changed since you opened it" role="alert">
-                    Someone else saved a change to this {editing?.field}. Load the latest to see it;
-                    your unsaved edit will be discarded.{" "}
-                    <Button
-                      variant="subtle"
-                      size="compact-sm"
-                      onClick={() => {
-                        setEditing(null);
-                        setConflict(false);
-                        void query.refetch();
-                      }}
-                    >
-                      Load the latest
-                    </Button>
-                  </Alert>
-                )}
+                <Group justify="space-between" wrap="nowrap">
+                  <div className={classes.id}>
+                    <TypeBadge type={issue.type} />
+                    <span>{issue.key}</span>
+                  </div>
+                  <Button
+                    variant="subtle"
+                    radius="xl"
+                    size="compact-sm"
+                    onClick={() =>
+                      void navigator.clipboard
+                        ?.writeText(window.location.href)
+                        .then(() => toast.success("Link copied."))
+                    }
+                  >
+                    Copy link
+                  </Button>
+                </Group>
                 {editing?.field === "title" ? (
                   <Stack gap="xs">
                     <TextInput
                       aria-label="Title"
                       autoFocus
                       maxLength={255}
+                      radius="xl"
+                      size="lg"
                       value={editing.draft}
                       error={fieldError}
                       disabled={saving}
@@ -252,6 +232,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                         setEditing({ ...editing, draft: event.currentTarget.value })
                       }
                     />
+                    {stale && <StaleAlert onLoad={loadLatest} />}
                     <EditButtons
                       saving={saving}
                       disabled={stale}
@@ -260,141 +241,264 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                     />
                   </Stack>
                 ) : (
-                  <Group align="flex-start" justify="space-between" wrap="nowrap">
-                    <Title order={1} fz={40} lh={1.1} style={{ overflowWrap: "anywhere" }}>
+                  <div
+                    className={canEdit ? classes.editable : undefined}
+                    onClick={() => canEdit && editing === null && startEditing("title")}
+                  >
+                    <Title order={1} fz={36} lh={1.15} style={{ overflowWrap: "anywhere" }}>
                       {issue.title}
                     </Title>
                     {canEdit && (
-                      <Button
+                      <ActionIcon
                         variant="subtle"
-                        size="compact-sm"
+                        color="gray"
+                        radius="xl"
+                        className={classes.pencil}
+                        aria-label="Edit title"
                         disabled={editing !== null}
-                        onClick={() => startEditing("title")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          startEditing("title");
+                        }}
                       >
-                        Edit title
-                      </Button>
+                        <IconPencil size={16} />
+                      </ActionIcon>
                     )}
-                  </Group>
+                  </div>
                 )}
-                <Panel p="xl">
-                  <Stack gap="sm">
-                    <Group justify="space-between">
-                      <Title order={2} fz={20}>
-                        Description
-                      </Title>
-                      {canEdit && editing?.field !== "description" && (
-                        <Button
-                          variant="subtle"
-                          size="compact-sm"
-                          disabled={editing !== null}
-                          onClick={() => startEditing("description")}
-                        >
-                          Edit description
-                        </Button>
-                      )}
-                    </Group>
-                    {editing?.field === "description" ? (
-                      <Stack gap="xs">
-                        <MarkdownField
-                          label="Description"
-                          autoFocus
-                          maxLength={50000}
-                          value={editing.draft}
-                          error={fieldError}
-                          disabled={saving}
-                          onChange={(draft) => setEditing({ ...editing, draft })}
-                        />
+                <Stack gap="xs">
+                  <div className={canEdit ? classes.editable : undefined}>
+                    <h2 className={classes.sectionTitle}>Description</h2>
+                    {canEdit && editing?.field !== "description" && (
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        radius="xl"
+                        className={classes.pencil}
+                        aria-label="Edit description"
+                        disabled={editing !== null}
+                        onClick={() => startEditing("description")}
+                      >
+                        <IconPencil size={16} />
+                      </ActionIcon>
+                    )}
+                  </div>
+                  {editing?.field === "description" ? (
+                    <Stack gap="xs">
+                      {stale && <StaleAlert onLoad={loadLatest} />}
+                      <MarkdownField
+                        label="Description"
+                        autoFocus
+                        maxLength={50000}
+                        value={editing.draft}
+                        error={fieldError}
+                        disabled={saving}
+                        onChange={(draft) => setEditing({ ...editing, draft })}
+                      />
+                      <div className={classes.editFoot}>
+                        <span className={classes.hint}>Markdown supported</span>
                         <EditButtons
                           saving={saving}
                           disabled={stale}
                           onSave={() => void saveText()}
                           onCancel={() => setEditing(null)}
                         />
-                      </Stack>
-                    ) : issue.description ? (
-                      <IssueMarkdown>{issue.description}</IssueMarkdown>
-                    ) : (
-                      <Text c="dimmed">No description yet.</Text>
-                    )}
-                  </Stack>
-                </Panel>
-                <IssueHistory issueKey={issue.key} />
+                      </div>
+                    </Stack>
+                  ) : (
+                    <div
+                      className={classes.descriptionBox}
+                      onClick={() => canEdit && editing === null && startEditing("description")}
+                    >
+                      {issue.description ? (
+                        <IssueMarkdown>{issue.description}</IssueMarkdown>
+                      ) : (
+                        <Text c="dimmed">No description yet.</Text>
+                      )}
+                    </div>
+                  )}
+                </Stack>
+                <IssueHistory issueKey={issue.key} statuses={statusList} />
               </div>
               <aside className={classes.side}>
-                <Panel p="xl">
-                  <Stack gap={0} component="dl" m={0}>
-                    <Detail label="Status">
-                      <Select
-                        aria-label="Status"
-                        allowDeselect={false}
-                        data={(
-                          statuses.data ?? [{ id: issue.status.id, name: issue.status.name }]
-                        ).map((status) => ({ value: status.id, label: status.name }))}
-                        value={issue.status.id}
-                        disabled={quickSaving || !canEdit}
-                        onChange={(value) =>
-                          value && void quickChange(() => api.moveIssue(issue.key, value))
-                        }
-                      />
-                    </Detail>
-                    <Detail label="Issue type">
-                      <Select
-                        aria-label="Issue type"
-                        allowDeselect={false}
-                        data={[...TYPES]}
-                        value={issue.type}
-                        disabled={quickSaving || !canEdit}
-                        onChange={(value) =>
-                          value && void changeField({ type: value as Issue["type"] })
-                        }
-                      />
-                    </Detail>
-                    <Detail label="Priority">
-                      <Select
-                        aria-label="Priority"
-                        allowDeselect={false}
-                        data={[...PRIORITIES]}
-                        value={issue.priority}
-                        disabled={quickSaving || !canEdit}
-                        onChange={(value) =>
-                          value && void changeField({ priority: value as Issue["priority"] })
-                        }
-                      />
-                    </Detail>
-                    <Detail label="Reporter">
-                      <Person person={issue.reporter} />
-                    </Detail>
-                    <Detail label="Assignee">
-                      <Select
-                        aria-label="Assignee"
-                        allowDeselect={false}
-                        data={assignees}
-                        value={issue.assignee?.id ?? UNASSIGNED}
-                        disabled={quickSaving || !canEdit}
-                        onChange={(value) =>
-                          value &&
-                          void quickChange(() =>
-                            api.assignIssue(issue.key, value === UNASSIGNED ? null : value),
-                          )
-                        }
-                      />
-                    </Detail>
-                    <div className={classes.dates}>
-                      <div title={new Date(issue.createdAt).toLocaleString()}>
-                        Created {new Date(issue.createdAt).toLocaleDateString()}
-                      </div>
-                      <div title={new Date(issue.updatedAt).toLocaleString()}>
-                        Updated {timeAgo(issue.updatedAt)} ago
-                      </div>
-                    </div>
-                  </Stack>
-                </Panel>
+                <dl className={classes.details}>
+                  <Detail label="Status">
+                    <Select
+                      aria-label="Status"
+                      className={selectClass}
+                      radius="xl"
+                      allowDeselect={false}
+                      data={statusList.map((status) => ({ value: status.id, label: status.name }))}
+                      value={issue.status.id}
+                      disabled={quickSaving || !canEdit}
+                      leftSection={<StatusDot category={issue.status.category} />}
+                      renderOption={({ option, checked }) => {
+                        const status = statusList.find((item) => item.id === option.value);
+                        return (
+                          <span className={classes.option}>
+                            {status && <StatusPill status={status} />}
+                            <span className={classes.optionNote} aria-hidden>
+                              {status && CATEGORY_NAMES[status.category]}
+                            </span>
+                            {checked && <IconCheck size={14} className={classes.check} />}
+                          </span>
+                        );
+                      }}
+                      onChange={(value) =>
+                        value && void quickChange(() => api.moveIssue(issue.key, value))
+                      }
+                    />
+                  </Detail>
+                  <Detail label="Type">
+                    <Select
+                      aria-label="Issue type"
+                      className={selectClass}
+                      radius="xl"
+                      allowDeselect={false}
+                      data={[...TYPES]}
+                      value={issue.type}
+                      disabled={quickSaving || !canEdit}
+                      leftSection={<TypeBadge type={issue.type} />}
+                      renderOption={({ option, checked }) => (
+                        <span className={classes.option}>
+                          <span aria-hidden>
+                            <TypeBadge type={option.value as Issue["type"]} />
+                          </span>
+                          {option.label}
+                          {checked && <IconCheck size={14} className={classes.check} />}
+                        </span>
+                      )}
+                      onChange={(value) =>
+                        value && void changeField({ type: value as Issue["type"] })
+                      }
+                    />
+                  </Detail>
+                  <Detail label="Priority">
+                    <Select
+                      aria-label="Priority"
+                      className={selectClass}
+                      radius="xl"
+                      allowDeselect={false}
+                      data={[...PRIORITIES]}
+                      value={issue.priority}
+                      disabled={quickSaving || !canEdit}
+                      leftSection={<PriorityMark priority={issue.priority} />}
+                      renderOption={({ option, checked }) => (
+                        <span className={classes.option}>
+                          <span aria-hidden>
+                            <PriorityMark priority={option.value as Issue["priority"]} />
+                          </span>
+                          {option.label}
+                          {checked && <IconCheck size={14} className={classes.check} />}
+                        </span>
+                      )}
+                      onChange={(value) =>
+                        value && void changeField({ priority: value as Issue["priority"] })
+                      }
+                    />
+                  </Detail>
+                  <Detail label="Assignee">
+                    <Select
+                      aria-label="Assignee"
+                      className={selectClass}
+                      radius="xl"
+                      allowDeselect={false}
+                      data={assignees}
+                      value={issue.assignee?.id ?? UNASSIGNED}
+                      disabled={quickSaving || !canEdit}
+                      leftSection={
+                        issue.assignee ? (
+                          <ProfilePicture
+                            name={issue.assignee.displayName}
+                            src={issue.assignee.avatarUrl}
+                            size={20}
+                          />
+                        ) : (
+                          <NobodyMark />
+                        )
+                      }
+                      renderOption={({ option, checked }) => (
+                        <span className={classes.option}>
+                          {option.value === UNASSIGNED ? (
+                            <NobodyMark />
+                          ) : (
+                            <ProfilePicture
+                              name={option.label}
+                              src={pictureOf(option.value)}
+                              size={20}
+                            />
+                          )}
+                          {option.label}
+                          {option.value === user?.id && (
+                            <span className={classes.hint} aria-hidden>
+                              (you)
+                            </span>
+                          )}
+                          {checked && <IconCheck size={14} className={classes.check} />}
+                        </span>
+                      )}
+                      onChange={(value) =>
+                        value &&
+                        void quickChange(() =>
+                          api.assignIssue(issue.key, value === UNASSIGNED ? null : value),
+                        )
+                      }
+                    />
+                  </Detail>
+                  <Detail label="Reporter">
+                    <Person person={issue.reporter} />
+                  </Detail>
+                  <Detail label="Created">
+                    <span title={new Date(issue.createdAt).toLocaleString()}>
+                      {new Date(issue.createdAt).toLocaleDateString(undefined, {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </Detail>
+                  <Detail label="Updated">
+                    <span title={new Date(issue.updatedAt).toLocaleString()}>
+                      {timeAgo(issue.updatedAt)} ago
+                    </span>
+                  </Detail>
+                </dl>
+                {canDelete && (
+                  <button
+                    type="button"
+                    className={classes.danger}
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    Delete Issue
+                  </button>
+                )}
+                {!canEdit && (
+                  <div className={classes.viewOnly}>
+                    <span className={classes.viewOnlyPill}>View only</span>
+                    <span>You can view this Issue but not change it.</span>
+                  </div>
+                )}
               </aside>
             </div>
           </>
         )}
       </Stack>
     </Container>
+  );
+}
+
+/** The way out of a refused or outdated save: the latest version replaces the edit. */
+function StaleAlert({ onLoad }: { onLoad: () => void }) {
+  return (
+    <div className={classes.stale} role="alert">
+      <span className={classes.staleMark} aria-hidden>
+        !
+      </span>
+      <span>This Issue changed since you opened it.</span>
+      <Button size="compact-sm" radius="xl" variant="default" onClick={onLoad}>
+        Load the latest
+      </Button>
+    </div>
   );
 }
 
@@ -411,10 +515,10 @@ function EditButtons({
 }) {
   return (
     <Group gap="xs">
-      <Button size="compact-md" loading={saving} disabled={disabled} onClick={onSave}>
+      <Button size="compact-md" radius="xl" loading={saving} disabled={disabled} onClick={onSave}>
         Save
       </Button>
-      <Button size="compact-md" variant="subtle" disabled={saving} onClick={onCancel}>
+      <Button size="compact-md" radius="xl" variant="subtle" disabled={saving} onClick={onCancel}>
         Cancel
       </Button>
     </Group>
@@ -423,22 +527,18 @@ function EditButtons({
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <>
-      <Text component="dt" className={classes.label}>
-        {label}
-      </Text>
-      <Text component="dd" className={classes.value}>
-        {children}
-      </Text>
-    </>
+    <div className={classes.row}>
+      <dt className={classes.label}>{label}</dt>
+      <dd className={classes.value}>{children}</dd>
+    </div>
   );
 }
 
 function Person({ person }: { person: NonNullable<Issue["assignee"]> }) {
   return (
-    <Group gap="xs" component="span" wrap="nowrap" display="inline-flex">
-      <ProfilePicture name={person.displayName} src={person.avatarUrl} size={24} />
+    <span className={classes.person}>
+      <ProfilePicture name={person.displayName} src={person.avatarUrl} size={20} />
       {person.displayName}
-    </Group>
+    </span>
   );
 }

@@ -77,3 +77,29 @@
   align-items: center;
   gap: 6px;
 }
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-accent-2-500);
+}
+
+.inProgressDot {
+  background: var(--color-accent-500);
+}
+
+.doneDot {
+  background: var(--seg-on-fg);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.nobody {
+  display: inline-block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 50%;
+}

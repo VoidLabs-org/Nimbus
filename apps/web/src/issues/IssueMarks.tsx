@@ -52,3 +52,15 @@ export function PriorityMark({ priority }: { priority: Issue["priority"] }) {
     </span>
   );
 }
+
+/** The Status's category as a dot: grey for To do, orange for In progress, white for Done. */
+export function StatusDot({ category }: { category: Issue["status"]["category"] }) {
+  const tone =
+    category === "IN_PROGRESS" ? classes.inProgressDot : category === "DONE" ? classes.doneDot : "";
+  return <span className={`${classes.dot} ${tone}`} aria-hidden />;
+}
+
+/** An empty ring where an Assignee's picture would be. */
+export function NobodyMark() {
+  return <span className={classes.nobody} aria-hidden />;
+}

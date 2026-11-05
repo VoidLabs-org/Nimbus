@@ -121,7 +121,10 @@ function DragBoard({
         onDragCancel={() => setLifted(null)}
       >
         {children}
-        <DragOverlay>{lifted && <CardBody issue={lifted} lifted />}</DragOverlay>
+        {/* No drop animation: the card is already in its column (the move is optimistic), so it must not fly back. */}
+        <DragOverlay dropAnimation={null}>
+          {lifted && <CardBody issue={lifted} lifted />}
+        </DragOverlay>
       </DndContext>
     </CanMoveContext>
   );
@@ -221,6 +224,9 @@ function BoardColumn({ column }: { column: Column }) {
         <StatusPill status={column.status} />
         <span>{column.total}</span>
       </div>
+      {column.items.length === 0 && column.total === 0 && (
+        <div className={classes.emptyColumn}>No issues</div>
+      )}
       {column.items.map((issue) => (
         <IssueCard key={issue.id} issue={issue} />
       ))}

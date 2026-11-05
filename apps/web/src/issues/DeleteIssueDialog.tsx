@@ -54,7 +54,7 @@ export function DeleteIssueDialog({
       withCloseButton={!deleting}
     >
       <Text size="sm" c="dimmed" mb="lg">
-        “{issue.title}” and its history will be gone for good. This can't be undone.
+        “{issue.title}” and its history will be removed. This can't be undone.
       </Text>
       <Group justify="flex-end">
         <Button variant="default" onClick={onClose} disabled={deleting}>

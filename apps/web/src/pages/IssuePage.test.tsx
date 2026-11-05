@@ -180,8 +180,8 @@ describe("an Issue's page", () => {
     vi.spyOn(api, "issue").mockResolvedValue(issue);
     showAt("/issues/NIM-12");
 
-    const changed = await screen.findByText("Dana changed the priority from “Medium” to “High”");
-    const created = screen.getByText("Dana created this Issue");
+    const changed = await screen.findByText("changed the priority");
+    const created = screen.getByText("created this Issue");
     expect(
       changed.compareDocumentPosition(created) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -217,7 +217,7 @@ describe("an Issue's page", () => {
     fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Mine" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText("This Issue changed since you opened it")).toBeTruthy();
+    expect(await screen.findByText("This Issue changed since you opened it.")).toBeTruthy();
     expect((screen.getByLabelText("Description") as HTMLTextAreaElement).value).toBe("Mine");
   });
 
@@ -251,7 +251,7 @@ describe("an Issue's page", () => {
     const statusNames = () =>
       screen
         .getAllByRole("option", { hidden: true })
-        .map((option) => option.textContent)
+        .map((option) => option.firstElementChild?.firstElementChild?.textContent)
         .filter((name) => ["To do", "In progress", "Done"].includes(name ?? ""));
     await waitFor(() => expect(statusNames()).toHaveLength(3));
     const names = statusNames();

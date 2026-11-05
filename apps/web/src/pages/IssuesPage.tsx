@@ -14,14 +14,14 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { Panel } from "@repo/ui/panel";
 import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
-import { IconSearch } from "@tabler/icons-react";
+import { IconCheck, IconSearch } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
-import { api, type Issue, type IssueSearch, type ProjectStatus } from "../api/client";
+import { type Issue, type IssueSearch, type ProjectStatus } from "../api/client";
 import {
   loadFailure,
   refreshFailed,
-  useIssueChanged,
+  useMoveIssue,
   useIssues,
   useProject,
   useProjectStatuses,
@@ -124,7 +124,7 @@ export default function IssuesPage() {
     items: columnQueries[index]?.data?.items ?? [],
     total: columnQueries[index]?.data?.total ?? 0,
   }));
-  const issueChanged = useIssueChanged();
+  const moveIssue = useMoveIssue();
   const failure =
     loadFailure(projectQuery) ??
     (grouped
@@ -229,10 +229,19 @@ export default function IssuesPage() {
     const issue = columns.flatMap((column) => column.items).find((item) => item.key === issueKey);
     if (!issue || issue.status.id === status.id) return;
     try {
-      issueChanged(await api.moveIssue(issue.key, status.id));
+      await moveIssue(issue, status);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "Couldn't move the Issue.");
+      const reason =
+        error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
+      toast.error(`Couldn't move ${issue.key} to ${status.name}: ${reason}`);
     }
+  }
+
+  function clearFilters() {
+    setText("");
+    setParams(view === "list" ? new URLSearchParams() : new URLSearchParams({ view }), {
+      replace: true,
+    });
   }
 
   const quick = (who: "me" | "none", label: string) => (
@@ -244,8 +253,23 @@ export default function IssuesPage() {
       aria-pressed={search.assignee === who}
       onClick={() => change("assignee", search.assignee === who ? null : who)}
     >
+      {search.assignee === who && <IconCheck size={14} />}
       {label}
     </Button>
+  );
+  const categories = (
+    <div className={viewClasses.switch} role="group" aria-label="Status category">
+      {CATEGORIES.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={search.category === option.value}
+          onClick={() => change("category", search.category === option.value ? null : option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
   );
   const pill = (
     name: string,
@@ -324,10 +348,19 @@ export default function IssuesPage() {
           />
           {quick("me", "Assigned to me")}
           {quick("none", "Unassigned")}
-          {pill("category", "Status", CATEGORIES, search.category)}
+          {categories}
           {pill("type", "Type", same(TYPES), search.type)}
           {pill("priority", "Priority", same(PRIORITIES), search.priority)}
-          <div className={classes.sort}>Filters apply to every view</div>
+          {filtered && (
+            <Button
+              variant="transparent"
+              size="compact-sm"
+              className={classes.sort}
+              onClick={clearFilters}
+            >
+              Clear filters
+            </Button>
+          )}
         </div>
         {refreshFailed(query) && (
           <Alert color="yellow" title="Couldn't refresh these Issues">
@@ -343,19 +376,28 @@ export default function IssuesPage() {
           </Loading>
         ) : total === 0 && !filtered ? (
           <div className={classes.blank}>
-            <div className={classes.bar} style={{ width: 160 }} />
-            <div className={classes.bar} style={{ width: 120 }} />
-            <div className={classes.bar} style={{ width: 70 }} />
+            <div className={classes.bar} style={{ width: 200 }} />
+            <div className={classes.bar} style={{ width: 144 }} />
+            <div className={classes.bar} style={{ width: 88 }} />
             <Title order={2} fz={24} mt="sm">
               No Issues yet
             </Title>
-            <Text c="dimmed">
-              Create the first one. It'll be {project?.key ?? ""}-1 and start in To do.
-            </Text>
+            <Text c="dimmed">Create the first one. Statuses are set up with it.</Text>
             {createButton}
           </div>
         ) : total === 0 && page === 0 ? (
-          <p className={classes.empty}>No Issues match these filters.</p>
+          <div className={classes.blank}>
+            <div className={classes.bar} style={{ width: 200 }} />
+            <div className={classes.bar} style={{ width: 144 }} />
+            <div className={classes.bar} style={{ width: 88 }} />
+            <Title order={2} fz={24} mt="sm">
+              No Issues match these filters
+            </Title>
+            <Text c="dimmed">Try fewer filters or a different search.</Text>
+            <Button variant="default" radius="xl" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          </div>
         ) : view === "board" ? (
           <IssueBoard
             columns={columns}
@@ -413,22 +455,6 @@ export default function IssuesPage() {
               )}
             </div>
           </>
-        )}
-        {filtered && loaded && (
-          <div className={classes.footer}>
-            <Button
-              variant="transparent"
-              size="compact-sm"
-              onClick={() => {
-                setText("");
-                setParams(view === "list" ? new URLSearchParams() : new URLSearchParams({ view }), {
-                  replace: true,
-                });
-              }}
-            >
-              Clear filters
-            </Button>
-          </div>
         )}
       </Stack>
     </Container>

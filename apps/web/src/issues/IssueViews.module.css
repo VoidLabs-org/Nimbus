@@ -110,8 +110,21 @@
 }
 
 .more {
-  padding: 4px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--seg);
   font-size: 12px;
+  text-align: center;
+  color: var(--color-accent-2-700);
+}
+
+/* A Status with no Issues: a dashed place a card can still be dropped. */
+.emptyColumn {
+  padding: 24px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  font-size: 12px;
+  text-align: center;
   color: var(--color-accent-2-700);
 }
 

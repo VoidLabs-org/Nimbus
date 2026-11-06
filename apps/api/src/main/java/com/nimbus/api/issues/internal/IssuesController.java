@@ -43,7 +43,8 @@ class IssuesController {
 	IssueService.IssueView create(@PathVariable String key, @Valid @RequestBody CreateIssue request) {
 		return issues.create(currentUser.id(), key,
 				new IssueService.NewIssue(request.type(), request.title(), request.description(),
-						request.priority() == null ? "Medium" : request.priority(), request.assigneeId()));
+						request.priority() == null ? "Medium" : request.priority(), request.assigneeId(),
+						request.statusId()));
 	}
 
 	/** Invalid filters are refused with {@code 400} and {@code errors} keyed by parameter, like invalid fields. */
@@ -53,8 +54,31 @@ class IssuesController {
 			@RequestParam(required = false) String priority, @RequestParam(required = false) String assignee,
 			@RequestParam(required = false) String q, @RequestParam(defaultValue = "updated") String sort,
 			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
-		var me = currentUser.id();
 		Map<String, String> errors = new TreeMap<>();
+		if (!Set.of("updated", "created", "priority").contains(sort)) errors.put("sort", "Choose updated, created or priority");
+		if (page < 0) errors.put("page", "Use 0 or more");
+		if (size < 1 || size > 100) errors.put("size", "Use 1 to 100");
+		var filter = filter(status, category, type, priority, assignee, q, sort, page, size, errors);
+		return issues.find(currentUser.id(), key, filter);
+	}
+
+	/**
+	 * How many Issues match the filters (the same as {@link #find}'s), and per value of Status, category, type and
+	 * priority, for the Filter menu.
+	 */
+	@GetMapping("/api/projects/{key}/issues/counts")
+	IssueService.IssueCountsView counts(@PathVariable String key, @RequestParam(required = false) String status,
+			@RequestParam(required = false) String category, @RequestParam(required = false) String type,
+			@RequestParam(required = false) String priority, @RequestParam(required = false) String assignee,
+			@RequestParam(required = false) String q) {
+		var filter = filter(status, category, type, priority, assignee, q, "updated", 0, 1, new TreeMap<>());
+		return issues.counts(currentUser.id(), key, filter);
+	}
+
+	/** The filters both endpoints take, checked; {@code errors} may already hold the caller's own. */
+	private IssueService.IssueFilter filter(String status, String category, String type, String priority,
+			String assignee, String q, String sort, int page, int size, Map<String, String> errors) {
+		var me = currentUser.id();
 		if (category != null && !Set.of("TODO", "IN_PROGRESS", "DONE").contains(category)) {
 			errors.put("category", "Choose TODO, IN_PROGRESS or DONE");
 		}
@@ -62,9 +86,6 @@ class IssuesController {
 		if (priority != null && !Set.of("Urgent", "High", "Medium", "Low").contains(priority)) {
 			errors.put("priority", CreateIssue.PRIORITY_RULE);
 		}
-		if (!Set.of("updated", "created", "priority").contains(sort)) errors.put("sort", "Choose updated, created or priority");
-		if (page < 0) errors.put("page", "Use 0 or more");
-		if (size < 1 || size > 100) errors.put("size", "Use 1 to 100");
 		UUID assigneeId = null;
 		if (assignee != null && assignee.equals("me")) assigneeId = me;
 		else if (assignee != null && !assignee.equals("none")) {
@@ -84,9 +105,8 @@ class IssuesController {
 			if (words.size() > 10) errors.put("q", "Use at most 10 words and 200 characters");
 		}
 		if (!errors.isEmpty()) throw new IssueService.InvalidFields(errors);
-
-		return issues.find(me, key, new IssueService.IssueFilter(status, category, type, priority, assigneeId,
-				"none".equals(assignee), words, sort, page, size));
+		return new IssueService.IssueFilter(status, category, type, priority, assigneeId, "none".equals(assignee), words,
+				sort, page, size);
 	}
 
 	@GetMapping("/api/issues/{issueKey}")
@@ -217,7 +237,7 @@ class IssuesController {
 			@NotNull(message = TITLE_RULE) @Pattern(regexp = "\\P{Cc}{1,255}", message = TITLE_RULE) String title,
 			@Size(max = 50_000, message = "Use at most 50,000 characters") String description,
 			@Pattern(regexp = "Urgent|High|Medium|Low", message = PRIORITY_RULE) String priority,
-			UUID assigneeId) {
+			UUID assigneeId, UUID statusId) {
 
 		static final String TYPE_RULE = "Choose Story, Bug or Chore";
 		static final String TITLE_RULE = "Use 1 to 255 characters without control characters";

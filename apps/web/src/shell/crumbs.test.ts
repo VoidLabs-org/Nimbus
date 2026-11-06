@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collapseCrumbs, type Crumb } from "./crumbs";
+import { collapseCrumbs, tabTitle, type Crumb } from "./crumbs";
 
 const long: Crumb[] = [
   { label: "A", to: "/a" },
@@ -34,5 +34,21 @@ describe("collapseCrumbs", () => {
       { label: "", pending: true },
     ];
     expect(collapseCrumbs(loading, true).up).toEqual({ label: "B", to: "/b" });
+  });
+});
+
+describe("a Tab's name", () => {
+  it("is the breadcrumb's last crumb", () => {
+    expect(tabTitle([{ label: "Projects" }])).toBe("Projects");
+    expect(tabTitle([{ label: "Projects", to: "/projects" }, { label: "Apollo" }])).toBe("Apollo");
+  });
+
+  it("waits while the last crumb is loading", () => {
+    expect(
+      tabTitle([
+        { label: "Projects", to: "/projects" },
+        { label: "", pending: true },
+      ]),
+    ).toBeNull();
   });
 });

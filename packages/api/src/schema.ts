@@ -219,7 +219,7 @@ export interface paths {
         put?: never;
         /**
          * Create an Issue in a project
-         * @description Any Member may, until permissions are integrated. The Reporter is the caller, the Issue gets the project's next number and starts in its first To do Status (the project's default Statuses are made if it has none). Requires a verified email.
+         * @description Any Member may, until permissions are integrated. The Reporter is the caller, the Issue gets the project's next number and starts in `statusId` when given, else in its first To do Status (the project's default Statuses are made if it has none). Requires a verified email.
          */
         post: {
             parameters: {
@@ -268,6 +268,69 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{key}/issues/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count a project's Issues that match the filters, in total and per value
+         * @description Takes the filters of `GET /api/projects/{key}/issues` (not `sort`, `page` or `size`) and refuses them the same way. Besides the total, it counts per Status, category, type and priority; a field's counts leave out that field's own filter, so with `type=Bug` the other types still show what choosing them instead would give. Values no matching Issue has are left out (zero). Any Member may. Requires a verified email.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Status name, matched ignoring case */
+                    status?: string;
+                    category?: components["schemas"]["StatusCategory"];
+                    type?: components["schemas"]["IssueType"];
+                    priority?: components["schemas"]["IssuePriority"];
+                    /** @description A User id, `me` for the caller, or `none` for unassigned Issues */
+                    assignee?: string;
+                    /** @description Words of the title; every word must appear in it, in any case */
+                    q?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The matching total and the counts per value */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IssueCounts"];
+                    };
+                };
+                400: components["responses"]["InvalidFields"];
+                401: components["responses"]["Unauthorized"];
+                /** @description Project not found (also returned for a non-Member) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4115,6 +4178,11 @@ export interface components {
              * @description Must be a Member of the project
              */
             assigneeId?: string | null;
+            /**
+             * Format: uuid
+             * @description One of the project's Statuses to start in (a Board column's Add issue); the first To do Status when omitted
+             */
+            statusId?: string | null;
         };
         IssuePerson: {
             /** Format: uuid */
@@ -4190,6 +4258,29 @@ export interface components {
             total: number;
             page: number;
             size: number;
+        };
+        IssueCounts: {
+            /**
+             * Format: int64
+             * @description Issues matching every filter
+             */
+            total: number;
+            /** @description Matching Issues per Status id, without the `status` filter */
+            statuses: {
+                [key: string]: number;
+            };
+            /** @description Matching Issues per category (TODO, IN_PROGRESS, DONE), without the `category` filter */
+            categories: {
+                [key: string]: number;
+            };
+            /** @description Matching Issues per type, without the `type` filter */
+            types: {
+                [key: string]: number;
+            };
+            /** @description Matching Issues per priority, without the `priority` filter */
+            priorities: {
+                [key: string]: number;
+            };
         };
         /** @enum {string} */
         IssueNotificationType: "ISSUE_ASSIGNED" | "ISSUE_UNASSIGNED" | "ISSUE_STATUS_CHANGED" | "ISSUE_EDITED" | "ISSUE_DELETED";

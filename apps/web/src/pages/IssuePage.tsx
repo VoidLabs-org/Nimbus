@@ -1,7 +1,6 @@
 import { ApiError } from "@repo/api";
 import {
   ActionIcon,
-  Alert,
   Button,
   Container,
   Group,
@@ -37,6 +36,7 @@ import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
 import classes from "./IssuePage.module.css";
+import { StaleNotice } from "../shell/StaleNotice";
 
 const TYPES = ["Story", "Bug", "Chore"] as const;
 const PRIORITIES = ["Urgent", "High", "Medium", "Low"] as const;
@@ -185,12 +185,11 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
         ) : (
           <>
             {refreshFailed(query) && (
-              <Alert color="yellow" title="Couldn't refresh this Issue">
-                Showing the last loaded details.{" "}
-                <Button variant="subtle" size="compact-sm" onClick={() => void query.refetch()}>
-                  Try again
-                </Button>
-              </Alert>
+              <StaleNotice
+                title="Couldn't refresh this Issue"
+                shown="the last loaded details"
+                onRetry={() => void query.refetch()}
+              />
             )}
             <DeleteIssueDialog
               issue={issue}

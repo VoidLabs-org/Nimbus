@@ -1,26 +1,18 @@
 import { ApiError } from "@repo/api";
-import {
-  Alert,
-  Button,
-  Container,
-  Group,
-  Select,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Button, Group, Text, Title } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Panel } from "@repo/ui/panel";
-import { Loading } from "@repo/ui/skeleton";
+import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
-import { IconCheck, IconSearch } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { IconZoomCancel } from "@tabler/icons-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { type Issue, type IssueSearch, type ProjectStatus } from "../api/client";
 import {
+  columnShown,
   loadFailure,
   refreshFailed,
+  useIssueCounts,
   useMoveIssue,
   useIssues,
   useProject,
@@ -29,32 +21,27 @@ import {
 } from "../api/queries";
 import { IssueBoard, IssueSwimlanes, type Column } from "../issues/IssueBoard";
 import { IssueGroups, IssueTable } from "../issues/IssueTable";
-import viewClasses from "../issues/IssueViews.module.css";
+import {
+  appliedFields,
+  CATEGORIES,
+  FIELD_LABELS,
+  FILTER_FIELDS,
+  PRIORITIES,
+  TYPES,
+  valueLabel,
+  VIEWS,
+  type FilterField,
+  type View,
+} from "../issues/issueFilters";
+import { IssueToolbar } from "../issues/IssueToolbar";
 import { NewIssueForm } from "../issues/NewIssueForm";
 import { useIssuePermissions } from "../issues/useIssuePermissions";
-import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
-import { PrimaryAction, StatusPage } from "../shell/StatusPage";
+import { useProjectOutlet } from "../projects/projectOutlet";
 import { FailedLoadPage } from "../shell/StatusPages";
-import { ProjectListSkeleton } from "./ProjectListSkeleton";
 import classes from "./IssuesPage.module.css";
+import { StaleNotice } from "../shell/StaleNotice";
 
 const PAGE_SIZE = 50;
-const ANY = "any";
-
-const CATEGORIES: { value: Issue["status"]["category"]; label: string }[] = [
-  { value: "TODO", label: "To do" },
-  { value: "IN_PROGRESS", label: "In progress" },
-  { value: "DONE", label: "Done" },
-];
-const TYPES: Issue["type"][] = ["Story", "Bug", "Chore"];
-const PRIORITIES: Issue["priority"][] = ["Urgent", "High", "Medium", "Low"];
-const VIEWS = [
-  { value: "list", label: "List" },
-  { value: "board", label: "Board" },
-  { value: "table", label: "Table" },
-  { value: "swimlanes", label: "Swimlanes" },
-] as const;
-type View = (typeof VIEWS)[number]["value"];
 
 /** The view this browser last used in the project, if it can say. */
 function storedView(projectKey: string): View | undefined {
@@ -66,11 +53,7 @@ function storedView(projectKey: string): View | undefined {
   }
 }
 
-const SORTS = [
-  { value: "updated", label: "Recently updated" },
-  { value: "created", label: "Newest" },
-  { value: "priority", label: "Priority" },
-];
+const SORTS = ["updated", "created", "priority"] as const;
 /** What the address holds, read as a search; anything not recognised is left out, so a bad link shows everything. */
 function searchFrom(params: URLSearchParams): IssueSearch {
   const pick = <T extends string>(name: string, allowed: readonly T[]) => {
@@ -79,7 +62,9 @@ function searchFrom(params: URLSearchParams): IssueSearch {
   };
   const page = Number(params.get("page"));
   const assignee = params.get("assignee");
+  const status = params.get("status")?.trim();
   return {
+    status: status || undefined,
     category: pick(
       "category",
       CATEGORIES.map((c) => c.value),
@@ -88,17 +73,31 @@ function searchFrom(params: URLSearchParams): IssueSearch {
     priority: pick("priority", PRIORITIES),
     assignee: assignee === "me" || assignee === "none" ? assignee : undefined,
     q: params.get("q")?.trim() || undefined,
-    sort: pick(
-      "sort",
-      SORTS.map((s) => s.value as "updated" | "created" | "priority"),
-    ),
+    sort: pick("sort", SORTS),
     page: Number.isInteger(page) && page > 0 ? page : undefined,
   };
 }
 
+/** The filters, as a sentence: "Status is In progress and Category is To do". */
+function describe(search: IssueSearch): string {
+  const parts: string[] = appliedFields(search).map(
+    (field) => `${FIELD_LABELS[field]} is ${valueLabel(field, search[field] as string)}`,
+  );
+  if (search.assignee === "me") parts.push("Mine is on");
+  if (search.assignee === "none") parts.push("Unassigned is on");
+  return parts.join(" and ");
+}
+
+/** The search without its paging, sorting and size: what the counts take. */
+function countsSearch(search: IssueSearch): IssueSearch {
+  const { status, category, type, priority, assignee, q } = search;
+  return { status, category, type, priority, assignee, q };
+}
+
 /**
- * A project's Issues, narrowed by the filters in the address (so a filtered list can be shared and survives a
- * reload), each row opening the Issue. The Status filter waits for a way to list the project's Statuses.
+ * A project's Issues tab (design "Issues toolbar"), narrowed by the filters in the address (so a filtered view can be
+ * shared and survives a reload), in one of four views. A Status filter keeps every Board column but empties the
+ * others, so the layout doesn't move; filters or a search that match nothing say so over the empty columns.
  */
 export default function IssuesPage() {
   const { key = "" } = useParams();
@@ -119,11 +118,12 @@ export default function IssuesPage() {
     { ...search, page: undefined },
     grouped,
   );
-  const columns: Column[] = (statuses.data ?? []).map((status, index) => ({
-    status,
-    items: columnQueries[index]?.data?.items ?? [],
-    total: columnQueries[index]?.data?.total ?? 0,
-  }));
+  const counts = useIssueCounts(key, countsSearch(search));
+  // A column a Status filter hides is empty, whatever its query last held.
+  const columns: Column[] = (statuses.data ?? []).map((status, index) => {
+    const shown = columnShown(search, status) ? columnQueries[index]?.data : undefined;
+    return { status, items: shown?.items ?? [], total: shown?.total ?? 0 };
+  });
   const moveIssue = useMoveIssue();
   const failure =
     loadFailure(projectQuery) ??
@@ -131,7 +131,9 @@ export default function IssuesPage() {
       ? (loadFailure(statuses) ?? columnQueries.map(loadFailure).find((found) => found !== null))
       : loadFailure(query)) ??
     null;
-  const [creating, setCreating] = useState(false);
+  const { createIssue } = useProjectOutlet();
+  // The column whose Add issue opened Create Issue, for this project only.
+  const [addingTo, setAddingTo] = useState<{ project: string; status: ProjectStatus } | null>(null);
   const urlText = params.get("q") ?? "";
   const [text, setText] = useState(urlText);
   const [seenUrlText, setSeenUrlText] = useState(urlText);
@@ -173,28 +175,21 @@ export default function IssuesPage() {
 
   function change(name: string, value: string | null | undefined) {
     const next = new URLSearchParams(params);
-    if (value && value !== ANY) next.set(name, value);
+    if (value) next.set(name, value);
     else next.delete(name);
     if (name !== "page") next.delete("page");
     setParams(next);
   }
 
-  if (
-    projectQuery.error instanceof ApiError &&
-    projectQuery.error.status === 404 &&
-    !projectQuery.isFetching
-  ) {
-    return (
-      <StatusPage
-        eyebrow="Error 404"
-        title="Project not found."
-        body="Check the project link or ask a project Member for help."
-        code="404"
-        name="Not found"
-        actions={<PrimaryAction to="/projects">Go to Projects</PrimaryAction>}
-      />
-    );
+  /** Removes `names` from the address, starting again from the first page. */
+  function remove(names: readonly string[]) {
+    const next = new URLSearchParams(params);
+    for (const name of names) next.delete(name);
+    next.delete("page");
+    setParams(next);
   }
+
+  // An unknown project, or one the User isn't a Member of, is ProjectLayout's Project not found.
   if (failure) {
     return (
       <FailedLoadPage
@@ -214,12 +209,18 @@ export default function IssuesPage() {
   const data = query.data;
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
   const page = search.page ?? 0;
-  const filtered = Boolean(
-    search.category || search.type || search.priority || search.assignee || search.q,
-  );
-  const canCreate = project && !project.archived && permissions.canCreate;
+  const applied = appliedFields(search).length + (search.assignee ? 1 : 0);
+  const filtered = applied > 0;
+  const searching = search.q !== undefined;
+  // An Archived project takes no new Issues and no moves.
+  const archived = project?.archived ?? false;
+  const canCreate = project !== undefined && !archived && permissions.canCreate;
+  const canMove = (issue: Issue) => !archived && permissions.canEdit(issue);
   const loaded = grouped
-    ? statuses.data !== undefined && columnQueries.every((q) => q.data)
+    ? statuses.data !== undefined &&
+      statuses.data.every(
+        (status, index) => !columnShown(search, status) || columnQueries[index]?.data,
+      )
     : Boolean(data);
   const total = grouped
     ? columns.reduce((sum, column) => sum + column.total, 0)
@@ -237,226 +238,215 @@ export default function IssuesPage() {
     }
   }
 
-  function clearFilters() {
+  /** The menu filters and the quick filters, not the search (state 4's Clear filters). */
+  const clearFilters = () => remove([...FILTER_FIELDS, "assignee"]);
+  const clearSearch = () => {
     setText("");
-    setParams(view === "list" ? new URLSearchParams() : new URLSearchParams({ view }), {
-      replace: true,
-    });
-  }
-
-  const quick = (who: "me" | "none", label: string) => (
-    <Button
-      variant="default"
-      size="compact-md"
-      radius="xl"
-      className={classes.pill}
-      aria-pressed={search.assignee === who}
-      onClick={() => change("assignee", search.assignee === who ? null : who)}
-    >
-      {search.assignee === who && <IconCheck size={14} />}
-      {label}
-    </Button>
-  );
-  const categories = (
-    <div className={viewClasses.switch} role="group" aria-label="Status category">
-      {CATEGORIES.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          aria-pressed={search.category === option.value}
-          onClick={() => change("category", search.category === option.value ? null : option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-  const pill = (
-    name: string,
-    label: string,
-    options: { value: string; label: string }[],
-    value: string | undefined,
-  ) => (
-    <Select
-      aria-label={label}
-      placeholder={label}
-      data={options}
-      value={value ?? null}
-      onChange={(next) => change(name, next)}
-      clearable
-      radius="xl"
-      w={name === "category" ? 130 : 115}
-    />
-  );
-  const same = (list: readonly string[]) => list.map((value) => ({ value, label: value }));
-  const createButton = canCreate && (
-    <Button radius="xl" onClick={() => setCreating(true)}>
+    remove(["q"]);
+  };
+  // The header's Create Issue (ProjectLayout), offered again in an empty project.
+  const createButton = canCreate && createIssue && (
+    <Button radius="xl" onClick={createIssue}>
       Create Issue
     </Button>
   );
+  let nothing: ReactNode = null;
+  if (total === 0 && page === 0 && filtered) {
+    nothing = (
+      <NoMatch
+        title="No issues match these filters"
+        body={`${describe(search)}. Try removing ${applied > 1 ? "one" : "it"}.`}
+        action="Clear filters"
+        onAction={clearFilters}
+      />
+    );
+  } else if (total === 0 && page === 0 && searching) {
+    nothing = (
+      <NoMatch
+        title={`No issues match “${search.q}”`}
+        body={`Check the spelling or search for a key like ${project?.key ?? "NIM"}-14.`}
+        action="Clear search"
+        onAction={clearSearch}
+      />
+    );
+  }
+  const addTo =
+    canCreate && project
+      ? (status: ProjectStatus) => setAddingTo({ project: project.key, status })
+      : undefined;
 
+  // Under the project's header and tabs (ProjectLayout), which hold the breadcrumb, the title and Create Issue.
   return (
-    <Container size={view === "board" || view === "swimlanes" ? "xl" : "lg"} px={0} py="xl">
-      <Stack gap="lg">
-        <BreadcrumbTrail
-          crumbs={[
-            { label: "Projects", to: "/projects" },
-            project
-              ? { label: project.name, to: `/projects/${encodeURIComponent(project.key)}` }
-              : { label: "", pending: true },
-            { label: "Issues" },
-          ]}
+    <>
+      <IssueToolbar
+        search={search}
+        statuses={statuses.data ?? []}
+        counts={counts.data}
+        text={text}
+        onText={(next) => {
+          setText(next);
+          if (!next) remove(["q"]);
+        }}
+        view={view}
+        onView={chooseView}
+        onFilter={(name: FilterField | "assignee", value) => change(name, value)}
+        onClearMenu={() => remove(FILTER_FIELDS)}
+      />
+      {refreshFailed(query) && (
+        <StaleNotice
+          title="Couldn't refresh these Issues"
+          shown="the last loaded list"
+          onRetry={() => void query.refetch()}
         />
-        <div className={classes.header}>
-          <Title order={1} fz={40} lh={1.1}>
-            Issues
+      )}
+      {project && addingTo?.project === project.key && (
+        <NewIssueForm
+          opened
+          projectKey={project.key}
+          projectName={project.name}
+          status={addingTo.status}
+          onClose={() => setAddingTo(null)}
+        />
+      )}
+      {!loaded ? (
+        <Loading>
+          <ViewSkeleton view={view} />
+        </Loading>
+      ) : total === 0 && page === 0 && !filtered && !searching ? (
+        <div className={classes.blank}>
+          <div className={classes.bar} style={{ width: 200 }} />
+          <div className={classes.bar} style={{ width: 144 }} />
+          <div className={classes.bar} style={{ width: 88 }} />
+          <Title order={2} fz={24} mt="sm">
+            No Issues yet
           </Title>
-          <Group gap="sm">
-            <div className={viewClasses.switch} role="group" aria-label="View">
-              {VIEWS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={view === option.value}
-                  onClick={() => chooseView(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            {/* An Archived project takes no new Issues. */}
-            {createButton}
-          </Group>
+          <Text c="dimmed">Create the first one. Statuses are set up with it.</Text>
+          {createButton}
         </div>
-        {project && (
-          <NewIssueForm
-            opened={creating}
-            projectKey={project.key}
-            projectName={project.name}
-            onClose={() => setCreating(false)}
-          />
-        )}
-        <div className={classes.filters}>
-          <TextInput
-            aria-label="Title"
-            placeholder="Search titles"
-            className={classes.search}
-            radius="xl"
-            leftSection={<IconSearch size={14} />}
-            value={text}
-            onChange={(event) => setText(event.currentTarget.value)}
-          />
-          {quick("me", "Assigned to me")}
-          {quick("none", "Unassigned")}
-          {categories}
-          {pill("type", "Type", same(TYPES), search.type)}
-          {pill("priority", "Priority", same(PRIORITIES), search.priority)}
-          {filtered && (
-            <Button
-              variant="transparent"
-              size="compact-sm"
-              className={classes.sort}
-              onClick={clearFilters}
-            >
-              Clear filters
-            </Button>
+      ) : view === "board" || view === "swimlanes" ? (
+        // The columns stay, with 0 in each, under a message when nothing matches, so the layout doesn't jump.
+        <div className={classes.over}>
+          {view === "board" ? (
+            <IssueBoard
+              columns={columns}
+              onMove={(key, status) => void move(key, status)}
+              canMove={canMove}
+              onAdd={addTo}
+            />
+          ) : (
+            <IssueSwimlanes
+              columns={columns}
+              onMove={(key, status) => void move(key, status)}
+              canMove={canMove}
+            />
           )}
+          {nothing}
         </div>
-        {refreshFailed(query) && (
-          <Alert color="yellow" title="Couldn't refresh these Issues">
-            Showing the last loaded list.{" "}
-            <Button variant="subtle" size="compact-sm" onClick={() => void query.refetch()}>
-              Try again
-            </Button>
-          </Alert>
-        )}
-        {!loaded ? (
-          <Loading>
-            <ProjectListSkeleton />
-          </Loading>
-        ) : total === 0 && !filtered ? (
-          <div className={classes.blank}>
-            <div className={classes.bar} style={{ width: 200 }} />
-            <div className={classes.bar} style={{ width: 144 }} />
-            <div className={classes.bar} style={{ width: 88 }} />
-            <Title order={2} fz={24} mt="sm">
-              No Issues yet
-            </Title>
-            <Text c="dimmed">Create the first one. Statuses are set up with it.</Text>
-            {createButton}
+      ) : nothing ? (
+        nothing
+      ) : view === "list" ? (
+        <IssueGroups columns={columns.filter((column) => columnShown(search, column.status))} />
+      ) : (
+        <>
+          <Panel p={8}>
+            {data && data.items.length > 0 ? (
+              <IssueTable
+                issues={data.items}
+                sort={search.sort ?? "updated"}
+                onSort={(sort) => change("sort", sort === "updated" ? null : sort)}
+              />
+            ) : (
+              <p className={classes.empty}>This page has no Issues.</p>
+            )}
+          </Panel>
+          <div className={classes.footer}>
+            <span aria-live="polite">
+              {!data || data.items.length === 0
+                ? `${total} Issues`
+                : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + data.items.length} of ${data.total}`}
+            </span>
+            {(pages > 1 || page > 0) && (
+              <Group gap="xs">
+                <Button
+                  variant="default"
+                  radius="xl"
+                  size="compact-md"
+                  disabled={page === 0}
+                  onClick={() => change("page", page > 1 ? String(page - 1) : null)}
+                >
+                  ← Prev
+                </Button>
+                <Button
+                  variant="default"
+                  radius="xl"
+                  size="compact-md"
+                  disabled={page + 1 >= pages}
+                  onClick={() => change("page", String(page + 1))}
+                >
+                  Next →
+                </Button>
+              </Group>
+            )}
           </div>
-        ) : total === 0 && page === 0 ? (
-          <div className={classes.blank}>
-            <div className={classes.bar} style={{ width: 200 }} />
-            <div className={classes.bar} style={{ width: 144 }} />
-            <div className={classes.bar} style={{ width: 88 }} />
-            <Title order={2} fz={24} mt="sm">
-              No Issues match these filters
-            </Title>
-            <Text c="dimmed">Try fewer filters or a different search.</Text>
-            <Button variant="default" radius="xl" onClick={clearFilters}>
-              Clear filters
-            </Button>
+        </>
+      )}
+    </>
+  );
+}
+
+/** Nothing matches (states 4 and 4b): what was asked, and the one action that undoes it. */
+function NoMatch({
+  title,
+  body,
+  action,
+  onAction,
+}: {
+  title: string;
+  body: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <div className={classes.noMatch} role="status">
+      <span className={classes.noMatchIcon} aria-hidden>
+        <IconZoomCancel size={18} />
+      </span>
+      <h2>{title}</h2>
+      <p>{body}</p>
+      <Button variant="default" radius="xl" onClick={onAction}>
+        {action}
+      </Button>
+    </div>
+  );
+}
+
+/** The shape of the view on its way, so nothing jumps when the Issues arrive (state 6). */
+function ViewSkeleton({ view }: { view: View }) {
+  if (view === "board" || view === "swimlanes") {
+    return (
+      <div className={classes.skeletonBoard}>
+        {[3, 2, 2, 1].map((cards, column) => (
+          <div key={column} className={classes.skeletonColumn}>
+            <Bone width={70} height={22} radius={999} />
+            {Array.from({ length: cards }, (_, card) => (
+              <div key={card} className={classes.skeletonCard}>
+                <Bone width="80%" height={12} />
+                <Bone width={60} height={10} />
+              </div>
+            ))}
           </div>
-        ) : view === "board" ? (
-          <IssueBoard
-            columns={columns}
-            onMove={(key, status) => void move(key, status)}
-            canMove={permissions.canEdit}
-          />
-        ) : view === "swimlanes" ? (
-          <IssueSwimlanes
-            columns={columns}
-            onMove={(key, status) => void move(key, status)}
-            canMove={permissions.canEdit}
-          />
-        ) : view === "list" ? (
-          <IssueGroups columns={columns} />
-        ) : (
-          <>
-            <Panel p={8}>
-              {data && data.items.length > 0 ? (
-                <IssueTable
-                  issues={data.items}
-                  sort={search.sort ?? "updated"}
-                  onSort={(sort) => change("sort", sort === "updated" ? null : sort)}
-                />
-              ) : (
-                <p className={classes.empty}>This page has no Issues.</p>
-              )}
-            </Panel>
-            <div className={classes.footer}>
-              <span aria-live="polite">
-                {!data || data.items.length === 0
-                  ? `${total} Issues`
-                  : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + data.items.length} of ${data.total}`}
-              </span>
-              {(pages > 1 || page > 0) && (
-                <Group gap="xs">
-                  <Button
-                    variant="default"
-                    radius="xl"
-                    size="compact-md"
-                    disabled={page === 0}
-                    onClick={() => change("page", page > 1 ? String(page - 1) : null)}
-                  >
-                    ← Prev
-                  </Button>
-                  <Button
-                    variant="default"
-                    radius="xl"
-                    size="compact-md"
-                    disabled={page + 1 >= pages}
-                    onClick={() => change("page", String(page + 1))}
-                  >
-                    Next →
-                  </Button>
-                </Group>
-              )}
-            </div>
-          </>
-        )}
-      </Stack>
-    </Container>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <Panel p={8}>
+      {Array.from({ length: 6 }, (_, row) => (
+        <div key={row} className={classes.skeletonRow}>
+          <Bone width={40} height={12} />
+          <Bone width={`${50 - row * 4}%`} height={12} />
+        </div>
+      ))}
+    </Panel>
   );
 }

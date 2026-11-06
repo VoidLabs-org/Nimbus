@@ -23,6 +23,7 @@ import { api, type IssuePage, type Project, type ProjectStatus } from "../api/cl
 import { createQueryClient } from "../api/queryClient";
 import { SessionContext, type Session } from "../auth/useSession";
 import StatusesPage from "./StatusesPage";
+import { ProjectLayout } from "../projects/ProjectLayout";
 
 const project: Project = {
   id: "p1",
@@ -78,7 +79,9 @@ function show() {
         <SessionContext value={session}>
           <MemoryRouter initialEntries={["/projects/NIM/settings/statuses"]}>
             <Routes>
-              <Route path="/projects/:key/settings/statuses" element={<StatusesPage />} />
+              <Route path="/projects/:key" element={<ProjectLayout />}>
+                <Route path="settings/statuses" element={<StatusesPage />} />
+              </Route>
             </Routes>
           </MemoryRouter>
         </SessionContext>

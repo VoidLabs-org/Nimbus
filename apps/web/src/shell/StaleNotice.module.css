@@ -1,0 +1,36 @@
+/* The failed-refresh line: outlined and muted, so it is noticed without taking over the page. Colours come only from
+   the theme variables. */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--color-accent-2-700);
+}
+
+.notice strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.icon {
+  flex: none;
+  color: var(--color-accent-600);
+}
+
+.retry {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}

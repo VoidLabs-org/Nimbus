@@ -16,6 +16,7 @@ import {
   type KeyboardCoordinateGetter,
 } from "@dnd-kit/core";
 import { VisuallyHidden } from "@mantine/core";
+import { IconPlus } from "@tabler/icons-react";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -191,28 +192,39 @@ function useStatusArea(id: string, status: ProjectStatus) {
   return useDroppable({ id, data: { status } });
 }
 
-/** The Board: a column for each Status, in order. Dropping a card on a column moves the Issue to that Status. */
+/**
+ * The Board: a column for each Status, in order. Dropping a card on a column moves the Issue to that Status. With
+ * `onAdd`, each column ends with "Add issue", which creates an Issue straight in that Status.
+ */
 export function IssueBoard({
   columns,
   onMove,
   canMove = () => true,
+  onAdd,
 }: {
   columns: Column[];
   onMove: MoveIssue;
   canMove?: CanMove;
+  onAdd?: (status: ProjectStatus) => void;
 }) {
   return (
     <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove} canMove={canMove}>
       <div className={classes.board}>
         {columns.map((column) => (
-          <BoardColumn key={column.status.id} column={column} />
+          <BoardColumn key={column.status.id} column={column} onAdd={onAdd} />
         ))}
       </div>
     </DragBoard>
   );
 }
 
-function BoardColumn({ column }: { column: Column }) {
+function BoardColumn({
+  column,
+  onAdd,
+}: {
+  column: Column;
+  onAdd?: (status: ProjectStatus) => void;
+}) {
   const { setNodeRef, isOver } = useStatusArea(column.status.id, column.status);
   return (
     <section
@@ -234,6 +246,17 @@ function BoardColumn({ column }: { column: Column }) {
         <div className={classes.more}>
           Showing {column.items.length} of {column.total}
         </div>
+      )}
+      {onAdd && (
+        <button
+          type="button"
+          className={classes.add}
+          aria-label={`Add issue to ${column.status.name}`}
+          onClick={() => onAdd(column.status)}
+        >
+          <IconPlus size={14} aria-hidden />
+          Add issue
+        </button>
       )}
     </section>
   );
@@ -280,9 +303,7 @@ export function IssueSwimlanes({
         className={classes.lanes}
         style={{ gridTemplateColumns: `140px repeat(${columns.length}, minmax(200px, 1fr))` }}
       >
-        <div className={classes.columnHead}>
-          Group by&nbsp;<b>Assignee</b>
-        </div>
+        <div className={`${classes.columnHead} ${classes.laneLabel}`}>Assignee</div>
         {columns.map((column) => (
           <div key={column.status.id} className={`${classes.columnHead} ${classes.statusHead}`}>
             <StatusPill status={column.status} />

@@ -79,7 +79,8 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
     <ActionIcon
       variant="subtle"
       color="gray"
-      size="lg"
+      size={44}
+      radius="xl"
       className={classes.bell}
       aria-label={`Notifications, ${unread} unread`}
       aria-expanded={opened}
@@ -93,11 +94,12 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
   );
   const panel = (
     <div className={classes.panel}>
-      <Group justify="space-between" p="md">
-        <Text fw={650}>Notifications</Text>
+      <Group justify="space-between" className={classes.header}>
+        <Text className={classes.title}>Notifications</Text>
         <Button
           variant="subtle"
-          size="compact-xs"
+          size="compact-sm"
+          className={classes.markAll}
           disabled={!hasUnread}
           loading={readAll.isPending}
           onClick={() => readAll.mutate()}
@@ -168,36 +170,49 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
                       <Glyph icon={IconShieldLock} size={20} />
                     </span>
                   )}
-                  <span className={classes.rowText}>
-                    {isIssueRow(item.type) ? (
-                      <span>
+                  {isIssueRow(item.type) ? (
+                    <span className={classes.rowText}>
+                      <span className={classes.headline}>
                         <strong>{item.snapshot.actorName}</strong> {issueVerb(item)}{" "}
-                        <strong>
-                          {item.snapshot.issueKey} · {item.snapshot.title}
-                        </strong>
-                        {item.type === "ISSUE_STATUS_CHANGED" &&
-                          item.snapshot.fromStatus &&
-                          item.snapshot.toStatus && (
-                            <>
-                              {" "}
-                              {item.snapshot.fromStatus} → {item.snapshot.toStatus}
-                            </>
-                          )}
+                        <span className={classes.key}>{item.snapshot.issueKey}</span>
+                      </span>{" "}
+                      <span
+                        className={classes.detail}
+                        data-deleted={item.type === "ISSUE_DELETED" || undefined}
+                      >
+                        {item.snapshot.title}
                       </span>
-                    ) : (
-                      <>
+                      {item.type === "ISSUE_STATUS_CHANGED" &&
+                        item.snapshot.fromStatus &&
+                        item.snapshot.toStatus && (
+                          <span className={classes.move}>
+                            {" "}
+                            <span className={classes.status}>
+                              {item.snapshot.fromStatus}
+                            </span> →{" "}
+                            <span className={classes.status}>{item.snapshot.toStatus}</span>
+                          </span>
+                        )}
+                    </span>
+                  ) : (
+                    <span className={classes.rowText}>
+                      <span className={classes.headline}>
                         <strong>{item.snapshot.title}</strong>
-                        <span>{item.snapshot.detail ?? item.snapshot.deviceLabel}</span>
-                      </>
-                    )}
+                      </span>{" "}
+                      <span className={classes.detail}>
+                        {item.snapshot.detail ?? item.snapshot.deviceLabel}
+                      </span>
+                    </span>
+                  )}{" "}
+                  <span className={classes.meta}>
                     <time
                       dateTime={item.createdAt}
                       title={new Date(item.createdAt).toLocaleString()}
                     >
                       {timeAgo(item.createdAt)}
                     </time>
+                    {!item.read && <span className={classes.dot} aria-label="Unread" />}
                   </span>
-                  {!item.read && <span className={classes.dot} aria-label="Unread" />}
                 </UnstyledButton>
               ))}
             </section>
@@ -224,12 +239,12 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
           </Text>
         )}
       </div>
-      <Group justify="space-between" p="md" className={classes.footer}>
-        <Text size="xs">Kept for 90 days</Text>
+      <Group justify="space-between" className={classes.footer}>
+        <Text inherit>Kept for 90 days</Text>
         <Anchor
           component={Link}
           to="/settings/notifications"
-          size="xs"
+          inherit
           onClick={() => setOpened(false)}
         >
           Email settings
@@ -260,7 +275,7 @@ export function NotificationBell({ position }: { position: PopoverProps["positio
       opened={opened}
       onChange={setOpened}
       position={position}
-      width={400}
+      width={420}
       trapFocus
       shadow="md"
     >

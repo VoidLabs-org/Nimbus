@@ -47,29 +47,30 @@
   box-shadow: 0 0 0 1px var(--line);
 }
 
+/* Signal bars: the lit ones in the priority's colour, the rest a faint line colour. */
 .priority {
-  display: inline-flex;
   flex: none;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  font-size: 10px;
-  letter-spacing: -1px;
-  color: var(--color-accent-500);
+  display: block;
+}
+
+.priority rect {
+  fill: var(--line-strong);
+}
+
+.priority rect[data-lit] {
+  fill: currentColor;
 }
 
 .urgent {
   color: #e5484d;
 }
 
-.medium,
-.low {
-  color: var(--color-accent-2-500);
+.high {
+  color: var(--color-accent-500);
 }
 
-.medium {
-  font-size: 14px;
-  letter-spacing: 0;
+.low {
+  color: var(--color-accent-2-500);
 }
 
 .priorityRow {

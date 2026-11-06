@@ -6,7 +6,7 @@ import { toast } from "@repo/ui/toast";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { WindowFrame } from "../access/WindowFrame";
-import { api, type Issue } from "../api/client";
+import { api, type Issue, type ProjectStatus } from "../api/client";
 import { useIssueCreated } from "../api/queries";
 import { useSession } from "../auth/useSession";
 import { PriorityMark, TypeBadge } from "./IssueMarks";
@@ -28,7 +28,8 @@ const initialValues = {
 
 /**
  * The Create Issue window: creates an Issue in a project, then opens it, or, with "Create another", stays for the next
- * one. Until the project's Members can be listed, the only Assignee on offer is the User themself. Closing the window
+ * one. Opened from a Board column's Add issue (`status`), the Issue starts in that Status and the User stays on the
+ * Board. Until the project's Members can be listed, the only Assignee on offer is the User themself. Closing the window
  * clears it, and a create that finishes after it closed or the User went to another page doesn't pull them back.
  */
 /** Nothing is mounted while the window is closed, so a page that offers it doesn't need a Session until it opens. */
@@ -36,6 +37,8 @@ export function NewIssueForm(props: {
   opened: boolean;
   projectKey: string;
   projectName?: string;
+  /** The Status to start in; the project's first To do Status when left out. */
+  status?: ProjectStatus;
   onClose: () => void;
 }) {
   return props.opened ? <CreateIssueWindow {...props} /> : null;
@@ -45,11 +48,13 @@ function CreateIssueWindow({
   opened,
   projectKey,
   projectName,
+  status,
   onClose,
 }: {
   opened: boolean;
   projectKey: string;
   projectName?: string;
+  status?: ProjectStatus;
   onClose: () => void;
 }) {
   const navigate = useNavigate();
@@ -85,6 +90,7 @@ function CreateIssueWindow({
         description: values.description || null,
         priority: values.priority,
         assigneeId: values.assigneeId === UNASSIGNED ? null : values.assigneeId,
+        statusId: status?.id ?? null,
       });
       issueCreated(issue);
       toast.success(`${issue.key} created.`);
@@ -94,7 +100,8 @@ function CreateIssueWindow({
         return;
       }
       close();
-      navigate(`/issues/${encodeURIComponent(issue.key)}`);
+      // Added to a Board column: the card shows there, so the User stays on the Board.
+      if (!status) navigate(`/issues/${encodeURIComponent(issue.key)}`);
     } catch (error) {
       const message =
         error instanceof ApiError ? error.message : "Couldn't create your Issue. Please try again.";
@@ -102,6 +109,11 @@ function CreateIssueWindow({
         toast.error(message);
       } else if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) {
         form.setErrors(error.fieldErrors);
+        // An error on a field the window doesn't show (the column's Status, gone meanwhile) still needs saying.
+        const unshown = Object.entries(error.fieldErrors).find(
+          ([field]) => !(field in form.values),
+        );
+        if (unshown) setFailure(unshown[1]);
       } else {
         setFailure(message);
       }
@@ -113,7 +125,13 @@ function CreateIssueWindow({
       opened={opened}
       onClose={close}
       title="Create Issue"
-      subtitle={projectName ? `In ${projectName}` : undefined}
+      subtitle={
+        projectName
+          ? `In ${projectName}${status ? ` · ${status.name}` : ""}`
+          : status
+            ? `In ${status.name}`
+            : undefined
+      }
     >
       <form onSubmit={(event) => form.onSubmit(submit)(event)}>
         <div className={classes.form}>

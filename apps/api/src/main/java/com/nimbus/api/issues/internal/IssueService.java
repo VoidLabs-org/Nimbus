@@ -68,7 +68,11 @@ class IssueService implements Issues {
 		}
 
 		var number = nextNumber(project.id());
-		var statusId = firstToDoStatus(project.id());
+		// A Status chosen on create (a Board column's Add issue) must be one of the project's own.
+		var statusId = input.statusId() == null ? firstToDoStatus(project.id())
+				: jdbc.sql("SELECT id FROM issue_statuses WHERE id = :id AND project_id = :project")
+					.param("id", input.statusId()).param("project", project.id()).query(UUID.class).optional()
+					.orElseThrow(() -> new InvalidField("statusId", "Choose one of the project's Statuses"));
 		var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 		var id = UUID.randomUUID();
 		jdbc.sql("""
@@ -354,22 +358,119 @@ class IssueService implements Issues {
 		var project = projects.findByKey(projectKey).orElseThrow(() -> new NotFound("Project not found"));
 		access.require(actor, project.id(), IssueAccess.Action.VIEW);
 
-		var where = new StringBuilder("WHERE i.project_id = :project");
 		var params = new java.util.HashMap<String, Object>();
-		params.put("project", project.id());
+		var where = where(project.id(), filter, null, params);
+
+		var total = jdbc.sql(COUNT + where).params(params).query(Long.class).single();
+		var order = switch (filter.sort()) {
+			case "created" -> "i.created_at DESC, i.number DESC";
+			case "priority" -> "CASE i.priority WHEN 'Urgent' THEN 0 WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END, "
+					+ "i.updated_at DESC, i.number DESC";
+			default -> "i.updated_at DESC, i.number DESC";
+		};
+		params.put("limit", filter.size());
+		params.put("offset", (long) filter.page() * filter.size());
+		var items = load(SELECT + where + " ORDER BY " + order + " LIMIT :limit OFFSET :offset", params, project);
+		return new IssuePageView(items, total, filter.page(), filter.size());
+	}
+
+	/**
+	 * How many of the project's Issues match the filters, and how many each value of Status, category, type and
+	 * priority would match. A field's counts leave out that field's own filter, so with Type Bug chosen the other
+	 * types still show what choosing them instead would give. Values no Issue has are left out (zero). Sorting and
+	 * paging don't apply. Unknown and non-Member projects are both "not found".
+	 */
+	IssueCountsView counts(UUID actor, String projectKey, IssueFilter filter) {
+		var project = projects.findByKey(projectKey).orElseThrow(() -> new NotFound("Project not found"));
+		access.require(actor, project.id(), IssueAccess.Action.VIEW);
+
+		// One pass: the filters that narrow every count (assignee, words) go in WHERE; the four fields' filters go in
+		// FILTER clauses, each field's own left out of its counts. GROUPING SETS gives a row per value of each field.
+		var params = new java.util.HashMap<String, Object>();
+		var base = where(project.id(), filter, "*", params);
+		var facets = new java.util.LinkedHashMap<String, String>();
 		if (filter.status() != null) {
-			where.append(" AND lower(s.name) = lower(:status)");
+			facets.put("status", "lower(s.name) = lower(:status)");
 			params.put("status", filter.status());
 		}
 		if (filter.category() != null) {
-			where.append(" AND s.category = :category");
+			facets.put("category", "s.category = :category");
 			params.put("category", filter.category());
 		}
 		if (filter.type() != null) {
-			where.append(" AND i.type = :type");
+			facets.put("type", "i.type = :type");
 			params.put("type", filter.type());
 		}
 		if (filter.priority() != null) {
+			facets.put("priority", "i.priority = :priority");
+			params.put("priority", filter.priority());
+		}
+		var sql = "SELECT GROUPING(i.status_id) AS by_status, GROUPING(s.category) AS by_category, "
+				+ "GROUPING(i.type) AS by_type, GROUPING(i.priority) AS by_priority, "
+				+ "i.status_id::text AS status, s.category, i.type, i.priority, "
+				+ "count(*) FILTER (WHERE " + allBut(facets, null) + ") AS total, "
+				+ "count(*) FILTER (WHERE " + allBut(facets, "status") + ") AS n_status, "
+				+ "count(*) FILTER (WHERE " + allBut(facets, "category") + ") AS n_category, "
+				+ "count(*) FILTER (WHERE " + allBut(facets, "type") + ") AS n_type, "
+				+ "count(*) FILTER (WHERE " + allBut(facets, "priority") + ") AS n_priority "
+				+ JOINED + base
+				+ " GROUP BY GROUPING SETS ((i.status_id), (s.category), (i.type), (i.priority), ())";
+		var total = new long[1];
+		var statuses = new java.util.LinkedHashMap<String, Long>();
+		var categories = new java.util.LinkedHashMap<String, Long>();
+		var types = new java.util.LinkedHashMap<String, Long>();
+		var priorities = new java.util.LinkedHashMap<String, Long>();
+		jdbc.sql(sql).params(params).query((row, index) -> {
+			if (row.getInt("by_status") == 0) put(statuses, row.getString("status"), row.getLong("n_status"));
+			else if (row.getInt("by_category") == 0) put(categories, row.getString("category"), row.getLong("n_category"));
+			else if (row.getInt("by_type") == 0) put(types, row.getString("type"), row.getLong("n_type"));
+			else if (row.getInt("by_priority") == 0) put(priorities, row.getString("priority"), row.getLong("n_priority"));
+			else total[0] = row.getLong("total");
+			return null;
+		}).list();
+		return new IssueCountsView(total[0], statuses, categories, types, priorities);
+	}
+
+	/** Every field filter but {@code field}'s, joined with AND; TRUE when none is left. */
+	private static String allBut(Map<String, String> facets, String field) {
+		var kept = facets.entrySet().stream().filter(entry -> !entry.getKey().equals(field)).map(Map.Entry::getValue)
+			.toList();
+		return kept.isEmpty() ? "TRUE" : String.join(" AND ", kept);
+	}
+
+	/** Values with no match are left out. */
+	private static void put(Map<String, Long> counts, String value, long count) {
+		if (count > 0) counts.put(value, count);
+	}
+
+	private static boolean keep(String field, String skip) {
+		return skip == null || !(skip.equals(field) || skip.equals("*"));
+	}
+
+	private static final String JOINED = "FROM issues i JOIN issue_statuses s ON s.id = i.status_id ";
+
+	private static final String COUNT = "SELECT count(*) " + JOINED;
+
+	/**
+	 * The WHERE clause for the project's Issues matching {@code filter}, its values put in {@code params}.
+	 * {@code skip} names one of status, category, type and priority to leave out, or {@code *} for all four.
+	 */
+	private static String where(UUID projectId, IssueFilter filter, String skip, Map<String, Object> params) {
+		var where = new StringBuilder("WHERE i.project_id = :project");
+		params.put("project", projectId);
+		if (filter.status() != null && keep("status", skip)) {
+			where.append(" AND lower(s.name) = lower(:status)");
+			params.put("status", filter.status());
+		}
+		if (filter.category() != null && keep("category", skip)) {
+			where.append(" AND s.category = :category");
+			params.put("category", filter.category());
+		}
+		if (filter.type() != null && keep("type", skip)) {
+			where.append(" AND i.type = :type");
+			params.put("type", filter.type());
+		}
+		if (filter.priority() != null && keep("priority", skip)) {
 			where.append(" AND i.priority = :priority");
 			params.put("priority", filter.priority());
 		}
@@ -385,19 +486,7 @@ class IssueService implements Issues {
 			where.append(" AND i.title ILIKE :word").append(index).append(" ESCAPE '\\'");
 			params.put("word" + index, "%" + words.get(index).replaceAll("([\\\\%_])", "\\\\$1") + "%");
 		}
-
-		var total = jdbc.sql("SELECT count(*) FROM issues i JOIN issue_statuses s ON s.id = i.status_id " + where)
-			.params(params).query(Long.class).single();
-		var order = switch (filter.sort()) {
-			case "created" -> "i.created_at DESC, i.number DESC";
-			case "priority" -> "CASE i.priority WHEN 'Urgent' THEN 0 WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END, "
-					+ "i.updated_at DESC, i.number DESC";
-			default -> "i.updated_at DESC, i.number DESC";
-		};
-		params.put("limit", filter.size());
-		params.put("offset", (long) filter.page() * filter.size());
-		var items = load(SELECT + where + " ORDER BY " + order + " LIMIT :limit OFFSET :offset", params, project);
-		return new IssuePageView(items, total, filter.page(), filter.size());
+		return where.toString();
 	}
 
 	/**
@@ -446,6 +535,11 @@ class IssueService implements Issues {
 	}
 
 	record IssuePageView(List<IssueView> items, long total, int page, int size) {
+	}
+
+	/** Matching Issues, and per value of each field; {@code statuses} is keyed by Status id. */
+	record IssueCountsView(long total, Map<String, Long> statuses, Map<String, Long> categories,
+			Map<String, Long> types, Map<String, Long> priorities) {
 	}
 
 	/** {@code null} leaves a field as it is; an empty description clears it. */
@@ -512,7 +606,9 @@ class IssueService implements Issues {
 	private record HistoryRow(UUID id, UUID actorId, Instant at, String field, String before, String after) {
 	}
 
-	record NewIssue(String type, String title, String description, String priority, UUID assigneeId) {
+	/** {@code statusId} null starts the Issue in the project's first To do Status. */
+	record NewIssue(String type, String title, String description, String priority, UUID assigneeId,
+			UUID statusId) {
 	}
 
 	private record Row(UUID id, int number, String type, String title, String description, String priority,

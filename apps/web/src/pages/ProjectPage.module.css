@@ -1,0 +1,19 @@
+/* A project's Overview tab, under the shared header (ProjectLayout). Colours come only from the theme variables. */
+.about {
+  padding: 20px 24px;
+  border-radius: 24px;
+  background: var(--color-surface);
+}
+
+.description {
+  max-width: 640px;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.description[data-empty] {
+  color: var(--color-accent-2-700);
+}

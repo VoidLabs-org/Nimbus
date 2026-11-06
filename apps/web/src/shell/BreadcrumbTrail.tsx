@@ -18,11 +18,18 @@ const NARROW = "(max-width: 36em)";
  * dots menu and adds an "up" button to the parent. Built by hand rather than on Mantine's Breadcrumbs, which is a
  * plain div: this one is a nav with an ordered list and marks the current page.
  */
-export function BreadcrumbTrail({ crumbs: path }: { crumbs: Crumb[] }) {
+export function BreadcrumbTrail({
+  crumbs: path,
+  tabTitle,
+}: {
+  crumbs: Crumb[];
+  /** The Desktop app's Tab name, when the last crumb alone doesn't say enough (null while it loads). */
+  tabTitle?: string | null;
+}) {
   const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
   // Inside the Desktop app's Settings overlay, its list stands in for the Settings overview (see overlayCrumbs).
   const crumbs = useSettingsOverlay() === "inside" ? overlayCrumbs(path) : path;
-  useTabTitle(path);
+  useTabTitle(path, tabTitle);
   const loading = crumbs.some((crumb) => crumb.pending);
   const { shown, hidden, up } = collapseCrumbs(crumbs, narrow);
   // The menu lists the folded steps that go somewhere, once each: a placeholder or the page itself has no link, and

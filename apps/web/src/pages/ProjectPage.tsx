@@ -1,128 +1,53 @@
-import { ApiError } from "@repo/api";
-import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
-import { Panel } from "@repo/ui/panel";
+import { Stack } from "@mantine/core";
 import { Bone, Loading } from "@repo/ui/skeleton";
-import { Tag } from "@repo/ui/tag";
-import { useState } from "react";
-import { Link, useParams } from "react-router";
-import { loadFailure, refreshFailed, useProject } from "../api/queries";
-import { NewIssueForm } from "../issues/NewIssueForm";
-import { useIssuePermissions } from "../issues/useIssuePermissions";
-import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
-import { PrimaryAction, StatusPage } from "../shell/StatusPage";
-import { FailedLoadPage } from "../shell/StatusPages";
+import { Navigate, useLocation, useParams } from "react-router";
+import { refreshFailed, useProject } from "../api/queries";
+import classes from "./ProjectPage.module.css";
+import { StaleNotice } from "../shell/StaleNotice";
 
-/** Read-only project details. Editing and archiving belong to the following tickets. */
+/** `/projects/:key`: a project opens on its Issues tab, keeping any query string (`?view=board`). */
+export function ProjectHome() {
+  const { key = "" } = useParams();
+  const { search } = useLocation();
+  return <Navigate to={`/projects/${encodeURIComponent(key)}/issues${search}`} replace />;
+}
+
+/**
+ * A project's Overview tab: its description, under the header and tabs that ProjectLayout draws (which also says
+ * when the project can't be found). Editing and archiving belong to the following tickets.
+ */
 export default function ProjectPage() {
   const { key = "" } = useParams();
   const query = useProject(key);
   const project = query.data;
-  const permissions = useIssuePermissions(project?.key);
-  const failure = loadFailure(query);
-  // The project the form is open for, so a form opened on one project is not still open on another.
-  const [creatingIssueIn, setCreatingIssueIn] = useState<string | null>(null);
-  const creatingIssue = project !== undefined && creatingIssueIn === project.key;
-
-  // A project that is unknown and one the User cannot see have exactly the same page.
-  if (query.error instanceof ApiError && query.error.status === 404 && !query.isFetching) {
+  // ProjectLayout says when the project can't be found or loaded; until it arrives, the description's shape.
+  if (!project) {
     return (
-      <StatusPage
-        eyebrow="Error 404"
-        title="Project not found."
-        body="Check the project link or ask a project Member for help."
-        code="404"
-        name="Not found"
-        actions={<PrimaryAction to="/projects">Go to Projects</PrimaryAction>}
-      />
+      <Loading>
+        <section className={classes.about}>
+          <Stack gap={10}>
+            <Bone width="70%" height={16} />
+            <Bone width="45%" height={16} />
+          </Stack>
+        </section>
+      </Loading>
     );
   }
-  if (failure) return <FailedLoadPage failure={failure} onRetry={() => void query.refetch()} />;
 
   return (
-    <Container size="md" px={0} py="xl">
-      <Stack gap="lg">
-        <BreadcrumbTrail
-          crumbs={[
-            { label: "Projects", to: "/projects" },
-            project ? { label: project.name } : { label: "", pending: true },
-          ]}
+    <>
+      {refreshFailed(query) && (
+        <StaleNotice
+          title="Couldn't refresh this project"
+          shown="the last loaded details"
+          onRetry={() => void query.refetch()}
         />
-        {!project ? (
-          <Loading>
-            <Stack gap="lg">
-              <Bone width="55%" height={44} />
-              <Panel p="xl">
-                <Stack>
-                  <Bone width={80} height={24} />
-                  <Bone height={18} />
-                  <Bone width="70%" height={18} />
-                </Stack>
-              </Panel>
-            </Stack>
-          </Loading>
-        ) : (
-          <>
-            {refreshFailed(query) && (
-              <Alert color="yellow" title="Couldn't refresh this project">
-                Showing the last loaded details.{" "}
-                <Button variant="subtle" size="compact-sm" onClick={() => void query.refetch()}>
-                  Try again
-                </Button>
-              </Alert>
-            )}
-            <Group gap="sm" justify="space-between">
-              <Group gap="sm">
-                <Tag>{project.key}</Tag>
-                {project.archived && <Tag>Archived</Tag>}
-              </Group>
-              <Group gap="sm">
-                <Button
-                  variant="default"
-                  component={Link}
-                  to={`/projects/${encodeURIComponent(project.key)}/issues`}
-                >
-                  View Issues
-                </Button>
-                {permissions.canManageStatuses && (
-                  <Button
-                    variant="default"
-                    component={Link}
-                    to={`/projects/${encodeURIComponent(project.key)}/settings/statuses`}
-                  >
-                    Manage Statuses
-                  </Button>
-                )}
-                {/* An Archived project takes no new Issues. */}
-                {!project.archived && permissions.canCreate && (
-                  <Button onClick={() => setCreatingIssueIn(project.key)}>Create Issue</Button>
-                )}
-              </Group>
-            </Group>
-            <NewIssueForm
-              opened={creatingIssue}
-              projectKey={project.key}
-              projectName={project.name}
-              onClose={() => setCreatingIssueIn(null)}
-            />
-            <Title order={1} fz={40} lh={1.1} style={{ overflowWrap: "anywhere" }}>
-              {project.name}
-            </Title>
-            <Panel p="xl">
-              <Stack gap="sm">
-                <Title order={2} fz={20}>
-                  About this project
-                </Title>
-                <Text
-                  c={project.description ? undefined : "dimmed"}
-                  style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-                >
-                  {project.description || "No description yet."}
-                </Text>
-              </Stack>
-            </Panel>
-          </>
-        )}
-      </Stack>
-    </Container>
+      )}
+      <section className={classes.about} aria-label="About this project">
+        <p className={classes.description} data-empty={!project.description || undefined}>
+          {project.description || "No description yet."}
+        </p>
+      </section>
+    </>
   );
 }

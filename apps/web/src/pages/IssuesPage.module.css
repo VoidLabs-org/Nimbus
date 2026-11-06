@@ -1,41 +1,86 @@
 /* The Issues list, from the "Nimbus Themes" design (34a): pill filters, then dense one-line rows. Colours come only
    from the theme variables. */
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px 24px;
+/* Over the Board or Swimlanes: the "nothing matches" message sits on the empty columns (design state 4). */
+.over {
+  position: relative;
 }
 
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+.over > .noMatch {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: var(--shadow-lg);
 }
 
-.sort {
+.noMatch {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+  width: min(380px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 24px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--card);
+  backdrop-filter: var(--panel-blur);
+  text-align: center;
+}
+
+.noMatch h2 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.noMatch p {
+  margin: 0 0 8px;
   font-size: 13px;
-  color: var(--color-accent-500);
+  color: var(--color-accent-2-700);
 }
 
-.search {
-  width: 190px;
+.noMatchIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--seg);
 }
 
-.pill {
-  border-radius: 999px;
+/* Loading: the view's own shape (design state 6). */
+.skeletonBoard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(200px, 1fr));
+  gap: 16px;
+  overflow: hidden;
 }
 
-.pill[aria-pressed="true"] {
-  border-color: var(--color-accent-500);
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
+.skeletonColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 320px;
+  padding: 14px;
+  border-radius: 20px;
+  background: var(--color-surface);
+}
+
+.skeletonCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 12px;
 }
 
 .footer {

@@ -1,0 +1,54 @@
+/* The key badge (design 33a and 33e). Colours come only from the theme variables. */
+.badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  box-sizing: border-box;
+  min-width: 56px;
+  height: 56px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--seg);
+  color: var(--color-bg);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.badge[data-size="sm"] {
+  min-width: 44px;
+  height: 44px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.badge[data-size="lg"] {
+  min-width: 72px;
+  height: 72px;
+}
+
+.badge[data-tone="muted"] {
+  background: var(--color-accent-2);
+}
+
+.badge[data-tone="ink"] {
+  background: var(--color-text);
+}
+
+.badge[data-tone="accent"] {
+  background: var(--color-accent);
+}
+
+@media (max-width: 48em) {
+  .badge {
+    min-width: 46px;
+    height: 46px;
+    font-size: 13px;
+  }
+
+  .badge[data-size="lg"] {
+    min-width: 56px;
+    height: 56px;
+  }
+}

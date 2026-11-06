@@ -15,7 +15,15 @@ export const NO_TABS: Tabs = { tabs: [], selected: null };
  * The pages a restored Tab may show: the signed-in pages of AppRoutes but Settings, which opens in its overlay over a
  * Tab's page. A restored Tab on any other address (an old page, Not found) is dropped.
  */
-const TAB_PAGES = ["/", "/projects", "/projects/:key"];
+const TAB_PAGES = [
+  "/",
+  "/projects",
+  "/projects/:key",
+  // A project's tabs: Overview, Issues and Settings.
+  "/projects/:key/overview",
+  "/projects/:key/issues",
+  "/projects/:key/settings/statuses",
+];
 
 export function isTabPath(path: string): boolean {
   return TAB_PAGES.some((pattern) => matchPath(pattern, path) !== null);
@@ -25,7 +33,7 @@ export function isTabPath(path: string): boolean {
 export function fallbackTitle(path: string): string {
   if (path === "/") return "Home";
   if (path === "/projects") return "Projects";
-  const project = matchPath("/projects/:key", path);
+  const project = matchPath("/projects/:key", path) ?? matchPath("/projects/:key/*", path);
   if (project) return project.params.key ?? path;
   return "Not found";
 }

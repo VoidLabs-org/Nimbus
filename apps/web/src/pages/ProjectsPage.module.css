@@ -1,5 +1,4 @@
-/* The Projects list, in the style of the Roles list (RolesPage.module.css). Colours come only from the theme
-   variables. */
+/* The Projects list, as in design 33a: one pill per project. Colours come only from the theme variables. */
 .header {
   display: flex;
   flex-wrap: wrap;
@@ -8,14 +7,10 @@
   gap: 16px 24px;
 }
 
-.description {
-  max-width: 620px;
-  margin-top: 8px;
-  font-size: 15px;
-  color: var(--color-accent-2-700);
-}
-
 .list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -28,42 +23,42 @@
   color: var(--color-accent-2-700);
 }
 
-/* The project, then the arrow. A line sits between rows, not above the first. */
+/* The key badge, the project, then the arrow, in a pill (design 33a). */
 .row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 20px;
-  gap: 24px;
+  display: flex;
   align-items: center;
-  padding: 18px 20px;
-  border-top: 1px solid var(--line);
-  border-radius: 20px;
+  gap: 18px;
+  padding: 12px 24px 12px 12px;
+  border-radius: 999px;
+  background: var(--color-surface);
   color: var(--color-text);
   text-decoration: none;
 }
 
-.list li:first-child .row,
-.skeleton .row:first-child {
-  border-top: 0;
+a.row:hover {
+  background: color-mix(in srgb, var(--color-surface), var(--color-text) 4%);
 }
 
-a.row:hover {
-  background: var(--row-hover);
+/* The badge's place while the list loads. */
+.badgeBone {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--seg);
 }
 
 .project {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
+  flex: 1;
   min-width: 0;
 }
 
 .name {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 17px;
   overflow-wrap: anywhere;
 }
 
@@ -74,19 +69,19 @@ a.row:hover {
   -webkit-line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-accent-2-700);
 }
 
 .arrow {
   display: flex;
   align-items: center;
-  color: var(--color-accent-2-500);
+  color: var(--color-accent-2-700);
 }
 
 @media (max-width: 48em) {
   .row {
-    gap: 16px;
-    padding: 16px;
+    gap: 14px;
+    padding: 10px 18px 10px 10px;
   }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -212,6 +213,31 @@ class CreateIssueTests {
 				JOIN projects p ON p.id = i.project_id WHERE p.key = :key
 				""").param("key", key).query(String.class).list();
 		assertThat(entries).containsExactly("created:" + dana.id());
+	}
+
+	@Test
+	void anIssueCanStartInAChosenStatusOfItsOwnProject() {
+		var dana = register("Dana");
+		var key = project(dana);
+		var other = project(dana);
+		create(dana, key, Map.of("type", "Story", "title", "Makes the Statuses")).expectStatus().isCreated();
+		create(dana, other, Map.of("type", "Story", "title", "Makes the other's")).expectStatus().isCreated();
+		var inProgress = statusId(dana, key, "In progress");
+
+		create(dana, key, Map.of("type", "Bug", "title", "Straight in", "statusId", inProgress)).expectStatus()
+			.isCreated().expectBody().jsonPath("$.status.name").isEqualTo("In progress");
+		expectFieldError(dana, key, Map.of("type", "Bug", "title", "Elsewhere", "statusId",
+				statusId(dana, other, "Done")), "statusId");
+		expectFieldError(dana, key, Map.of("type", "Bug", "title", "Nowhere", "statusId",
+				UUID.randomUUID().toString()), "statusId");
+	}
+
+	private String statusId(Person who, String projectKey, String name) {
+		var body = new String(client.get().uri("/api/projects/{key}/statuses", projectKey)
+			.header("Authorization", "Bearer " + who.token()).exchange().expectStatus().isOk().expectBody().returnResult()
+			.getResponseBody(), StandardCharsets.UTF_8);
+		List<String> ids = JsonPath.read(body, "$[?(@.name == '" + name + "')].id");
+		return ids.getFirst();
 	}
 
 	private RestTestClient.ResponseSpec create(Person who, String projectKey, Map<String, ?> body) {

@@ -21,7 +21,6 @@ import {
   ActionIcon,
   Alert,
   Button,
-  Container,
   Group,
   Select,
   Stack,
@@ -47,10 +46,10 @@ import {
 } from "../api/queries";
 import { DeleteStatusDialog } from "../issues/DeleteStatusDialog";
 import { useIssuePermissions } from "../issues/useIssuePermissions";
-import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
 import { ProjectListSkeleton } from "./ProjectListSkeleton";
+import { StaleNotice } from "../shell/StaleNotice";
 
 const MAX_STATUSES = 20;
 const CATEGORIES: { value: ProjectStatus["category"]; label: string }[] = [
@@ -199,22 +198,7 @@ export default function StatusesPage() {
   const failure = loadFailure(statusesQuery) ?? loadFailure(projectQuery);
   const archived = project?.archived ?? false;
 
-  if (
-    projectQuery.error instanceof ApiError &&
-    projectQuery.error.status === 404 &&
-    !projectQuery.isFetching
-  ) {
-    return (
-      <StatusPage
-        eyebrow="Error 404"
-        title="Project not found."
-        body="Check the project link or ask a project Member for help."
-        code="404"
-        name="Not found"
-        actions={<PrimaryAction to="/projects">Go to Projects</PrimaryAction>}
-      />
-    );
-  }
+  // An unknown project, or one the User isn't a Member of, is ProjectLayout's Project not found.
   if (permissions.loaded && !permissions.canManageStatuses) {
     return (
       <StatusPage
@@ -317,19 +301,18 @@ export default function StatusesPage() {
     });
   }
 
+  // The Settings tab, under the project's header and tabs (ProjectLayout), which hold the breadcrumb.
   return (
-    <Container size="md" px={0} py="xl">
+    <>
       <Stack gap="lg">
-        <BreadcrumbTrail
-          crumbs={[
-            { label: "Projects", to: "/projects" },
-            project
-              ? { label: project.name, to: `/projects/${encodeURIComponent(project.key)}` }
-              : { label: "", pending: true },
-            { label: "Statuses" },
-          ]}
-        />
-        <Title order={1}>Statuses</Title>
+        <div>
+          <Title order={2} fz={24}>
+            Statuses
+          </Title>
+          <Text c="dimmed" size="sm" mt={4}>
+            The order Issues move through. Drag to reorder. Each category keeps at least one Status.
+          </Text>
+        </div>
         {!project || statusesQuery.isPending ? (
           <Loading>
             <ProjectListSkeleton />
@@ -337,16 +320,11 @@ export default function StatusesPage() {
         ) : (
           <>
             {refreshFailed(statusesQuery) && (
-              <Alert color="yellow" title="Couldn't refresh the Statuses">
-                Showing the last loaded Statuses.{" "}
-                <Button
-                  variant="subtle"
-                  size="compact-sm"
-                  onClick={() => void statusesQuery.refetch()}
-                >
-                  Try again
-                </Button>
-              </Alert>
+              <StaleNotice
+                title="Couldn't refresh the Statuses"
+                shown="the last loaded Statuses"
+                onRetry={() => void statusesQuery.refetch()}
+              />
             )}
             {archived && (
               <Alert color="gray" title="This project is archived">
@@ -439,6 +417,6 @@ export default function StatusesPage() {
         statuses={statuses}
         onClose={() => setDeleting(null)}
       />
-    </Container>
+    </>
   );
 }

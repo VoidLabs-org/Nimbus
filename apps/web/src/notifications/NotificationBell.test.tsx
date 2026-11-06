@@ -246,7 +246,7 @@ it("shows an Assigned to you row with the actor, key and title, and opens the Is
   drawBell();
   fireEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
   const row = await screen.findByRole("button", {
-    name: /Maya assigned you NIM-12 · Fix the login.*Just now/,
+    name: /Maya assigned you NIM-12 Fix the login.*Just now/,
   });
   fireEvent.click(row);
   await waitFor(() => expect(read).toHaveBeenCalledWith("a"));
@@ -284,10 +284,10 @@ it("shows unassigned and edited rows with the actor, what changed, key and title
   drawBell();
   fireEvent.click(await screen.findByRole("button", { name: "Notifications, 2 unread" }));
   expect(
-    await screen.findByRole("button", { name: /Maya unassigned you from NIM-12 · Fix the login/ }),
+    await screen.findByRole("button", { name: /Maya unassigned you from NIM-12 Fix the login/ }),
   ).toBeTruthy();
   expect(
-    screen.getByRole("button", { name: /Maya edited title and priority NIM-12 · Fix the login/ }),
+    screen.getByRole("button", { name: /Maya edited title and priority NIM-12 Fix the login/ }),
   ).toBeTruthy();
 });
 
@@ -316,11 +316,8 @@ it("shows a Status move as from → to", async () => {
   });
   drawBell();
   fireEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
-  expect(
-    await screen.findByRole("button", {
-      name: /Jordan moved NIM-12 · Fix the login In progress → In review/,
-    }),
-  ).toBeTruthy();
+  const row = await screen.findByRole("button", { name: /Jordan moved NIM-12 Fix the login/ });
+  expect(row.textContent).toContain("Fix the login In progress → In review");
 });
 
 it("shows a Deleted row with the actor, key and title, and opens the project", async () => {
@@ -342,7 +339,7 @@ it("shows a Deleted row with the actor, key and title, and opens the project", a
   drawBell();
   fireEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
   fireEvent.click(
-    await screen.findByRole("button", { name: /Maya deleted NIM-120 · Old audit filter/ }),
+    await screen.findByRole("button", { name: /Maya deleted NIM-120 Old audit filter/ }),
   );
   await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/projects/NIM"));
 });

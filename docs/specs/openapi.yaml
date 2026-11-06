@@ -198,8 +198,8 @@ paths:
       summary: Create an Issue in a project
       description: >-
         Any Member may, until permissions are integrated. The Reporter is the caller, the Issue gets the project's next
-        number and starts in its first To do Status (the project's default Statuses are made if it has none). Requires
-        a verified email.
+        number and starts in `statusId` when given, else in its first To do Status (the project's default Statuses are
+        made if it has none). Requires a verified email.
       parameters:
         - name: key
           in: path
@@ -232,6 +232,66 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "409":
           description: The project is Archived and takes no new Issues
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/issues/counts:
+    get:
+      tags: [issues]
+      summary: Count a project's Issues that match the filters, in total and per value
+      description: >-
+        Takes the filters of `GET /api/projects/{key}/issues` (not `sort`, `page` or `size`) and refuses them the same
+        way. Besides the total, it counts per Status, category, type and priority; a field's counts leave out that
+        field's own filter, so with `type=Bug` the other types still show what choosing them instead would give.
+        Values no matching Issue has are left out (zero). Any Member may. Requires a verified email.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Status name, matched ignoring case
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            $ref: "#/components/schemas/StatusCategory"
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/IssueType"
+        - name: priority
+          in: query
+          schema:
+            $ref: "#/components/schemas/IssuePriority"
+        - name: assignee
+          in: query
+          description: A User id, `me` for the caller, or `none` for unassigned Issues
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Words of the title; every word must appear in it, in any case
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The matching total and the counts per value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueCounts"
+        "400":
+          $ref: "#/components/responses/InvalidFields"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Project not found (also returned for a non-Member)
           content:
             application/problem+json:
               schema:
@@ -3065,6 +3125,10 @@ components:
           type: [string, "null"]
           format: uuid
           description: Must be a Member of the project
+        statusId:
+          type: [string, "null"]
+          format: uuid
+          description: One of the project's Statuses to start in (a Board column's Add issue); the first To do Status when omitted
     IssuePerson:
       type: object
       required: [id, displayName, avatarUrl]
@@ -3210,6 +3274,38 @@ components:
           type: integer
         size:
           type: integer
+    IssueCounts:
+      type: object
+      required: [total, statuses, categories, types, priorities]
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: Issues matching every filter
+        statuses:
+          type: object
+          description: Matching Issues per Status id, without the `status` filter
+          additionalProperties:
+            type: integer
+            format: int64
+        categories:
+          type: object
+          description: Matching Issues per category (TODO, IN_PROGRESS, DONE), without the `category` filter
+          additionalProperties:
+            type: integer
+            format: int64
+        types:
+          type: object
+          description: Matching Issues per type, without the `type` filter
+          additionalProperties:
+            type: integer
+            format: int64
+        priorities:
+          type: object
+          description: Matching Issues per priority, without the `priority` filter
+          additionalProperties:
+            type: integer
+            format: int64
     IssueNotificationType:
       type: string
       enum: [ISSUE_ASSIGNED, ISSUE_UNASSIGNED, ISSUE_STATUS_CHANGED, ISSUE_EDITED, ISSUE_DELETED]

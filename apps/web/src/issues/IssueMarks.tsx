@@ -33,21 +33,41 @@ export function StatusPill({ status }: { status: Issue["status"] }) {
   return <span className={`${classes.status} ${tone}`}>{status.name}</span>;
 }
 
-const PRIORITY_MARK: Record<Issue["priority"], { mark: string; tone: string }> = {
-  Urgent: { mark: "▲▲", tone: classes.urgent },
-  High: { mark: "▲", tone: "" },
-  Medium: { mark: "—", tone: classes.medium },
-  Low: { mark: "▼", tone: classes.low },
+/** How many of the three bars are lit, and their colour. */
+const PRIORITY_BARS: Record<Issue["priority"], { lit: number; tone: string }> = {
+  Urgent: { lit: 3, tone: classes.urgent },
+  High: { lit: 3, tone: classes.high },
+  Medium: { lit: 2, tone: classes.high },
+  Low: { lit: 1, tone: classes.low },
 };
 
-/** The priority as arrows, double and red for Urgent. The word is there for screen readers and on hover. */
+/**
+ * The priority as rising signal bars (design "Issues toolbar"): three red for Urgent, three orange for High, two for
+ * Medium, one muted for Low. The word is there for screen readers and on hover.
+ */
 export function PriorityMark({ priority }: { priority: Issue["priority"] }) {
-  const { mark, tone } = PRIORITY_MARK[priority];
+  const { lit, tone } = PRIORITY_BARS[priority];
   return (
     <span className={classes.priorityRow} title={priority}>
-      <span className={`${classes.priority} ${tone}`} aria-hidden>
-        {mark}
-      </span>
+      <svg
+        className={`${classes.priority} ${tone}`}
+        viewBox="0 0 14 12"
+        width="14"
+        height="12"
+        aria-hidden
+      >
+        {[0, 1, 2].map((bar) => (
+          <rect
+            key={bar}
+            x={bar * 5}
+            y={8 - bar * 4}
+            width="3"
+            height={4 + bar * 4}
+            rx="1"
+            data-lit={bar < lit || undefined}
+          />
+        ))}
+      </svg>
       <VisuallyHidden>{priority}</VisuallyHidden>
     </span>
   );

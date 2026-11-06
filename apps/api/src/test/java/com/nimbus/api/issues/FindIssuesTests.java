@@ -203,6 +203,69 @@ class FindIssuesTests {
 		client.get().uri("/api/projects/{key}/issues", key).exchange().expectStatus().isUnauthorized();
 	}
 
+	@Test
+	@SuppressWarnings("unchecked")
+	void countsGiveTheTotalAndEachValuesCountLeavingOutThatFieldsOwnFilter() {
+		var dana = register("Dana");
+		var key = project(dana);
+		create(dana, key, "Bug", "Login crashes", "Urgent", null);
+		create(dana, key, "Bug", "Logout is slow", "Low", null);
+		create(dana, key, "Story", "Login with Google", "Urgent", null);
+		create(dana, key, "Chore", "Tidy up", "Medium", null);
+		move(key, 2, "In progress");
+
+		var all = counts(dana, key, "");
+		assertThat((Integer) JsonPath.read(all, "$.total")).isEqualTo(4);
+		assertThat((Map<String, Integer>) JsonPath.read(all, "$.types")).containsEntry("Bug", 2)
+			.containsEntry("Story", 1).containsEntry("Chore", 1);
+		assertThat((Map<String, Integer>) JsonPath.read(all, "$.categories")).containsEntry("TODO", 3)
+			.containsEntry("IN_PROGRESS", 1).doesNotContainKey("DONE");
+		var inProgress = statusId(dana, key, "In progress");
+		assertThat((Map<String, Integer>) JsonPath.read(all, "$.statuses")).containsEntry(inProgress, 1);
+
+		// With Bug chosen the total and the other fields narrow, but every type still shows its own count.
+		var bugs = counts(dana, key, "?type=Bug");
+		assertThat((Integer) JsonPath.read(bugs, "$.total")).isEqualTo(2);
+		assertThat((Map<String, Integer>) JsonPath.read(bugs, "$.types")).containsEntry("Bug", 2)
+			.containsEntry("Story", 1).containsEntry("Chore", 1);
+		assertThat((Map<String, Integer>) JsonPath.read(bugs, "$.priorities")).containsEntry("Urgent", 1)
+			.containsEntry("Low", 1).doesNotContainKey("Medium");
+
+		// The search and the quick filters narrow every field.
+		var login = counts(dana, key, "?q=login");
+		assertThat((Integer) JsonPath.read(login, "$.total")).isEqualTo(2);
+		assertThat((Map<String, Integer>) JsonPath.read(login, "$.types")).containsEntry("Bug", 1)
+			.containsEntry("Story", 1).doesNotContainKey("Chore");
+	}
+
+	@Test
+	void countsTakeTheSameFiltersAndRefuseTheSameWay() {
+		var dana = register("Dana");
+		var eve = register("Eve");
+		var key = project(dana);
+
+		client.get().uri(URI.create("/api/projects/" + key + "/issues/counts?type=Epic"))
+			.header("Authorization", "Bearer " + dana.token()).exchange().expectStatus().isBadRequest().expectBody()
+			.jsonPath("$.errors.type").exists();
+		client.get().uri(URI.create("/api/projects/" + key + "/issues/counts"))
+			.header("Authorization", "Bearer " + eve.token()).exchange().expectStatus().isNotFound();
+		assertThat((Integer) JsonPath.read(counts(dana, key, ""), "$.total")).isZero();
+	}
+
+	private String counts(Person who, String projectKey, String query) {
+		return new String(client.get().uri(URI.create("/api/projects/" + projectKey + "/issues/counts" + query))
+			.header("Authorization", "Bearer " + who.token()).exchange().expectStatus().isOk().expectBody().returnResult()
+			.getResponseBody(), StandardCharsets.UTF_8);
+	}
+
+	private String statusId(Person who, String projectKey, String name) {
+		var body = new String(client.get().uri("/api/projects/{key}/statuses", projectKey)
+			.header("Authorization", "Bearer " + who.token()).exchange().expectStatus().isOk().expectBody().returnResult()
+			.getResponseBody(), StandardCharsets.UTF_8);
+		List<String> ids = JsonPath.read(body, "$[?(@.name == '" + name + "')].id");
+		return ids.getFirst();
+	}
+
 	/** There is no endpoint to edit an Issue yet, so it is made the most recently updated in the table. */
 	private void touch(String projectKey, int number) {
 		jdbc.sql("""

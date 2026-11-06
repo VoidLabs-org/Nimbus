@@ -1,0 +1,65 @@
+/* The header and tabs every project page shares (design "Project page layouts", A). Colours come only from the theme
+   variables. */
+.top {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--color-accent-2-700);
+}
+
+.code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* An Archived project says why Create Issue, Add issue and dragging are gone (design state 7). */
+.archived {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-accent-2-700);
+}
+
+.create {
+  flex: none;
+}
+
+@media (max-width: 48em) {
+  .name {
+    font-size: 22px;
+  }
+}

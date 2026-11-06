@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ApiError } from "@repo/api";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -22,6 +23,7 @@ import { api, type Issue, type IssuePage, type Project, type ProjectStatus } fro
 import { createQueryClient } from "../api/queryClient";
 import { SessionContext, type Session } from "../auth/useSession";
 import IssuesPage from "./IssuesPage";
+import { ProjectLayout } from "../projects/ProjectLayout";
 
 const project: Project = {
   id: "p1",
@@ -67,6 +69,7 @@ function byStatus(all: Issue[]) {
   });
 }
 const inProgress = { id: "s2", name: "In progress", category: "IN_PROGRESS" as const };
+const noCounts = { total: 0, statuses: {}, categories: {}, types: {}, priorities: {} };
 
 const fullAccess = {
   "issues:issue:create": "project",
@@ -90,6 +93,7 @@ beforeEach(() => {
   );
   vi.spyOn(api, "project").mockResolvedValue(project);
   vi.spyOn(api, "projectStatuses").mockResolvedValue(statuses);
+  vi.spyOn(api, "issueCounts").mockResolvedValue(noCounts);
   try {
     localStorage.clear();
   } catch {
@@ -110,7 +114,9 @@ function show(url = "/projects/NIM/issues") {
         <SessionContext value={session}>
           <MemoryRouter initialEntries={[url]}>
             <Routes>
-              <Route path="/projects/:key/issues" element={<IssuesPage />} />
+              <Route path="/projects/:key" element={<ProjectLayout />}>
+                <Route path="issues" element={<IssuesPage />} />
+              </Route>
             </Routes>
           </MemoryRouter>
         </SessionContext>
@@ -142,9 +148,10 @@ describe("IssuesPage", () => {
     await screen.findByText("A");
 
     issues.mockResolvedValue(page([]));
-    fireEvent.click(screen.getByText("Assigned to me"));
+    fireEvent.click(screen.getByRole("button", { name: "Mine" }));
 
-    await screen.findByText("No Issues match these filters");
+    await screen.findByText("No issues match these filters");
+    expect(screen.getByText("Mine is on. Try removing it.")).toBeTruthy();
     expect(issues).toHaveBeenLastCalledWith("NIM", expect.objectContaining({ assignee: "me" }));
   });
 
@@ -178,21 +185,23 @@ describe("IssuesPage", () => {
     show("/projects/NIM/issues?view=table");
     await screen.findByText("A");
 
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "login" } });
+    fireEvent.change(screen.getByLabelText("Search issues"), { target: { value: "login" } });
 
     await waitFor(() =>
       expect(issues).toHaveBeenLastCalledWith("NIM", expect.objectContaining({ q: "login" })),
     );
   });
 
-  it("clears every filter at once", async () => {
+  it("clears every menu filter at once, keeping the search and the quick filters", async () => {
     const issues = vi.spyOn(api, "issues").mockResolvedValue(page([issue(1, "A")]));
-    show("/projects/NIM/issues?view=table&type=Bug&q=login");
+    show("/projects/NIM/issues?view=table&type=Bug&priority=High&assignee=me&q=login");
     await screen.findByText("A");
 
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
 
-    await waitFor(() => expect(issues).toHaveBeenLastCalledWith("NIM", { size: 50 }));
+    await waitFor(() =>
+      expect(issues).toHaveBeenLastCalledWith("NIM", { assignee: "me", q: "login", size: 50 }),
+    );
   });
 
   it("hides Create Issue for an Archived project", async () => {
@@ -289,5 +298,145 @@ describe("IssuesPage", () => {
       ),
     );
     expect(localStorage.getItem("nimbus.issues.view.NIM")).toBe("board");
+  });
+  it("picks a value in the Filter menu, shows it as a token with its count, and the token's × removes it", async () => {
+    const issues = vi.spyOn(api, "issues").mockResolvedValue(page([issue(1, "A")]));
+    vi.spyOn(api, "issueCounts").mockResolvedValue({
+      ...noCounts,
+      total: 1,
+      types: { Story: 6, Bug: 3 },
+    });
+    show("/projects/NIM/issues?view=table");
+    await screen.findByText("A");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Type", hidden: true }));
+    // jsdom gives the button no size, so the menu's positioning keeps it hidden from role queries.
+    const bug = await screen.findByRole("radio", { name: /Bug/, hidden: true });
+    expect(bug.textContent).toContain("3");
+    fireEvent.click(bug);
+
+    await waitFor(() =>
+      expect(issues).toHaveBeenLastCalledWith("NIM", expect.objectContaining({ type: "Bug" })),
+    );
+    const tokens = screen.getByRole("group", { name: "Applied filters" });
+    expect(within(tokens).getByText("Type is")).toBeTruthy();
+    expect(screen.getByLabelText("1 applied")).toBeTruthy();
+    // Picking the chosen value again clears it.
+    fireEvent.click(screen.getByRole("radio", { name: /Bug/, hidden: true }));
+    await waitFor(() =>
+      expect(screen.queryByRole("group", { name: "Applied filters" })).toBeNull(),
+    );
+  });
+
+  it("removes one filter with its token's ×", async () => {
+    const issues = vi.spyOn(api, "issues").mockResolvedValue(page([issue(1, "A")]));
+    show("/projects/NIM/issues?view=table&type=Bug&priority=High");
+    await screen.findByText("A");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Type filter" }));
+
+    await waitFor(() =>
+      expect(issues).toHaveBeenLastCalledWith("NIM", { priority: "High", size: 50 }),
+    );
+  });
+
+  it("shows how many Issues match, as one issue or many", async () => {
+    vi.spyOn(api, "issues").mockResolvedValue(page([issue(1, "A")]));
+    vi.spyOn(api, "issueCounts").mockResolvedValue({ ...noCounts, total: 1 });
+    show("/projects/NIM/issues?view=table");
+
+    expect(await screen.findByText("1 issue")).toBeTruthy();
+  });
+
+  it("keeps every Board column for a Status filter, asking only for that Status's Issues", async () => {
+    const issues = byStatus([issue(2, "Fix login", { status: inProgress })]);
+    show("/projects/NIM/issues?view=board&status=In%20progress");
+
+    await screen.findByRole("link", { name: /Fix login/ });
+    expect(screen.getByRole("region", { name: "To do" })).toBeTruthy();
+    const asked = issues.mock.calls.map(([, search]) => search.status);
+    expect(asked).toContain("In progress");
+    expect(asked).not.toContain("To do");
+  });
+
+  it("says a search matched nothing, and Clear search clears only the search", async () => {
+    const issues = vi.spyOn(api, "issues").mockResolvedValue(page([]));
+    show("/projects/NIM/issues?view=table&type=Bug&q=zzz");
+
+    // Filters and a search: the filters are named first.
+    expect(await screen.findByText("No issues match these filters")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(await screen.findByText("No issues match “zzz”")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    await waitFor(() => expect(issues).toHaveBeenLastCalledWith("NIM", { size: 50 }));
+  });
+
+  it("adds an Issue straight into a Board column's Status", async () => {
+    byStatus([issue(1, "Plan sprint")]);
+    const created = vi
+      .spyOn(api, "createIssue")
+      .mockResolvedValue(issue(3, "Straight in", { status: inProgress }));
+    show("/projects/NIM/issues?view=board");
+    await screen.findByRole("link", { name: /Plan sprint/ });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add issue to In progress" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("In Nimbus · In progress")).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText(/^Title/), { target: { value: "Straight in" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Create Issue/ }));
+
+    await waitFor(() =>
+      expect(created).toHaveBeenCalledWith("NIM", expect.objectContaining({ statusId: "s2" })),
+    );
+  });
+
+  it("offers no Add issue and says why in an Archived project", async () => {
+    vi.spyOn(api, "project").mockResolvedValue({ ...project, archived: true });
+    byStatus([issue(1, "Plan sprint")]);
+    show("/projects/NIM/issues?view=board");
+
+    await screen.findByRole("link", { name: /Plan sprint/ });
+    expect(screen.getByText("Archived · read-only")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Add issue/ })).toBeNull();
+  });
+
+  it("focuses the search with /", async () => {
+    vi.spyOn(api, "issues").mockResolvedValue(page([issue(1, "A")]));
+    show("/projects/NIM/issues?view=table");
+    await screen.findByText("A");
+
+    fireEvent.keyDown(document.body, { key: "/" });
+
+    expect(document.activeElement).toBe(screen.getByLabelText("Search issues"));
+  });
+  it("empties the other columns when a Status filter is chosen after they loaded", async () => {
+    byStatus([issue(1, "Plan sprint"), issue(2, "Fix login", { status: inProgress })]);
+    show("/projects/NIM/issues?view=board");
+    await screen.findByRole("link", { name: /Plan sprint/ });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
+    fireEvent.click(await screen.findByRole("radio", { name: /In progress/, hidden: true }));
+
+    await waitFor(() => expect(screen.queryByRole("link", { name: /Plan sprint/ })).toBeNull());
+    expect(screen.getByRole("link", { name: /Fix login/ })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "To do" })).getByText("0")).toBeTruthy();
+  });
+
+  it("says why an Issue couldn't be added when its column's Status is gone", async () => {
+    byStatus([issue(1, "Plan sprint")]);
+    vi.spyOn(api, "createIssue").mockRejectedValue(
+      new ApiError(400, "Invalid fields", { statusId: "Choose one of the project's Statuses" }),
+    );
+    show("/projects/NIM/issues?view=board");
+    await screen.findByRole("link", { name: /Plan sprint/ });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add issue to In progress" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/^Title/), { target: { value: "Late" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Create Issue/ }));
+
+    expect(await within(dialog).findByText("Choose one of the project's Statuses")).toBeTruthy();
   });
 });

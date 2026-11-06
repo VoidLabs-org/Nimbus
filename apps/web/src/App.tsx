@@ -26,7 +26,8 @@ import ProfilePage from "./pages/ProfilePage";
 import IssuePage from "./pages/IssuePage";
 import IssuesPage from "./pages/IssuesPage";
 import StatusesPage from "./pages/StatusesPage";
-import ProjectPage from "./pages/ProjectPage";
+import ProjectPage, { ProjectHome } from "./pages/ProjectPage";
+import { ProjectLayout } from "./projects/ProjectLayout";
 import ProjectsPage from "./pages/ProjectsPage";
 import RolesPage from "./pages/RolesPage";
 import SecurityPage from "./pages/SecurityPage";
@@ -206,9 +207,13 @@ export function AppRoutes() {
           >
             <Route path="/" element={<HomePage />} />
             <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/projects/:key" element={<ProjectPage />} />
-            <Route path="/projects/:key/issues" element={<IssuesPage />} />
-            <Route path="/projects/:key/settings/statuses" element={<StatusesPage />} />
+            {/* A project's tabs share its header; it opens on its Issues. */}
+            <Route path="/projects/:key" element={<ProjectLayout />}>
+              <Route index element={<ProjectHome />} />
+              <Route path="overview" element={<ProjectPage />} />
+              <Route path="issues" element={<IssuesPage />} />
+              <Route path="settings/statuses" element={<StatusesPage />} />
+            </Route>
             <Route path="/issues/:issueKey" element={<IssuePage />} />
             {/* Settings: the overview list, and the pages it opens. */}
             <Route path="/settings" element={<SettingsOverview />} />

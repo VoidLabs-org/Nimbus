@@ -8,11 +8,14 @@ import { tabTitle, type Crumb } from "./crumbs";
  */
 export const TabTitleContext = createContext<((path: string, title: string) => void) | null>(null);
 
-/** Names the page's Tab after its breadcrumb, once the breadcrumb has its name. */
-export function useTabTitle(crumbs: Crumb[]) {
+/**
+ * Names the page's Tab after its breadcrumb, once the breadcrumb has its name; `explicit` names it instead (null while
+ * it loads), for a page whose last crumb alone doesn't say enough.
+ */
+export function useTabTitle(crumbs: Crumb[], explicit?: string | null) {
   const nameTab = use(TabTitleContext);
   const { pathname } = useLocation();
-  const title = tabTitle(crumbs);
+  const title = explicit === undefined ? tabTitle(crumbs) : explicit;
   useEffect(() => {
     if (nameTab && title) nameTab(pathname, title);
   }, [nameTab, pathname, title]);

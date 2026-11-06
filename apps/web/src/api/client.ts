@@ -22,6 +22,9 @@ export type Issue = Schemas["Issue"];
 
 export type IssuePage = Schemas["IssuePage"];
 
+/** How many Issues match, in total and per value of each field (each without its own filter). */
+export type IssueCounts = Schemas["IssueCounts"];
+
 /** The filters, sort and page of the Issues list; the server's defaults apply to what is left out. */
 export type IssueSearch = {
   category?: Issue["status"]["category"];
@@ -412,6 +415,19 @@ export function createApiClient(
       const query = params.toString();
       return request<IssuePage>(
         `/api/projects/${encodeURIComponent(projectKey)}/issues${query ? `?${query}` : ""}`,
+      );
+    },
+
+    /** How many of a project's Issues match the filters, in total and per value of each field. */
+    issueCounts: (projectKey: string, search: IssueSearch) => {
+      const params = new URLSearchParams();
+      for (const name of ["status", "category", "type", "priority", "assignee", "q"] as const) {
+        const value = search[name];
+        if (value !== undefined && value !== "") params.set(name, String(value));
+      }
+      const query = params.toString();
+      return request<IssueCounts>(
+        `/api/projects/${encodeURIComponent(projectKey)}/issues/counts${query ? `?${query}` : ""}`,
       );
     },
 

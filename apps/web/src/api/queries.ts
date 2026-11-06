@@ -39,6 +39,9 @@ export const queryKeys = {
   // A project's list under "issues" too, so creating an Issue refreshes it with one invalidation.
   issueList: (projectKey: string, search: IssueSearch) =>
     ["issues", "list", storedKey(projectKey), search] as const,
+  // Beside the lists, not under them, so the lists' entries all share one shape; refreshed with them.
+  issueCounts: (projectKey: string, search: IssueSearch) =>
+    ["issues", "counts", storedKey(projectKey), search] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -133,6 +136,20 @@ export function useIssues(projectKey: string, search: IssueSearch, enabled = tru
   });
 }
 
+/**
+ * How many of the project's Issues match `search`, in total and per value of each field, for the Filter menu, the
+ * count on the toolbar and the Issues tab. The last answer stays while the next search loads.
+ */
+export function useIssueCounts(projectKey: string, search: IssueSearch, enabled = true) {
+  return useQuery({
+    enabled: enabled && projectKey !== "",
+    queryKey: queryKeys.issueCounts(projectKey, search),
+    queryFn: () => api.issueCounts(storedKey(projectKey), search),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === storedKey(projectKey) ? previous : undefined,
+  });
+}
+
 /** The most Issues the server sends for one Status; the Board, Swimlanes and grouped List show this many a column. */
 export const COLUMN_SIZE = 100;
 
@@ -152,11 +169,18 @@ export function useStatusColumns(
       return {
         queryKey: queryKeys.issueList(projectKey, columnSearch),
         queryFn: () => api.issues(storedKey(projectKey), columnSearch),
-        enabled,
-        placeholderData: keepPreviousData,
+        // A Status filter keeps every column but asks only for its own: the others are empty without asking, and
+        // keep no earlier answer as a placeholder (a disabled query still shows one).
+        enabled: enabled && columnShown(search, status),
+        placeholderData: columnShown(search, status) ? keepPreviousData : undefined,
       };
     }),
   });
+}
+
+/** Whether a Status's column has Issues to ask for under `search`: all do, unless a Status filter names another. */
+export function columnShown(search: IssueSearch, status: ProjectStatus) {
+  return search.status === undefined || search.status.toLowerCase() === status.name.toLowerCase();
 }
 
 /** The project key of an Issue key (the Issue key is the project key, a dash and a number). */
@@ -169,13 +193,19 @@ function projectIssueLists(issueKey: string) {
   return ["issues", "list", projectKeyOf(issueKey)] as const;
 }
 
+/** The key prefix of all of an Issue's project's counts, which change whenever its lists do. */
+function projectIssueCounts(issueKey: string) {
+  return ["issues", "counts", projectKeyOf(issueKey)] as const;
+}
+
 /** Keep the server's created Issue, so opening it right after shows it at once (it is then refreshed). */
 export function useIssueCreated() {
   const client = useQueryClient();
   return (issue: Issue) => {
     client.setQueryData(queryKeys.issue(issue.key), issue);
-    // The project's lists have a new Issue.
+    // The project's lists and counts have a new Issue.
     void client.invalidateQueries({ queryKey: projectIssueLists(issue.key) });
+    void client.invalidateQueries({ queryKey: projectIssueCounts(issue.key) });
   };
 }
 
@@ -185,6 +215,7 @@ export function useIssueDeleted() {
   return (issueKey: string) => {
     client.removeQueries({ queryKey: queryKeys.issue(issueKey) });
     void client.invalidateQueries({ queryKey: projectIssueLists(issueKey) });
+    void client.invalidateQueries({ queryKey: projectIssueCounts(issueKey) });
   };
 }
 
@@ -195,6 +226,7 @@ export function useIssueChanged() {
     client.setQueryData(queryKeys.issue(issue.key), issue);
     void client.invalidateQueries({ queryKey: queryKeys.issueHistory(issue.key) });
     void client.invalidateQueries({ queryKey: projectIssueLists(issue.key) });
+    void client.invalidateQueries({ queryKey: projectIssueCounts(issue.key) });
   };
 }
 
@@ -214,9 +246,11 @@ export function useMoveIssue() {
       if (!data) continue;
       const search = key[key.length - 1] as IssueSearch | undefined;
       const here = data.items.some((item) => item.key === issue.key);
-      if (search?.status === status.name && !here) {
+      // Status filters match names ignoring case, as the server does.
+      const filtered = search?.status?.toLowerCase();
+      if (filtered === status.name.toLowerCase() && !here) {
         client.setQueryData(key, { ...data, items: [moved, ...data.items], total: data.total + 1 });
-      } else if (search?.status === issue.status.name && here) {
+      } else if (filtered === issue.status.name.toLowerCase() && here) {
         client.setQueryData(key, {
           ...data,
           items: data.items.filter((item) => item.key !== issue.key),

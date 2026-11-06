@@ -54,9 +54,12 @@ function show(client = createQueryClient()) {
   );
 }
 
-const newProject = () => screen.getByRole("button", { name: "+ New project" });
+const newProject = () => screen.getByRole("button", { name: "New project" });
 const openForm = async () => {
-  fireEvent.click(await screen.findByRole("button", { name: "+ New project" }));
+  const button = await screen.findByRole("button", { name: "New project" });
+  // A real click focuses the button, which the window hands focus back to when it closes.
+  button.focus();
+  fireEvent.click(button);
   return screen.findByLabelText(/^Name/);
 };
 const create = () => fireEvent.click(screen.getByRole("button", { name: /Create project/ }));
@@ -90,7 +93,7 @@ describe("the Projects page: the list", () => {
     show();
 
     expect(await screen.findByText("Something went wrong on our side.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "+ New project" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
 
     projects.mockResolvedValue([apple]);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -107,12 +110,12 @@ describe("the Projects page: the list", () => {
     projects.mockRejectedValueOnce(new ApiError(500, "boom"));
     show(client);
     expect(screen.getByText("apple")).toBeTruthy();
-    expect(await screen.findByText("Couldn't refresh your projects")).toBeTruthy();
+    expect(await screen.findByText("Couldn't refresh your projects.")).toBeTruthy();
 
     projects.mockResolvedValue([apple, nimbus]);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Nimbus")).toBeTruthy();
-    expect(screen.queryByText("Couldn't refresh your projects")).toBeNull();
+    expect(screen.queryByText("Couldn't refresh your projects.")).toBeNull();
   });
 });
 
@@ -122,22 +125,22 @@ describe("the Projects page: New project", () => {
     vi.spyOn(api, "projects").mockReturnValue(new Promise((resolve) => (finish = resolve)));
     show();
 
-    expect(screen.queryByRole("button", { name: "+ New project" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
     finish([apple]);
-    expect(await screen.findByRole("button", { name: "+ New project" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "New project" })).toBeTruthy();
   });
 
-  it("opens the form with Name focused, and Cancel closes it and puts focus back on New project", async () => {
+  it("opens the window with Name focused, and Cancel closes it and puts focus back on New project", async () => {
     vi.spyOn(api, "projects").mockResolvedValue([apple]);
     show();
 
     expect(document.activeElement).toBe(document.body);
     const name = await openForm();
-    expect(document.activeElement).toBe(name);
-    expect(screen.queryByRole("button", { name: "+ New project" })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(name));
+    expect(screen.getByRole("dialog", { name: "New project" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByLabelText(/^Name/)).toBeNull();
+    await waitFor(() => expect(screen.queryByLabelText(/^Name/)).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(newProject()));
   });
 
@@ -160,6 +163,61 @@ describe("the Projects page: New project", () => {
       key: "NW",
       description: " About it ",
     });
+  });
+
+  it("checks a field when the User leaves it, and clears the error as soon as it is fixed", async () => {
+    vi.spyOn(api, "projects").mockResolvedValue([apple]);
+    show();
+
+    const name = await openForm();
+    fireEvent.blur(name);
+    expect(await screen.findByText("Enter a name.")).toBeTruthy();
+    fireEvent.change(name, { target: { value: "N" } });
+    expect(screen.queryByText("Enter a name.")).toBeNull();
+
+    const key = screen.getByLabelText(/^Project key/);
+    fireEvent.change(key, { target: { value: "1A" } });
+    // Not while typing: only once the User leaves the field.
+    expect(screen.queryByText(/Use 2 to 10 letters or digits/)).toBeNull();
+    fireEvent.blur(key);
+    expect(
+      await screen.findByText("Use 2 to 10 letters or digits, starting with a letter."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Suggested from the name/)).toBeNull();
+    fireEvent.change(key, { target: { value: "NW" } });
+    expect(screen.queryByText(/Use 2 to 10 letters or digits/)).toBeNull();
+    expect(screen.getByText(/Suggested from the name/)).toBeTruthy();
+  });
+
+  it("says at once that a key one of the User's projects has is taken, before anything is sent", async () => {
+    vi.spyOn(api, "projects").mockResolvedValue([apple]);
+    const created = vi.spyOn(api, "createProject");
+    show();
+
+    // The name suggests APP, which "apple" already has.
+    fireEvent.change(await openForm(), { target: { value: "Application" } });
+    expect(await screen.findByText("APP is already used by one of your projects.")).toBeTruthy();
+    create();
+    expect(created).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/^Project key/), { target: { value: "APX" } });
+    expect(screen.queryByText(/already used/)).toBeNull();
+  });
+
+  it("doesn't send a form the window can already tell is wrong", async () => {
+    vi.spyOn(api, "projects").mockResolvedValue([apple]);
+    const created = vi.spyOn(api, "createProject");
+    show();
+
+    fireEvent.change(await openForm(), { target: { value: "Nimbus Web" } });
+    fireEvent.change(screen.getByLabelText(/^Description/), {
+      target: { value: "x".repeat(1001) },
+    });
+    create();
+
+    expect(await screen.findByText("Keep it to 1000 characters.")).toBeTruthy();
+    expect(screen.getByText(/1,001 \/ 1000/)).toBeTruthy();
+    expect(created).not.toHaveBeenCalled();
   });
 
   it("refreshes the list once the project is created", async () => {

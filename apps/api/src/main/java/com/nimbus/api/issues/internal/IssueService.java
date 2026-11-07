@@ -164,6 +164,109 @@ class IssueService implements Issues {
 	}
 
 	/**
+	 * Puts the Issue directly after {@code afterKey}, else directly before {@code beforeKey}, in the project's order.
+	 * Best effort: a neighbour that is the Issue itself, was deleted, or moved to another Status since the client saw
+	 * it is ignored, and with no usable neighbour the Rank is kept. A neighbour that never existed, or belongs to
+	 * another project, is a {@code 400}. Silent: no history, no event, and {@code updated_at} and {@code version}
+	 * stay. Everything happens under the project's lock, so two drops never get the same key.
+	 */
+	@Transactional
+	IssueView reorder(UUID actor, String issueKey, String afterKey, String beforeKey) {
+		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
+		var project = target.project();
+		lockProject(project.id());
+		// The Issue row is locked like every edit does (after the project: that order everywhere), so a delete or a move
+		// that runs at the same time is waited for and then seen, not raced.
+		var current = findRanked(project.id(), target.number(), true).orElseThrow(() -> new NotFound("Issue not found"));
+		access.requireOwn(target.scope(), IssueAccess.Action.EDIT, actor, current.reporterId(), current.assigneeId());
+		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
+		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
+
+		var errors = new java.util.TreeMap<String, String>();
+		var after = neighbour("after", afterKey, project, current, errors);
+		var before = neighbour("before", beforeKey, project, current, errors);
+		if (!errors.isEmpty()) throw new InvalidFields(errors);
+
+		String newRank = null;
+		if (after != null) {
+			var next = jdbc.sql("SELECT min(rank) FROM issues WHERE project_id = :project AND rank > :rank AND id <> :self")
+				.param("project", project.id()).param("rank", after.rank()).param("self", current.id())
+				.query(String.class).list().getFirst();
+			var inPlace = current.rank().compareTo(after.rank()) > 0 && (next == null || current.rank().compareTo(next) < 0);
+			if (!inPlace) newRank = RankKeys.between(after.rank(), next);
+		}
+		else if (before != null) {
+			var previous = jdbc.sql("SELECT max(rank) FROM issues WHERE project_id = :project AND rank < :rank AND id <> :self")
+				.param("project", project.id()).param("rank", before.rank()).param("self", current.id())
+				.query(String.class).list().getFirst();
+			var inPlace = current.rank().compareTo(before.rank()) < 0
+					&& (previous == null || current.rank().compareTo(previous) > 0);
+			if (!inPlace) newRank = RankKeys.between(previous, before.rank());
+		}
+		if (newRank != null) {
+			if (newRank.length() > MAX_RANK_LENGTH) renumber(project.id(), current, after != null ? after : before, after != null);
+			else jdbc.sql("UPDATE issues SET rank = :rank WHERE id = :id").param("rank", newRank)
+				.param("id", current.id()).update();
+		}
+		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), project).getFirst();
+	}
+
+	/** A Rank key longer than this makes the project's keys be rewritten evenly (ADR 0012). */
+	private static final int MAX_RANK_LENGTH = 50;
+
+	private java.util.Optional<Ranked> findRanked(UUID projectId, int number, boolean lock) {
+		return jdbc.sql("SELECT id, reporter_id, assignee_id, status_id, rank FROM issues WHERE project_id = :project AND number = :number"
+				+ (lock ? " FOR UPDATE" : ""))
+			.param("project", projectId).param("number", number)
+			.query((row, index) -> new Ranked(row.getObject("id", UUID.class), row.getObject("reporter_id", UUID.class),
+					row.getObject("assignee_id", UUID.class), row.getObject("status_id", UUID.class), row.getString("rank")))
+			.optional();
+	}
+
+	/**
+	 * The usable neighbour for a drop, or {@code null} to ignore it (absent, the Issue itself, deleted since, or in
+	 * another Status than the Issue). One that never existed or is of another project adds to {@code errors}.
+	 */
+	private Ranked neighbour(String field, String key, ProjectSummary project, Ranked self, Map<String, String> errors) {
+		if (key == null) return null;
+		var parsed = IssueKeys.parse(key).filter(k -> k.projectKey().equals(project.key()));
+		if (parsed.isEmpty()) {
+			errors.put(field, "Choose an Issue of the same project");
+			return null;
+		}
+		var found = findRanked(project.id(), parsed.get().number(), false);
+		if (found.isEmpty()) {
+			// Numbers are never reused, so one that was taken once belongs to an Issue deleted meanwhile.
+			var last = jdbc.sql("SELECT last_number FROM issue_counters WHERE project_id = :project")
+				.param("project", project.id()).query(Integer.class).single();
+			if (parsed.get().number() > last) errors.put(field, "Choose an Issue of the same project");
+			return null;
+		}
+		var neighbour = found.get();
+		if (neighbour.id().equals(self.id()) || !neighbour.statusId().equals(self.statusId())) return null;
+		return neighbour;
+	}
+
+	/**
+	 * Rewrites every key of the project evenly, keeping the order, with the Issue placed next to {@code anchor}. Keys
+	 * go through temporary unique values first, since {@code (project_id, rank)} is checked row by row.
+	 */
+	private void renumber(UUID projectId, Ranked moving, Ranked anchor, boolean after) {
+		var ids = new ArrayList<>(jdbc.sql("SELECT id FROM issues WHERE project_id = :project AND id <> :self ORDER BY rank")
+			.param("project", projectId).param("self", moving.id()).query(UUID.class).list());
+		int at = ids.indexOf(anchor.id());
+		ids.add(after ? at + 1 : at, moving.id());
+		var keys = RankKeys.sequence(ids.size());
+		jdbc.sql("UPDATE issues SET rank = id::text WHERE project_id = :project").param("project", projectId).update();
+		jdbc.sql("""
+				UPDATE issues i SET rank = v.rank
+				FROM unnest(CAST(:ids AS uuid[]), CAST(:ranks AS text[])) AS v(id, rank) WHERE i.id = v.id
+				""")
+			.param("ids", "{" + ids.stream().map(UUID::toString).collect(Collectors.joining(",")) + "}")
+			.param("ranks", "{" + String.join(",", keys) + "}").update();
+	}
+
+	/**
 	 * Removes the Issue and its history for good and keeps a deletion record. Locks the Issue row like every edit,
 	 * so a delete never races an edit; the number stays used because {@code issue_counters} only goes up.
 	 */
@@ -617,6 +720,9 @@ class IssueService implements Issues {
 	}
 
 	private record Target(ProjectSummary project, int number, Scope scope) {
+	}
+
+	private record Ranked(UUID id, UUID reporterId, UUID assigneeId, UUID statusId, String rank) {
 	}
 
 	private record Deletable(UUID id, String title, UUID reporterId, UUID assigneeId) {

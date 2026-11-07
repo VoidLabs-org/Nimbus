@@ -2,6 +2,7 @@ import {
   closestCenter,
   DndContext,
   DragOverlay,
+  getClientRect,
   KeyboardSensor,
   PointerSensor,
   TouchSensor,
@@ -10,6 +11,7 @@ import {
   useDroppable,
   useSensor,
   useSensors,
+  type Collision,
   type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
@@ -17,6 +19,12 @@ import {
   type DropAnimationFunction,
   type KeyboardCoordinateGetter,
 } from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { VisuallyHidden } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
@@ -27,6 +35,7 @@ import {
   useEffect,
   useLayoutEffect,
   useState,
+  type CSSProperties,
   type PointerEvent,
   type ReactNode,
 } from "react";
@@ -39,6 +48,13 @@ import classes from "./IssueViews.module.css";
 export type Column = { status: ProjectStatus; items: Issue[]; total: number };
 
 export type MoveIssue = (issueKey: string, status: ProjectStatus) => void;
+
+/** An Issue dropped between two cards of its own column: the keys of the cards directly above and below it. */
+export type ReorderIssue = (
+  issueKey: string,
+  after: string | undefined,
+  before: string | undefined,
+) => void;
 
 /** Whether the User may move an Issue; a card they can't move is not draggable. Everything is allowed by default. */
 export type CanMove = (issue: Issue) => boolean;
@@ -66,60 +82,170 @@ const TargetContext = createContext<Target | null>(null);
  * On a drop, the carried card glides into the place where the Issue now is (the move is optimistic, so that is its new
  * column) and straightens up as it lands; the card itself stays hidden until it arrives.
  *
- * dnd-kit's own drop animation measures the card at once, but the Board only shows the move a moment later (TanStack
- * Query tells React on its next tick, a timeout), so the card would fly back to its old column. This one waits for
- * that timeout and the render after it, then finds the card wherever it now is.
+ * A move into another column shows a card-sized gap where the card will land (DropSlot); the drop handler keeps its
+ * position in `landing`, so the glide starts at once, however long the Board takes to show the move. Without a gap (a
+ * reorder, where the card is only a little way off) there is nothing to go by: dnd-kit's own drop animation would
+ * measure the card at once, but the Board only shows the change a moment later (TanStack Query tells React on its next
+ * tick, a timeout), so the card would fly back to where it was. This one then waits for that timeout and the render
+ * after it, and finds the card wherever it now is.
  */
-const dropAnimation: DropAnimationFunction = async ({
-  active,
-  dragOverlay,
-  draggableNodes,
-  transform,
-}) => {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await new Promise((resolve) => requestAnimationFrame(resolve));
-  const card = draggableNodes.get(active.id)?.node.current;
-  if (!card || !card.isConnected) return;
-  const to = card.getBoundingClientRect();
-  const from = dragOverlay.node.getBoundingClientRect();
-  const end = {
-    ...transform,
-    x: transform.x + to.left - from.left,
-    y: transform.y + to.top - from.top,
+/** Where the gap for the move being dropped was; there is only ever one drag at a time. */
+const landing: { current: DOMRect | null } = { current: null };
+
+const dropAnimation = makeDropAnimation();
+
+/**
+ * The card the drop animation showed with an inline `visibility`, while its Drop still hides it. A card that stays in
+ * the same column is the same element on its next drop, so the inline style has to go once the Drop is over, or it
+ * would keep winning over the class that hides the card during that next drop.
+ */
+let revealed: HTMLElement | null = null;
+
+function clearRevealed() {
+  revealed?.style.removeProperty("visibility");
+  revealed = null;
+}
+
+function makeDropAnimation(): DropAnimationFunction {
+  return async ({ active, dragOverlay, draggableNodes, transform }) => {
+    dropping = false;
+    let to = landing.current;
+    landing.current = null;
+    let card: HTMLElement | null = null;
+    if (!to) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      card = draggableNodes.get(active.id)?.node.current ?? null;
+      if (!card || !card.isConnected) return;
+      revealInColumn(card);
+      to = card.getBoundingClientRect();
+    }
+    const from = dragOverlay.node.getBoundingClientRect();
+    const end = {
+      ...transform,
+      x: transform.x + to.left - from.left,
+      y: transform.y + to.top - from.top,
+    };
+    const opacity = card?.style.opacity ?? "";
+    if (card) {
+      card.style.opacity = "0";
+      // Hidden by its Drop until now; shown under the carried card the moment it lands (the inline style wins).
+      card.style.visibility = "visible";
+    }
+    dragOverlay.node.classList.add(classes.dropping!);
+    // Sticky: it is pulled into place, overshoots a hair, presses in as it lands, then settles.
+    const there = CSS.Transform.toString(end);
+    const animation = dragOverlay.node.animate(
+      [
+        {
+          transform: CSS.Transform.toString(transform),
+          easing: "cubic-bezier(0.34, 1.4, 0.64, 1)",
+        },
+        {
+          transform: `${there} scale(0.96)`,
+          offset: 0.7,
+          easing: "cubic-bezier(0.3, 0, 0.3, 1.6)",
+        },
+        { transform: `${there} scale(1)` },
+      ],
+      { duration: 340, fill: "forwards" },
+    );
+    try {
+      await animation.finished;
+    } finally {
+      if (card) card.style.opacity = opacity;
+    }
+    if (card) {
+      revealed = card;
+      return;
+    }
+    // The card was not looked for before: it is in its new column by now, hidden by its Drop; show it under the
+    // carried card, which goes the moment this returns (a few frames at most, if the Board is slow).
+    for (let frame = 0; frame < 10; frame++) {
+      const arrived = draggableNodes.get(active.id)?.node.current;
+      if (arrived?.isConnected) {
+        arrived.style.visibility = "visible";
+        revealed = arrived;
+        revealInColumn(arrived);
+        return;
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
   };
-  const opacity = card.style.opacity;
-  card.style.opacity = "0";
-  // Hidden by its Drop until now; shown under the carried card the moment it lands (the inline style wins).
-  card.style.visibility = "visible";
-  dragOverlay.node.classList.add(classes.dropping!);
-  // Sticky: it is pulled into place, overshoots a hair, presses in as it lands, then settles.
-  const there = CSS.Transform.toString(end);
-  const animation = dragOverlay.node.animate(
-    [
-      { transform: CSS.Transform.toString(transform), easing: "cubic-bezier(0.34, 1.4, 0.64, 1)" },
-      { transform: `${there} scale(0.96)`, offset: 0.7, easing: "cubic-bezier(0.3, 0, 0.3, 1.6)" },
-      { transform: `${there} scale(1)` },
-    ],
-    { duration: 340, fill: "forwards" },
-  );
-  try {
-    await animation.finished;
-  } finally {
-    card.style.opacity = opacity;
-  }
+}
+
+/**
+ * Near an edge, dnd-kit scrolls whatever can scroll under the card, the browser window included: carrying a card near
+ * the bottom of a long column scrolled the page too, and it stayed scrolled after the drop. Only the Board's own
+ * scrollers (a column's cards, the Board and the Swimlanes sideways) follow the card.
+ */
+const autoScroll = {
+  canScroll: (element: Element) =>
+    element.matches(`.${classes.cards!}, .${classes.board!}, .${classes.lanes!}`),
 };
+
+/**
+ * True from a drop until its animation starts. Just before it calls the animation, dnd-kit scrolls the dropped card
+ * into view if its slot is off screen (a column scrolled away from where the card started, say), and that scrolled the
+ * column and the whole page to the card's old place. The animation finds the card's new place itself, so the scroll is
+ * never wanted: for these few moments the card measures as being in view, and dnd-kit leaves the scrolling alone.
+ */
+let dropping = false;
+
+const IN_VIEW = { top: 0, left: 0, right: 1, bottom: 1, width: 1, height: 1 };
+
+const measuring = {
+  draggable: {
+    measure: (element: HTMLElement) =>
+      dropping ? IN_VIEW : getClientRect(element, { ignoreTransform: true }),
+  },
+};
+
+/**
+ * Scrolls the dropped card's column (only that: never the page) just enough to show the card, since a drop can put it
+ * out of the part of the column in view: the column keeps its scroll while the card moves to another place in it.
+ */
+function revealInColumn(card: HTMLElement) {
+  const list = card.closest<HTMLElement>(`.${classes.cards!}`);
+  if (!list) return;
+  const inner = card.getBoundingClientRect();
+  const outer = list.getBoundingClientRect();
+  const margin = 8;
+  if (inner.top < outer.top) list.scrollTop -= outer.top - inner.top + margin;
+  else if (inner.bottom > outer.bottom) list.scrollTop += inner.bottom - outer.bottom + margin;
+}
 
 function prefersReducedMotion() {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
-/** Under the pointer when there is one; the nearest drop area otherwise (the keyboard has no pointer). */
+/**
+ * Under the pointer when there is one; the nearest drop area otherwise (the keyboard has no pointer). A card under
+ * the pointer wins over its column; over a column's bare space (a gap between cards, below the last one) it is the
+ * column's nearest card, so a drop there still lands somewhere in that column.
+ */
 const collisionDetection: CollisionDetection = (args) => {
   const within = pointerWithin(args);
-  return within.length > 0 ? within : closestCenter(args);
+  if (within.length === 0) return closestCenter(args);
+  const dataOf = (collision: Collision) => collision.data?.droppableContainer.data.current;
+  const card = within.find((collision) => dataOf(collision)?.issue);
+  if (card) return [card];
+  const status = dataOf(within[0]!)?.status as ProjectStatus | undefined;
+  if (!status) return within;
+  const nearest = closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter((c) => {
+      const data = c.data.current;
+      return data?.issue && (data.status as ProjectStatus).id === status.id;
+    }),
+  });
+  return nearest.length > 0 ? nearest : within;
 };
 
-/** The arrow keys carry a lifted card to the nearest drop area in that direction, so one press changes a Status. */
+/**
+ * The arrow keys carry a lifted card to the nearest drop area in that direction: the next card of its column (a
+ * drop there is a reorder), or another column's card or bare space (a drop there changes the Status).
+ */
 const keyboardCoordinates: KeyboardCoordinateGetter = (
   event,
   { context: { droppableRects, droppableContainers, collisionRect } },
@@ -165,11 +291,13 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (
 function DragBoard({
   issues,
   onMove,
+  onReorder,
   canMove,
   children,
 }: {
   issues: Issue[];
   onMove: MoveIssue;
+  onReorder?: ReorderIssue;
   canMove: CanMove;
   children: ReactNode;
 }) {
@@ -180,7 +308,10 @@ function DragBoard({
   useEffect(() => {
     if (!dropKey) return;
     // Past the drop animation, a card still where it was (the move failed) shows again; the trace is done by 1.5s.
-    const shown = setTimeout(() => setDrop((now) => now && { ...now, moving: false }), 600);
+    const shown = setTimeout(() => {
+      setDrop((now) => now && { ...now, moving: false });
+      clearRevealed();
+    }, 600);
     const done = setTimeout(() => setDrop(null), 1500);
     return () => {
       clearTimeout(shown);
@@ -195,6 +326,8 @@ function DragBoard({
   );
 
   function start(event: DragStartEvent) {
+    dropping = false;
+    clearRevealed();
     setDrop(null);
     setLifted(issues.find((issue) => issue.key === event.active.id) ?? null);
   }
@@ -211,10 +344,22 @@ function DragBoard({
   }
 
   function end(event: DragEndEvent) {
+    // Only an animation clears these, and with reduced motion there is none.
+    const animated = !prefersReducedMotion();
+    dropping = animated;
     const status = event.over?.data.current?.status as ProjectStatus | undefined;
     const issue = issues.find((item) => item.key === event.active.id);
     const moved = status !== undefined && issue !== undefined && issue.status.id !== status.id;
-    const animated = !prefersReducedMotion();
+    // Dropped on a card of its own column: it takes that card's place, and the cards between shift by one.
+    const overKey = (event.over?.data.current?.issue as Issue | undefined)?.key;
+    const reorder =
+      onReorder && issue && status && !moved && overKey !== undefined
+        ? reorderedBetween(issues, issue, overKey)
+        : undefined;
+    landing.current =
+      moved && animated
+        ? (document.querySelector("[data-drop-slot]")?.getBoundingClientRect() ?? null)
+        : null;
     if (issue && (moved || animated)) {
       setDrop({
         key: issue.key,
@@ -226,10 +371,12 @@ function DragBoard({
     }
     setLifted(null);
     setTarget(null);
-    if (status) onMove(String(event.active.id), status);
+    if (reorder && issue) onReorder?.(issue.key, reorder.after, reorder.before);
+    else if (status) onMove(String(event.active.id), status);
   }
 
   function cancel() {
+    dropping = false;
     setLifted(null);
     setTarget(null);
   }
@@ -241,6 +388,8 @@ function DragBoard({
           <DndContext
             sensors={sensors}
             collisionDetection={collisionDetection}
+            autoScroll={autoScroll}
+            measuring={measuring}
             onDragStart={start}
             onDragOver={over}
             onDragEnd={end}
@@ -255,6 +404,19 @@ function DragBoard({
       </DropContext>
     </CanMoveContext>
   );
+}
+
+/**
+ * Where an Issue lands when dropped on the card `overKey` of its own column: the cards directly above and below it
+ * there (`issues` are all the Board's, in column order), or nothing when it stays where it was.
+ */
+function reorderedBetween(issues: Issue[], issue: Issue, overKey: string) {
+  const column = issues.filter((item) => item.status.id === issue.status.id);
+  const from = column.findIndex((item) => item.key === issue.key);
+  const to = column.findIndex((item) => item.key === overKey);
+  if (from < 0 || to < 0 || from === to) return undefined;
+  const placed = arrayMove(column, from, to);
+  return { after: placed[to - 1]?.key, before: placed[to + 1]?.key };
 }
 
 /** The Assignee as a picture, or an empty ring; the name is there for screen readers. */
@@ -291,35 +453,90 @@ function CardBody({ issue, lifted = false }: { issue: Issue; lifted?: boolean })
   );
 }
 
+/** The classes that show a card's part in a drop (see Drop). */
+function useCardDrop(issue: Issue) {
+  const drop = useContext(DropContext);
+  const dropped = drop?.key === issue.key;
+  const there = dropped && issue.status.id === drop.status;
+  const landed = there && drop.moved;
+  const leaving = dropped && drop.moving && (drop.animated || !there);
+  return { landed, leaving };
+}
+
+function CardLink({
+  issue,
+  dragging,
+  handles,
+  nodeRef,
+  style,
+}: {
+  issue: Issue;
+  dragging: boolean;
+  handles: object;
+  nodeRef: (node: HTMLElement | null) => void;
+  style?: CSSProperties;
+}) {
+  const { landed, leaving } = useCardDrop(issue);
+  return (
+    <Link
+      ref={nodeRef}
+      to={`/issues/${encodeURIComponent(issue.key)}`}
+      className={`${classes.cardLink} ${dragging ? classes.placeholder : ""} ${landed ? classes.landed : ""} ${leaving ? classes.leaving : ""}`}
+      style={style}
+      // The browser's own link dragging would fight the drag.
+      draggable={false}
+      {...handles}
+      role="link"
+    >
+      <CardBody issue={issue} />
+    </Link>
+  );
+}
+
 /**
  * An Issue as a card that opens the Issue and can be dragged; where it was shows as a dashed outline meanwhile, and
  * its outline is traced once when it lands in a new Status (see Drop).
  */
 function IssueCard({ issue }: { issue: Issue }) {
   const canMove = useContext(CanMoveContext);
-  const drop = useContext(DropContext);
-  const dropped = drop?.key === issue.key;
-  const there = dropped && issue.status.id === drop.status;
-  const landed = there && drop.moved;
-  const leaving = dropped && drop.moving && (drop.animated || !there);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: issue.key,
     data: { issue },
     disabled: !canMove(issue),
   });
   return (
-    <Link
-      ref={setNodeRef}
-      to={`/issues/${encodeURIComponent(issue.key)}`}
-      className={`${classes.cardLink} ${isDragging ? classes.placeholder : ""} ${landed ? classes.landed : ""} ${leaving ? classes.leaving : ""}`}
-      // The browser's own link dragging would fight the drag.
-      draggable={false}
-      {...attributes}
-      role="link"
-      {...listeners}
-    >
-      <CardBody issue={issue} />
-    </Link>
+    <CardLink
+      issue={issue}
+      dragging={isDragging}
+      nodeRef={setNodeRef}
+      handles={{ ...attributes, ...listeners }}
+    />
+  );
+}
+
+/**
+ * A card in a Board column: dragged like {@link IssueCard}, and also dropped on, so the cards of its column slide
+ * apart to open a gap where the carried card would land. A card the User may not move can't be dragged but still
+ * takes drops.
+ */
+function SortableIssueCard({ issue }: { issue: Issue }) {
+  const canMove = useContext(CanMoveContext);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: issue.key,
+    data: { issue, status: issue.status },
+    disabled: { draggable: !canMove(issue), droppable: false },
+    // The cards already slid into place during the drag, and the drop is animated by dropAnimation; sortable's own
+    // slide on the reorder would play on top of both and make the cards jump twice.
+    animateLayoutChanges: () => false,
+  });
+  return (
+    <CardLink
+      issue={issue}
+      dragging={isDragging}
+      nodeRef={setNodeRef}
+      handles={{ ...attributes, ...listeners }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+    />
   );
 }
 
@@ -335,7 +552,14 @@ function DropSlot({ status, lane }: { status: ProjectStatus; lane?: string }) {
   const target = useContext(TargetContext);
   if (!target || target.status !== status.id || target.issue.status.id === status.id) return null;
   if (lane !== undefined && lane !== laneIdOf(target.issue)) return null;
-  return <div className={classes.dropSlot} style={{ height: target.height }} aria-hidden />;
+  return (
+    <div
+      className={classes.dropSlot}
+      data-drop-slot
+      style={{ height: target.height }}
+      aria-hidden
+    />
+  );
 }
 
 /**
@@ -345,11 +569,13 @@ function DropSlot({ status, lane }: { status: ProjectStatus; lane?: string }) {
 export function IssueBoard({
   columns,
   onMove,
+  onReorder,
   canMove = () => true,
   onAdd,
 }: {
   columns: Column[];
   onMove: MoveIssue;
+  onReorder?: ReorderIssue;
   canMove?: CanMove;
   onAdd?: (status: ProjectStatus) => void;
 }) {
@@ -361,7 +587,12 @@ export function IssueBoard({
   const crowded = useCrowded(scroller, columns.length);
 
   return (
-    <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove} canMove={canMove}>
+    <DragBoard
+      issues={columns.flatMap((column) => column.items)}
+      onMove={onMove}
+      onReorder={onReorder}
+      canMove={canMove}
+    >
       <div ref={setFrame} className={classes.boardFrame} style={{ height }}>
         <div
           ref={setScroller}
@@ -672,9 +903,14 @@ function BoardColumn({
         {column.items.length === 0 && column.total === 0 && (
           <div className={classes.emptyColumn}>No issues</div>
         )}
-        {column.items.map((issue) => (
-          <IssueCard key={issue.id} issue={issue} />
-        ))}
+        <SortableContext
+          items={column.items.map((issue) => issue.key)}
+          strategy={verticalListSortingStrategy}
+        >
+          {column.items.map((issue) => (
+            <SortableIssueCard key={issue.id} issue={issue} />
+          ))}
+        </SortableContext>
         {column.total > column.items.length && (
           <div className={classes.more}>
             Showing {column.items.length} of {column.total}

@@ -14,6 +14,7 @@ import {
   refreshFailed,
   useIssueCounts,
   useMoveIssue,
+  useReorderIssue,
   useIssues,
   useProject,
   useProjectStatuses,
@@ -125,6 +126,7 @@ export default function IssuesPage() {
     return { status, items: shown?.items ?? [], total: shown?.total ?? 0 };
   });
   const moveIssue = useMoveIssue();
+  const reorderIssue = useReorderIssue();
   const failure =
     loadFailure(projectQuery) ??
     (grouped
@@ -254,6 +256,18 @@ export default function IssuesPage() {
     }
   }
 
+  async function reorder(issueKey: string, after: string | undefined, before: string | undefined) {
+    const issue = columns.flatMap((column) => column.items).find((item) => item.key === issueKey);
+    if (!issue) return;
+    try {
+      await reorderIssue(issue, after, before);
+    } catch (error) {
+      const reason =
+        error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
+      toast.error(`Couldn't reorder ${issue.key}: ${reason}`);
+    }
+  }
+
   /** The menu filters and the quick filters, not the search (state 4's Clear filters). */
   const clearFilters = () => remove([...FILTER_FIELDS, "assignee"]);
   const clearSearch = () => {
@@ -350,6 +364,7 @@ export default function IssuesPage() {
                 <IssueBoard
                   columns={columns}
                   onMove={(key, status) => void move(key, status)}
+                  onReorder={(key, after, before) => void reorder(key, after, before)}
                   canMove={canMove}
                   onAdd={addTo}
                 />

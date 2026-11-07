@@ -1,6 +1,7 @@
 import {
   keepPreviousData,
   type QueryClient,
+  type QueryKey,
   useQueries,
   useQuery,
   useQueryClient,
@@ -259,7 +260,10 @@ export function useIssueChanged() {
  * Board moves sent and not yet answered, per cache, and the Issues whose projects they changed: when the last one
  * finishes, whether it worked or not, every project a finished move changed is refreshed.
  */
-const movesInFlight = new WeakMap<QueryClient, { count: number; changed: Set<string> }>();
+const movesInFlight = new WeakMap<
+  QueryClient,
+  { count: number; changed: Set<string>; reordered: Map<string, string> }
+>();
 
 /**
  * Move an Issue to a Status with the Board updated at once: the card is taken out of its column and put at the top
@@ -276,7 +280,8 @@ export function useMoveIssue() {
   const client = useQueryClient();
   return async (issue: Issue, status: ProjectStatus) => {
     const lists = { queryKey: projectIssueLists(issue.key) };
-    void client.cancelQueries(lists, { revert: false });
+    // Silently: a refresh cut short is not a failed refresh, which would show "Couldn't refresh these Issues".
+    void client.cancelQueries(lists, { revert: false, silent: true });
     const snapshot = client.getQueriesData<{ items: Issue[]; total: number }>(lists);
     const moved = { ...issue, status };
     for (const [key, data] of snapshot) {
@@ -295,28 +300,142 @@ export function useMoveIssue() {
         });
       }
     }
-    const moves = movesInFlight.get(client) ?? { count: 0, changed: new Set<string>() };
-    movesInFlight.set(client, moves);
-    moves.count += 1;
-    /** One move fewer on its way; the last one refreshes every project a finished move changed. */
-    const settle = () => {
-      moves.count -= 1;
-      if (moves.count > 0) return;
-      for (const issueKey of moves.changed) refreshProjectIssues(client, issueKey);
-      moves.changed.clear();
-    };
+    const settle = startBoardChange(client);
     try {
-      const saved = await api.moveIssue(issue.key, status.id);
+      const saved = await inOrder(client, issue.key, () => api.moveIssue(issue.key, status.id));
       client.setQueryData(queryKeys.issue(saved.key), saved);
       void client.invalidateQueries({ queryKey: queryKeys.issueHistory(saved.key) });
-      moves.changed.add(saved.key);
-      settle();
+      settle.done(saved.key);
     } catch (error) {
-      // Alone, put the Board back as it was; with other moves on their way, the snapshot would undo theirs too, so
-      // ask the server instead.
-      if (moves.count === 1) for (const [key, data] of snapshot) client.setQueryData(key, data);
-      else moves.changed.add(issue.key);
+      settle.failed(issue.key, snapshot);
+      throw error;
+    }
+  };
+}
+
+/**
+ * Board changes go to the server one at a time per project, in the order they were made: a drop's neighbours are the cards the
+ * Board showed, which already include the drops before it, so a later one must not be applied first. (Sent together
+ * over separate connections, they could arrive either way round.) An earlier one failing doesn't hold the rest back.
+ */
+const sending = new WeakMap<QueryClient, Map<string, Promise<unknown>>>();
+
+function inOrder<T>(client: QueryClient, issueKey: string, send: () => Promise<T>): Promise<T> {
+  // Per project: changes to different projects' Issues have nothing to do with each other.
+  const queues = sending.get(client) ?? new Map<string, Promise<unknown>>();
+  sending.set(client, queues);
+  const project = projectKeyOf(issueKey);
+  const turn = (queues.get(project) ?? Promise.resolve()).then(send);
+  queues.set(
+    project,
+    turn.catch(() => {}),
+  );
+  return turn;
+}
+
+/**
+ * A Board change (a move or a reorder) is on its way. `done` and `failed` end it; the last one to end, whether it
+ * worked or not, refreshes every project a finished change touched.
+ */
+function startBoardChange(client: QueryClient) {
+  const moves = movesInFlight.get(client) ?? {
+    count: 0,
+    changed: new Set<string>(),
+    reordered: new Map<string, string>(),
+  };
+  movesInFlight.set(client, moves);
+  moves.count += 1;
+  /**
+   * One change fewer on its way; the last one refreshes every project a finished change changed. A reorder only
+   * changes the order of its own column (no counts, totals or other columns), so that is all it refreshes.
+   */
+  const settle = () => {
+    moves.count -= 1;
+    if (moves.count > 0) return;
+    const refreshed = new Set<string>();
+    for (const issueKey of moves.changed) {
+      refreshed.add(projectKeyOf(issueKey));
+      refreshProjectIssues(client, issueKey);
+    }
+    for (const [issueKey, statusName] of moves.reordered) {
+      if (refreshed.has(projectKeyOf(issueKey))) continue;
+      void client.invalidateQueries({
+        queryKey: projectIssueLists(issueKey),
+        predicate: (query) => {
+          // Every list in Rank order that can show the Issue: its Status's column, and the lists of all Statuses
+          // (the Table sorted by Rank), which the optimistic reorder changed too.
+          const search = query.queryKey[query.queryKey.length - 1] as IssueSearch | undefined;
+          if (search?.sort !== "rank") return false;
+          return (
+            search.status === undefined || search.status.toLowerCase() === statusName.toLowerCase()
+          );
+        },
+      });
+    }
+    moves.changed.clear();
+    moves.reordered.clear();
+  };
+  return {
+    /** A move changed the Issue's project; a reorder (`reorderedIn`: its Status's name) only that column. */
+    done(issueKey: string, reorderedIn?: string) {
+      if (reorderedIn) moves.reordered.set(issueKey, reorderedIn);
+      else moves.changed.add(issueKey);
       settle();
+    },
+    /** Alone, put the Board back as it was; with others on their way the snapshot would undo theirs too, so ask the server. */
+    failed(issueKey: string, snapshot: [QueryKey, unknown][], reorderedIn?: string) {
+      if (moves.count === 1) for (const [key, data] of snapshot) client.setQueryData(key, data);
+      else if (reorderedIn) moves.reordered.set(issueKey, reorderedIn);
+      else moves.changed.add(issueKey);
+      settle();
+    },
+  };
+}
+
+/** The items with `issueKey` taken out and put directly after `after`, else directly before `before`, if shown. */
+export function placeIssue<T extends { key: string }>(
+  items: T[],
+  issueKey: string,
+  after: string | undefined,
+  before: string | undefined,
+): T[] {
+  const issue = items.find((item) => item.key === issueKey);
+  const rest = items.filter((item) => item.key !== issueKey);
+  const afterAt = after === undefined ? -1 : rest.findIndex((item) => item.key === after);
+  const beforeAt = before === undefined ? -1 : rest.findIndex((item) => item.key === before);
+  const anchor = afterAt >= 0 ? afterAt + 1 : beforeAt;
+  if (!issue || anchor < 0) return items;
+  return [...rest.slice(0, anchor), issue, ...rest.slice(anchor)];
+}
+
+/**
+ * Reorder an Issue within its Board column with the Board updated at once: the card goes between the cards it was
+ * dropped between before the server answers, and goes back if that fails. Shares {@link useMoveIssue}'s bookkeeping:
+ * the last of several quick drops, moves and reorders, once answered, refreshes the lists.
+ */
+export function useReorderIssue() {
+  const client = useQueryClient();
+  return async (issue: Issue, after: string | undefined, before: string | undefined) => {
+    const lists = { queryKey: projectIssueLists(issue.key) };
+    // Silently: a refresh cut short is not a failed refresh, which would show "Couldn't refresh these Issues".
+    void client.cancelQueries(lists, { revert: false, silent: true });
+    const snapshot = client.getQueriesData<{ items: Issue[]; total: number }>(lists);
+    for (const [key, data] of snapshot) {
+      const search = key[key.length - 1] as IssueSearch | undefined;
+      // Only lists in Rank order show the new place; the Table's sorts don't.
+      if (!data || search?.sort !== "rank") continue;
+      const items = placeIssue(data.items, issue.key, after, before);
+      if (items !== data.items) client.setQueryData(key, { ...data, items });
+    }
+    const settle = startBoardChange(client);
+    try {
+      const saved = await inOrder(client, issue.key, () =>
+        api.reorderIssue(issue.key, after, before),
+      );
+      client.setQueryData(queryKeys.issue(saved.key), saved);
+      settle.done(saved.key, issue.status.name);
+    } catch (error) {
+      settle.failed(issue.key, snapshot, issue.status.name);
       throw error;
     }
   };

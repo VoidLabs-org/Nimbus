@@ -653,6 +653,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/issues/{issueKey}/rank": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reorder an Issue, by the Issues it was dropped between
+         * @description Best effort. Places the Issue directly after `after` when given, else directly before `before`, else keeps its Rank. A neighbour that is the Issue itself, was deleted, or has since moved to another Status is ignored. A reorder is silent: no history entry, no event, and `updatedAt` and `version` stay as they are.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    issueKey: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Key of the Issue directly above the drop, as the client saw it */
+                        after?: string;
+                        /** @description Key of the Issue directly below the drop, as the client saw it */
+                        before?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The Issue after the reorder */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Issue"];
+                    };
+                };
+                400: components["responses"]["InvalidFields"];
+                401: components["responses"]["Unauthorized"];
+                /** @description The User may not move Issues of this project */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Unknown key, or an Issue in a project the User is not a Member of */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The project is Archived */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{key}/statuses": {
         parameters: {
             query?: never;

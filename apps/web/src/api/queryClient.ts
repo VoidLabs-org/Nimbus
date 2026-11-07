@@ -1,4 +1,9 @@
-import { focusManager, QueryClient } from "@tanstack/react-query";
+import { focusManager, notifyManager, QueryClient } from "@tanstack/react-query";
+
+// Tell React about a change in the cache in the same tick, not on a timeout (the default). The Board's drop shows
+// the moved card at once; with a timeout in between, the cards that had slid apart for it closed up for a frame
+// first (dnd-kit lets go of them at the drop), then moved again: the other cards' names flickered.
+notifyManager.setScheduler(queueMicrotask);
 
 // Query only listens for tab visibility; a window can also regain focus without becoming visible again.
 focusManager.setEventListener((handleFocus) => {

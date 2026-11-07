@@ -208,13 +208,15 @@ class StatusService {
 
 	/**
 	 * The unique index on {@code lower(name)} is the final word on names: Java and Postgres can fold some characters
-	 * differently, so a violation that {@link #requireFreeName} let through is the same refusal.
+	 * differently, so a violation of it that {@link #requireFreeName} let through is the same refusal. Any other
+	 * constraint (the default's) is not a name clash and is left to fail as what it is.
 	 */
 	private static void nameTaken(String name, Runnable write) {
 		try {
 			write.run();
 		}
 		catch (DataIntegrityViolationException e) {
+			if (!String.valueOf(e.getMessage()).contains("issue_statuses_project_name")) throw e;
 			throw new IssueService.Conflict("A Status named " + name + " already exists", "status_name_taken");
 		}
 	}

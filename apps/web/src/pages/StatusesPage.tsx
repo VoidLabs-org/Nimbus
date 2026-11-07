@@ -119,6 +119,16 @@ function dropped(groups: Groups, activeId: string, overId: string): Groups {
   };
 }
 
+/**
+ * The list with exactly one default, a To do Status: the server's rule, applied to a list shown before it answers. A
+ * default that was moved out of To do gives way to the first To do Status.
+ */
+function withDefault(list: ProjectStatus[]): ProjectStatus[] {
+  const kept = list.find((status) => status.isDefault && status.category === "TODO");
+  const defaultId = (kept ?? list.find((status) => status.category === "TODO"))?.id;
+  return list.map((status) => ({ ...status, isDefault: status.id === defaultId }));
+}
+
 function failureMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
@@ -546,6 +556,8 @@ export default function StatusesPage() {
   // Changes to the order go to the server one at a time, each built on the one before.
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const savesPending = useRef(0);
+  // Whether a Status was added while changes were waiting to be sent (see withNewStatuses).
+  const addedWhilePending = useRef(false);
   const failure = loadFailure(statusesQuery) ?? loadFailure(projectQuery);
   const archived = project?.archived ?? false;
   const groups = draft ?? groupsOf(statuses);
@@ -580,58 +592,90 @@ export default function StatusesPage() {
     );
   }
 
+  /**
+   * Every change to the Statuses goes through this one queue, in the order it was made, and the lists are refreshed
+   * only when the last one is answered. A refresh in between would show the order from before a drop still waiting
+   * to be sent, and a drop sent after an add must know about the new Status (see `withNewStatuses`).
+   */
+  function enqueue<T>(job: () => Promise<T>): Promise<T> {
+    savesPending.current += 1;
+    const turn = saveQueue.current.then(job);
+    saveQueue.current = turn
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .then(() => {
+        savesPending.current -= 1;
+        if (savesPending.current === 0) {
+          addedWhilePending.current = false;
+          if (project) statusesChanged(project.key);
+        }
+      });
+    return turn;
+  }
+
+  /** The refusal to show under a name field (or "couldn't" when there is none, with the reason as a toast). */
+  function fieldRefusal(error: unknown, fallback: string): string {
+    if (error instanceof ApiError && error.status === 400 && error.fieldErrors.name) {
+      return error.fieldErrors.name;
+    }
+    if (error instanceof ApiError && error.code === "status_name_taken") return error.message;
+    toast.error(failureMessage(error, fallback));
+    return fallback;
+  }
+
+  /** A change with nothing to show on a field: queued, then a toast says what went wrong (or what was done). */
+  async function mutate(call: () => Promise<unknown>, fallback: string, success?: string) {
+    try {
+      await enqueue(call);
+      if (success) toast.success(success);
+    } catch (error) {
+      toast.error(failureMessage(error, fallback));
+    }
+  }
+
   /** Adds a Status to a category; the refusal to show under the field, or null when it was added. */
   async function add(category: Category, name: string): Promise<string | null> {
     if (!project) return "Couldn't add the Status.";
     try {
-      await api.addStatus(project.key, { name, category });
-      statusesChanged(project.key);
+      await enqueue(async () => {
+        const added = await api.addStatus(project.key, { name, category });
+        // A drop queued after this one has to send it too.
+        addedWhilePending.current = true;
+        return added;
+      });
       return null;
     } catch (error) {
-      if (error instanceof ApiError && error.status === 400 && error.fieldErrors.name) {
-        return error.fieldErrors.name;
-      }
-      if (error instanceof ApiError && error.code === "status_name_taken") return error.message;
-      toast.error(failureMessage(error, "Couldn't add the Status."));
-      return "Couldn't add the Status.";
+      return fieldRefusal(error, "Couldn't add the Status.");
     }
   }
 
   async function rename(status: ProjectStatus, name: string): Promise<string | null> {
     if (!project) return "Couldn't rename the Status.";
     try {
-      await api.editStatus(project.key, status.id, { name });
-      statusesChanged(project.key);
+      await enqueue(() => api.editStatus(project.key, status.id, { name }));
       return null;
     } catch (error) {
-      if (error instanceof ApiError && error.status === 400 && error.fieldErrors.name) {
-        return error.fieldErrors.name;
-      }
-      if (error instanceof ApiError && error.code === "status_name_taken") return error.message;
-      toast.error(failureMessage(error, "Couldn't rename the Status."));
-      return "Couldn't rename the Status.";
+      return fieldRefusal(error, "Couldn't rename the Status.");
     }
   }
 
-  async function changeCategory(status: ProjectStatus, category: Category) {
+  /** From the ⋯ menu: the same as dropping the row at the end of that card, so the order follows the cards too. */
+  function changeCategory(status: ProjectStatus, category: Category) {
     if (!project) return;
-    try {
-      await api.editStatus(project.key, status.id, { category });
-    } catch (error) {
-      toast.error(failureMessage(error, "Couldn't change the category."));
-    }
-    statusesChanged(project.key);
+    const key = queryKeys.projectStatuses(project.key);
+    const current = client.getQueryData<ProjectStatus[]>(key) ?? statuses;
+    commit(current, dropped(groupsOf(current), status.id, containerId(category)), status.id);
   }
 
-  async function makeDefault(status: ProjectStatus) {
+  function makeDefault(status: ProjectStatus) {
     if (!project) return;
-    try {
-      await api.makeDefaultStatus(project.key, status.id);
-      toast.success(`${status.name} is now the default.`);
-    } catch (error) {
-      toast.error(failureMessage(error, "Couldn't change the default."));
-    }
-    statusesChanged(project.key);
+    void mutate(
+      () => api.makeDefaultStatus(project.key, status.id),
+      "Couldn't change the default.",
+      `${status.name} is now the default.`,
+    );
   }
 
   function start(event: DragStartEvent) {
@@ -648,14 +692,15 @@ export default function StatusesPage() {
   function over(event: DragOverEvent) {
     const overId = event.over ? String(event.over.id) : null;
     const activeId = String(event.active.id);
-    setDraft((now) => {
-      const base = now ?? groupsOf(statuses);
-      if (overId === null || overId === activeId) return base;
+    const base = draft ?? groupsOf(statuses);
+    let next = base;
+    if (overId !== null && overId !== activeId) {
       const from = categoryOf(base, activeId);
       const to = categoryOf(base, overId);
-      return from && to && from !== to ? dropped(base, activeId, overId) : base;
-    });
-    setOverCard(draft && overId ? (categoryOf(draft, overId) ?? null) : null);
+      if (from && to && from !== to) next = dropped(base, activeId, overId);
+    }
+    if (next !== base) setDraft(next);
+    setOverCard(overId ? (categoryOf(next, overId) ?? null) : null);
   }
 
   /**
@@ -664,24 +709,29 @@ export default function StatusesPage() {
    * waiting (and without calling that a failed refresh). The saving then follows, one change at a time.
    */
   function finish(event: DragEndEvent) {
-    const activeId = String(event.active.id);
     const base = draft ?? groupsOf(statuses);
-    const letGo = () => {
-      setCarried(null);
-      setDraft(null);
-      setOverCard(null);
-    };
-    if (!project || !event.over) return letGo();
+    if (project && event.over) {
+      const key = queryKeys.projectStatuses(project.key);
+      // The newest list, which already has any change still being saved.
+      const current = client.getQueryData<ProjectStatus[]>(key) ?? statuses;
+      const activeId = String(event.active.id);
+      commit(current, dropped(base, activeId, String(event.over.id)), activeId);
+    }
+    setCarried(null);
+    setDraft(null);
+    setOverCard(null);
+  }
+
+  /** Shows the groups `after` (what `current` becomes) at once and queues saving them; nothing if it changes nothing. */
+  function commit(current: ProjectStatus[], after: Groups, activeId: string) {
+    if (!project) return;
     const key = queryKeys.projectStatuses(project.key);
-    // The newest list, which already has any drop still being saved.
-    const current = client.getQueryData<ProjectStatus[]>(key) ?? statuses;
     const before = groupsOf(current);
-    const after = dropped(base, activeId, String(event.over.id));
-    const ids = CATEGORIES.flatMap((category) => after[category.value].map((status) => status.id));
-    const was = CATEGORIES.flatMap((category) => before[category.value].map((status) => status.id));
+    const ids = CATEGORIES.flatMap((card) => after[card.value].map((status) => status.id));
+    const was = CATEGORIES.flatMap((card) => before[card.value].map((status) => status.id));
     const category = categoryOf(after, activeId);
     const changedCategory = category !== undefined && category !== categoryOf(before, activeId);
-    if (!changedCategory && ids.join() === was.join()) return letGo();
+    if (!changedCategory && ids.join() === was.join()) return;
 
     const byId = new Map(
       CATEGORIES.flatMap((card) => after[card.value]).map((status) => [status.id, status]),
@@ -691,12 +741,11 @@ export default function StatusesPage() {
       return status ? [{ ...status, position }] : [];
     });
     void client.cancelQueries({ queryKey: key }, { revert: false, silent: true });
-    client.setQueryData(key, reordered);
-    letGo();
+    client.setQueryData(key, withDefault(reordered));
     save(key, current, ids, changedCategory ? { id: activeId, category } : null);
   }
 
-  /** Sends a drop to the server after the ones before it; `previous` is what the list was before this drop. */
+  /** Sends a change to the order after the ones before it; `previous` is what the list was before this change. */
   function save(
     key: ReturnType<typeof queryKeys.projectStatuses>,
     previous: ProjectStatus[],
@@ -704,22 +753,44 @@ export default function StatusesPage() {
     recategorised: { id: string; category: Category } | null,
   ) {
     if (!project) return;
-    savesPending.current += 1;
-    saveQueue.current = saveQueue.current.then(async () => {
+    void enqueue(async () => {
+      let categoryChanged = false;
       try {
         if (recategorised) {
           await api.editStatus(project.key, recategorised.id, { category: recategorised.category });
+          categoryChanged = true;
         }
-        await api.reorderStatuses(project.key, ids);
+        await api.reorderStatuses(project.key, await withNewStatuses(project.key, ids));
       } catch (error) {
-        toast.error(failureMessage(error, "Couldn't save the change."));
-        // Alone, put the list back as it was at once; with others still to be sent it would undo theirs too.
-        if (savesPending.current === 1) client.setQueryData(key, previous);
+        if (categoryChanged) {
+          // Half done: the category is saved, so putting the old list back would be wrong. The refresh shows what is.
+          toast.error(
+            `The category was changed, but the new order wasn't saved: ${failureMessage(error, "Couldn't save the order.")}`,
+          );
+        } else {
+          toast.error(failureMessage(error, "Couldn't save the change."));
+          // Alone, put the list back as it was at once; with others still to be sent it would undo theirs too.
+          if (savesPending.current === 1) client.setQueryData(key, previous);
+        }
       }
-      savesPending.current -= 1;
-      // Only the last one refreshes, so an earlier answer can't undo a later drop.
-      if (savesPending.current === 0) statusesChanged(project.key);
     });
+  }
+
+  /**
+   * `ids` with any Status added since the drop was made, which the server needs in the order too: after the last
+   * Status of its category, like a Status added on its own. Only asks the server when an add came first in the queue.
+   */
+  async function withNewStatuses(projectKey: string, ids: string[]): Promise<string[]> {
+    if (!addedWhilePending.current) return ids;
+    const latest = await api.projectStatuses(projectKey);
+    const byId = new Map(latest.map((status) => [status.id, status]));
+    const result = ids.filter((id) => byId.has(id));
+    for (const status of latest) {
+      if (result.includes(status.id)) continue;
+      const after = result.findLastIndex((id) => byId.get(id)?.category === status.category);
+      result.splice(after + 1, 0, status.id);
+    }
+    return result;
   }
 
   function cancel() {
@@ -806,8 +877,8 @@ export default function StatusesPage() {
                             onStartRename={() => setRenaming(status.id)}
                             onStopRename={() => setRenaming(null)}
                             onRename={rename}
-                            onCategory={(row, next) => void changeCategory(row, next)}
-                            onDefault={(row) => void makeDefault(row)}
+                            onCategory={changeCategory}
+                            onDefault={makeDefault}
                             onDelete={setDeleting}
                           />
                         ))}

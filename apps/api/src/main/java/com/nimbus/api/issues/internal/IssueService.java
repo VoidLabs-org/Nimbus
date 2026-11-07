@@ -69,7 +69,7 @@ class IssueService implements Issues {
 
 		var number = nextNumber(project.id());
 		// A Status chosen on create (a Board column's Add issue) must be one of the project's own.
-		var statusId = input.statusId() == null ? firstToDoStatus(project.id())
+		var statusId = input.statusId() == null ? defaultStatus(project.id())
 				: jdbc.sql("SELECT id FROM issue_statuses WHERE id = :id AND project_id = :project")
 					.param("id", input.statusId()).param("project", project.id()).query(UUID.class).optional()
 					.orElseThrow(() -> new InvalidField("statusId", "Choose one of the project's Statuses"));
@@ -666,10 +666,13 @@ class IssueService implements Issues {
 		return RankKeys.between(last, null);
 	}
 
-	/** The project's default Status, a To do one; the project's first Statuses are made if it has none. */
-	private UUID firstToDoStatus(UUID projectId) {
+	/**
+	 * The project's default Status, where a new Issue starts; the project's first Statuses are made if it has none.
+	 * A project whose Statuses were put there some other way, with none marked, falls back to its first To do one.
+	 */
+	private UUID defaultStatus(UUID projectId) {
 		DefaultStatuses.ensure(jdbc, projectId);
-		return jdbc.sql("SELECT id FROM issue_statuses WHERE project_id = :project AND is_default")
+		return jdbc.sql("SELECT id FROM issue_statuses WHERE project_id = :project AND category = 'TODO' ORDER BY is_default DESC, position LIMIT 1")
 			.param("project", projectId).query(UUID.class).single();
 	}
 

@@ -189,6 +189,21 @@ class ManageStatusesTests {
 	}
 
 	@Test
+	void aProjectWithNoMarkedDefaultStillStartsIssuesInItsFirstToDoStatus() {
+		var dana = register("Dana");
+		var key = project(dana);
+		add(dana, key, "Triage", "TODO").expectStatus().isCreated();
+		// Statuses put there some other way (a seed, a fixture) may have none marked.
+		jdbc.sql("UPDATE issue_statuses SET is_default = FALSE WHERE project_id = (SELECT id FROM projects WHERE key = :key)")
+			.param("key", key).update();
+
+		var issue = createIssue(dana, key);
+
+		client.get().uri("/api/issues/{key}", issue).header("Authorization", "Bearer " + dana.token()).exchange()
+			.expectBody().jsonPath("$.status.name").isEqualTo("To do");
+	}
+
+	@Test
 	void onlyAToDoStatusCanBeTheDefault() {
 		var dana = register("Dana");
 		var key = project(dana);

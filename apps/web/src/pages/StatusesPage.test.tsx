@@ -196,6 +196,7 @@ describe("StatusesPage", () => {
 
   it("changes a category from the menu", async () => {
     const edit = vi.spyOn(api, "editStatus").mockResolvedValue(status("s4", "Triage", "DONE", 1));
+    const reorder = vi.spyOn(api, "reorderStatuses").mockResolvedValue([]);
     show();
     await openMenu("Triage");
     const sub = await screen.findByRole("menuitem", { name: /^Category/ });
@@ -205,6 +206,8 @@ describe("StatusesPage", () => {
     const target = (await screen.findAllByRole("menuitem", { name: "Done", hidden: true })).at(-1)!;
     fireEvent.click(target);
     await waitFor(() => expect(edit).toHaveBeenCalledWith("NIM", "s4", { category: "DONE" }));
+    // The order follows the cards, so the Board's columns do too: Triage goes to the end of Done.
+    await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM", ["s1", "s2", "s3", "s4"]));
   });
 
   it("makes a To do Status the default, and offers it only for To do", async () => {
@@ -271,6 +274,91 @@ describe("StatusesPage", () => {
           name: "Rename Triage",
         }),
       ).toBeTruthy(),
+    );
+  });
+
+  it("gives the default badge to the next To do Status when the default is dragged out of To do", async () => {
+    vi.spyOn(api, "editStatus").mockReturnValue(new Promise(() => {}));
+    show();
+    await screen.findByRole("button", { name: "Rename To do" });
+
+    await act(async () =>
+      dragEnd?.({ active: { id: "s1" }, over: { id: "category:IN_PROGRESS" } }),
+    );
+
+    const todo = within(screen.getByRole("region", { name: "To do" }));
+    const triage = todo.getByRole("button", { name: "Rename Triage" }).parentElement!;
+    expect(within(triage).getByText("Default")).toBeTruthy();
+    expect(screen.getAllByText("Default")).toHaveLength(1);
+  });
+
+  it("says so, and doesn't put the old list back, when the category was saved but the order wasn't", async () => {
+    vi.spyOn(api, "editStatus").mockResolvedValue(status("s4", "Triage", "DONE", 1));
+    vi.spyOn(api, "reorderStatuses").mockRejectedValue(
+      new ApiError(400, "Send each Status once", {}, null, null),
+    );
+    const error = vi.spyOn(toast, "error");
+    show();
+    await screen.findByRole("button", { name: "Rename To do" });
+
+    await act(async () => dragEnd?.({ active: { id: "s4" }, over: { id: "category:DONE" } }));
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(expect.stringContaining("The category was changed")),
+    );
+  });
+
+  it("sends a change made while a drop is waiting after it, not before", async () => {
+    const answers: (() => void)[] = [];
+    const edit = vi
+      .spyOn(api, "editStatus")
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => answers.push(() => resolve(status("s4", "Triage", "DONE", 1)))),
+      );
+    vi.spyOn(api, "reorderStatuses").mockResolvedValue([]);
+    show();
+    await screen.findByRole("button", { name: "Rename To do" });
+    await act(async () => dragEnd?.({ active: { id: "s4" }, over: { id: "category:DONE" } }));
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1));
+
+    // A rename while the drop is still being saved is queued behind it.
+    fireEvent.click(screen.getByRole("button", { name: "Rename In progress" }));
+    const name = screen.getByLabelText("Name of In progress");
+    fireEvent.change(name, { target: { value: "Doing" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+    await act(async () => {});
+    expect(edit).toHaveBeenCalledTimes(1);
+
+    await act(async () => answers[0]!());
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(2));
+    expect(edit).toHaveBeenLastCalledWith("NIM", "s2", { name: "Doing" });
+  });
+
+  it("includes a Status added just before a drop when the drop is sent", async () => {
+    let created: (added: ProjectStatus) => void = () => {};
+    vi.spyOn(api, "addStatus").mockImplementation(
+      () => new Promise((resolve) => (created = resolve)),
+    );
+    vi.spyOn(api, "editStatus").mockResolvedValue(status("s4", "Triage", "DONE", 1));
+    const reorder = vi.spyOn(api, "reorderStatuses").mockResolvedValue([]);
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Add status to Done" }));
+    const field = await screen.findByLabelText("Name of the new Done status");
+    fireEvent.change(field, { target: { value: "QA" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    await act(async () => dragEnd?.({ active: { id: "s4" }, over: { id: "category:DONE" } }));
+
+    // By the time the drop is sent, the server has the new Status, which the drop's list was made without.
+    const added = status("s5", "QA", "DONE", 4);
+    vi.mocked(api.projectStatuses).mockResolvedValue([
+      ...statuses.map((each) => (each.id === "s4" ? { ...each, category: "DONE" as const } : each)),
+      added,
+    ]);
+    await act(async () => created(added));
+
+    await waitFor(() =>
+      expect(reorder).toHaveBeenCalledWith("NIM", ["s1", "s2", "s3", "s4", "s5"]),
     );
   });
 

@@ -248,6 +248,31 @@ class ReorderIssueTests {
 	}
 
 	@Test
+	void aReorderRacingADeleteOfTheSameIssueIsAnswerOrNotFoundNeverAnError() throws Exception {
+		var dana = register("Dana");
+		var key = project(dana);
+		var anchor = create(dana, key, "Anchor");
+		var pool = Executors.newFixedThreadPool(2);
+		try {
+			for (int round = 0; round < 6; round++) {
+				var victim = create(dana, key, "Victim " + round);
+				List<Callable<Integer>> both = List.of(
+						() -> reorder(dana, victim, anchor, null).returnResult().getStatus().value(),
+						() -> client.method(HttpMethod.DELETE).uri("/api/issues/{key}", victim)
+							.header("Authorization", "Bearer " + dana.token()).exchange().returnResult().getStatus()
+							.value());
+				var results = pool.invokeAll(both);
+				// The reorder waits for the delete (404) or finishes first (200); the delete always works.
+				assertThat(results.get(0).get()).isIn(200, 404);
+				assertThat(results.get(1).get()).isEqualTo(204);
+			}
+		}
+		finally {
+			pool.shutdownNow();
+		}
+	}
+
+	@Test
 	void repeatedDropsIntoTheSameGapRenumberTheProjectAndKeepTheOrder() {
 		var dana = register("Dana");
 		var key = project(dana);

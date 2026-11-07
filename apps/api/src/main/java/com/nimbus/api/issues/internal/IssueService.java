@@ -175,7 +175,9 @@ class IssueService implements Issues {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
 		var project = target.project();
 		lockProject(project.id());
-		var current = findRanked(project.id(), target.number()).orElseThrow(() -> new NotFound("Issue not found"));
+		// The Issue row is locked like every edit does (after the project: that order everywhere), so a delete or a move
+		// that runs at the same time is waited for and then seen, not raced.
+		var current = findRanked(project.id(), target.number(), true).orElseThrow(() -> new NotFound("Issue not found"));
 		access.requireOwn(target.scope(), IssueAccess.Action.EDIT, actor, current.reporterId(), current.assigneeId());
 		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
 		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
@@ -212,8 +214,9 @@ class IssueService implements Issues {
 	/** A Rank key longer than this makes the project's keys be rewritten evenly (ADR 0012). */
 	private static final int MAX_RANK_LENGTH = 50;
 
-	private java.util.Optional<Ranked> findRanked(UUID projectId, int number) {
-		return jdbc.sql("SELECT id, reporter_id, assignee_id, status_id, rank FROM issues WHERE project_id = :project AND number = :number")
+	private java.util.Optional<Ranked> findRanked(UUID projectId, int number, boolean lock) {
+		return jdbc.sql("SELECT id, reporter_id, assignee_id, status_id, rank FROM issues WHERE project_id = :project AND number = :number"
+				+ (lock ? " FOR UPDATE" : ""))
 			.param("project", projectId).param("number", number)
 			.query((row, index) -> new Ranked(row.getObject("id", UUID.class), row.getObject("reporter_id", UUID.class),
 					row.getObject("assignee_id", UUID.class), row.getObject("status_id", UUID.class), row.getString("rank")))
@@ -231,7 +234,7 @@ class IssueService implements Issues {
 			errors.put(field, "Choose an Issue of the same project");
 			return null;
 		}
-		var found = findRanked(project.id(), parsed.get().number());
+		var found = findRanked(project.id(), parsed.get().number(), false);
 		if (found.isEmpty()) {
 			// Numbers are never reused, so one that was taken once belongs to an Issue deleted meanwhile.
 			var last = jdbc.sql("SELECT last_number FROM issue_counters WHERE project_id = :project")

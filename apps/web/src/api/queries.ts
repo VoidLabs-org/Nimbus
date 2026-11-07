@@ -302,7 +302,7 @@ export function useMoveIssue() {
     }
     const settle = startBoardChange(client);
     try {
-      const saved = await inOrder(client, () => api.moveIssue(issue.key, status.id));
+      const saved = await inOrder(client, issue.key, () => api.moveIssue(issue.key, status.id));
       client.setQueryData(queryKeys.issue(saved.key), saved);
       void client.invalidateQueries({ queryKey: queryKeys.issueHistory(saved.key) });
       settle.done(saved.key);
@@ -314,16 +314,20 @@ export function useMoveIssue() {
 }
 
 /**
- * Board changes go to the server one at a time, in the order they were made: a drop's neighbours are the cards the
+ * Board changes go to the server one at a time per project, in the order they were made: a drop's neighbours are the cards the
  * Board showed, which already include the drops before it, so a later one must not be applied first. (Sent together
  * over separate connections, they could arrive either way round.) An earlier one failing doesn't hold the rest back.
  */
-const sending = new WeakMap<QueryClient, Promise<unknown>>();
+const sending = new WeakMap<QueryClient, Map<string, Promise<unknown>>>();
 
-function inOrder<T>(client: QueryClient, send: () => Promise<T>): Promise<T> {
-  const turn = (sending.get(client) ?? Promise.resolve()).then(send);
-  sending.set(
-    client,
+function inOrder<T>(client: QueryClient, issueKey: string, send: () => Promise<T>): Promise<T> {
+  // Per project: changes to different projects' Issues have nothing to do with each other.
+  const queues = sending.get(client) ?? new Map<string, Promise<unknown>>();
+  sending.set(client, queues);
+  const project = projectKeyOf(issueKey);
+  const turn = (queues.get(project) ?? Promise.resolve()).then(send);
+  queues.set(
+    project,
     turn.catch(() => {}),
   );
   return turn;
@@ -358,8 +362,13 @@ function startBoardChange(client: QueryClient) {
       void client.invalidateQueries({
         queryKey: projectIssueLists(issueKey),
         predicate: (query) => {
+          // Every list in Rank order that can show the Issue: its Status's column, and the lists of all Statuses
+          // (the Table sorted by Rank), which the optimistic reorder changed too.
           const search = query.queryKey[query.queryKey.length - 1] as IssueSearch | undefined;
-          return search?.status?.toLowerCase() === statusName.toLowerCase();
+          if (search?.sort !== "rank") return false;
+          return (
+            search.status === undefined || search.status.toLowerCase() === statusName.toLowerCase()
+          );
         },
       });
     }
@@ -392,12 +401,9 @@ export function placeIssue<T extends { key: string }>(
 ): T[] {
   const issue = items.find((item) => item.key === issueKey);
   const rest = items.filter((item) => item.key !== issueKey);
-  const anchor =
-    after !== undefined && rest.some((item) => item.key === after)
-      ? rest.findIndex((item) => item.key === after) + 1
-      : before !== undefined && rest.some((item) => item.key === before)
-        ? rest.findIndex((item) => item.key === before)
-        : -1;
+  const afterAt = after === undefined ? -1 : rest.findIndex((item) => item.key === after);
+  const beforeAt = before === undefined ? -1 : rest.findIndex((item) => item.key === before);
+  const anchor = afterAt >= 0 ? afterAt + 1 : beforeAt;
   if (!issue || anchor < 0) return items;
   return [...rest.slice(0, anchor), issue, ...rest.slice(anchor)];
 }
@@ -423,7 +429,9 @@ export function useReorderIssue() {
     }
     const settle = startBoardChange(client);
     try {
-      const saved = await inOrder(client, () => api.reorderIssue(issue.key, after, before));
+      const saved = await inOrder(client, issue.key, () =>
+        api.reorderIssue(issue.key, after, before),
+      );
       client.setQueryData(queryKeys.issue(saved.key), saved);
       settle.done(saved.key, issue.status.name);
     } catch (error) {

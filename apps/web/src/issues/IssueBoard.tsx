@@ -11,6 +11,7 @@ import {
   useDroppable,
   useSensor,
   useSensors,
+  type Collision,
   type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
@@ -93,6 +94,18 @@ const landing: { current: DOMRect | null } = { current: null };
 
 const dropAnimation = makeDropAnimation();
 
+/**
+ * The card the drop animation showed with an inline `visibility`, while its Drop still hides it. A card that stays in
+ * the same column is the same element on its next drop, so the inline style has to go once the Drop is over, or it
+ * would keep winning over the class that hides the card during that next drop.
+ */
+let revealed: HTMLElement | null = null;
+
+function clearRevealed() {
+  revealed?.style.removeProperty("visibility");
+  revealed = null;
+}
+
 function makeDropAnimation(): DropAnimationFunction {
   return async ({ active, dragOverlay, draggableNodes, transform }) => {
     dropping = false;
@@ -142,13 +155,17 @@ function makeDropAnimation(): DropAnimationFunction {
     } finally {
       if (card) card.style.opacity = opacity;
     }
-    if (card) return;
+    if (card) {
+      revealed = card;
+      return;
+    }
     // The card was not looked for before: it is in its new column by now, hidden by its Drop; show it under the
     // carried card, which goes the moment this returns (a few frames at most, if the Board is slow).
     for (let frame = 0; frame < 10; frame++) {
       const arrived = draggableNodes.get(active.id)?.node.current;
       if (arrived?.isConnected) {
         arrived.style.visibility = "visible";
+        revealed = arrived;
         revealInColumn(arrived);
         return;
       }
@@ -178,7 +195,10 @@ let dropping = false;
 const IN_VIEW = { top: 0, left: 0, right: 1, bottom: 1, width: 1, height: 1 };
 
 const measuring = {
-  draggable: { measure: (element: HTMLElement) => (dropping ? IN_VIEW : getClientRect(element)) },
+  draggable: {
+    measure: (element: HTMLElement) =>
+      dropping ? IN_VIEW : getClientRect(element, { ignoreTransform: true }),
+  },
 };
 
 /**
@@ -207,10 +227,10 @@ function prefersReducedMotion() {
 const collisionDetection: CollisionDetection = (args) => {
   const within = pointerWithin(args);
   if (within.length === 0) return closestCenter(args);
-  const dataOf = (id: unknown) => args.droppableContainers.find((c) => c.id === id)?.data.current;
-  const card = within.find((collision) => dataOf(collision.id)?.issue);
+  const dataOf = (collision: Collision) => collision.data?.droppableContainer.data.current;
+  const card = within.find((collision) => dataOf(collision)?.issue);
   if (card) return [card];
-  const status = dataOf(within[0]!.id)?.status as ProjectStatus | undefined;
+  const status = dataOf(within[0]!)?.status as ProjectStatus | undefined;
   if (!status) return within;
   const nearest = closestCenter({
     ...args,
@@ -222,7 +242,10 @@ const collisionDetection: CollisionDetection = (args) => {
   return nearest.length > 0 ? nearest : within;
 };
 
-/** The arrow keys carry a lifted card to the nearest drop area in that direction, so one press changes a Status. */
+/**
+ * The arrow keys carry a lifted card to the nearest drop area in that direction: the next card of its column (a
+ * drop there is a reorder), or another column's card or bare space (a drop there changes the Status).
+ */
 const keyboardCoordinates: KeyboardCoordinateGetter = (
   event,
   { context: { droppableRects, droppableContainers, collisionRect } },
@@ -285,7 +308,10 @@ function DragBoard({
   useEffect(() => {
     if (!dropKey) return;
     // Past the drop animation, a card still where it was (the move failed) shows again; the trace is done by 1.5s.
-    const shown = setTimeout(() => setDrop((now) => now && { ...now, moving: false }), 600);
+    const shown = setTimeout(() => {
+      setDrop((now) => now && { ...now, moving: false });
+      clearRevealed();
+    }, 600);
     const done = setTimeout(() => setDrop(null), 1500);
     return () => {
       clearTimeout(shown);
@@ -301,6 +327,7 @@ function DragBoard({
 
   function start(event: DragStartEvent) {
     dropping = false;
+    clearRevealed();
     setDrop(null);
     setLifted(issues.find((issue) => issue.key === event.active.id) ?? null);
   }
@@ -317,7 +344,9 @@ function DragBoard({
   }
 
   function end(event: DragEndEvent) {
-    dropping = true;
+    // Only an animation clears these, and with reduced motion there is none.
+    const animated = !prefersReducedMotion();
+    dropping = animated;
     const status = event.over?.data.current?.status as ProjectStatus | undefined;
     const issue = issues.find((item) => item.key === event.active.id);
     const moved = status !== undefined && issue !== undefined && issue.status.id !== status.id;
@@ -327,10 +356,10 @@ function DragBoard({
       onReorder && issue && status && !moved && overKey !== undefined
         ? reorderedBetween(issues, issue, overKey)
         : undefined;
-    landing.current = moved
-      ? (document.querySelector("[data-drop-slot]")?.getBoundingClientRect() ?? null)
-      : null;
-    const animated = !prefersReducedMotion();
+    landing.current =
+      moved && animated
+        ? (document.querySelector("[data-drop-slot]")?.getBoundingClientRect() ?? null)
+        : null;
     if (issue && (moved || animated)) {
       setDrop({
         key: issue.key,

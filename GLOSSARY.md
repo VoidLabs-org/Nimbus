@@ -5,8 +5,8 @@ A project management app where teams plan and track work in projects, boards and
 ## Product
 
 **Project**:
-A place where a team plans and tracks its work. It holds the team's Issues, boards and sprints.
-_Avoid_: Workspace, space, board
+A place where a team plans and tracks its work. It holds the team's Issues, boards and sprints, and records the User who created it (a plain fact, not a role: creating a project gives no rights beyond being its first Member).
+_Avoid_: Workspace, space, board (the **Board** is one view of a project's Issues)
 
 **Project key**:
 A short code that identifies a project and prefixes its Issue numbers, as in `NIM-12`. It never changes and is never reused.
@@ -38,11 +38,19 @@ _Avoid_: Task (as a type), category
 
 **Reporter**:
 The User who created an Issue.
-_Avoid_: Creator, author, owner
+_Avoid_: Creator (of an Issue), author, owner
 
 **Assignee**:
 The Member responsible for doing an Issue.
 _Avoid_: Owner, responsible
+
+**Board**:
+A view of a project's Issues as a column per Status, where dragging an Issue to another column moves it to that Status.
+_Avoid_: Kanban, project (as a synonym)
+
+**Swimlanes**:
+The Board with a row per Assignee; dropping an Issue in another column changes its Status only, never its Assignee.
+_Avoid_: Lanes, grouped board
 
 **User**:
 A person who can sign in to Nimbus, identified by their email address. One person is one User, however many ways they sign in.

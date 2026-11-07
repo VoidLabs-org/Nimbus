@@ -131,6 +131,20 @@ export default function IssuesPage() {
       ? (loadFailure(statuses) ?? columnQueries.map(loadFailure).find((found) => found !== null))
       : loadFailure(query)) ??
     null;
+  // A refresh that failed while the last answer is still shown: the open view's own queries (the Board, Swimlanes and
+  // List read a query per Status, the Table one paged query), each column only while it is shown.
+  const shownColumns = columnQueries.filter((_, index) => {
+    const status = statuses.data?.[index];
+    return status !== undefined && columnShown(search, status);
+  });
+  const stale = grouped
+    ? refreshFailed(statuses) || shownColumns.some(refreshFailed)
+    : refreshFailed(query);
+  function retryStale() {
+    if (!grouped) return void query.refetch();
+    if (refreshFailed(statuses)) void statuses.refetch();
+    for (const column of shownColumns) if (refreshFailed(column)) void column.refetch();
+  }
   const { createIssue } = useProjectOutlet();
   // The column whose Add issue opened Create Issue, for this project only.
   const [addingTo, setAddingTo] = useState<{ project: string; status: ProjectStatus } | null>(null);
@@ -294,11 +308,11 @@ export default function IssuesPage() {
         onFilter={(name: FilterField | "assignee", value) => change(name, value)}
         onClearMenu={() => remove(FILTER_FIELDS)}
       />
-      {refreshFailed(query) && (
+      {stale && (
         <StaleNotice
           title="Couldn't refresh these Issues"
           shown="the last loaded list"
-          onRetry={() => void query.refetch()}
+          onRetry={retryStale}
         />
       )}
       {project && addingTo?.project === project.key && (

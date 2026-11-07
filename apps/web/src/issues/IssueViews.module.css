@@ -135,6 +135,9 @@
 /* A column's cards: they scroll when there are more than fit. The small padding keeps the cards' outlines and focus
    rings from being cut off at the edges. */
 .cards {
+  /* Positioned, so it clips what is absolutely positioned inside it too (each card's visually hidden Assignee name):
+     otherwise the cards scrolled out of view would still make the page taller, and the Board would shrink to fit. */
+  position: relative;
   display: flex;
   flex: 0 1 auto;
   flex-direction: column;
@@ -248,7 +251,7 @@
   }
 }
 
-/* Just dropped in a new Status, until the Board shows it there: hidden where it was, so it doesn't show for a frame. */
+/* Just dropped, until the carried card lands on it: hidden, so it never shows twice or back where it was. */
 .leaving {
   visibility: hidden;
 }

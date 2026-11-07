@@ -332,6 +332,25 @@ describe("IssuesPage", () => {
     await waitFor(() => expect(issues.mock.calls.length).toBeGreaterThan(asked));
   });
 
+  it("says when the Board couldn't be refreshed, keeps the cards, and Try again asks again", async () => {
+    const issues = byStatus([issue(1, "Plan sprint")]);
+    vi.spyOn(api, "moveIssue").mockResolvedValue(issue(1, "Plan sprint", { status: inProgress }));
+    show("/projects/NIM/issues?view=board");
+    await screen.findByRole("link", { name: /Plan sprint/ });
+
+    // The refresh after the move fails: the Board keeps what it showed and says so.
+    issues.mockRejectedValue(new Error("Offline"));
+    act(() =>
+      dragEnd?.({ active: { id: "NIM-1" }, over: { data: { current: { status: statuses[1] } } } }),
+    );
+    expect(await screen.findByText("Couldn't refresh these Issues.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Plan sprint/ })).toBeTruthy();
+
+    issues.mockImplementation(async () => page([issue(1, "Plan sprint", { status: inProgress })]));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.queryByText("Couldn't refresh these Issues.")).toBeNull());
+  });
+
   it("does nothing when a card is dropped on the Status it is already in", async () => {
     byStatus([issue(1, "Plan sprint")]);
     const move = vi.spyOn(api, "moveIssue");

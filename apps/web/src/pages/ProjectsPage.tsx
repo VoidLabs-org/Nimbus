@@ -123,7 +123,7 @@ function Toolbar({
         ref={searchRef}
         aria-label="Search projects"
         placeholder="Search projects"
-        className={toolbar.search}
+        className={`${toolbar.search} ${classes.search}`}
         classNames={{ input: toolbar.searchInput }}
         leftSection={<IconSearch size={15} aria-hidden />}
         rightSection={
@@ -179,7 +179,7 @@ function ProjectTable({ projects }: { projects: Project[] }) {
             <th className={classes.wideOnly}>Progress</th>
             <th className={classes.wideOnly}>Members</th>
             <th className={classes.wideOnly}>Updated</th>
-            <th aria-hidden />
+            <th className={classes.arrow} aria-hidden />
           </tr>
         </thead>
         <tbody>

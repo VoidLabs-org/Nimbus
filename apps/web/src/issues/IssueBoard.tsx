@@ -46,11 +46,14 @@ export type CanMove = (issue: Issue) => boolean;
 const CanMoveContext = createContext<CanMove>(() => true);
 
 /**
- * The Issue just dropped in a new Status, and that Status. Until the Board shows the move (a moment later: TanStack
- * Query tells React on its next tick) its card is hidden where it was, so it doesn't show there for a frame; once the
- * card is in that Status, its outline is traced. If the move fails it is back where it was, untraced.
+ * The Issue just dropped and the Status it was dropped in (its own, for a drop that moves nothing). While `moving`,
+ * its card is hidden wherever it is: in its old column until the Board shows the move (a moment later: TanStack Query
+ * tells React on its next tick), and in its new place until the carried card has glided there, which then shows it
+ * (see dropAnimation), so there are never two at once. Without animation (`animated` false) only the old place is
+ * hidden. A card that `moved` and is in that Status gets its outline traced; if the move fails it is back where it
+ * was, untraced.
  */
-type Drop = { key: string; status: string; moving: boolean };
+type Drop = { key: string; status: string; moved: boolean; animated: boolean; moving: boolean };
 
 const DropContext = createContext<Drop | null>(null);
 
@@ -86,6 +89,8 @@ const dropAnimation: DropAnimationFunction = async ({
   };
   const opacity = card.style.opacity;
   card.style.opacity = "0";
+  // Hidden by its Drop until now; shown under the carried card the moment it lands (the inline style wins).
+  card.style.visibility = "visible";
   dragOverlay.node.classList.add(classes.dropping!);
   // Sticky: it is pulled into place, overshoots a hair, presses in as it lands, then settles.
   const there = CSS.Transform.toString(end);
@@ -175,7 +180,7 @@ function DragBoard({
   useEffect(() => {
     if (!dropKey) return;
     // Past the drop animation, a card still where it was (the move failed) shows again; the trace is done by 1.5s.
-    const shown = setTimeout(() => setDrop((now) => now && { ...now, moving: false }), 400);
+    const shown = setTimeout(() => setDrop((now) => now && { ...now, moving: false }), 600);
     const done = setTimeout(() => setDrop(null), 1500);
     return () => {
       clearTimeout(shown);
@@ -208,8 +213,16 @@ function DragBoard({
   function end(event: DragEndEvent) {
     const status = event.over?.data.current?.status as ProjectStatus | undefined;
     const issue = issues.find((item) => item.key === event.active.id);
-    if (status && issue && issue.status.id !== status.id) {
-      setDrop({ key: issue.key, status: status.id, moving: true });
+    const moved = status !== undefined && issue !== undefined && issue.status.id !== status.id;
+    const animated = !prefersReducedMotion();
+    if (issue && (moved || animated)) {
+      setDrop({
+        key: issue.key,
+        status: status?.id ?? issue.status.id,
+        moved,
+        animated,
+        moving: true,
+      });
     }
     setLifted(null);
     setTarget(null);
@@ -286,8 +299,9 @@ function IssueCard({ issue }: { issue: Issue }) {
   const canMove = useContext(CanMoveContext);
   const drop = useContext(DropContext);
   const dropped = drop?.key === issue.key;
-  const landed = dropped && issue.status.id === drop.status;
-  const leaving = dropped && drop.moving && !landed;
+  const there = dropped && issue.status.id === drop.status;
+  const landed = there && drop.moved;
+  const leaving = dropped && drop.moving && (drop.animated || !there);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: issue.key,
     data: { issue },

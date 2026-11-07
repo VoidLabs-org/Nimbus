@@ -231,8 +231,18 @@
 
 /* On a phone: the project and its open Issues; the key is in the badge anyway. */
 @media (max-width: 48em) {
+  /* The arrow too: the whole row opens the project, and it would make the table scroll sideways. */
   .keyCell,
-  .wideOnly {
+  .wideOnly,
+  .arrow {
     display: none;
+  }
+
+  /* The shared search goes full width on a phone (the Issues toolbar gives it its own row); here it shares its row
+     with the count, so it shrinks to leave the count room instead of pushing it off the screen. */
+  .toolbar .search {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
   }
 }

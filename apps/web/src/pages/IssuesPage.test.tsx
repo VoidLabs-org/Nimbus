@@ -32,6 +32,9 @@ const project: Project = {
   description: null,
   archived: false,
   createdAt: "2026-10-19T00:00:00Z",
+  createdBy: { id: "u1", displayName: "Dana", avatarUrl: null },
+  memberCount: 1,
+  members: [{ id: "u1", displayName: "Dana", avatarUrl: null }],
 };
 const dana = { id: "u1", displayName: "Dana", avatarUrl: null };
 const issue = (number: number, title: string, over: Partial<Issue> = {}): Issue => ({
@@ -247,6 +250,86 @@ describe("IssuesPage", () => {
     );
 
     await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", "s2"));
+  });
+
+  it("shows a dropped card in its new column, and never back where it was, before the server answers", async () => {
+    byStatus([issue(1, "Plan sprint")]);
+    // Never answers, so only the Board's own update can have moved the card.
+    vi.spyOn(api, "moveIssue").mockReturnValue(new Promise(() => {}));
+    show("/projects/NIM/issues?view=board");
+    await screen.findByRole("link", { name: /Plan sprint/ });
+
+    // Microtasks only, as a browser runs before it paints: the Board hears about the move on a timeout, so until then
+    // the card must not show in its old column.
+    await act(async () =>
+      dragEnd?.({ active: { id: "NIM-1" }, over: { data: { current: { status: statuses[1] } } } }),
+    );
+    const todo = screen.getByRole("region", { name: "To do" });
+    const left = within(todo).queryByRole("link", { name: /Plan sprint/ });
+    // The test doesn't load the CSS, so the class that hides it stands in for it.
+    expect(left === null || /leaving/.test(left.className)).toBe(true);
+
+    const doing = screen.getByRole("region", { name: "In progress" });
+    expect(await within(doing).findByText("Plan sprint")).toBeTruthy();
+  });
+
+  it("refreshes the Board only when the last of several quick moves is answered", async () => {
+    const all = [issue(1, "Plan sprint"), issue(2, "Fix login")];
+    const issues = byStatus(all);
+    const answers: ((moved: Issue) => void)[] = [];
+    vi.spyOn(api, "moveIssue").mockImplementation(
+      () => new Promise((resolve) => answers.push(resolve)),
+    );
+    show("/projects/NIM/issues?view=board");
+    await screen.findByRole("link", { name: /Fix login/ });
+    const drop = (key: string) =>
+      act(() =>
+        dragEnd?.({ active: { id: key }, over: { data: { current: { status: statuses[1] } } } }),
+      );
+
+    drop("NIM-1");
+    drop("NIM-2");
+    await waitFor(() => expect(answers).toHaveLength(2));
+    const asked = issues.mock.calls.length;
+
+    // The first answer comes while the second move is on its way: asking the server now could show NIM-2 back in
+    // To do, so the Board isn't refreshed yet.
+    await act(async () => answers[0]!(issue(1, "Plan sprint", { status: inProgress })));
+    expect(issues.mock.calls.length).toBe(asked);
+    expect(
+      within(screen.getByRole("region", { name: "In progress" })).getByText("Fix login"),
+    ).toBeTruthy();
+
+    // The last answer refreshes it, once the server has both moves.
+    all.forEach((item, index) => (all[index] = { ...item, status: inProgress }));
+    await act(async () => answers[1]!(issue(2, "Fix login", { status: inProgress })));
+    await waitFor(() => expect(issues.mock.calls.length).toBeGreaterThan(asked));
+  });
+
+  it("still refreshes the Board for an earlier move when the last of several quick moves fails", async () => {
+    const all = [issue(1, "Plan sprint"), issue(2, "Fix login")];
+    const issues = byStatus(all);
+    const answers: { resolve: (moved: Issue) => void; reject: (error: Error) => void }[] = [];
+    vi.spyOn(api, "moveIssue").mockImplementation(
+      () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
+    );
+    show("/projects/NIM/issues?view=board");
+    await screen.findByRole("link", { name: /Fix login/ });
+    const drop = (key: string) =>
+      act(() =>
+        dragEnd?.({ active: { id: key }, over: { data: { current: { status: statuses[1] } } } }),
+      );
+
+    drop("NIM-1");
+    drop("NIM-2");
+    await waitFor(() => expect(answers).toHaveLength(2));
+    await act(async () => answers[0]!.resolve(issue(1, "Plan sprint", { status: inProgress })));
+    const asked = issues.mock.calls.length;
+
+    // NIM-1's move worked and hasn't refreshed the Board yet; NIM-2's failing last must not leave it unrefreshed.
+    all[0] = { ...all[0]!, status: inProgress };
+    await act(async () => answers[1]!.reject(new Error("Offline")));
+    await waitFor(() => expect(issues.mock.calls.length).toBeGreaterThan(asked));
   });
 
   it("does nothing when a card is dropped on the Status it is already in", async () => {

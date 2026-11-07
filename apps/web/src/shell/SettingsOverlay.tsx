@@ -2,8 +2,7 @@ import { FocusTrap, Overlay, Portal, UnstyledButton } from "@mantine/core";
 import { Glyph } from "@repo/ui/glyph";
 import { IconX } from "@tabler/icons-react";
 import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
-import { NavLink } from "react-router";
-import { useSettingsGroups } from "../settings/sections";
+import { SettingsNav } from "../settings/SettingsNav";
 import { SettingsOverlayContext } from "../settings/settingsOverlay";
 import { takesTyping } from "./navPosition";
 import classes from "./SettingsOverlay.module.css";
@@ -22,7 +21,7 @@ function escClosesFrom(target: EventTarget | null, overlay: HTMLElement | null):
  * Settings in the Desktop app, over the page the User was on, from the "Nimbus Desktop v2" design (2c), laid out like
  * the Claude app's Settings: a panel centred in the window over the dimmed, blurred app, with a header row (the title
  * and the ✕) above two columns. The Settings pages are listed on the left (Account for everyone, Workspace only for
- * Users who may open its pages, the same list as the Settings overview) and the open page, `children`, is on the
+ * Users who may open its pages; the same SettingsNav as the browser's Settings layout) and the open page, `children`, is on the
  * right; each column scrolls on its own, under the header. Esc, its ✕ and a click on the dimmed app call `onClose`;
  * Esc only from inside the panel, and not from a field (see escClosesFrom).
  *
@@ -36,7 +35,6 @@ export default function SettingsOverlay({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const groups = useSettingsGroups();
   const close = useEffectEvent(onClose);
   // On the layer, not the panel: FocusTrap puts its own ref on the panel. The layer holds only the panel and backdrop.
   const layer = useRef<HTMLDivElement>(null);
@@ -81,24 +79,7 @@ export default function SettingsOverlay({
               </UnstyledButton>
             </header>
             <div className={classes.columns}>
-              <nav aria-label="Settings pages" className={classes.list}>
-                {groups.map((group) => (
-                  <div key={group.label} className={classes.group}>
-                    <div className={classes.heading}>{group.label}</div>
-                    {group.items.map((item) => (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        className={({ isActive }) =>
-                          isActive ? `${classes.item} ${classes.active}` : classes.item
-                        }
-                      >
-                        {item.label}
-                      </NavLink>
-                    ))}
-                  </div>
-                ))}
-              </nav>
+              <SettingsNav className={classes.list} />
               <div className={classes.page}>
                 <SettingsOverlayContext value="inside">{children}</SettingsOverlayContext>
               </div>

@@ -231,7 +231,7 @@ export function AppShell() {
         </div>
       </nav>
       <div className={classes.content}>
-        <Container size="lg">
+        <Container fluid>
           <PageContent />
         </Container>
       </div>

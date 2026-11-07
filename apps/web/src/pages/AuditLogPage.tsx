@@ -1,6 +1,6 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import { Alert, Button, Container, Group, Pagination, Stack, Title } from "@mantine/core";
+import { Alert, Box, Button, Group, Pagination, Stack, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { Loading } from "@repo/ui/skeleton";
 import { useEffect, useState } from "react";
@@ -73,12 +73,12 @@ export default function AuditLogPage() {
   }
 
   return (
-    <Container size="lg" px={0} py="xl">
+    <Box py="xl">
       <Stack gap="lg">
         <BreadcrumbTrail crumbs={settingsCrumbs("Audit log")} />
         <div className={classes.header}>
           <div>
-            <Title order={1} fz={40} lh={1.05}>
+            <Title order={1} fz={32} lh={1.1}>
               Audit log
             </Title>
             <div className={classes.description}>
@@ -149,7 +149,7 @@ export default function AuditLogPage() {
         )}
       </Stack>
       {opened && <AuditEntryModal entry={opened} onClose={() => setOpened(null)} />}
-    </Container>
+    </Box>
   );
 }
 

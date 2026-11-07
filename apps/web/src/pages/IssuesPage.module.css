@@ -131,3 +131,20 @@
     margin-left: 0;
   }
 }
+
+/* The open view, faded in briefly when the User switches views, so one layout doesn't replace another at once. */
+.viewIn {
+  animation: view-in 150ms ease-out;
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewIn {
+    animation: none;
+  }
+}

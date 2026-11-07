@@ -33,7 +33,7 @@ import RolesPage from "./pages/RolesPage";
 import SecurityPage from "./pages/SecurityPage";
 import TwoStepSignInPage from "./pages/TwoStepSignInPage";
 import NotificationSettingsPage from "./pages/NotificationSettingsPage";
-import SettingsOverview from "./settings/SettingsOverview";
+import SettingsLayout from "./settings/SettingsLayout";
 import { PASSWORD_WINDOW_PATH } from "./settings/sections";
 import {
   isSettingsPath,
@@ -215,9 +215,10 @@ export function AppRoutes() {
               <Route path="settings/statuses" element={<StatusesPage />} />
             </Route>
             <Route path="/issues/:issueKey" element={<IssuePage />} />
-            {/* Settings: the overview list, and the pages it opens. */}
-            <Route path="/settings" element={<SettingsOverview />} />
-            {SETTINGS_PAGES}
+            {/* Settings: its pages beside their list. Its list stands in for an overview, so Settings opens on Profile,
+                as the Desktop app's overlay does. */}
+            <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />
+            <Route element={<SettingsLayout />}>{SETTINGS_PAGES}</Route>
             {/* Any other address: not found, with the navbar so the User can leave. */}
             <Route path="*" element={<NotFoundPage />} />
           </Route>

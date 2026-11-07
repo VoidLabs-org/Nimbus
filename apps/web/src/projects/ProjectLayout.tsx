@@ -78,7 +78,7 @@ export function ProjectLayout() {
   ];
 
   return (
-    <Container size="xl" px={0} py="xl">
+    <Container fluid px={0} py="xl" className={classes.page}>
       <Stack gap="lg">
         {/* A project's other tabs add its name, "Apollo · Issues", so two projects' Desktop Tabs tell apart. */}
         <BreadcrumbTrail

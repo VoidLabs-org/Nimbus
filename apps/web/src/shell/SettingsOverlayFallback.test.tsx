@@ -82,7 +82,7 @@ describe("the Desktop app, when its Settings overlay can't load", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Profile" })).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Settings pages" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
   });
 
@@ -107,8 +107,9 @@ describe("the Desktop app, when its Settings overlay can't load", () => {
       ctrlKey: true,
     });
 
-    // The overview: the overlay's redirect to Profile is not there.
-    expect(await screen.findByRole("heading", { name: "Account" })).toBeTruthy();
+    // Settings as a page, beside its list, on Profile.
+    expect(await screen.findByRole("navigation", { name: "Settings pages" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Profile" })).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Jump" })).toBeNull());
   });
 

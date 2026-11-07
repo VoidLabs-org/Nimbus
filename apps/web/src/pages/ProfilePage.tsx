@@ -1,4 +1,4 @@
-import { Button, Container, Stack, Text, Title } from "@mantine/core";
+import { Box, Button, Stack, Text, Title } from "@mantine/core";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { Panel } from "@repo/ui/panel";
@@ -39,7 +39,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <Container size="sm" px={0} py="xl">
+    <Box py="xl">
       <Stack gap="lg">
         <BreadcrumbTrail crumbs={settingsCrumbs("Profile")} />
         <div>
@@ -134,6 +134,6 @@ export default function ProfilePage() {
         onConfirm={() => signInAgain.mutate()}
         onClose={() => setReauthOpen(false)}
       />
-    </Container>
+    </Box>
   );
 }

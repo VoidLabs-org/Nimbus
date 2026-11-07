@@ -1,5 +1,5 @@
 import { IconLock, IconShieldLock } from "@tabler/icons-react";
-import { Alert, Button, Container, Group, Stack, Switch, Table, Text, Title } from "@mantine/core";
+import { Alert, Box, Button, Group, Stack, Switch, Table, Text, Title } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Glyph } from "@repo/ui/glyph";
 import { Panel } from "@repo/ui/panel";
@@ -65,11 +65,13 @@ export default function NotificationSettingsPage() {
   }
 
   return (
-    <Container size="md" px={0} py="xl">
+    <Box py="xl">
       <Stack gap="lg">
         <BreadcrumbTrail crumbs={settingsCrumbs("Notifications")} />
         <div>
-          <Title order={1}>Notifications</Title>
+          <Title order={1} fz={32} lh={1.1}>
+            Notifications
+          </Title>
           <Text c="dimmed" mt={6}>
             Choose which Issue Notifications are also sent by email. Each change is saved as you
             make it.
@@ -148,6 +150,6 @@ export default function NotificationSettingsPage() {
           </Group>
         </Panel>
       </Stack>
-    </Container>
+    </Box>
   );
 }

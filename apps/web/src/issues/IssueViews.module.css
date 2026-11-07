@@ -1,23 +1,174 @@
 /* The Board, Swimlanes, grouped List and Table of the Issues page, from the "Nimbus Themes" design (37a–37e). Colours
    come only from the theme variables. */
+/* The Board's frame: the scrolling row of columns and the minimap under it. Its height (set in code) reaches the
+   bottom of the window, and the row takes all of it but the minimap's. */
+.boardFrame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The columns share the width (200–320px each), so a few Statuses fit with no scrollbar; past that the row scrolls. */
 .board {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(220px, 1fr);
+  display: flex;
+  flex: 1;
   gap: 12px;
+  min-height: 0;
   overflow-x: auto;
   padding-bottom: 8px;
 }
 
+/* A mask, not a colour overlay, so the fade works on every theme, the translucent ones too. */
+.board[data-more="right"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 64px), transparent);
+}
+
+.board[data-more="left"] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 64px), transparent);
+}
+
+.board[data-more="both"] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 64px,
+    #000 calc(100% - 64px),
+    transparent
+  );
+}
+
+/* A thin scrollbar instead of the system one, on the Board and the Swimlanes, shown only while it scrolls: the fade
+   and the minimap already say there is more. Hidden, it can still be grabbed, and its space stays, so nothing
+   moves when it shows. */
+.board,
+.lanes {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.board[data-scrolling],
+.lanes[data-scrolling] {
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* The minimap, under the Board on the right where the scrollbar shows, so it never covers a card: a bar per column,
+   and a frame around the ones in view. The columns are all one width once they overflow, so equal bars line up with
+   the frame. */
+.minimap {
+  /* Sticks to the bottom of the window while the page is scrolled up from the Board's end, so it's always at hand;
+     the solid background keeps it legible over the columns then. */
+  position: sticky;
+  bottom: 12px;
+  z-index: 1;
+  flex: none;
+  width: fit-content;
+  margin: 4px 0 0 auto;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--mantine-color-body);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+/* The bars themselves; the frame is placed against this, so its percentages match the Board's. */
+.minimapTrack {
+  position: relative;
+  display: flex;
+  gap: 1px;
+  height: 22px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+/* Columns in view are bright, the rest dim, so the frame reads at a glance; an empty column is fainter still. Mixed
+   from the text colour, so they show on every theme. */
+.minimapColumn {
+  /* 16px with a 1px gap keeps the Board's proportions (200px columns, 12px gaps). */
+  width: 16px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+}
+
+.minimapColumn[data-seen] {
+  background: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.minimapColumn[data-empty] {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+.minimapColumn[data-empty][data-seen] {
+  background: color-mix(in srgb, var(--color-text) 22%, transparent);
+}
+
+.minimapView {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  border: 2px solid color-mix(in srgb, var(--color-text) 70%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  pointer-events: none;
+}
+
 .column {
   display: flex;
+  flex: 1 0 200px;
   flex-direction: column;
   gap: 8px;
-  min-height: 160px;
+  min-width: 0;
+  max-width: 320px;
+  min-height: 0;
   padding: 12px;
   border: 1px solid transparent;
   border-radius: 24px;
   background: var(--seg);
+}
+
+/* When the columns don't all fit (see useCrowded), the Board scrolls anyway, so each takes a comfortable fixed width
+   instead of squeezing to the narrowest that would have fitted. */
+.board[data-crowded] .column {
+  flex: 0 0 272px;
+  max-width: 272px;
+}
+
+/* A column's cards: they scroll when there are more than fit. The small padding keeps the cards' outlines and focus
+   rings from being cut off at the edges. */
+.cards {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  margin: -4px;
+  padding: 4px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.cards:hover {
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Cards out of view above or below (see useEndFades): that edge fades, so a card slides away under the column's head
+   or above Add issue instead of being cut off, and the fade says there's more. A mask, so it works on every theme. */
+.cards[data-more="bottom"] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+
+.cards[data-more="top"] {
+  mask-image: linear-gradient(to top, #000 calc(100% - 32px), transparent);
+}
+
+.cards[data-more="both"] {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 32px,
+    #000 calc(100% - 32px),
+    transparent
+  );
 }
 
 /* Where the dragged card would land. */
@@ -67,7 +218,92 @@
   box-shadow:
     0 0 0 1px var(--color-accent-500),
     var(--shadow-lg);
+  transform: rotate(2deg) scale(1.02);
+  transition:
+    transform 220ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 220ms cubic-bezier(0.2, 0, 0, 1);
   cursor: grabbing;
+}
+
+/* Dropped: it straightens and settles as it glides into place. */
+.dropping .lifted {
+  transform: none;
+  box-shadow: 0 0 0 1px var(--color-accent-500);
+}
+
+/* Where a carried card will land: a gap the size of the card at the top of the column. */
+.dropSlot {
+  flex: none;
+  min-height: 48px;
+  border: 1px dashed var(--color-accent-500);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-accent-500) 8%, transparent);
+  animation: slotOpen 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes slotOpen {
+  from {
+    opacity: 0;
+    transform: scaleY(0.6);
+  }
+}
+
+/* Just dropped in a new Status, until the Board shows it there: hidden where it was, so it doesn't show for a frame. */
+.leaving {
+  visibility: hidden;
+}
+
+/* Just dropped in a new Status: once it has landed, an orange line runs once around the card's outline, then fades.
+   The line is a conic gradient that sweeps round, masked down to a 2px ring. */
+@property --trace {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+.landed .card {
+  position: relative;
+}
+
+.landed .card::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 2px;
+  border-radius: 17px;
+  background: conic-gradient(var(--color-accent-500) var(--trace), transparent 0);
+  opacity: 0;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: traced 1000ms cubic-bezier(0.4, 0, 0.2, 1) 340ms;
+}
+
+@keyframes traced {
+  0% {
+    --trace: 0%;
+    opacity: 1;
+  }
+  65% {
+    --trace: 100%;
+    opacity: 1;
+  }
+  100% {
+    --trace: 100%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lifted,
+  .dropSlot,
+  .landed .card::after {
+    transition: none;
+    animation: none;
+  }
 }
 
 /* Where the card was, while it is being carried. */
@@ -118,7 +354,6 @@
   color: var(--color-accent-2-700);
 }
 
-/* A Status with no Issues: a dashed place a card can still be dropped. */
 /* A column's "Add issue": quiet until hovered, so the cards stay the focus. */
 .add {
   display: flex;
@@ -145,10 +380,9 @@
   color: var(--color-accent-2-700);
 }
 
+/* A Status with no Issues: a quiet line; the whole column is still a drop area. */
 .emptyColumn {
   padding: 24px 12px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 16px;
   font-size: 12px;
   text-align: center;
   color: var(--color-accent-2-700);

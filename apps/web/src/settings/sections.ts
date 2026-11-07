@@ -9,7 +9,7 @@ export const PASSWORD_PARAM = "password";
  */
 export const PASSWORD_WINDOW_PATH = `/settings/profile?${PASSWORD_PARAM}`;
 
-/** A page in Settings, with the line the overview shows under its name. */
+/** A page in Settings, with a line about it. */
 export type SettingsItem = { to: string; label: string; description: string };
 
 export type SettingsGroup = { label: "Account" | "Workspace"; items: SettingsItem[] };
@@ -30,7 +30,7 @@ const ACCOUNT: SettingsItem[] = [
 ];
 
 /**
- * The Settings pages a User may open, grouped as the overview shows them: Account for everyone, Workspace (Roles &
+ * The Settings pages a User may open, grouped as the Settings list shows them: Account for everyone, Workspace (Roles &
  * access with `access:role:manage`, the Audit log with `access:audit:view`) only when there is something in it. The
  * one place that decides what Settings offers.
  */
@@ -51,6 +51,14 @@ export function settingsGroups(platformPermissions: readonly string[]): Settings
   const groups: SettingsGroup[] = [{ label: "Account", items: ACCOUNT }];
   if (workspace.length > 0) groups.push({ label: "Workspace", items: workspace });
   return groups;
+}
+
+/**
+ * Whether the Settings page at `pathname` is a table (Roles & access, a Role, the Audit log), which takes the whole
+ * width beside the Settings list in a browser; the other pages are forms in a readable column.
+ */
+export function isWideSettingsPage(pathname: string): boolean {
+  return pathname.startsWith("/settings/roles") || pathname.startsWith("/settings/audit");
 }
 
 /** The signed-in User's Settings groups; only Account until their Permissions are known. */

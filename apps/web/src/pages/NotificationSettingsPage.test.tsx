@@ -92,7 +92,7 @@ function show(path = "/settings/notifications") {
 const emailSwitch = (name: string) => screen.findByRole("switch", { name: `Email: ${name}` });
 
 describe("the Notifications settings page", () => {
-  it("opens from the Settings overview", async () => {
+  it("opens from the Settings list", async () => {
     vi.spyOn(api, "notificationSettings").mockResolvedValue(DEFAULTS);
     show("/settings");
 

@@ -296,6 +296,25 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/issues/stats:
+    get:
+      tags: [issues]
+      summary: Issue totals for each of the User's projects
+      description: >-
+        For the Projects table, in one request: every active project the User is a Member of, in the order of
+        `GET /api/projects`, with how many Issues it has, how many are in a Done Status, and when an Issue last changed
+        or was deleted. A project with no Issues is listed with zeros and `updatedAt` null. Requires a verified email.
+      responses:
+        "200":
+          description: One entry per project, empty when the User has none
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectIssueStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/issues/{issueKey}:
     get:
       tags: [issues]
@@ -3078,7 +3097,7 @@ components:
             characters rejected.
     Project:
       type: object
-      required: [id, key, name, description, archived, createdAt]
+      required: [id, key, name, description, archived, createdAt, createdBy, memberCount, members]
       properties:
         id:
           type: string
@@ -3094,6 +3113,49 @@ components:
           type: boolean
         createdAt:
           type: string
+          format: date-time
+        createdBy:
+          description: Who created the project; null when they are no longer known
+          oneOf:
+            - $ref: "#/components/schemas/Person"
+            - type: "null"
+        memberCount:
+          type: integer
+          description: How many Members the project has
+        members:
+          type: array
+          maxItems: 5
+          description: The first Members, earliest added first, at most 5 of memberCount
+          items:
+            $ref: "#/components/schemas/Person"
+    Person:
+      type: object
+      required: [id, displayName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        avatarUrl:
+          type: [string, "null"]
+    ProjectIssueStats:
+      type: object
+      required: [projectKey, total, done, updatedAt]
+      properties:
+        projectKey:
+          type: string
+        total:
+          type: integer
+          format: int64
+          description: Every Issue in the project
+        done:
+          type: integer
+          format: int64
+          description: Issues in a Status of category DONE
+        updatedAt:
+          description: When an Issue last changed or was deleted; null when neither has happened
+          type: [string, "null"]
           format: date-time
     IssueType:
       type: string

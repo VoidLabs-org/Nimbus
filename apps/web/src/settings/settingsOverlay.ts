@@ -1,8 +1,9 @@
 import { createContext, use } from "react";
 
 /**
- * Where a component is relative to the Desktop app's Settings overlay: "closed" when there is none (always in a
- * browser), "behind" for the page and shell under it, "inside" for the Settings page it shows.
+ * Where a component is relative to the Settings list: "inside" for a Settings page shown beside it (in the Desktop
+ * app's overlay, or a browser's Settings layout), "behind" for the page and shell under the Desktop overlay, "closed"
+ * otherwise.
  */
 export type SettingsOverlayPlace = "closed" | "behind" | "inside";
 

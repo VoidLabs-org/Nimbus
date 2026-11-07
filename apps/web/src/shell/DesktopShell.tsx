@@ -439,7 +439,7 @@ export default function DesktopShell() {
           <JumpBox platform={platform} onClick={openJump} />
         </div>
         <div className={classes.content}>
-          <Container size="lg">
+          <Container fluid>
             <TabTitleContext value={tabs.name}>
               <PageContent />
             </TabTitleContext>

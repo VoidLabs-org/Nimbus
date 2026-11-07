@@ -48,7 +48,7 @@ import { DeleteStatusDialog } from "../issues/DeleteStatusDialog";
 import { useIssuePermissions } from "../issues/useIssuePermissions";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
-import { ProjectListSkeleton } from "./ProjectListSkeleton";
+import { PillListSkeleton } from "./PillListSkeleton";
 import { StaleNotice } from "../shell/StaleNotice";
 
 const MAX_STATUSES = 20;
@@ -304,7 +304,8 @@ export default function StatusesPage() {
   // The Settings tab, under the project's header and tabs (ProjectLayout), which hold the breadcrumb.
   return (
     <>
-      <Stack gap="lg">
+      {/* A settings list, so it keeps a readable width in the full-width project area. */}
+      <Stack gap="lg" maw={960}>
         <div>
           <Title order={2} fz={24}>
             Statuses
@@ -315,7 +316,7 @@ export default function StatusesPage() {
         </div>
         {!project || statusesQuery.isPending ? (
           <Loading>
-            <ProjectListSkeleton />
+            <PillListSkeleton />
           </Loading>
         ) : (
           <>

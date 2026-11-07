@@ -1,6 +1,6 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { Glyph } from "@repo/ui/glyph";
-import { Button, Container, Stack, Title, VisuallyHidden } from "@mantine/core";
+import { Box, Button, Stack, Title, VisuallyHidden } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { PillTabs } from "@repo/ui/pill-tabs";
 import { Loading } from "@repo/ui/skeleton";
@@ -51,12 +51,12 @@ export default function RolesPage() {
   }
 
   return (
-    <Container size="lg" px={0} py="xl">
+    <Box py="xl">
       <Stack gap="lg">
         <BreadcrumbTrail crumbs={settingsCrumbs("Roles & access")} />
         <div className={classes.header}>
           <div>
-            <Title order={1} fz={40} lh={1.05}>
+            <Title order={1} fz={32} lh={1.1}>
               Roles & access
             </Title>
             <div className={classes.description}>
@@ -87,7 +87,7 @@ export default function RolesPage() {
         )}
       </Stack>
       <NewRoleModal opened={creating} initialKind={kind} onClose={() => setCreating(false)} />
-    </Container>
+    </Box>
   );
 }
 

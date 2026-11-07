@@ -63,3 +63,11 @@
     font-size: 22px;
   }
 }
+
+/* A project's pages never scroll sideways: only the Board (and the Swimlanes and Table) scroll, inside their own area,
+   as in Jira. Clip, not hidden, so the page isn't made a scroll container (the Board's minimap stays sticky); the clip
+   margin leaves room for focus rings at the edges. */
+.page {
+  overflow-x: clip;
+  overflow-clip-margin: 8px;
+}

@@ -1,5 +1,6 @@
 import {
   keepPreviousData,
+  type QueryClient,
   useQueries,
   useQuery,
   useQueryClient,
@@ -42,6 +43,7 @@ export const queryKeys = {
   // Beside the lists, not under them, so the lists' entries all share one shape; refreshed with them.
   issueCounts: (projectKey: string, search: IssueSearch) =>
     ["issues", "counts", storedKey(projectKey), search] as const,
+  projectIssueStats: ["issues", "stats"] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -90,6 +92,8 @@ export function useProjectCreated() {
     await client.cancelQueries({ queryKey: queryKeys.project(project.key), exact: true });
     client.setQueryData(queryKeys.project(project.key), project);
     void client.invalidateQueries({ queryKey: queryKeys.projects, exact: true });
+    // The Projects table's Open issues, Progress and Updated wait for the new project's totals.
+    void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
   };
 }
 
@@ -133,6 +137,17 @@ export function useIssues(projectKey: string, search: IssueSearch, enabled = tru
     // Only another filter or page of the same project; another project's list is never shown in its place.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[2] === storedKey(projectKey) ? previous : undefined,
+  });
+}
+
+/**
+ * The Issue totals of all the User's projects, for the Projects table's Open issues, Progress and Updated: one request
+ * however many projects there are. Under "issues", so creating, moving or deleting an Issue refreshes it with the rest.
+ */
+export function useProjectIssueStats() {
+  return useQuery({
+    queryKey: queryKeys.projectIssueStats,
+    queryFn: () => api.projectIssueStats(),
   });
 }
 
@@ -198,14 +213,20 @@ function projectIssueCounts(issueKey: string) {
   return ["issues", "counts", projectKeyOf(issueKey)] as const;
 }
 
+/** Refresh what changes with any of a project's Issues: its lists, its counts, and the Projects table's totals. */
+function refreshProjectIssues(client: QueryClient, issueKey: string) {
+  void client.invalidateQueries({ queryKey: projectIssueLists(issueKey) });
+  void client.invalidateQueries({ queryKey: projectIssueCounts(issueKey) });
+  void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
+}
+
 /** Keep the server's created Issue, so opening it right after shows it at once (it is then refreshed). */
 export function useIssueCreated() {
   const client = useQueryClient();
   return (issue: Issue) => {
     client.setQueryData(queryKeys.issue(issue.key), issue);
     // The project's lists and counts have a new Issue.
-    void client.invalidateQueries({ queryKey: projectIssueLists(issue.key) });
-    void client.invalidateQueries({ queryKey: projectIssueCounts(issue.key) });
+    refreshProjectIssues(client, issue.key);
   };
 }
 
@@ -214,8 +235,7 @@ export function useIssueDeleted() {
   const client = useQueryClient();
   return (issueKey: string) => {
     client.removeQueries({ queryKey: queryKeys.issue(issueKey) });
-    void client.invalidateQueries({ queryKey: projectIssueLists(issueKey) });
-    void client.invalidateQueries({ queryKey: projectIssueCounts(issueKey) });
+    refreshProjectIssues(client, issueKey);
   };
 }
 
@@ -225,21 +245,32 @@ export function useIssueChanged() {
   return (issue: Issue) => {
     client.setQueryData(queryKeys.issue(issue.key), issue);
     void client.invalidateQueries({ queryKey: queryKeys.issueHistory(issue.key) });
-    void client.invalidateQueries({ queryKey: projectIssueLists(issue.key) });
-    void client.invalidateQueries({ queryKey: projectIssueCounts(issue.key) });
+    refreshProjectIssues(client, issue.key);
   };
 }
 
 /**
+ * Board moves sent and not yet answered, per cache, and the Issues whose projects they changed: when the last one
+ * finishes, whether it worked or not, every project a finished move changed is refreshed.
+ */
+const movesInFlight = new WeakMap<QueryClient, { count: number; changed: Set<string> }>();
+
+/**
  * Move an Issue to a Status with the Board updated at once: the card is taken out of its column and put at the top
  * of the new one before the server answers, and put back if the move fails.
+ *
+ * Two things keep a moved card from flashing back to its old column. The Board changes in the same moment as the
+ * drop: a refresh already on its way is cancelled without awaiting it, and without putting back the data it started
+ * from (its default), which would undo the move. And while other moves are still on their way, a finished move doesn't
+ * refresh the lists: a refresh then could come back before the server has the later moves and show their cards where
+ * they were. The last move to finish refreshes the lists of every project a move changed (moves on several projects'
+ * Boards share the count), when the server has every move, also when that last move failed.
  */
 export function useMoveIssue() {
   const client = useQueryClient();
-  const changed = useIssueChanged();
   return async (issue: Issue, status: ProjectStatus) => {
     const lists = { queryKey: projectIssueLists(issue.key) };
-    await client.cancelQueries(lists);
+    void client.cancelQueries(lists, { revert: false });
     const snapshot = client.getQueriesData<{ items: Issue[]; total: number }>(lists);
     const moved = { ...issue, status };
     for (const [key, data] of snapshot) {
@@ -258,10 +289,28 @@ export function useMoveIssue() {
         });
       }
     }
+    const moves = movesInFlight.get(client) ?? { count: 0, changed: new Set<string>() };
+    movesInFlight.set(client, moves);
+    moves.count += 1;
+    /** One move fewer on its way; the last one refreshes every project a finished move changed. */
+    const settle = () => {
+      moves.count -= 1;
+      if (moves.count > 0) return;
+      for (const issueKey of moves.changed) refreshProjectIssues(client, issueKey);
+      moves.changed.clear();
+    };
     try {
-      changed(await api.moveIssue(issue.key, status.id));
+      const saved = await api.moveIssue(issue.key, status.id);
+      client.setQueryData(queryKeys.issue(saved.key), saved);
+      void client.invalidateQueries({ queryKey: queryKeys.issueHistory(saved.key) });
+      moves.changed.add(saved.key);
+      settle();
     } catch (error) {
-      for (const [key, data] of snapshot) client.setQueryData(key, data);
+      // Alone, put the Board back as it was; with other moves on their way, the snapshot would undo theirs too, so
+      // ask the server instead.
+      if (moves.count === 1) for (const [key, data] of snapshot) client.setQueryData(key, data);
+      else moves.changed.add(issue.key);
+      settle();
       throw error;
     }
   };

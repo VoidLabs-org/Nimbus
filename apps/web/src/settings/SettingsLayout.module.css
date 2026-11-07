@@ -1,0 +1,72 @@
+/* Settings in a browser: a 240px list on the left gutter, the page beside it. Colours come only from the theme
+   variables. */
+.layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+/* The pages keep their own space above the title; the list starts level with it, and stays in view while a long
+   page (the Audit log) scrolls: it sticks just under the top navbar (--page-top-inset, from the shell), or the top of
+   the Desktop app's scrolling content. */
+.side {
+  position: sticky;
+  top: var(--page-top-inset, 0px);
+  padding-top: var(--mantine-spacing-xl);
+}
+
+.title {
+  margin: 0 0 20px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+/* A form: a readable column, centred in the space beside the list on a laptop-sized window; on a wide one the gap
+   stops growing at 200px, so the column stays by its list instead of drifting to the middle of the window. 100% is the
+   space beside the list. */
+.page {
+  width: 100%;
+  max-width: 720px;
+  min-width: 0;
+  margin-left: clamp(0px, calc((100% - 720px) / 2), 200px);
+}
+
+/* A table (Roles & access, a Role, the Audit log): the whole space. */
+.page[data-wide] {
+  max-width: none;
+  margin-left: 0;
+}
+
+/* On a narrow window the list goes above the page, as a row of pills that scrolls sideways. */
+@media (max-width: 48em) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .side {
+    position: static;
+  }
+
+  .side nav {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  .side nav > div {
+    display: flex;
+    gap: 4px;
+    margin: 0;
+  }
+
+  .side nav > div > div {
+    display: none;
+  }
+
+  .side nav a {
+    white-space: nowrap;
+  }
+}

@@ -1,4 +1,4 @@
-import { Container, Stack, Text, Title } from "@mantine/core";
+import { Box, Stack, Text, Title } from "@mantine/core";
 import { Panel } from "@repo/ui/panel";
 import { ThemePicker } from "@repo/ui/theme-picker";
 import { isDesktop } from "../shell/desktop";
@@ -27,11 +27,13 @@ export default function AppearancePage() {
         hint: "Paper and Fog are light; Ink and Slate are dark. System follows your device's light or dark setting, and keeps flat or glass as you last chose.",
       };
   return (
-    <Container size="md" px={0} py="xl">
+    <Box py="xl">
       <Stack gap="lg">
         <BreadcrumbTrail crumbs={settingsCrumbs("Appearance")} />
         <div>
-          <Title order={1}>Appearance</Title>
+          <Title order={1} fz={32} lh={1.1}>
+            Appearance
+          </Title>
           <Text c="dimmed" mt={6}>
             Choose how Nimbus looks.{copy.themes} Your choice is kept {copy.keptIn}.
           </Text>
@@ -62,6 +64,6 @@ export default function AppearancePage() {
           </Panel>
         )}
       </Stack>
-    </Container>
+    </Box>
   );
 }

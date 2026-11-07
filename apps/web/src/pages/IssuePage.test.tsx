@@ -78,6 +78,9 @@ beforeEach(() => {
     description: null,
     archived: false,
     createdAt: "2026-10-19T00:00:00Z",
+    createdBy: null,
+    memberCount: 1,
+    members: [],
   });
   vi.spyOn(api, "myProjectPermissions").mockResolvedValue(fullAccess);
   vi.spyOn(api, "issueHistory").mockResolvedValue(history);

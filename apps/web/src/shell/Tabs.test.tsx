@@ -65,6 +65,9 @@ function project(key: string, name: string): Project {
     description: null,
     archived: false,
     createdAt: "2026-10-01T09:00:00Z",
+    createdBy: null,
+    memberCount: 1,
+    members: [],
   };
 }
 

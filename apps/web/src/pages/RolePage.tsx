@@ -1,5 +1,5 @@
 import { ApiError } from "@repo/api";
-import { Alert, Box, Button, Container, Group, Modal, Stack, Text, Title } from "@mantine/core";
+import { Alert, Box, Button, Group, Modal, Stack, Text, Title } from "@mantine/core";
 import { toast } from "@repo/ui/toast";
 import { PillTabs } from "@repo/ui/pill-tabs";
 import { Loading } from "@repo/ui/skeleton";
@@ -95,7 +95,7 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
   }
 
   return (
-    <Container size="lg" px={0} py="xl">
+    <Box py="xl">
       <Box mb="md">
         <BreadcrumbTrail crumbs={roleCrumbs(role)} />
       </Box>
@@ -148,7 +148,7 @@ function RoleDetails({ roleKey: key }: { roleKey: string }) {
           />
         </Stack>
       )}
-    </Container>
+    </Box>
   );
 }
 
@@ -223,7 +223,7 @@ function RoleWorkspace({
 function RoleHeader({ role }: { role: Role }) {
   return (
     <div>
-      <Title order={1} fz={40} lh={1.05}>
+      <Title order={1} fz={32} lh={1.1}>
         {role.name}
       </Title>
       {role.description && (

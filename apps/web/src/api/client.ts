@@ -25,6 +25,9 @@ export type IssuePage = Schemas["IssuePage"];
 /** How many Issues match, in total and per value of each field (each without its own filter). */
 export type IssueCounts = Schemas["IssueCounts"];
 
+/** A project's Issue totals for the Projects table: all, done, and when an Issue last changed (null if never). */
+export type ProjectIssueStats = Schemas["ProjectIssueStats"];
+
 /** The filters, sort and page of the Issues list; the server's defaults apply to what is left out. */
 export type IssueSearch = {
   category?: Issue["status"]["category"];
@@ -417,6 +420,9 @@ export function createApiClient(
         `/api/projects/${encodeURIComponent(projectKey)}/issues${query ? `?${query}` : ""}`,
       );
     },
+
+    /** Every project the User is a Member of with its Issue totals, in the Projects list's order, in one request. */
+    projectIssueStats: () => request<ProjectIssueStats[]>("/api/issues/stats"),
 
     /** How many of a project's Issues match the filters, in total and per value of each field. */
     issueCounts: (projectKey: string, search: IssueSearch) => {

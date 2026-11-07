@@ -20,6 +20,9 @@ const apple: Project = {
   description: "Fruit stand",
   archived: false,
   createdAt: "2026-10-19T00:00:00Z",
+  createdBy: { id: "u1", displayName: "Dana", avatarUrl: null },
+  memberCount: 1,
+  members: [{ id: "u1", displayName: "Dana", avatarUrl: null }],
 };
 
 const fullAccess = {

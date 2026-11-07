@@ -87,7 +87,7 @@ Jump opens a page or runs a command by name (`Jump` and `jumpTargets` in `apps/w
 
 ## Settings overlay
 
-In the Desktop app, Settings opens over the page the User is on instead of as pages (`SettingsOverlay`, design "Nimbus Desktop v2" 2c). The browser keeps the Settings overview and its pages.
+In the Desktop app, Settings opens over the page the User is on instead of as pages (`SettingsOverlay`, design "Nimbus Desktop v2" 2c). In a browser, Settings is a page instead: the same list of Settings pages (`SettingsNav`) on the left, with the open page beside it (`SettingsLayout`).
 
 - **Opening.** Settings at the bottom of the Sidebar, or Ctrl `,` (⌘ `,` on macOS) from anywhere, opens it on Profile.
 - **Inside.** A panel centred in the window over the dimmed, blurred app, laid out like the Claude app's Settings: a header row ("Settings" and the ✕) over two columns, each scrolling on its own. On the left the Settings pages, Account (Profile, Security, Appearance) for everyone and Workspace (Roles & access, Audit log) only for Users who may open them, from the same `settingsGroups` as the overview; on the right the open page. A page's breadcrumbs start inside the overlay (`overlayCrumbs`): a page the list opens has none, a Role starts at Roles & access.

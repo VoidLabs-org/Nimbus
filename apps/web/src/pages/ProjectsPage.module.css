@@ -1,4 +1,5 @@
-/* The Projects list, as in design 33a: one pill per project. Colours come only from the theme variables. */
+/* The Projects page, from the "Page widths · full-width shell" design: a work surface, so the table fills the width
+   between the page gutters. Colours come only from the theme variables. */
 .header {
   display: flex;
   flex-wrap: wrap;
@@ -7,13 +8,12 @@
   gap: 16px 24px;
 }
 
-.list {
+/* Search on the left, the count on the right, as on the Issues toolbar. */
+.toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .empty {
@@ -23,65 +23,216 @@
   color: var(--color-accent-2-700);
 }
 
-/* The key badge, the project, then the arrow, in a pill (design 33a). */
-.row {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 12px 24px 12px 12px;
-  border-radius: 999px;
+/* The table sits in one rounded panel; it scrolls sideways rather than squash on a narrow window. */
+.tableFrame {
+  overflow-x: auto;
+  border-radius: 20px;
   background: var(--color-surface);
-  color: var(--color-text);
-  text-decoration: none;
+  box-shadow: 0 0 0 1px var(--line);
 }
 
-a.row:hover {
-  background: color-mix(in srgb, var(--color-surface), var(--color-text) 4%);
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
 }
 
-/* The badge's place while the list loads. */
-.badgeBone {
-  flex: none;
-  width: 56px;
-  height: 56px;
-  border-radius: 999px;
-  background: var(--seg);
+.table th {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--color-accent-2-700);
+}
+
+.table td {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+/* The row's link is the name, stretched over the whole row (see .name::after). */
+.row {
+  position: relative;
+}
+
+.row:hover {
+  background: var(--row-hover);
+}
+
+.row:focus-within {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: -2px;
+}
+
+.keyCell {
+  width: 72px;
+}
+
+.key {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--color-accent-2-700);
 }
 
 .project {
   display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.projectText {
+  display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
   min-width: 0;
 }
 
 .name {
+  font-size: 14px;
   font-weight: 600;
-  font-size: 17px;
   overflow-wrap: anywhere;
+  color: var(--color-text);
+  text-decoration: none;
 }
 
-/* At most two lines of the description; a long one doesn't stretch the row. */
+.name:focus-visible {
+  outline: none;
+}
+
+/* The whole row opens the project. */
+.name::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* One line of the description; a long one doesn't stretch the row. */
 .summary {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   overflow: hidden;
-  overflow-wrap: anywhere;
-  font-size: 14px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 480px;
+  color: var(--color-accent-2-700);
+}
+
+.numberCell {
+  width: 120px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wideOnly {
+  width: 220px;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--color-accent-2-700);
+}
+
+/* The first Members, overlapping, each ringed in the table's colour so the overlap reads; then "+N". */
+.members {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.faces {
+  display: inline-flex;
+}
+
+.face {
+  display: inline-flex;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+
+.face + .face {
+  margin-left: -6px;
+}
+
+.more {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent-2-700);
+}
+
+/* Who created the project: their picture and name. */
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 200px;
+}
+
+.personName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Done Issues out of all of them. */
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar {
+  flex: 1;
+  max-width: 140px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--seg);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--toast-success);
+}
+
+.percent {
+  min-width: 36px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   color: var(--color-accent-2-700);
 }
 
 .arrow {
-  display: flex;
-  align-items: center;
+  width: 40px;
   color: var(--color-accent-2-700);
 }
 
+/* A number or a bar still loading. */
+.bone {
+  display: inline-block;
+  width: 40px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--seg);
+}
+
+/* The skeleton's badge. */
+.badgeBone {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--seg);
+}
+
+/* On a phone: the project and its open Issues; the key is in the badge anyway. */
 @media (max-width: 48em) {
-  .row {
-    gap: 14px;
-    padding: 10px 18px 10px 10px;
+  .keyCell,
+  .wideOnly {
+    display: none;
   }
 }

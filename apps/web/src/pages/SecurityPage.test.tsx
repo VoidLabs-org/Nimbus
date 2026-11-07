@@ -184,7 +184,7 @@ describe("the Security page", () => {
     expect(sessions).toHaveBeenCalledTimes(2);
   });
 
-  it("is listed on the Settings overview after Profile", async () => {
+  it("is listed in the Settings list after Profile", async () => {
     show("/settings");
 
     const links = (await screen.findAllByRole("link")).map((link) => link.getAttribute("href"));

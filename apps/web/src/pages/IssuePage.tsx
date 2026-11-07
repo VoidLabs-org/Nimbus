@@ -164,7 +164,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
   }
 
   return (
-    <Container size="lg" px={0} py="xl">
+    <Container fluid px={0} py="xl">
       <Stack gap="lg">
         <BreadcrumbTrail
           crumbs={[

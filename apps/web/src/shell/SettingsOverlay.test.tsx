@@ -375,11 +375,22 @@ describe("the Settings overlay and what is open in it", () => {
 });
 
 describe("Settings in a browser", () => {
-  it("stays a page in the navbar shell, with its breadcrumbs", async () => {
+  it("stays a page in the navbar shell, beside the list of Settings pages instead of breadcrumbs", async () => {
     renderAt("/settings/profile");
 
     expect(await screen.findByRole("heading", { name: "Profile" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull();
-    expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toBeTruthy();
+    const list = screen.getByRole("navigation", { name: "Settings pages" });
+    expect(within(list).getByRole("link", { name: "Profile" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
+  });
+
+  it("opens on Profile, as the overlay does: the list stands in for an overview", async () => {
+    renderAt("/settings");
+
+    expect(await screen.findByRole("heading", { name: "Profile" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Settings pages" })).toBeTruthy();
   });
 });

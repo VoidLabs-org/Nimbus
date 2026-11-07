@@ -27,7 +27,8 @@ export function BreadcrumbTrail({
   tabTitle?: string | null;
 }) {
   const narrow = useMediaQuery(NARROW, false, { getInitialValueInEffect: false });
-  // Inside the Desktop app's Settings overlay, its list stands in for the Settings overview (see overlayCrumbs).
+  // Beside the Settings list (the Desktop overlay or the browser's Settings layout), the list stands in for the
+  // Settings crumb (see overlayCrumbs).
   const crumbs = useSettingsOverlay() === "inside" ? overlayCrumbs(path) : path;
   useTabTitle(path, tabTitle);
   const loading = crumbs.some((crumb) => crumb.pending);

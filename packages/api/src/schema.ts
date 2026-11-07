@@ -337,6 +337,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/issues/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Issue totals for each of the User's projects
+         * @description For the Projects table, in one request: every active project the User is a Member of, in the order of `GET /api/projects`, with how many Issues it has, how many are in a Done Status, and when an Issue last changed or was deleted. A project with no Issues is listed with zeros and `updatedAt` null. Requires a verified email.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One entry per project, empty when the User has none */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectIssueStats"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/issues/{issueKey}": {
         parameters: {
             query?: never;
@@ -4158,6 +4198,36 @@ export interface components {
             archived: boolean;
             /** Format: date-time */
             createdAt: string;
+            /** @description Who created the project; null when they are no longer known */
+            createdBy: components["schemas"]["Person"] | null;
+            /** @description How many Members the project has */
+            memberCount: number;
+            /** @description The first Members, earliest added first, at most 5 of memberCount */
+            members: components["schemas"]["Person"][];
+        };
+        Person: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            avatarUrl: string | null;
+        };
+        ProjectIssueStats: {
+            projectKey: string;
+            /**
+             * Format: int64
+             * @description Every Issue in the project
+             */
+            total: number;
+            /**
+             * Format: int64
+             * @description Issues in a Status of category DONE
+             */
+            done: number;
+            /**
+             * Format: date-time
+             * @description When an Issue last changed or was deleted; null when neither has happened
+             */
+            updatedAt: string | null;
         };
         /** @enum {string} */
         IssueType: "Story" | "Bug" | "Chore";

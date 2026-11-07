@@ -46,6 +46,40 @@ class ProjectListTests {
 	}
 
 	@Test
+	void eachProjectSaysWhoCreatedIt() {
+		var token = register(true);
+		var key = stem();
+		create(token, key, "Made by Dana");
+
+		listed(token)
+			.jsonPath("$[0].createdBy.displayName").isEqualTo("Dana")
+			.jsonPath("$[0].createdBy.id").exists();
+		client.get().uri("/api/projects/{key}", key).header("Authorization", "Bearer " + token).exchange()
+			.expectStatus().isOk().expectBody().jsonPath("$.createdBy.displayName").isEqualTo("Dana");
+	}
+
+	@Test
+	void eachProjectCountsItsMembersAndNamesTheFirstFiveEarliestFirst() {
+		var token = register(true);
+		var key = stem();
+		create(token, key, "Busy project");
+		// There is no endpoint to add Members yet, so six more are added in the table, a minute apart.
+		for (var minute = 1; minute <= 6; minute++) {
+			var user = UUID.fromString(JsonPath.read(registered("Member " + minute), "$.user.id"));
+			jdbc.sql("""
+					INSERT INTO project_members (project_id, user_id, added_at)
+					SELECT id, :user, created_at + make_interval(mins => :minute) FROM projects WHERE key = :key
+					""").param("user", user).param("minute", minute).param("key", key).update();
+		}
+
+		listed(token)
+			.jsonPath("$[0].memberCount").isEqualTo(7)
+			.jsonPath("$[0].members.length()").isEqualTo(5)
+			.jsonPath("$[0].members[*].displayName")
+			.isEqualTo(List.of("Dana", "Member 1", "Member 2", "Member 3", "Member 4"));
+	}
+
+	@Test
 	void theListIsSortedByNameWithoutRegardToCase() {
 		var token = register(true);
 		create(token, stem(), "Zebra");
@@ -123,7 +157,8 @@ class ProjectListTests {
 
 		Map<String, Object> listedProject = JsonPath.read(list, "$[0]");
 		Map<String, Object> openedProject = JsonPath.read(opened, "$");
-		assertThat(listedProject).containsOnlyKeys("id", "key", "name", "description", "archived", "createdAt")
+		assertThat(listedProject).containsOnlyKeys("id", "key", "name", "description", "archived", "createdAt", "createdBy",
+				"memberCount", "members")
 			.isEqualTo(openedProject);
 	}
 
@@ -148,6 +183,14 @@ class ProjectListTests {
 	/** A key no other test uses: a letter and seven characters of a random id, so 8 of the 10 a key may have. */
 	private static String stem() {
 		return "T" + UUID.randomUUID().toString().replace("-", "").substring(0, 7).toUpperCase();
+	}
+
+	/** A new User with this name, as the registration answered: `$.user.id` is their id. */
+	private String registered(String displayName) {
+		return client.post().uri("/api/auth/register")
+			.body(Map.of("displayName", displayName, "email", UUID.randomUUID() + "@example.com", "password",
+					"correct horse"))
+			.exchange().expectStatus().isCreated().expectBody(String.class).returnResult().getResponseBody();
 	}
 
 	private void create(String token, String key, String name) {

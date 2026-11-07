@@ -12,13 +12,24 @@ import {
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
+  type DropAnimationFunction,
   type KeyboardCoordinateGetter,
 } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { VisuallyHidden } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { ProfilePicture } from "@repo/ui/profile-picture";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router";
 import type { Issue, ProjectStatus } from "../api/client";
 import { PriorityMark, StatusPill, TypeBadge } from "./IssueMarks";
@@ -33,6 +44,69 @@ export type MoveIssue = (issueKey: string, status: ProjectStatus) => void;
 export type CanMove = (issue: Issue) => boolean;
 
 const CanMoveContext = createContext<CanMove>(() => true);
+
+/**
+ * The Issue just dropped in a new Status, and that Status. Until the Board shows the move (a moment later: TanStack
+ * Query tells React on its next tick) its card is hidden where it was, so it doesn't show there for a frame; once the
+ * card is in that Status, its outline is traced. If the move fails it is back where it was, untraced.
+ */
+type Drop = { key: string; status: string; moving: boolean };
+
+const DropContext = createContext<Drop | null>(null);
+
+/** Where a carried card would land if dropped now: its Issue, the Status under it and the card's height. */
+type Target = { issue: Issue; status: string; height: number | undefined };
+
+const TargetContext = createContext<Target | null>(null);
+
+/**
+ * On a drop, the carried card glides into the place where the Issue now is (the move is optimistic, so that is its new
+ * column) and straightens up as it lands; the card itself stays hidden until it arrives.
+ *
+ * dnd-kit's own drop animation measures the card at once, but the Board only shows the move a moment later (TanStack
+ * Query tells React on its next tick, a timeout), so the card would fly back to its old column. This one waits for
+ * that timeout and the render after it, then finds the card wherever it now is.
+ */
+const dropAnimation: DropAnimationFunction = async ({
+  active,
+  dragOverlay,
+  draggableNodes,
+  transform,
+}) => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  const card = draggableNodes.get(active.id)?.node.current;
+  if (!card || !card.isConnected) return;
+  const to = card.getBoundingClientRect();
+  const from = dragOverlay.node.getBoundingClientRect();
+  const end = {
+    ...transform,
+    x: transform.x + to.left - from.left,
+    y: transform.y + to.top - from.top,
+  };
+  const opacity = card.style.opacity;
+  card.style.opacity = "0";
+  dragOverlay.node.classList.add(classes.dropping!);
+  // Sticky: it is pulled into place, overshoots a hair, presses in as it lands, then settles.
+  const there = CSS.Transform.toString(end);
+  const animation = dragOverlay.node.animate(
+    [
+      { transform: CSS.Transform.toString(transform), easing: "cubic-bezier(0.34, 1.4, 0.64, 1)" },
+      { transform: `${there} scale(0.96)`, offset: 0.7, easing: "cubic-bezier(0.3, 0, 0.3, 1.6)" },
+      { transform: `${there} scale(1)` },
+    ],
+    { duration: 340, fill: "forwards" },
+  );
+  try {
+    await animation.finished;
+  } finally {
+    card.style.opacity = opacity;
+  }
+};
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
 
 /** Under the pointer when there is one; the nearest drop area otherwise (the keyboard has no pointer). */
 const collisionDetection: CollisionDetection = (args) => {
@@ -95,6 +169,19 @@ function DragBoard({
   children: ReactNode;
 }) {
   const [lifted, setLifted] = useState<Issue | null>(null);
+  const [target, setTarget] = useState<Target | null>(null);
+  const [drop, setDrop] = useState<Drop | null>(null);
+  const dropKey = drop && `${drop.key}:${drop.status}`;
+  useEffect(() => {
+    if (!dropKey) return;
+    // Past the drop animation, a card still where it was (the move failed) shows again; the trace is done by 1.5s.
+    const shown = setTimeout(() => setDrop((now) => now && { ...now, moving: false }), 400);
+    const done = setTimeout(() => setDrop(null), 1500);
+    return () => {
+      clearTimeout(shown);
+      clearTimeout(done);
+    };
+  }, [dropKey]);
   const sensors = useSensors(
     // A short drag, so a plain click still opens the Issue.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -103,30 +190,56 @@ function DragBoard({
   );
 
   function start(event: DragStartEvent) {
+    setDrop(null);
     setLifted(issues.find((issue) => issue.key === event.active.id) ?? null);
   }
 
-  function end(event: DragEndEvent) {
-    setLifted(null);
+  // Only when the area under the card changes, so the drop areas don't re-render on every pointer move.
+  function over(event: DragOverEvent) {
     const status = event.over?.data.current?.status as ProjectStatus | undefined;
+    const issue = event.active.data.current?.issue as Issue | undefined;
+    setTarget(
+      status && issue
+        ? { issue, status: status.id, height: event.active.rect.current.initial?.height }
+        : null,
+    );
+  }
+
+  function end(event: DragEndEvent) {
+    const status = event.over?.data.current?.status as ProjectStatus | undefined;
+    const issue = issues.find((item) => item.key === event.active.id);
+    if (status && issue && issue.status.id !== status.id) {
+      setDrop({ key: issue.key, status: status.id, moving: true });
+    }
+    setLifted(null);
+    setTarget(null);
     if (status) onMove(String(event.active.id), status);
+  }
+
+  function cancel() {
+    setLifted(null);
+    setTarget(null);
   }
 
   return (
     <CanMoveContext value={canMove}>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={collisionDetection}
-        onDragStart={start}
-        onDragEnd={end}
-        onDragCancel={() => setLifted(null)}
-      >
-        {children}
-        {/* No drop animation: the card is already in its column (the move is optimistic), so it must not fly back. */}
-        <DragOverlay dropAnimation={null}>
-          {lifted && <CardBody issue={lifted} lifted />}
-        </DragOverlay>
-      </DndContext>
+      <DropContext value={drop}>
+        <TargetContext value={target}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={collisionDetection}
+            onDragStart={start}
+            onDragOver={over}
+            onDragEnd={end}
+            onDragCancel={cancel}
+          >
+            {children}
+            <DragOverlay dropAnimation={prefersReducedMotion() ? null : dropAnimation}>
+              {lifted && <CardBody issue={lifted} lifted />}
+            </DragOverlay>
+          </DndContext>
+        </TargetContext>
+      </DropContext>
     </CanMoveContext>
   );
 }
@@ -165,18 +278,26 @@ function CardBody({ issue, lifted = false }: { issue: Issue; lifted?: boolean })
   );
 }
 
-/** An Issue as a card that opens the Issue and can be dragged; where it was shows as a dashed outline meanwhile. */
+/**
+ * An Issue as a card that opens the Issue and can be dragged; where it was shows as a dashed outline meanwhile, and
+ * its outline is traced once when it lands in a new Status (see Drop).
+ */
 function IssueCard({ issue }: { issue: Issue }) {
   const canMove = useContext(CanMoveContext);
+  const drop = useContext(DropContext);
+  const dropped = drop?.key === issue.key;
+  const landed = dropped && issue.status.id === drop.status;
+  const leaving = dropped && drop.moving && !landed;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: issue.key,
+    data: { issue },
     disabled: !canMove(issue),
   });
   return (
     <Link
       ref={setNodeRef}
       to={`/issues/${encodeURIComponent(issue.key)}`}
-      className={`${classes.cardLink} ${isDragging ? classes.placeholder : ""}`}
+      className={`${classes.cardLink} ${isDragging ? classes.placeholder : ""} ${landed ? classes.landed : ""} ${leaving ? classes.leaving : ""}`}
       // The browser's own link dragging would fight the drag.
       draggable={false}
       {...attributes}
@@ -190,6 +311,17 @@ function IssueCard({ issue }: { issue: Issue }) {
 
 function useStatusArea(id: string, status: ProjectStatus) {
   return useDroppable({ id, data: { status } });
+}
+
+/**
+ * Where a carried card will land if dropped now: a card-sized gap at the top of `status` (moves put the Issue first),
+ * shown only when the drop would change its Status and, in the Swimlanes, only in the card's own lane (`lane`).
+ */
+function DropSlot({ status, lane }: { status: ProjectStatus; lane?: string }) {
+  const target = useContext(TargetContext);
+  if (!target || target.status !== status.id || target.issue.status.id === status.id) return null;
+  if (lane !== undefined && lane !== laneIdOf(target.issue)) return null;
+  return <div className={classes.dropSlot} style={{ height: target.height }} aria-hidden />;
 }
 
 /**
@@ -207,15 +339,297 @@ export function IssueBoard({
   canMove?: CanMove;
   onAdd?: (status: ProjectStatus) => void;
 }) {
+  const [frame, setFrame] = useState<HTMLDivElement | null>(null);
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const more = useHiddenSides(scroller);
+  useScrollbarWhileScrolling(scroller);
+  const height = useHeightToWindowBottom(frame);
+  const crowded = useCrowded(scroller, columns.length);
+
   return (
     <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove} canMove={canMove}>
-      <div className={classes.board}>
-        {columns.map((column) => (
-          <BoardColumn key={column.status.id} column={column} onAdd={onAdd} />
-        ))}
+      <div ref={setFrame} className={classes.boardFrame} style={{ height }}>
+        <div
+          ref={setScroller}
+          className={classes.board}
+          data-more={more}
+          data-crowded={crowded || undefined}
+        >
+          {columns.map((column) => (
+            <BoardColumn key={column.status.id} column={column} onAdd={onAdd} />
+          ))}
+        </div>
+        {more && scroller && <Minimap scroller={scroller} columns={columns} />}
       </div>
     </DragBoard>
   );
+}
+
+/** The part of the Board in view, as fractions of its whole width. */
+type View = { start: number; size: number };
+
+function viewOf(scroller: HTMLElement): View {
+  return {
+    start: scroller.scrollLeft / scroller.scrollWidth,
+    size: scroller.clientWidth / scroller.scrollWidth,
+  };
+}
+
+/**
+ * A small picture of the Board's columns under its right end, shown when they don't all fit, with a frame around the ones in
+ * view. Pressing or dragging on it scrolls the Board there. It is for the pointer only: the keyboard reaches every card
+ * by Tab, which scrolls it into view anyway.
+ */
+function Minimap({ scroller, columns }: { scroller: HTMLElement; columns: Column[] }) {
+  const [view, setView] = useState<View>(() => viewOf(scroller));
+
+  useLayoutEffect(() => {
+    const update = () => setView(viewOf(scroller));
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, [scroller]);
+
+  /** Centres the view on where the pointer is along the map. */
+  function jump(event: PointerEvent<HTMLDivElement>) {
+    const map = event.currentTarget.getBoundingClientRect();
+    const at = (event.clientX - map.left) / map.width;
+    scroller.scrollTo({ left: (at - view.size / 2) * scroller.scrollWidth });
+  }
+
+  return (
+    <div className={classes.minimap} aria-hidden>
+      <div
+        className={classes.minimapTrack}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          jump(event);
+        }}
+        onPointerMove={(event) => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) jump(event);
+        }}
+      >
+        {columns.map((column, index) => {
+          // In view when most of its share of the width is inside the frame.
+          const start = index / columns.length;
+          const end = (index + 1) / columns.length;
+          const seen =
+            Math.min(end, view.start + view.size) - Math.max(start, view.start) > (end - start) / 2;
+          return (
+            <span
+              key={column.status.id}
+              className={classes.minimapColumn}
+              data-empty={column.total === 0 || undefined}
+              data-seen={seen || undefined}
+            />
+          );
+        })}
+        <span
+          className={classes.minimapView}
+          style={{ left: `${view.start * 100}%`, width: `${view.size * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Marks a scroller with `data-scrolling` while it scrolls and for a moment after, so the CSS shows its scrollbar only
+ * then. It sets the attribute directly rather than through state, so scrolling doesn't re-render the Board.
+ */
+function useScrollbarWhileScrolling(element: HTMLElement | null) {
+  useEffect(() => {
+    if (!element) return;
+    const scroller = element;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function scrolled() {
+      scroller.dataset.scrolling = "";
+      clearTimeout(timer);
+      timer = setTimeout(() => delete scroller.dataset.scrolling, 800);
+    }
+    scroller.addEventListener("scroll", scrolled, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", scrolled);
+      clearTimeout(timer);
+      delete scroller.dataset.scrolling;
+    };
+  }, [element]);
+}
+
+/** The narrowest a column gets while every column fits; past this they don't all fit and the Board scrolls. */
+const NARROWEST_FITTING_COLUMN = 200;
+
+/** Column gap on the Board, as in the CSS (.board). */
+const COLUMN_GAP = 12;
+
+/**
+ * Whether the columns don't all fit at NARROWEST_FITTING_COLUMN. Then the Board scrolls anyway, so the columns stop
+ * squeezing and take a comfortable fixed width instead (the CSS, under data-crowded); otherwise they share the width.
+ * Measured from the scroller, so it follows the window and the number of Statuses.
+ */
+function useCrowded(element: HTMLElement | null, count: number): boolean {
+  const [crowded, setCrowded] = useState(false);
+  useLayoutEffect(() => {
+    if (!element) return;
+    const scroller = element;
+    const update = () =>
+      setCrowded(
+        count * NARROWEST_FITTING_COLUMN + (count - 1) * COLUMN_GAP > scroller.clientWidth,
+      );
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [element, count]);
+  return crowded;
+}
+
+/** The Board is never shorter than this, so a small window still shows a few cards per column. */
+const MIN_BOARD_HEIGHT = 360;
+
+/** The nearest ancestor that scrolls vertically: the Desktop app's content area, or the page itself on the web. */
+function scrollParentOf(element: HTMLElement): HTMLElement | null {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (/auto|scroll|overlay/.test(getComputedStyle(parent).overflowY)) return parent;
+  }
+  return null;
+}
+
+/**
+ * The height that takes an element from where it starts down to the bottom of the window, less what sits under it:
+ * the padding the shell and the page keep there (the bottom nav bar sits in it), and anything else, measured from the
+ * page itself if it still overflows. The Board takes this height, so the page doesn't scroll and its columns scroll on
+ * their own instead: their headers and the minimap stay on screen however many cards there are.
+ */
+function useHeightToWindowBottom(element: HTMLElement | null): number | undefined {
+  const [height, setHeight] = useState<number>();
+  useLayoutEffect(() => {
+    if (!element) return;
+    const self = element;
+    const scrollParent = scrollParentOf(self);
+    // What lies under the Board besides the ancestors' bottom padding (a margin, a gap, anything after it), measured
+    // whenever the page still overflows. The Board's own new height never clears it, so the height settles instead of
+    // going back and forth; a resized window or a Board that starts elsewhere (a notice above it came or went, the
+    // toolbar wrapped) does, so a passing overflow doesn't keep the Board short for good.
+    let missed = 0;
+    let lastOffset: number | undefined;
+    let lastVisible: number | undefined;
+    function update() {
+      const top = self.getBoundingClientRect().top;
+      const offset = scrollParent
+        ? top - scrollParent.getBoundingClientRect().top + scrollParent.scrollTop
+        : top + window.scrollY;
+      const visible = scrollParent ? scrollParent.clientHeight : window.innerHeight;
+      if (offset !== lastOffset || visible !== lastVisible) missed = 0;
+      lastOffset = offset;
+      lastVisible = visible;
+      let padding = 0;
+      for (let parent = self.parentElement; parent; parent = parent.parentElement) {
+        padding += Number.parseFloat(getComputedStyle(parent).paddingBottom) || 0;
+        if (parent === scrollParent) break;
+      }
+      // While the page overflows, its full height says exactly how much is under the Board.
+      const content = scrollParent
+        ? scrollParent.scrollHeight
+        : document.documentElement.scrollHeight;
+      if (content > visible + 1) {
+        const under = content - (offset + self.offsetHeight);
+        missed = Math.max(0, Math.ceil(under - padding));
+      }
+      setHeight(Math.max(MIN_BOARD_HEIGHT, Math.floor(visible - offset - padding - missed)));
+    }
+    update();
+    window.addEventListener("resize", update);
+    // The window's size isn't the only thing that moves the Board: the toolbar above it can wrap, for one. The Board's
+    // own frame too, so after each new height it checks once more whether the page still overflows (the page's body
+    // may keep one height whatever its content, and wouldn't say).
+    const observer = new ResizeObserver(update);
+    observer.observe(scrollParent ?? document.body);
+    observer.observe(self);
+    return () => {
+      window.removeEventListener("resize", update);
+      observer.disconnect();
+    };
+  }, [element]);
+  return height;
+}
+
+/**
+ * Marks a column's card list with `data-more` ("top", "bottom" or "both") while cards are out of view that way, so the
+ * CSS fades that edge instead of cutting a card off, and the fade says there's more. Set on the element directly, not
+ * through state, so scrolling a column doesn't re-render the Board; before paint, so the first frame is right.
+ */
+function useEndFades(element: HTMLElement | null) {
+  useLayoutEffect(() => {
+    if (!element) return;
+    const list = element;
+    function update() {
+      // A pixel of slack: fractional heights can leave scrollTop just short of the end.
+      const top = list.scrollTop > 1;
+      const bottom = list.scrollTop + list.clientHeight < list.scrollHeight - 1;
+      const more = top && bottom ? "both" : top ? "top" : bottom ? "bottom" : null;
+      if (more) list.setAttribute("data-more", more);
+      else list.removeAttribute("data-more");
+    }
+    update();
+    list.addEventListener("scroll", update, { passive: true });
+    // The list's own size, and its cards': both change as Issues come, go or are edited.
+    const observer = new ResizeObserver(update);
+    observer.observe(list);
+    for (const child of list.children) observer.observe(child);
+    const children = new MutationObserver(() => {
+      for (const child of list.children) observer.observe(child);
+      update();
+    });
+    children.observe(list, { childList: true });
+    return () => {
+      list.removeEventListener("scroll", update);
+      observer.disconnect();
+      children.disconnect();
+    };
+  }, [element]);
+}
+
+type HiddenSides = "left" | "right" | "both" | undefined;
+
+/** Which sides of a horizontal scroller have columns out of view, kept up to date as it scrolls or resizes. */
+function useHiddenSides(element: HTMLElement | null): HiddenSides {
+  const [sides, setSides] = useState<HiddenSides>(undefined);
+  useLayoutEffect(() => {
+    if (!element) return;
+    const scroller = element;
+    function update() {
+      // A pixel of slack: fractional widths can leave scrollLeft just short of the end.
+      const left = scroller.scrollLeft > 1;
+      const right = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 1;
+      if (left && right) setSides("both");
+      else if (left) setSides("left");
+      else if (right) setSides("right");
+      else setSides(undefined);
+    }
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    // Watches the scroller's own size and its columns', which change as cards or Statuses come and go.
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    for (const child of scroller.children) observer.observe(child);
+    const children = new MutationObserver(() => {
+      for (const child of scroller.children) observer.observe(child);
+      update();
+    });
+    children.observe(scroller, { childList: true });
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      observer.disconnect();
+      children.disconnect();
+    };
+  }, [element]);
+  return sides;
 }
 
 function BoardColumn({
@@ -226,6 +640,8 @@ function BoardColumn({
   onAdd?: (status: ProjectStatus) => void;
 }) {
   const { setNodeRef, isOver } = useStatusArea(column.status.id, column.status);
+  const [cards, setCards] = useState<HTMLDivElement | null>(null);
+  useEndFades(cards);
   return (
     <section
       ref={setNodeRef}
@@ -236,17 +652,21 @@ function BoardColumn({
         <StatusPill status={column.status} />
         <span>{column.total}</span>
       </div>
-      {column.items.length === 0 && column.total === 0 && (
-        <div className={classes.emptyColumn}>No issues</div>
-      )}
-      {column.items.map((issue) => (
-        <IssueCard key={issue.id} issue={issue} />
-      ))}
-      {column.total > column.items.length && (
-        <div className={classes.more}>
-          Showing {column.items.length} of {column.total}
-        </div>
-      )}
+      {/* The cards scroll on their own; the head above and "Add issue" below stay put. */}
+      <div ref={setCards} className={classes.cards}>
+        <DropSlot status={column.status} />
+        {column.items.length === 0 && column.total === 0 && (
+          <div className={classes.emptyColumn}>No issues</div>
+        )}
+        {column.items.map((issue) => (
+          <IssueCard key={issue.id} issue={issue} />
+        ))}
+        {column.total > column.items.length && (
+          <div className={classes.more}>
+            Showing {column.items.length} of {column.total}
+          </div>
+        )}
+      </div>
       {onAdd && (
         <button
           type="button"
@@ -264,6 +684,10 @@ function BoardColumn({
 
 /** One row of the Swimlanes: who it is for, and their Issues. */
 type Lane = { id: string; name: string | null; avatarUrl: string | null; issues: Issue[] };
+
+function laneIdOf(issue: Issue) {
+  return issue.assignee?.id ?? "none";
+}
 
 /** Lanes by Assignee, in the order they first appear, with Unassigned last. */
 function lanesOf(columns: Column[]): Lane[] {
@@ -297,9 +721,12 @@ export function IssueSwimlanes({
   canMove?: CanMove;
 }) {
   const lanes = lanesOf(columns);
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  useScrollbarWhileScrolling(scroller);
   return (
     <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove} canMove={canMove}>
       <div
+        ref={setScroller}
         className={classes.lanes}
         style={{ gridTemplateColumns: `140px repeat(${columns.length}, minmax(200px, 1fr))` }}
       >
@@ -363,6 +790,7 @@ function LaneCell({
       role="group"
       aria-label={label}
     >
+      <DropSlot status={status} lane={laneId} />
       {issues.map((issue) => (
         <IssueCard key={issue.id} issue={issue} />
       ))}

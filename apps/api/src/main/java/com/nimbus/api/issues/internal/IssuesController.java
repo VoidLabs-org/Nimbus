@@ -75,6 +75,12 @@ class IssuesController {
 		return issues.counts(currentUser.id(), key, filter);
 	}
 
+	/** Every project the User is a Member of, with its Issue totals, for the Projects table: one request for all. */
+	@GetMapping("/api/issues/stats")
+	List<IssueService.ProjectStatsView> stats() {
+		return issues.projectStats(currentUser.id());
+	}
+
 	/** The filters both endpoints take, checked; {@code errors} may already hold the caller's own. */
 	private IssueService.IssueFilter filter(String status, String category, String type, String priority,
 			String assignee, String q, String sort, int page, int size, Map<String, String> errors) {

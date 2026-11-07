@@ -4,7 +4,10 @@ import type { Crumb } from "../shell/crumbs";
 const SETTINGS: Crumb = { label: "Settings", to: "/settings" };
 const ROLES: Crumb = { label: "Roles & access", to: "/settings/roles" };
 
-/** `Settings › <page>`: the path of a page the Settings overview opens. */
+/**
+ * `Settings › <page>`: a Settings page's path. Beside the Settings list (the browser's layout or the Desktop overlay)
+ * it shortens to nothing (see overlayCrumbs); the full path is for the Desktop app's Tab title.
+ */
 export function settingsCrumbs(page: string): Crumb[] {
   return [SETTINGS, { label: page }];
 }
@@ -28,9 +31,9 @@ export function roleCrumbs(role: { kind: Kind; name: string } | null): Crumb[] {
 }
 
 /**
- * A Settings page's path inside the Desktop app's Settings overlay, whose list stands in for the overview: the
- * Settings crumb goes, and a path left with only the page itself goes too (the page's title says it). A Role keeps
- * Roles & access › its tab › the Role.
+ * A Settings page's path beside the Settings list (the Desktop overlay or the browser's Settings layout), which stands
+ * in for the Settings crumb: that crumb goes, and a path left with only the page itself goes too (the page's title
+ * says it). A Role keeps Roles & access › its tab › the Role.
  */
 export function overlayCrumbs(crumbs: Crumb[]): Crumb[] {
   const inside = crumbs.filter((crumb) => crumb.to !== SETTINGS.to);

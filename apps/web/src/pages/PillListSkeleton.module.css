@@ -1,0 +1,31 @@
+/* Pill rows while a list loads. Colours come only from the theme variables. */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 24px 12px 12px;
+  border-radius: 999px;
+  background: var(--color-surface);
+}
+
+.badge {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--seg);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}

@@ -32,6 +32,9 @@ const project: Project = {
   description: null,
   archived: false,
   createdAt: "2026-10-19T00:00:00Z",
+  createdBy: { id: "u1", displayName: "Dana", avatarUrl: null },
+  memberCount: 1,
+  members: [{ id: "u1", displayName: "Dana", avatarUrl: null }],
 };
 const statuses: ProjectStatus[] = [
   { id: "s1", name: "To do", category: "TODO", position: 0 },

@@ -190,6 +190,14 @@ export default function IssuesPage() {
   }
 
   // An unknown project, or one the User isn't a Member of, is ProjectLayout's Project not found.
+  // Before the failure screen's early return: useHeldHeight is a hook, called on every render.
+  const loaded = grouped
+    ? statuses.data !== undefined &&
+      statuses.data.every(
+        (status, index) => !columnShown(search, status) || columnQueries[index]?.data,
+      )
+    : Boolean(query.data);
+  const { ref: viewFrame, heldHeight } = useHeldHeight(loaded);
   if (failure) {
     return (
       <FailedLoadPage
@@ -216,12 +224,6 @@ export default function IssuesPage() {
   const archived = project?.archived ?? false;
   const canCreate = project !== undefined && !archived && permissions.canCreate;
   const canMove = (issue: Issue) => !archived && permissions.canEdit(issue);
-  const loaded = grouped
-    ? statuses.data !== undefined &&
-      statuses.data.every(
-        (status, index) => !columnShown(search, status) || columnQueries[index]?.data,
-      )
-    : Boolean(data);
   const total = grouped
     ? columns.reduce((sum, column) => sum + column.total, 0)
     : (data?.total ?? 0);
@@ -308,88 +310,94 @@ export default function IssuesPage() {
           onClose={() => setAddingTo(null)}
         />
       )}
-      {!loaded ? (
-        <Loading>
-          <ViewSkeleton view={view} />
-        </Loading>
-      ) : total === 0 && page === 0 && !filtered && !searching ? (
-        <div className={classes.blank}>
-          <div className={classes.bar} style={{ width: 200 }} />
-          <div className={classes.bar} style={{ width: 144 }} />
-          <div className={classes.bar} style={{ width: 88 }} />
-          <Title order={2} fz={24} mt="sm">
-            No Issues yet
-          </Title>
-          <Text c="dimmed">Create the first one. Statuses are set up with it.</Text>
-          {createButton}
-        </div>
-      ) : view === "board" || view === "swimlanes" ? (
-        // The columns stay, with 0 in each, under a message when nothing matches, so the layout doesn't jump.
-        <div className={classes.over}>
-          {view === "board" ? (
-            <IssueBoard
-              columns={columns}
-              onMove={(key, status) => void move(key, status)}
-              canMove={canMove}
-              onAdd={addTo}
-            />
+      {/* Keyed by the view, so switching views fades the new one in instead of swapping it at once. The frame
+          keeps the last view's height while the next one loads, so the page doesn't get shorter and scroll up. */}
+      <div ref={viewFrame} style={{ minHeight: loaded ? undefined : heldHeight }}>
+        <div key={view} className={classes.viewIn}>
+          {!loaded ? (
+            <Loading>
+              <ViewSkeleton view={view} />
+            </Loading>
+          ) : total === 0 && page === 0 && !filtered && !searching ? (
+            <div className={classes.blank}>
+              <div className={classes.bar} style={{ width: 200 }} />
+              <div className={classes.bar} style={{ width: 144 }} />
+              <div className={classes.bar} style={{ width: 88 }} />
+              <Title order={2} fz={24} mt="sm">
+                No Issues yet
+              </Title>
+              <Text c="dimmed">Create the first one. Statuses are set up with it.</Text>
+              {createButton}
+            </div>
+          ) : view === "board" || view === "swimlanes" ? (
+            // The columns stay, with 0 in each, under a message when nothing matches, so the layout doesn't jump.
+            <div className={classes.over}>
+              {view === "board" ? (
+                <IssueBoard
+                  columns={columns}
+                  onMove={(key, status) => void move(key, status)}
+                  canMove={canMove}
+                  onAdd={addTo}
+                />
+              ) : (
+                <IssueSwimlanes
+                  columns={columns}
+                  onMove={(key, status) => void move(key, status)}
+                  canMove={canMove}
+                />
+              )}
+              {nothing}
+            </div>
+          ) : nothing ? (
+            nothing
+          ) : view === "list" ? (
+            <IssueGroups columns={columns.filter((column) => columnShown(search, column.status))} />
           ) : (
-            <IssueSwimlanes
-              columns={columns}
-              onMove={(key, status) => void move(key, status)}
-              canMove={canMove}
-            />
+            <>
+              <Panel p={8}>
+                {data && data.items.length > 0 ? (
+                  <IssueTable
+                    issues={data.items}
+                    sort={search.sort ?? "updated"}
+                    onSort={(sort) => change("sort", sort === "updated" ? null : sort)}
+                  />
+                ) : (
+                  <p className={classes.empty}>This page has no Issues.</p>
+                )}
+              </Panel>
+              <div className={classes.footer}>
+                <span aria-live="polite">
+                  {!data || data.items.length === 0
+                    ? `${total} Issues`
+                    : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + data.items.length} of ${data.total}`}
+                </span>
+                {(pages > 1 || page > 0) && (
+                  <Group gap="xs">
+                    <Button
+                      variant="default"
+                      radius="xl"
+                      size="compact-md"
+                      disabled={page === 0}
+                      onClick={() => change("page", page > 1 ? String(page - 1) : null)}
+                    >
+                      ← Prev
+                    </Button>
+                    <Button
+                      variant="default"
+                      radius="xl"
+                      size="compact-md"
+                      disabled={page + 1 >= pages}
+                      onClick={() => change("page", String(page + 1))}
+                    >
+                      Next →
+                    </Button>
+                  </Group>
+                )}
+              </div>
+            </>
           )}
-          {nothing}
         </div>
-      ) : nothing ? (
-        nothing
-      ) : view === "list" ? (
-        <IssueGroups columns={columns.filter((column) => columnShown(search, column.status))} />
-      ) : (
-        <>
-          <Panel p={8}>
-            {data && data.items.length > 0 ? (
-              <IssueTable
-                issues={data.items}
-                sort={search.sort ?? "updated"}
-                onSort={(sort) => change("sort", sort === "updated" ? null : sort)}
-              />
-            ) : (
-              <p className={classes.empty}>This page has no Issues.</p>
-            )}
-          </Panel>
-          <div className={classes.footer}>
-            <span aria-live="polite">
-              {!data || data.items.length === 0
-                ? `${total} Issues`
-                : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + data.items.length} of ${data.total}`}
-            </span>
-            {(pages > 1 || page > 0) && (
-              <Group gap="xs">
-                <Button
-                  variant="default"
-                  radius="xl"
-                  size="compact-md"
-                  disabled={page === 0}
-                  onClick={() => change("page", page > 1 ? String(page - 1) : null)}
-                >
-                  ← Prev
-                </Button>
-                <Button
-                  variant="default"
-                  radius="xl"
-                  size="compact-md"
-                  disabled={page + 1 >= pages}
-                  onClick={() => change("page", String(page + 1))}
-                >
-                  Next →
-                </Button>
-              </Group>
-            )}
-          </div>
-        </>
-      )}
+      </div>
     </>
   );
 }
@@ -449,4 +457,22 @@ function ViewSkeleton({ view }: { view: View }) {
       ))}
     </Panel>
   );
+}
+
+/**
+ * The height the view's frame last had with a loaded view in it, to hold while the next one loads: the delayed
+ * skeleton (nothing for the first 200ms, then shorter than real content) would otherwise make the page shorter, and the
+ * browser would scroll the User up to stay inside it.
+ */
+function useHeldHeight(loaded: boolean) {
+  // State, not a ref: the frame can mount after the view has loaded (after the failure screen), and must be observed.
+  const [frame, ref] = useState<HTMLDivElement | null>(null);
+  const [heldHeight, setHeldHeight] = useState<number>();
+  useEffect(() => {
+    if (!frame || !loaded) return;
+    const observer = new ResizeObserver(() => setHeldHeight(frame.offsetHeight));
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [frame, loaded]);
+  return { ref, heldHeight };
 }

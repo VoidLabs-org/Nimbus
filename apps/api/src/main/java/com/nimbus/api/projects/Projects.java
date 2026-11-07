@@ -1,5 +1,6 @@
 package com.nimbus.api.projects;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,4 +16,7 @@ public interface Projects {
 	Optional<ProjectSummary> findByKey(String key);
 
 	boolean isMember(UUID projectId, UUID userId);
+
+	/** The active (not Archived) projects the User is a Member of, in the order the Projects list shows them. */
+	List<ProjectSummary> memberProjects(UUID userId);
 }

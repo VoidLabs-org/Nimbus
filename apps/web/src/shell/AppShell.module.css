@@ -9,8 +9,9 @@
   --nav-bar: 64px;
   --nav-rail: 72px;
   --nav-pill: 64px;
-  /* The horizontal bar is as wide as the page's content, centred. */
-  --nav-bar-w: min(calc(var(--container-size-lg, 1140px) - 32px), calc(100% - 2 * var(--nav-edge)));
+  /* The horizontal bar is as wide as the page's content: the shell is full width, and each page picks its own width
+     inside it (work surfaces wide, reading and form pages narrower and centred). */
+  --nav-bar-w: calc(100% - 2 * (var(--nav-edge) + var(--mantine-spacing-md)));
   --nav-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --nav-ms: 260ms;
 }
@@ -146,8 +147,46 @@
   transition: padding var(--nav-ms) var(--nav-ease);
 }
 
+/* A band behind the horizontal bar, from the window's edge to just past the bar, so the page scrolls away under it
+   instead of showing in the gap between the bar and the edge. Nearly the page's own colour and blurred, so on the glass
+   themes it frosts their glow rather than cutting a flat stripe across it; it fades out on the page's side. Hidden
+   while the bar folds to move edges. */
+.shell[data-nav="top"]::before,
+.shell[data-nav="bottom"]::before {
+  content: "";
+  position: fixed;
+  z-index: 99;
+  left: 0;
+  right: 0;
+  height: calc(var(--nav-edge) + var(--nav-bar) + 16px);
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.shell[data-nav="top"]::before {
+  top: 0;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+}
+
+.shell[data-nav="bottom"]::before {
+  bottom: 0;
+  mask-image: linear-gradient(to top, #000 calc(100% - 16px), transparent);
+}
+
+.shell[data-folded]::before {
+  display: none;
+}
+
+/* --page-top-inset: how much of the window's top the fixed bar covers, for anything on a page that sticks to the top
+   (the Settings list); nothing covers it with the bar on another edge. */
+.shell[data-nav="top"] {
+  --page-top-inset: calc(var(--nav-edge) + var(--nav-bar));
+}
+
 .shell[data-nav="top"] .content {
-  padding-top: calc(var(--nav-edge) + var(--nav-bar));
+  padding-top: var(--page-top-inset);
 }
 
 .shell[data-nav="bottom"] .content {

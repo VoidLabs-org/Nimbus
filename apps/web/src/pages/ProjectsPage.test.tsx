@@ -4,10 +4,10 @@ import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { toast } from "@repo/ui/toast";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, type Project } from "../api/client";
+import { api, type Project, type ProjectIssueStats } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import ProjectsPage from "./ProjectsPage";
 
@@ -18,8 +18,19 @@ const apple: Project = {
   description: "Fruit stand",
   archived: false,
   createdAt: "2026-10-19T00:00:00Z",
+  createdBy: { id: "u1", displayName: "Dana", avatarUrl: null },
+  memberCount: 1,
+  members: [{ id: "u1", displayName: "Dana", avatarUrl: null }],
 };
 const nimbus: Project = { ...apple, id: "p2", key: "NIM", name: "Nimbus", description: null };
+
+/** A project's Issue totals: `total` Issues, `done` of them in a Done Status, last changed `updatedAt`. */
+const stats = (
+  projectKey: string,
+  total: number,
+  done: number,
+  updatedAt: string | null = null,
+): ProjectIssueStats => ({ projectKey, total, done, updatedAt });
 
 let restoreMatchMedia: () => void;
 beforeEach(() => {
@@ -67,15 +78,58 @@ const create = () => fireEvent.click(screen.getByRole("button", { name: /Create 
 describe("the Projects page: the list", () => {
   it("lists the projects as links to their pages, with their keys and descriptions", async () => {
     vi.spyOn(api, "projects").mockResolvedValue([apple, nimbus]);
+    vi.spyOn(api, "projectIssueStats").mockResolvedValue([]);
     show();
 
     expect((await screen.findByText("apple")).closest("a")?.getAttribute("href")).toBe(
       "/projects/APP",
     );
-    expect(screen.getByText("APP")).toBeTruthy();
+    expect(screen.getAllByText("APP").length).toBeGreaterThan(0);
     expect(screen.getByText("Fruit stand")).toBeTruthy();
     expect(screen.getByText("Nimbus").closest("a")?.getAttribute("href")).toBe("/projects/NIM");
-    expect(screen.getByRole("list", { name: "Your projects" }).children.length).toBe(2);
+    const table = screen.getByRole("table", { name: "Your projects" });
+    expect(within(table).getAllByRole("row").length).toBe(3);
+    expect(screen.getByText("2 projects")).toBeTruthy();
+  });
+
+  it("shows each project's creator, open Issues, how many are done and when it last changed", async () => {
+    vi.spyOn(api, "projects").mockResolvedValue([{ ...apple, memberCount: 4 }, nimbus]);
+    const issueStats = vi
+      .spyOn(api, "projectIssueStats")
+      .mockResolvedValue([stats("APP", 8, 2, new Date().toISOString()), stats("NIM", 0, 0)]);
+    show();
+
+    const appleRow = (await screen.findByText("apple")).closest("tr")!;
+    expect(await within(appleRow).findByText("6")).toBeTruthy();
+    expect(within(appleRow).getByText("25%")).toBeTruthy();
+    expect(
+      within(appleRow)
+        .getByRole("progressbar", { name: "apple progress" })
+        .getAttribute("aria-valuenow"),
+    ).toBe("25");
+    expect(within(appleRow).getAllByText("Dana").length).toBeGreaterThan(0);
+    expect(within(appleRow).getByText("Dana and 3 more")).toBeTruthy();
+    expect(within(appleRow).getByText("+3")).toBeTruthy();
+    expect(within(appleRow).getByText(/ago$/)).toBeTruthy();
+    const nimbusRow = screen.getByText("Nimbus").closest("tr")!;
+    expect(await within(nimbusRow).findByText("No issues")).toBeTruthy();
+    // One request for every project's totals, not one per project.
+    expect(issueStats).toHaveBeenCalledTimes(1);
+  });
+
+  it("narrows the table to the projects matching the search, by name, key or description", async () => {
+    vi.spyOn(api, "projects").mockResolvedValue([apple, nimbus]);
+    vi.spyOn(api, "projectIssueStats").mockResolvedValue([]);
+    show();
+
+    const search = await screen.findByRole("textbox", { name: "Search projects" });
+    fireEvent.change(search, { target: { value: "fruit" } });
+    expect(screen.getByText("apple")).toBeTruthy();
+    expect(screen.queryByText("Nimbus")).toBeNull();
+    expect(screen.getByText("1 project")).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: "zzz" } });
+    expect(screen.getByText("No projects match “zzz”.")).toBeTruthy();
   });
 
   it("says there are no projects to show, without saying anything about membership", async () => {
@@ -85,7 +139,7 @@ describe("the Projects page: the list", () => {
     expect(
       await screen.findByText("No projects to show yet. Create one to get started."),
     ).toBeTruthy();
-    expect(screen.queryByRole("list", { name: "Your projects" })).toBeNull();
+    expect(screen.queryByRole("table", { name: "Your projects" })).toBeNull();
   });
 
   it("shows the server-error page, with Try again, when the first load fails", async () => {

@@ -1,9 +1,12 @@
 /* The Issue page, from the "Nimbus Issues" design (40a–40l): the text and history on the left, the details beside them.
    Colours come only from the theme variables, except the red of Bugs and Urgent, which no theme changes. */
+/* Full width like every other page (ADR 0011), so the breadcrumb stays where it is on the project pages: the text from
+   the left gutter, the details at the right gutter, growing with the screen from 340px to 460px, and the text filling
+   the space between them, so a wide screen leaves no gap. */
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 24%, 460px);
+  gap: 48px;
   align-items: start;
 }
 
@@ -14,9 +17,10 @@
   min-width: 0;
 }
 
+/* Stays in view while a long History scrolls, just under the top navbar (--page-top-inset, from the shell). */
 .side {
   position: sticky;
-  top: 16px;
+  top: calc(var(--page-top-inset, 0px) + 16px);
   display: flex;
   flex-direction: column;
   gap: 16px;

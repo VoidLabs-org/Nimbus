@@ -1,6 +1,6 @@
 import { ApiError } from "@repo/api";
 import { IconDeviceDesktop, IconDeviceMobile } from "@tabler/icons-react";
-import { Button, Container, Stack, Title } from "@mantine/core";
+import { Box, Button, Stack, Title } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "@repo/ui/toast";
@@ -70,8 +70,8 @@ export default function SecurityPage() {
   const others = sessions?.filter((session) => !session.current) ?? [];
 
   return (
-    <Container size="sm" px={0} py="xl">
-      <Stack gap="lg" maw={760}>
+    <Box py="xl">
+      <Stack gap="lg">
         <BreadcrumbTrail crumbs={settingsCrumbs("Security")} />
         <Title order={1} fz={32} lh={1.1}>
           Security
@@ -154,7 +154,7 @@ export default function SecurityPage() {
         onConfirm={() => signOutOthers.mutate()}
         onClose={() => setConfirmOpen(false)}
       />
-    </Container>
+    </Box>
   );
 }
 

@@ -431,6 +431,45 @@ class IssueService implements Issues {
 		return new IssueCountsView(total[0], statuses, categories, types, priorities);
 	}
 
+	/**
+	 * Each active project the actor is a Member of, in the Projects list's order, with its Issue totals: all of them,
+	 * those in a Done Status, and when an Issue last changed or was deleted ({@code null} with neither). One grouped
+	 * query for all the projects, so the Projects table doesn't ask once per project. Membership is all that viewing
+	 * Issues needs (see {@link IssueAccess}), so every project listed may be shown.
+	 */
+	List<ProjectStatsView> projectStats(UUID actor) {
+		var mine = projects.memberProjects(actor);
+		if (mine.isEmpty()) return List.of();
+		var ids = mine.stream().map(ProjectSummary::id).toList();
+		record Totals(long total, long done, Instant updated) {
+		}
+		var totals = new java.util.HashMap<UUID, Totals>();
+		jdbc.sql("""
+				SELECT i.project_id, count(*) AS total, count(*) FILTER (WHERE s.category = 'DONE') AS done,
+				max(i.updated_at) AS updated
+				FROM issues i JOIN issue_statuses s ON s.id = i.status_id
+				WHERE i.project_id IN (:ids)
+				GROUP BY i.project_id
+				""").param("ids", ids).query((row, index) -> totals.put(row.getObject("project_id", UUID.class),
+						new Totals(row.getLong("total"), row.getLong("done"), row.getTimestamp("updated").toInstant())))
+			.list();
+		var deleted = new java.util.HashMap<UUID, Instant>();
+		jdbc.sql("""
+				SELECT project_id, max(deleted_at) AS deleted FROM issue_deletions
+				WHERE project_id IN (:ids) GROUP BY project_id
+				""").param("ids", ids)
+			.query((row, index) -> deleted.put(row.getObject("project_id", UUID.class),
+					row.getTimestamp("deleted").toInstant()))
+			.list();
+		return mine.stream().map(project -> {
+			var counted = totals.getOrDefault(project.id(), new Totals(0, 0, null));
+			var gone = deleted.get(project.id());
+			var updated = counted.updated() == null ? gone
+					: gone == null || counted.updated().isAfter(gone) ? counted.updated() : gone;
+			return new ProjectStatsView(project.key(), counted.total(), counted.done(), updated);
+		}).toList();
+	}
+
 	/** Every field filter but {@code field}'s, joined with AND; TRUE when none is left. */
 	private static String allBut(Map<String, String> facets, String field) {
 		var kept = facets.entrySet().stream().filter(entry -> !entry.getKey().equals(field)).map(Map.Entry::getValue)
@@ -535,6 +574,10 @@ class IssueService implements Issues {
 	}
 
 	record IssuePageView(List<IssueView> items, long total, int page, int size) {
+	}
+
+	/** A project's Issue totals for the Projects table; {@code updatedAt} is {@code null} when nothing happened yet. */
+	record ProjectStatsView(String projectKey, long total, long done, Instant updatedAt) {
 	}
 
 	/** Matching Issues, and per value of each field; {@code statuses} is keyed by Status id. */

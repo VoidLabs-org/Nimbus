@@ -23,9 +23,10 @@ final class DefaultStatuses {
 			.param("project", projectId).query(Long.class).single();
 		if (existing > 0) return;
 		for (int position = 0; position < DEFAULTS.size(); position++) {
-			jdbc.sql("INSERT INTO issue_statuses (id, project_id, name, category, position) VALUES (:id, :project, :name, :category, :position)")
+			jdbc.sql("INSERT INTO issue_statuses (id, project_id, name, category, position, is_default) VALUES (:id, :project, :name, :category, :position, :isDefault)")
 				.param("id", UUID.randomUUID()).param("project", projectId).param("name", DEFAULTS.get(position)[0])
-				.param("category", DEFAULTS.get(position)[1]).param("position", position).update();
+				.param("category", DEFAULTS.get(position)[1]).param("position", position)
+				.param("isDefault", position == 0).update();
 		}
 	}
 }

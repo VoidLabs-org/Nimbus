@@ -59,7 +59,7 @@ class StatusService {
 		nameTaken(name, () -> jdbc.sql("INSERT INTO issue_statuses (id, project_id, name, category, position) VALUES (:id, :project, :name, :category, :position)")
 			.param("id", id).param("project", project.id()).param("name", name).param("category", category)
 			.param("position", position).update());
-		return new ProjectStatus(id, name, category, position);
+		return new ProjectStatus(id, name, category, position, false);
 	}
 
 	/** Only what is sent changes; the id stays, so Issues keep their Status. */
@@ -71,9 +71,33 @@ class StatusService {
 		var newCategory = category == null ? current.category() : category;
 		if (!newName.equals(current.name())) requireFreeName(all, newName, statusId);
 		if (!newCategory.equals(current.category())) requireOtherInCategory(all, current);
-		nameTaken(newName, () -> jdbc.sql("UPDATE issue_statuses SET name = :name, category = :category WHERE id = :id")
-			.param("name", newName).param("category", newCategory).param("id", statusId).update());
-		return new ProjectStatus(statusId, newName, newCategory, current.position());
+		// Leaving To do, the Status can't stay the default (the table refuses it): the first To do Status left is.
+		var keepsDefault = current.isDefault() && newCategory.equals("TODO");
+		nameTaken(newName, () -> jdbc.sql("UPDATE issue_statuses SET name = :name, category = :category, is_default = :isDefault WHERE id = :id")
+			.param("name", newName).param("category", newCategory).param("isDefault", keepsDefault)
+			.param("id", statusId).update());
+		if (current.isDefault() && !keepsDefault) defaultToFirstToDo(project.id());
+		return new ProjectStatus(statusId, newName, newCategory, current.position(), keepsDefault);
+	}
+
+	/**
+	 * Makes a To do Status the one new Issues start in. Any other category is {@code 409} (code
+	 * {@code default_needs_todo}); the one that already is the default changes nothing.
+	 */
+	ProjectStatus makeDefault(UUID actor, String projectKey, UUID statusId) {
+		var project = lock(actor, projectKey);
+		var all = statuses(project.id());
+		var current = find(all, statusId);
+		if (!current.category().equals("TODO")) {
+			throw new IssueService.Conflict("Only a To do Status can be the default", "default_needs_todo");
+		}
+		if (!current.isDefault()) {
+			// One at a time: the unique index allows one default per project.
+			jdbc.sql("UPDATE issue_statuses SET is_default = FALSE WHERE project_id = :project AND is_default")
+				.param("project", project.id()).update();
+			jdbc.sql("UPDATE issue_statuses SET is_default = TRUE WHERE id = :id").param("id", statusId).update();
+		}
+		return new ProjectStatus(current.id(), current.name(), current.category(), current.position(), true);
 	}
 
 	/** {@code statusIds} must be exactly the project's Statuses, each once. */
@@ -136,6 +160,7 @@ class StatusService {
 		}
 		jdbc.sql("UPDATE issue_statuses SET position = position - 1 WHERE project_id = :project AND position > :position")
 			.param("project", project.id()).param("position", current.position()).update();
+		if (current.isDefault()) defaultToFirstToDo(project.id());
 		// Only now that nothing can refuse the delete.
 		changed.forEach(events::publishEvent);
 	}
@@ -161,11 +186,19 @@ class StatusService {
 	}
 
 	private List<ProjectStatus> statuses(UUID projectId) {
-		return jdbc.sql("SELECT id, name, category, position FROM issue_statuses WHERE project_id = :project ORDER BY position")
+		return jdbc.sql("SELECT id, name, category, position, is_default FROM issue_statuses WHERE project_id = :project ORDER BY position")
 			.param("project", projectId)
 			.query((row, index) -> new ProjectStatus(row.getObject("id", UUID.class), row.getString("name"),
-					row.getString("category"), row.getInt("position")))
+					row.getString("category"), row.getInt("position"), row.getBoolean("is_default")))
 			.list();
+	}
+
+	/** After the default left To do or was deleted: the first To do Status, in order, takes over. */
+	private void defaultToFirstToDo(UUID projectId) {
+		jdbc.sql("""
+				UPDATE issue_statuses SET is_default = TRUE WHERE id = (
+				    SELECT id FROM issue_statuses WHERE project_id = :project AND category = 'TODO' ORDER BY position LIMIT 1)
+				""").param("project", projectId).update();
 	}
 
 	private static ProjectStatus find(List<ProjectStatus> all, UUID statusId) {
@@ -175,13 +208,15 @@ class StatusService {
 
 	/**
 	 * The unique index on {@code lower(name)} is the final word on names: Java and Postgres can fold some characters
-	 * differently, so a violation that {@link #requireFreeName} let through is the same refusal.
+	 * differently, so a violation of it that {@link #requireFreeName} let through is the same refusal. Any other
+	 * constraint (the default's) is not a name clash and is left to fail as what it is.
 	 */
 	private static void nameTaken(String name, Runnable write) {
 		try {
 			write.run();
 		}
 		catch (DataIntegrityViolationException e) {
+			if (!String.valueOf(e.getMessage()).contains("issue_statuses_project_name")) throw e;
 			throw new IssueService.Conflict("A Status named " + name + " already exists", "status_name_taken");
 		}
 	}

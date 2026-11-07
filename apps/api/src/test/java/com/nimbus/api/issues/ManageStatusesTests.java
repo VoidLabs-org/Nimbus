@@ -154,19 +154,98 @@ class ManageStatusesTests {
 	}
 
 	@Test
-	void newIssuesStartInTheFirstToDoStatusInTheNewOrder() {
+	void aNewProjectsToDoStatusIsTheDefaultAndNewIssuesStartThere() {
 		var dana = register("Dana");
 		var key = project(dana);
 		add(dana, key, "Triage", "TODO").expectStatus().isCreated();
-		var todo = statusId(dana, key, "To do");
-		var triage = statusId(dana, key, "Triage");
-		var progress = statusId(dana, key, "In progress");
-		var done = statusId(dana, key, "Done");
 
-		order(dana, key, List.of(triage, todo, progress, done)).expectStatus().isOk();
+		var list = list(dana, key);
+		assertThat(defaults(list)).containsExactly("To do");
+		// Adding a To do Status doesn't take the default, and neither does putting it first.
+		order(dana, key, List.of(statusId(dana, key, "Triage"), statusId(dana, key, "To do"),
+				statusId(dana, key, "In progress"), statusId(dana, key, "Done"))).expectStatus().isOk();
+		assertThat(defaults(list(dana, key))).containsExactly("To do");
+		var issue = createIssue(dana, key);
+		client.get().uri("/api/issues/{key}", issue).header("Authorization", "Bearer " + dana.token()).exchange()
+			.expectBody().jsonPath("$.status.name").isEqualTo("To do");
+	}
+
+	@Test
+	void anotherToDoStatusCanBeMadeTheDefaultAndNewIssuesStartThere() {
+		var dana = register("Dana");
+		var key = project(dana);
+		add(dana, key, "Triage", "TODO").expectStatus().isCreated();
+		var triage = statusId(dana, key, "Triage");
+
+		makeDefault(dana, key, triage).expectStatus().isOk().expectBody().jsonPath("$.name").isEqualTo("Triage")
+			.jsonPath("$.isDefault").isEqualTo(true);
+		assertThat(defaults(list(dana, key))).containsExactly("Triage");
 		var issue = createIssue(dana, key);
 		client.get().uri("/api/issues/{key}", issue).header("Authorization", "Bearer " + dana.token()).exchange()
 			.expectBody().jsonPath("$.status.name").isEqualTo("Triage");
+		// Making the default the default again changes nothing.
+		makeDefault(dana, key, triage).expectStatus().isOk();
+		assertThat(defaults(list(dana, key))).containsExactly("Triage");
+	}
+
+	@Test
+	void aProjectWithNoMarkedDefaultStillStartsIssuesInItsFirstToDoStatus() {
+		var dana = register("Dana");
+		var key = project(dana);
+		add(dana, key, "Triage", "TODO").expectStatus().isCreated();
+		// Statuses put there some other way (a seed, a fixture) may have none marked.
+		jdbc.sql("UPDATE issue_statuses SET is_default = FALSE WHERE project_id = (SELECT id FROM projects WHERE key = :key)")
+			.param("key", key).update();
+
+		var issue = createIssue(dana, key);
+
+		client.get().uri("/api/issues/{key}", issue).header("Authorization", "Bearer " + dana.token()).exchange()
+			.expectBody().jsonPath("$.status.name").isEqualTo("To do");
+	}
+
+	@Test
+	void onlyAToDoStatusCanBeTheDefault() {
+		var dana = register("Dana");
+		var key = project(dana);
+		createIssue(dana, key);
+
+		makeDefault(dana, key, statusId(dana, key, "In progress")).expectStatus().isEqualTo(409).expectBody()
+			.jsonPath("$.code").isEqualTo("default_needs_todo");
+		makeDefault(dana, key, statusId(dana, key, "Done")).expectStatus().isEqualTo(409);
+		makeDefault(dana, key, UUID.randomUUID().toString()).expectStatus().isNotFound();
+		assertThat(defaults(list(dana, key))).containsExactly("To do");
+	}
+
+	@Test
+	void theDefaultMovesToTheFirstRemainingToDoStatusWhenItLeavesToDoOrIsDeleted() {
+		var dana = register("Dana");
+		var key = project(dana);
+		add(dana, key, "Triage", "TODO").expectStatus().isCreated();
+		add(dana, key, "Ready", "TODO").expectStatus().isCreated();
+		var todo = statusId(dana, key, "To do");
+
+		// Re-categorised: the default can't stay in a category it isn't a To do Status of.
+		patch(dana, key, todo, Map.of("category", "IN_PROGRESS")).expectStatus().isOk().expectBody()
+			.jsonPath("$.isDefault").isEqualTo(false);
+		assertThat(defaults(list(dana, key))).containsExactly("Triage");
+
+		// Deleted: the same.
+		delete(dana, key, statusId(dana, key, "Triage"), null).expectStatus().isNoContent();
+		assertThat(defaults(list(dana, key))).containsExactly("Ready");
+	}
+
+	@Test
+	void defaultsAreStoredPerProjectAndExactlyOneEach() {
+		var dana = register("Dana");
+		var first = project(dana);
+		var second = project(dana);
+		add(dana, first, "Triage", "TODO").expectStatus().isCreated();
+		makeDefault(dana, first, statusId(dana, first, "Triage")).expectStatus().isOk();
+		list(dana, second);
+		add(dana, second, "Backlog", "TODO").expectStatus().isCreated();
+
+		assertThat(defaults(list(dana, first))).containsExactly("Triage");
+		assertThat(defaults(list(dana, second))).containsExactly("To do");
 	}
 
 	@Test
@@ -259,6 +338,7 @@ class ManageStatusesTests {
 		patch(dana, key, todo, Map.of("name", "Renamed")).expectStatus().isEqualTo(409);
 		order(dana, key, List.of(done, progress, todo)).expectStatus().isEqualTo(409);
 		delete(dana, key, todo, progress).expectStatus().isEqualTo(409);
+		makeDefault(dana, key, todo).expectStatus().isEqualTo(409);
 		assertThat(names(list(dana, key))).containsExactly("To do", "In progress", "Done");
 	}
 
@@ -275,6 +355,7 @@ class ManageStatusesTests {
 		patch(lee, key, todo, Map.of("name", "Sneaky")).expectStatus().isNotFound();
 		order(lee, key, List.of(todo, progress)).expectStatus().isNotFound();
 		delete(lee, key, todo, progress).expectStatus().isNotFound();
+		makeDefault(lee, key, todo).expectStatus().isNotFound();
 		add(dana, "NOPE", "Nothing", "TODO").expectStatus().isNotFound();
 		assertThat(names(list(dana, key))).containsExactly("To do", "In progress", "Done");
 
@@ -285,6 +366,8 @@ class ManageStatusesTests {
 		client.put().uri("/api/projects/{key}/statuses/order", key).body(Map.of("statusIds", List.of(todo)))
 			.exchange().expectStatus().isUnauthorized();
 		client.delete().uri("/api/projects/{key}/statuses/{id}", key, todo).exchange().expectStatus().isUnauthorized();
+		client.put().uri("/api/projects/{key}/statuses/{id}/default", key, todo).exchange().expectStatus()
+			.isUnauthorized();
 	}
 
 	@Test
@@ -329,6 +412,15 @@ class ManageStatusesTests {
 
 	private List<String> names(String list) {
 		return JsonPath.read(list, "$[*].name");
+	}
+
+	private List<String> defaults(String list) {
+		return JsonPath.read(list, "$[?(@.isDefault==true)].name");
+	}
+
+	private RestTestClient.ResponseSpec makeDefault(Person who, String projectKey, String statusId) {
+		return client.put().uri("/api/projects/{key}/statuses/{id}/default", projectKey, statusId)
+			.header("Authorization", "Bearer " + who.token()).exchange();
 	}
 
 	private String list(Person who, String projectKey) {

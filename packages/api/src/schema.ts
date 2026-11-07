@@ -834,6 +834,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{key}/statuses/{statusId}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Make a To do Status the one new Issues start in
+         * @description The Status that was the default stops being it. The default is also moved, to the first To do Status in order, when its Status leaves To do or is deleted.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    key: string;
+                    statusId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The Status, now the default */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectStatus"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description The User may not manage this project's Statuses */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Unknown project or Status, or a project the User is not a Member of */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The project is Archived, or the Status is not a To do one (code `default_needs_todo`) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{key}/statuses/order": {
         parameters: {
             query?: never;
@@ -4384,6 +4454,8 @@ export interface components {
             name: string;
             category: components["schemas"]["StatusCategory"];
             position: number;
+            /** @description Whether new Issues start in this Status. Exactly one To do Status of a project is the default */
+            isDefault: boolean;
         };
         IssueHistoryEntry: {
             /** Format: uuid */

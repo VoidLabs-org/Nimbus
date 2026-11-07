@@ -7,9 +7,9 @@ import { api, type ProjectStatus } from "../api/client";
 import { useStatusesChanged } from "../api/queries";
 
 /**
- * "Delete In review?", asked before a Status is deleted. A Status with Issues asks where they go (**Move Issues
- * to**, the first other Status of the same category chosen); one without just goes. The last Status of a category
- * can't be deleted, which the server also enforces. While deleting it can't be closed; a refusal is shown and the
+ * "Delete “In review”?", asked before a Status is deleted. A Status with Issues asks where they go (**Move its issues
+ * to**, the first other Status of the same category chosen) and the button says how many move; one without just
+ * goes. The last Status of a category can't be deleted, which the server also enforces. While deleting it can't be closed; a refusal is shown and the
  * dialog stays open to try again.
  */
 export function DeleteStatusDialog({
@@ -73,7 +73,7 @@ export function DeleteStatusDialog({
     <Modal
       opened={status !== null}
       onClose={onClose}
-      title={status ? `Delete ${status.name}?` : ""}
+      title={status ? `Delete “${status.name}”?` : ""}
       size={420}
       closeOnEscape={!deleting}
       closeOnClickOutside={!deleting}
@@ -81,17 +81,17 @@ export function DeleteStatusDialog({
     >
       {soleOfCategory ? (
         <Text size="sm" c="dimmed" mb="lg">
-          A project keeps at least one Status in each category. Add another one to this category
-          first.
+          Each category needs at least one status. Add another one to this category first.
         </Text>
       ) : hasIssues ? (
         <>
           <Text size="sm" c="dimmed" mb="md">
-            {count.data?.total === 1 ? "1 Issue is" : `${count.data?.total} Issues are`} in this
-            Status. Choose where they go.
+            {count.data?.total === 1 ? "1 issue is" : `${count.data?.total} issues are`} in this
+            status. Choose where to move {count.data?.total === 1 ? "it" : "them"}. The board column
+            is removed for everyone on this project.
           </Text>
           <Select
-            label="Move Issues to"
+            label="Move its issues to"
             data={others.map((other) => ({ value: other.id, label: other.name }))}
             value={moveTo}
             onChange={(value) =>
@@ -106,7 +106,7 @@ export function DeleteStatusDialog({
           {count.isError
             ? "Couldn't check whether this Status has Issues."
             : count.data
-              ? "No Issues are in this Status."
+              ? "No issues are in this status. The board column is removed for everyone on this project."
               : "Checking for Issues…"}
           {count.isError && (
             <>
@@ -128,7 +128,9 @@ export function DeleteStatusDialog({
           loading={deleting}
           disabled={!ready}
         >
-          Delete
+          {hasIssues
+            ? `Delete and move ${count.data?.total} ${count.data?.total === 1 ? "issue" : "issues"}`
+            : "Delete"}
         </Button>
       </Group>
     </Modal>

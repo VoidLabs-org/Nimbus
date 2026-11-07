@@ -157,10 +157,12 @@ paths:
             type: string
         - name: sort
           in: query
-          description: "`updated` and `created` are newest first; `priority` is Urgent first, then most recently updated"
+          description: >-
+            `updated` and `created` are newest first; `priority` is Urgent first, then most recently updated; `rank` is
+            the project's manual order (Rank), as the Board shows it
           schema:
             type: string
-            enum: [updated, created, priority]
+            enum: [updated, created, priority, rank]
             default: updated
         - name: page
           in: query

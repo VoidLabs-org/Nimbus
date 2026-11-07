@@ -179,8 +179,8 @@ export interface paths {
                     assignee?: string;
                     /** @description Words of the title; every word must appear in it, in any case */
                     q?: string;
-                    /** @description `updated` and `created` are newest first; `priority` is Urgent first, then most recently updated */
-                    sort?: "updated" | "created" | "priority";
+                    /** @description `updated` and `created` are newest first; `priority` is Urgent first, then most recently updated; `rank` is the project's manual order (Rank), as the Board shows it */
+                    sort?: "updated" | "created" | "priority" | "rank";
                     /** @description Zero-based page number */
                     page?: number;
                     size?: number;

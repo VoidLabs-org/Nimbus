@@ -44,8 +44,12 @@ _Avoid_: Creator (of an Issue), author, owner
 The Member responsible for doing an Issue.
 _Avoid_: Owner, responsible
 
+**Rank**:
+An Issue's place in its project's single manual order of Issues, which the team sets by dragging and which the Board shows top to bottom in each column.
+_Avoid_: Position (a Status's place among Statuses), priority (a field of the Issue), sort order (the Sort menu)
+
 **Board**:
-A view of a project's Issues as a column per Status, where dragging an Issue to another column moves it to that Status.
+A view of a project's Issues as a column per Status, in Rank order, where dragging an Issue up or down changes its Rank and dragging it to another column also moves it to that Status.
 _Avoid_: Kanban, project (as a synonym)
 
 **Swimlanes**:

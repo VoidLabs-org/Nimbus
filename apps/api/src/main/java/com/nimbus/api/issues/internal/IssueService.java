@@ -75,12 +75,17 @@ class IssueService implements Issues {
 					.orElseThrow(() -> new InvalidField("statusId", "Choose one of the project's Statuses"));
 		var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
 		var id = UUID.randomUUID();
+		// Last in the project's order, so at the bottom of its column. nextNumber's lock is held, so no other Issue
+		// of the project can take the same key meanwhile.
+		var last = jdbc.sql("SELECT max(rank) FROM issues WHERE project_id = :project").param("project", project.id())
+			.query(String.class).list().getFirst(); // null for the project's first Issue
 		jdbc.sql("""
 				INSERT INTO issues (id, project_id, number, type, title, description, priority, status_id, reporter_id,
-				                    assignee_id, created_at, updated_at, version)
+				                    assignee_id, created_at, updated_at, version, rank)
 				VALUES (:id, :project, :number, :type, :title, :description, :priority, :status, :reporter, :assignee,
-				        :at, :at, 0)
+				        :at, :at, 0, :rank)
 				""")
+			.param("rank", RankKeys.between(last, null))
 			.param("id", id).param("project", project.id()).param("number", number).param("type", input.type())
 			.param("title", input.title()).param("description", input.description())
 			.param("priority", input.priority()).param("status", statusId).param("reporter", actor)
@@ -366,6 +371,8 @@ class IssueService implements Issues {
 			case "created" -> "i.created_at DESC, i.number DESC";
 			case "priority" -> "CASE i.priority WHEN 'Urgent' THEN 0 WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END, "
 					+ "i.updated_at DESC, i.number DESC";
+			// Ranks are unique in a project; the id only keeps paging stable should that ever not hold.
+			case "rank" -> "i.rank, i.id";
 			default -> "i.updated_at DESC, i.number DESC";
 		};
 		params.put("limit", filter.size());

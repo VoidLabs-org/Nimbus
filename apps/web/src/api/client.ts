@@ -38,7 +38,7 @@ export type IssueSearch = {
   /** A User id, "me" or "none". */
   assignee?: string;
   q?: string;
-  sort?: "updated" | "created" | "priority";
+  sort?: "updated" | "created" | "priority" | "rank";
   page?: number;
   size?: number;
 };

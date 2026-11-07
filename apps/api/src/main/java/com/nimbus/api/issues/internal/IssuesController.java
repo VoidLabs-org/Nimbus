@@ -55,7 +55,9 @@ class IssuesController {
 			@RequestParam(required = false) String q, @RequestParam(defaultValue = "updated") String sort,
 			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
 		Map<String, String> errors = new TreeMap<>();
-		if (!Set.of("updated", "created", "priority").contains(sort)) errors.put("sort", "Choose updated, created or priority");
+		if (!Set.of("updated", "created", "priority", "rank").contains(sort)) {
+			errors.put("sort", "Choose updated, created, priority or rank");
+		}
 		if (page < 0) errors.put("page", "Use 0 or more");
 		if (size < 1 || size > 100) errors.put("size", "Use 1 to 100");
 		var filter = filter(status, category, type, priority, assignee, q, sort, page, size, errors);

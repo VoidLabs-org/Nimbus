@@ -170,7 +170,8 @@ export const COLUMN_SIZE = 100;
 
 /**
  * The project's Issues one Status at a time, in the Statuses' order, for the Board, Swimlanes and the grouped List.
- * Each column is its own list under "issues", so any change to an Issue refreshes them all with the lists.
+ * Each column is its own list under "issues", so any change to an Issue refreshes them all with the lists. Columns are
+ * always in Rank order, whatever `search.sort` says: only the Table sorts.
  */
 export function useStatusColumns(
   projectKey: string,
@@ -180,7 +181,12 @@ export function useStatusColumns(
 ) {
   return useQueries({
     queries: statuses.map((status) => {
-      const columnSearch: IssueSearch = { ...search, status: status.name, size: COLUMN_SIZE };
+      const columnSearch: IssueSearch = {
+        ...search,
+        status: status.name,
+        sort: "rank",
+        size: COLUMN_SIZE,
+      };
       return {
         queryKey: queryKeys.issueList(projectKey, columnSearch),
         queryFn: () => api.issues(storedKey(projectKey), columnSearch),

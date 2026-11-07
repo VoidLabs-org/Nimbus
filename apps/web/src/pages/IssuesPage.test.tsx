@@ -235,6 +235,18 @@ describe("IssuesPage", () => {
     expect(within(doing).getByText("Fix login")).toBeTruthy();
   });
 
+  it.each(["list", "board", "swimlanes"])(
+    "shows the %s in Rank order, whatever sort the address names",
+    async (view) => {
+      const issues = byStatus([issue(1, "Plan sprint")]);
+      show(`/projects/NIM/issues?view=${view}&sort=priority`);
+
+      await screen.findAllByText("Plan sprint");
+      expect(issues).toHaveBeenCalledWith("NIM", expect.objectContaining({ status: "To do" }));
+      for (const [, search] of issues.mock.calls) expect(search.sort).toBe("rank");
+    },
+  );
+
   it("shows a column for each Status on the Board and moves an Issue dropped on another", async () => {
     byStatus([issue(1, "Plan sprint")]);
     const move = vi

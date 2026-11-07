@@ -77,10 +77,11 @@ class IssueService implements Issues {
 		var id = UUID.randomUUID();
 		jdbc.sql("""
 				INSERT INTO issues (id, project_id, number, type, title, description, priority, status_id, reporter_id,
-				                    assignee_id, created_at, updated_at, version)
+				                    assignee_id, created_at, updated_at, version, rank)
 				VALUES (:id, :project, :number, :type, :title, :description, :priority, :status, :reporter, :assignee,
-				        :at, :at, 0)
+				        :at, :at, 0, :rank)
 				""")
+			.param("rank", lastRank(project.id()))
 			.param("id", id).param("project", project.id()).param("number", number).param("type", input.type())
 			.param("title", input.title()).param("description", input.description())
 			.param("priority", input.priority()).param("status", statusId).param("reporter", actor)
@@ -366,6 +367,8 @@ class IssueService implements Issues {
 			case "created" -> "i.created_at DESC, i.number DESC";
 			case "priority" -> "CASE i.priority WHEN 'Urgent' THEN 0 WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END, "
 					+ "i.updated_at DESC, i.number DESC";
+			// Ranks are unique in a project, so they alone keep paging stable.
+			case "rank" -> "i.rank";
 			default -> "i.updated_at DESC, i.number DESC";
 		};
 		params.put("limit", filter.size());
@@ -533,10 +536,31 @@ class IssueService implements Issues {
 	 * up and get distinct numbers. The first Statuses are created while holding it, so they are created once.
 	 */
 	private int nextNumber(UUID projectId) {
-		jdbc.sql("INSERT INTO issue_counters (project_id, last_number) VALUES (:project, 0) ON CONFLICT DO NOTHING")
-			.param("project", projectId).update();
+		lockProject(projectId);
 		return jdbc.sql("UPDATE issue_counters SET last_number = last_number + 1 WHERE project_id = :project RETURNING last_number")
 			.param("project", projectId).query(Integer.class).single();
+	}
+
+	/**
+	 * Locks the project's {@code issue_counters} row (made if missing) until the transaction ends. Taking a number,
+	 * changing Statuses and every Rank change queue up on it; taking it again in the same transaction is free.
+	 */
+	private void lockProject(UUID projectId) {
+		jdbc.sql("INSERT INTO issue_counters (project_id, last_number) VALUES (:project, 0) ON CONFLICT DO NOTHING")
+			.param("project", projectId).update();
+		jdbc.sql("SELECT 1 FROM issue_counters WHERE project_id = :project FOR UPDATE").param("project", projectId)
+			.query(Integer.class).single();
+	}
+
+	/**
+	 * A Rank after every Issue of the project: the bottom of the order. Holds the project's lock, so no other Rank of
+	 * the project can be made from the same last key meanwhile (Ranks are unique in a project).
+	 */
+	private String lastRank(UUID projectId) {
+		lockProject(projectId);
+		var last = jdbc.sql("SELECT max(rank) FROM issues WHERE project_id = :project").param("project", projectId)
+			.query(String.class).list().getFirst(); // null for the project's first Issue
+		return RankKeys.between(last, null);
 	}
 
 	/** The first Status, in order, in the To do category; the project's default Statuses are made if it has none. */

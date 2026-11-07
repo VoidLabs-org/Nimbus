@@ -461,6 +461,16 @@ export function createApiClient(
         body: JSON.stringify({ statusId }),
       }),
 
+    /**
+     * Drops the Issue directly after `after`, else directly before `before` (keys of the cards it landed between).
+     * Silent on the server: no history, and the Issue's `updatedAt` and `version` stay.
+     */
+    reorderIssue: (issueKey: string, after: string | undefined, before: string | undefined) =>
+      request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}/rank`, {
+        method: "PUT",
+        body: JSON.stringify({ after, before }),
+      }),
+
     /** Deletes the Issue for good. */
     deleteIssue: (issueKey: string) =>
       request<void>(`/api/issues/${encodeURIComponent(issueKey)}`, { method: "DELETE" }),

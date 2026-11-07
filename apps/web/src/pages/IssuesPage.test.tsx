@@ -2,6 +2,7 @@
 import { ApiError } from "@repo/api";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
+import { toast } from "@repo/ui/toast";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -301,12 +302,14 @@ describe("IssuesPage", () => {
 
     drop("NIM-1");
     drop("NIM-2");
-    await waitFor(() => expect(answers).toHaveLength(2));
+    // They go to the server one at a time, in the order they were made: the second waits for the first's answer.
+    await waitFor(() => expect(answers).toHaveLength(1));
     const asked = issues.mock.calls.length;
 
-    // The first answer comes while the second move is on its way: asking the server now could show NIM-2 back in
+    // The first answer comes while the second move is still to be sent: asking the server now could show NIM-2 back in
     // To do, so the Board isn't refreshed yet.
     await act(async () => answers[0]!(issue(1, "Plan sprint", { status: inProgress })));
+    await waitFor(() => expect(answers).toHaveLength(2));
     expect(issues.mock.calls.length).toBe(asked);
     expect(
       within(screen.getByRole("region", { name: "In progress" })).getByText("Fix login"),
@@ -334,8 +337,9 @@ describe("IssuesPage", () => {
 
     drop("NIM-1");
     drop("NIM-2");
-    await waitFor(() => expect(answers).toHaveLength(2));
+    await waitFor(() => expect(answers).toHaveLength(1));
     await act(async () => answers[0]!.resolve(issue(1, "Plan sprint", { status: inProgress })));
+    await waitFor(() => expect(answers).toHaveLength(2));
     const asked = issues.mock.calls.length;
 
     // NIM-1's move worked and hasn't refreshed the Board yet; NIM-2's failing last must not leave it unrefreshed.
@@ -374,6 +378,134 @@ describe("IssuesPage", () => {
     );
 
     expect(move).not.toHaveBeenCalled();
+  });
+
+  describe("reordering within a column", () => {
+    const three = () => [issue(1, "Plan sprint"), issue(2, "Fix login"), issue(3, "Ship it")];
+    /** Ends a drag of `key` over the card `over`, which is in the same column. */
+    const dropOn = (key: string, over: Issue) =>
+      act(() =>
+        dragEnd?.({
+          active: { id: key },
+          over: { data: { current: { status: over.status, issue: over } } },
+        }),
+      );
+    const titles = (column: string) =>
+      within(screen.getByRole("region", { name: column }))
+        .getAllByRole("link")
+        .map((link) => link.textContent ?? "");
+
+    it("sends the keys of the cards it was dropped between and shows it there before the server answers", async () => {
+      const all = three();
+      byStatus(all);
+      // Never answers, so only the Board's own update can have moved the card.
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      const move = vi.spyOn(api, "moveIssue");
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Ship it/ });
+
+      // NIM-3 dropped on NIM-1 (the top): before NIM-1, nothing above.
+      await dropOn("NIM-3", all[0]!);
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-3", undefined, "NIM-1"));
+      await waitFor(() =>
+        expect(
+          titles("To do").map((text) => /Ship it|Plan sprint|Fix login/.exec(text)?.[0]),
+        ).toEqual(["Ship it", "Plan sprint", "Fix login"]),
+      );
+      expect(move).not.toHaveBeenCalled();
+    });
+
+    it("sends both neighbours for a drop between two cards, and only `after` at the bottom", async () => {
+      const all = three();
+      byStatus(all);
+      const reorder = vi.spyOn(api, "reorderIssue").mockResolvedValue(issue(1, "Plan sprint"));
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Ship it/ });
+
+      // NIM-1 dropped on NIM-2: it takes NIM-2's place, between NIM-2 and NIM-3.
+      await dropOn("NIM-1", all[1]!);
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3"));
+      // Now NIM-2, NIM-1, NIM-3: NIM-2 dropped on the last card goes to the bottom.
+      await dropOn("NIM-2", all[2]!);
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-2", "NIM-3", undefined));
+    });
+
+    it("sends quick drops one after another, in the order they were made", async () => {
+      const all = three();
+      byStatus(all);
+      const answers: ((saved: Issue) => void)[] = [];
+      const reorder = vi
+        .spyOn(api, "reorderIssue")
+        .mockImplementation(() => new Promise((resolve) => answers.push(resolve)));
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Ship it/ });
+
+      await dropOn("NIM-3", all[0]!);
+      await dropOn("NIM-2", all[0]!);
+
+      // The second drop is held until the first has been answered, so the server applies them in order.
+      await waitFor(() => expect(answers).toHaveLength(1));
+      expect(reorder).toHaveBeenCalledTimes(1);
+      await act(async () => answers[0]!(issue(3, "Ship it")));
+      await waitFor(() => expect(reorder).toHaveBeenCalledTimes(2));
+      expect(reorder).toHaveBeenNthCalledWith(1, "NIM-3", undefined, "NIM-1");
+    });
+
+    it("puts the card back, with a message, when the server refuses", async () => {
+      const all = three();
+      byStatus(all);
+      const error = vi.spyOn(toast, "error");
+      vi.spyOn(api, "reorderIssue").mockRejectedValue(new Error("Archived"));
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Ship it/ });
+
+      await dropOn("NIM-3", all[0]!);
+
+      await waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining("NIM-3")));
+      await waitFor(() =>
+        expect(
+          titles("To do").map((text) => /Ship it|Plan sprint|Fix login/.exec(text)?.[0]),
+        ).toEqual(["Plan sprint", "Fix login", "Ship it"]),
+      );
+    });
+
+    it("does nothing when a card is dropped on itself", async () => {
+      const all = three();
+      byStatus(all);
+      const reorder = vi.spyOn(api, "reorderIssue");
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Ship it/ });
+
+      await dropOn("NIM-2", all[1]!);
+
+      expect(reorder).not.toHaveBeenCalled();
+    });
+
+    it("still moves a card dropped on a card of another column", async () => {
+      const all = [issue(1, "Plan sprint"), issue(2, "Fix login", { status: inProgress })];
+      byStatus(all);
+      const reorder = vi.spyOn(api, "reorderIssue");
+      const move = vi
+        .spyOn(api, "moveIssue")
+        .mockResolvedValue(issue(1, "Plan sprint", { status: inProgress }));
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Fix login/ });
+
+      await dropOn("NIM-1", all[1]!);
+
+      await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", "s2"));
+      expect(reorder).not.toHaveBeenCalled();
+    });
+
+    it("keeps cards the User may not move from being dragged", async () => {
+      vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+      byStatus(three());
+      show("/projects/NIM/issues?view=board");
+
+      const card = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      expect(card.getAttribute("aria-disabled")).toBe("true");
+    });
   });
 
   it("puts each Assignee in a lane on the Swimlanes", async () => {

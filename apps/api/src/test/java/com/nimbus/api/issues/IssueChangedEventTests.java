@@ -68,6 +68,12 @@ class IssueChangedEventTests {
 		client.patch().uri("/api/issues/ICH-1").header("Authorization", "Bearer " + token)
 			.body(Map.of("priority", "High")).exchange().expectStatus().isOk();
 
+		// A reorder is silent: it publishes nothing.
+		client.post().uri("/api/projects/ICH/issues").header("Authorization", "Bearer " + token)
+			.body(Map.of("type", "Story", "title", "Second")).exchange().expectStatus().isCreated();
+		client.put().uri("/api/issues/ICH-2/rank").header("Authorization", "Bearer " + token)
+			.body(Map.of("before", "ICH-1")).exchange().expectStatus().isOk();
+
 		var published = events.ofType(IssueChanged.class);
 		assertThat(published).hasSize(1);
 		var first = published.iterator().next();

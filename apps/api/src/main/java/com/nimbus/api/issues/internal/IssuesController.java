@@ -147,6 +147,15 @@ class IssuesController {
 		return issues.move(currentUser.id(), issueKey, request.statusId());
 	}
 
+	/**
+	 * Drops the Issue where the client saw it land: directly after {@code after}, else directly before {@code before}
+	 * (Issue keys of its neighbours), else nowhere new. Best effort; see {@link IssueService#reorder}.
+	 */
+	@PutMapping("/api/issues/{issueKey}/rank")
+	IssueService.IssueView reorder(@PathVariable String issueKey, @RequestBody RankIssue request) {
+		return issues.reorder(currentUser.id(), issueKey, request.after(), request.before());
+	}
+
 	@GetMapping("/api/projects/{key}/statuses")
 	List<ProjectStatus> statuses(@PathVariable String key) {
 		return issues.statuses(currentUser.id(), key);
@@ -237,6 +246,9 @@ class IssuesController {
 	}
 
 	record MoveIssue(UUID statusId) {
+	}
+
+	record RankIssue(String after, String before) {
 	}
 
 	/** The title is trimmed before it is checked, so pasted surrounding whitespace is not an error. */

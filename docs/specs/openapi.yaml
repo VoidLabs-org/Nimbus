@@ -637,6 +637,50 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/statuses/{statusId}/default:
+    put:
+      tags: [issues]
+      summary: Make a To do Status the one new Issues start in
+      description: The Status that was the default stops being it. The default is also moved, to the first To do Status in order, when its Status leaves To do or is deleted.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: statusId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The Status, now the default
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The User may not manage this project's Statuses
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Unknown project or Status, or a project the User is not a Member of
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The project is Archived, or the Status is not a To do one (code `default_needs_todo`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/projects/{key}/statuses/order:
     put:
       tags: [issues]
@@ -3344,7 +3388,7 @@ components:
           description: The Issue's version as opened; required with `title` or `description`
     ProjectStatus:
       type: object
-      required: [id, name, category, position]
+      required: [id, name, category, position, isDefault]
       properties:
         id:
           type: string
@@ -3355,6 +3399,9 @@ components:
           $ref: "#/components/schemas/StatusCategory"
         position:
           type: integer
+        isDefault:
+          type: boolean
+          description: Whether new Issues start in this Status. Exactly one To do Status of a project is the default
     IssueHistoryEntry:
       type: object
       required: [id, actor, at, field, before, after]

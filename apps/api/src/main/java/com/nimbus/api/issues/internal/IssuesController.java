@@ -173,6 +173,12 @@ class IssuesController {
 		return statuses.edit(currentUser.id(), key, statusId, request.name(), request.category());
 	}
 
+	/** Makes a To do Status the one new Issues start in. */
+	@PutMapping("/api/projects/{key}/statuses/{statusId}/default")
+	ProjectStatus makeDefaultStatus(@PathVariable String key, @PathVariable UUID statusId) {
+		return statuses.makeDefault(currentUser.id(), key, statusId);
+	}
+
 	/** All of the project's Statuses, in the new order. */
 	@PutMapping("/api/projects/{key}/statuses/order")
 	List<ProjectStatus> reorderStatuses(@PathVariable String key, @RequestBody ReorderStatuses request) {

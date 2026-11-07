@@ -497,6 +497,13 @@ export function createApiClient(
         { method: "PATCH", body: JSON.stringify(change) },
       ),
 
+    /** Makes a To do Status the one new Issues start in. */
+    makeDefaultStatus: (projectKey: string, statusId: string) =>
+      request<ProjectStatus>(
+        `/api/projects/${encodeURIComponent(projectKey)}/statuses/${encodeURIComponent(statusId)}/default`,
+        { method: "PUT" },
+      ),
+
     /** Sets the order; `statusIds` is every Status of the project once. */
     reorderStatuses: (projectKey: string, statusIds: string[]) =>
       request<ProjectStatus[]>(`/api/projects/${encodeURIComponent(projectKey)}/statuses/order`, {

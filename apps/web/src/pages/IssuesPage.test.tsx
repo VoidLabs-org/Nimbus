@@ -62,8 +62,8 @@ const page = (items: Issue[], total = items.length): IssuePage => ({
 });
 
 const statuses: ProjectStatus[] = [
-  { id: "s1", name: "To do", category: "TODO", position: 0 },
-  { id: "s2", name: "In progress", category: "IN_PROGRESS", position: 1 },
+  { id: "s1", name: "To do", category: "TODO", position: 0, isDefault: true },
+  { id: "s2", name: "In progress", category: "IN_PROGRESS", position: 1, isDefault: false },
 ];
 /** Answers each Status's column with the Issues of that Status, as the server does. */
 function byStatus(all: Issue[]) {

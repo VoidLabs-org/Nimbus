@@ -311,10 +311,10 @@ class IssueService implements Issues {
 	}
 
 	private List<ProjectStatus> statusesOf(UUID projectId) {
-		return jdbc.sql("SELECT id, name, category, position FROM issue_statuses WHERE project_id = :project ORDER BY position")
+		return jdbc.sql("SELECT id, name, category, position, is_default FROM issue_statuses WHERE project_id = :project ORDER BY position")
 			.param("project", projectId)
 			.query((row, index) -> new ProjectStatus(row.getObject("id", UUID.class), row.getString("name"),
-					row.getString("category"), row.getInt("position")))
+					row.getString("category"), row.getInt("position"), row.getBoolean("is_default")))
 			.list();
 	}
 
@@ -666,10 +666,10 @@ class IssueService implements Issues {
 		return RankKeys.between(last, null);
 	}
 
-	/** The first Status, in order, in the To do category; the project's default Statuses are made if it has none. */
+	/** The project's default Status, a To do one; the project's first Statuses are made if it has none. */
 	private UUID firstToDoStatus(UUID projectId) {
 		DefaultStatuses.ensure(jdbc, projectId);
-		return jdbc.sql("SELECT id FROM issue_statuses WHERE project_id = :project AND category = 'TODO' ORDER BY position LIMIT 1")
+		return jdbc.sql("SELECT id FROM issue_statuses WHERE project_id = :project AND is_default")
 			.param("project", projectId).query(UUID.class).single();
 	}
 

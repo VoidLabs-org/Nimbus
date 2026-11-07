@@ -85,9 +85,9 @@ beforeEach(() => {
   vi.spyOn(api, "myProjectPermissions").mockResolvedValue(fullAccess);
   vi.spyOn(api, "issueHistory").mockResolvedValue(history);
   vi.spyOn(api, "projectStatuses").mockResolvedValue([
-    { id: "s1", name: "To do", category: "TODO", position: 0 },
-    { id: "s2", name: "In progress", category: "IN_PROGRESS", position: 1 },
-    { id: "s3", name: "Done", category: "DONE", position: 2 },
+    { id: "s1", name: "To do", category: "TODO", position: 0, isDefault: true },
+    { id: "s2", name: "In progress", category: "IN_PROGRESS", position: 1, isDefault: false },
+    { id: "s3", name: "Done", category: "DONE", position: 2, isDefault: false },
   ]);
 });
 afterEach(() => {

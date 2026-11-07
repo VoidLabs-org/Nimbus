@@ -1,0 +1,261 @@
+/* The project's Statuses settings, from the "Statuses" design: one card per category, plain rows that show their
+   handle and actions on hover. Colours come only from the theme variables. */
+.card {
+  border: 1px dashed transparent;
+  border-radius: 24px;
+  padding: 16px 12px 8px;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+/* The card a dragged row would join: tinted, with a dashed edge. */
+.card[data-over] {
+  background: color-mix(in srgb, var(--color-accent-500) 12%, transparent);
+  border-color: var(--color-accent-500);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 0 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cardCount {
+  font-size: 12px;
+  color: var(--color-accent-2-500);
+}
+
+.cardBlurb {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--color-accent-2-500);
+}
+
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-accent-2-500);
+}
+
+/* Set here, not on the page: the menu is in a portal, outside it. */
+.dot[data-category="IN_PROGRESS"] {
+  background: var(--color-accent-500);
+}
+
+.dot[data-category="DONE"] {
+  background: #4cb782;
+}
+
+/* The ⋯ menu: compact, like the design. */
+.menu {
+  padding: 6px;
+  border-radius: 14px;
+}
+
+.menuItem {
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.menuValue {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-accent-2-500);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  padding-top: 4px;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 8px 0 4px;
+  border-radius: 14px;
+}
+
+.row:hover,
+.row:focus-within {
+  background: var(--row-hover);
+}
+
+/* Where a dragged row would land: a dashed outline, the row's own content hidden. */
+.row[data-slot] {
+  border: 1px dashed var(--color-accent-500);
+  background: transparent;
+}
+
+.row[data-slot] > * {
+  visibility: hidden;
+}
+
+/* The row on its way, carried by the pointer: a little tilted, lifted off the card. */
+.lifted {
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 18px 40px rgba(0, 0, 0, 0.28);
+  transform: rotate(-1deg);
+  cursor: grabbing;
+}
+
+.handle,
+.action {
+  flex: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.handle {
+  touch-action: none;
+  cursor: grab;
+}
+
+.handle:disabled {
+  cursor: default;
+}
+
+/* Handle and actions show on hover or keyboard focus; where there is no hover (a finger) they always show. */
+.row:hover .handle,
+.row:hover .action,
+.row:focus-within .handle,
+.row:focus-within .action,
+.handle:focus-visible,
+.action:focus-visible,
+.action[data-expanded] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .handle,
+  .action {
+    opacity: 1;
+  }
+}
+
+.name {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name:disabled {
+  cursor: default;
+}
+
+.name:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 1px;
+}
+
+.badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-accent-2-700);
+  background: var(--seg);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.issues {
+  flex: none;
+  min-width: 64px;
+  font-size: 12px;
+  text-align: right;
+  color: var(--color-accent-2-500);
+}
+
+.edit {
+  flex: 1;
+  min-width: 0;
+}
+
+.editActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 2px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 14px;
+  font-size: 13px;
+  color: var(--color-accent-2-500);
+  background: none;
+  cursor: pointer;
+}
+
+.add:hover:not(:disabled),
+.add:focus-visible {
+  color: var(--color-text);
+  background: var(--row-hover);
+}
+
+.add:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--color-accent-2-500);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .handle,
+  .action {
+    transition: none;
+  }
+}

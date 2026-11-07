@@ -2,7 +2,9 @@
 -- (RankKeys); they sort byte by byte, hence COLLATE "C": the database's own collation would order them wrongly.
 ALTER TABLE issues ADD COLUMN rank TEXT COLLATE "C";
 
--- The n-th key (from 0) RankKeys makes when it appends key after key: a0 â€¦ az, b00 â€¦ bzz, c000 â€¦ czzz, and so on.
+-- The n-th key (from 0) of the run a0 to az, then b00 to bzz, then c000 to czzz, and so on: the keys RankKeys makes
+-- when it appends key after key. Any increasing run of valid keys would do; RankKeys makes new keys around them.
+-- Dropped below, since a pg_temp function outlives the migration on its pooled connection.
 CREATE FUNCTION pg_temp.appended_rank_key(n BIGINT) RETURNS TEXT LANGUAGE plpgsql IMMUTABLE AS $$
 DECLARE
     digits CONSTANT TEXT := '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -33,6 +35,8 @@ FROM (
     FROM issues
 ) o
 WHERE o.id = i.id;
+
+DROP FUNCTION pg_temp.appended_rank_key(BIGINT);
 
 ALTER TABLE issues ALTER COLUMN rank SET NOT NULL;
 ALTER TABLE issues ADD CONSTRAINT issues_project_rank UNIQUE (project_id, rank);

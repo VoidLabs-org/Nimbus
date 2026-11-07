@@ -33,6 +33,15 @@ class IssueRankBackfillTests {
 	@Test
 	void existingIssuesAreRankedInTheOrderTheBoardShowedThem() {
 		var schema = "rank_backfill_" + UUID.randomUUID().toString().replace("-", "");
+		try {
+			backfill(schema);
+		}
+		finally {
+			jdbc.sql("DROP SCHEMA IF EXISTS " + schema + " CASCADE").update();
+		}
+	}
+
+	private void backfill(String schema) {
 		migrate(schema, "29");
 
 		var user = UUID.randomUUID();

@@ -634,6 +634,94 @@ describe("IssuesPage", () => {
     });
   });
 
+  describe("moving a card by keyboard", () => {
+    const board = () => [
+      issue(1, "Plan sprint"),
+      issue(2, "Fix login"),
+      issue(3, "Ship it"),
+      issue(4, "Write docs", { status: inProgress }),
+    ];
+    /** dnd-kit listens on the document a tick after a card is lifted. */
+    const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const press = async (code: string, target: Element = document.body) => {
+      await act(async () => {
+        fireEvent.keyDown(target, { code, key: code });
+      });
+      await tick();
+    };
+    const said = () => screen.getByRole("status", { name: "Moving cards" }).textContent;
+
+    it("lifts a card with Space, moves it one place with Down, and drops it there with Space", async () => {
+      byStatus(board());
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=board");
+      const card = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      await press("Space", card);
+      expect(said()).toMatch(/Picked up NIM-1, position 1 of 3 in To do/);
+      await press("ArrowDown");
+      expect(said()).toBe("NIM-1, position 2 of 3 in To do");
+      await press("ArrowUp");
+      await press("ArrowDown");
+      await press("Space");
+
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3", undefined),
+      );
+      expect(said()).toBe("Dropped NIM-1 at position 2 of 3 in To do");
+    });
+
+    it("carries a card to the next column with Right, and drops it there with its new Status", async () => {
+      byStatus(board());
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=board");
+      const card = await screen.findByRole("link", { name: /Ship it/ });
+
+      await press("Space", card);
+      await press("ArrowRight");
+      // About the same height: In progress has one card, so after it.
+      expect(said()).toBe("NIM-3, position 2 of 2 in In progress");
+      const doing = screen.getByRole("region", { name: "In progress" });
+      expect(doing.querySelector("[data-drop-slot]")).toBeTruthy();
+      await press("ArrowUp");
+      expect(said()).toBe("NIM-3, position 1 of 2 in In progress");
+      await press("Space");
+
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-3", undefined, "NIM-4", "s2"));
+    });
+
+    it("puts the card back with Escape and sends nothing", async () => {
+      byStatus(board());
+      const reorder = vi.spyOn(api, "reorderIssue");
+      const move = vi.spyOn(api, "moveIssue");
+      show("/projects/NIM/issues?view=board");
+      const card = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      await press("Space", card);
+      await press("ArrowRight");
+      await press("Escape");
+
+      expect(said()).toMatch(/NIM-1 was put back at position 1 of 3 in To do/);
+      expect(reorder).not.toHaveBeenCalled();
+      expect(move).not.toHaveBeenCalled();
+    });
+
+    it("can't lift a card the User may not move", async () => {
+      vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+      byStatus(board());
+      const reorder = vi.spyOn(api, "reorderIssue");
+      show("/projects/NIM/issues?view=board");
+      const card = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      await press("Space", card);
+      await press("ArrowDown");
+      await press("Space");
+
+      expect(said()).toBe("");
+      expect(reorder).not.toHaveBeenCalled();
+    });
+  });
+
   it("still moves an Issue dropped on another Status in the Swimlanes, by its Status only", async () => {
     byStatus([issue(1, "Plan sprint")]);
     const reorder = vi.spyOn(api, "reorderIssue");

@@ -19,6 +19,7 @@ import {
   type DragStartEvent,
   type DropAnimationFunction,
   type KeyboardCoordinateGetter,
+  type SensorContext,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -44,6 +45,17 @@ import {
 import { Link } from "react-router";
 import type { Issue, ProjectStatus } from "../api/client";
 import { PriorityMark, StatusPill, TypeBadge } from "./IssueMarks";
+import {
+  aimAt,
+  describePlace,
+  describeWhere,
+  neighboursAt,
+  nextPlace,
+  placeOf,
+  type Direction,
+  type Group,
+  type Place,
+} from "./keyboardDrag";
 import classes from "./IssueViews.module.css";
 
 /** One Status and the Issues the server sent for it; `total` counts all of them, which may be more than shown. */
@@ -234,6 +246,13 @@ function prefersReducedMotion() {
  * column's nearest card, so a drop there still lands somewhere in that column.
  */
 const collisionDetection: CollisionDetection = (args) => {
+  // A keyboard drag is over what its place names, whatever the boxes say (two places can share coordinates).
+  const drag = keyboardDrag.current;
+  if (drag) {
+    const id = aimAt(drag.groups, drag.carried, drag.place);
+    const container = args.droppableContainers.find((c) => c.id === id);
+    if (container) return [{ id, data: { droppableContainer: container, value: 0 } }];
+  }
   const within = pointerWithin(args);
   if (within.length === 0) return closestCenter(args);
   const dataOf = (collision: Collision) => collision.data?.droppableContainer.data.current;
@@ -252,17 +271,59 @@ const collisionDetection: CollisionDetection = (args) => {
 };
 
 /**
- * The arrow keys carry a lifted card to the nearest drop area in that direction: the next card of its column (a
- * drop there is a reorder), or another column's card or bare space (a drop there changes the Status).
- *
- * Carried onto a card, the card's middle is on that card's, which lands it above that card (see landingIndex). So
- * Down on the last card of a column, with nowhere further down, moves it a little lower instead, to land below it;
- * Up then goes back onto the card.
+ * A keyboard drag on the Board, moved by place (see keyboardDrag): the columns as they were when the card was lifted,
+ * the place the arrow keys have carried it to, and `moved`, which tells the Board, so it shows the gap there and says
+ * where the card is. The drop sends that place's neighbours. dnd-kit's coordinates only move the carried card on
+ * screen. There is only ever one drag at a time; null for a pointer drag and in the Swimlanes.
  */
-const keyboardCoordinates: KeyboardCoordinateGetter = (
-  event,
-  { context: { droppableRects, droppableContainers, collisionRect, over } },
-) => {
+const keyboardDrag: {
+  current: { groups: Group[]; carried: string; place: Place; moved: (place: Place) => void } | null;
+} = { current: null };
+
+const DIRECTIONS = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+} as const satisfies Record<string, Direction>;
+
+/**
+ * The arrow keys. On the Board, Up and Down move the card one place in its column and Left and Right to the
+ * neighbouring column at the same index (columns line up at the top and cards are alike, so about the same height;
+ * Right then Left also comes back to the same place). The carried card is moved onto the card it is over at its new
+ * place, just below the last one past the end. Elsewhere, to the nearest drop area in that direction.
+ */
+const keyboardCoordinates: KeyboardCoordinateGetter = (event, { context }) => {
+  const drag = keyboardDrag.current;
+  if (!drag) return nearestInDirection(event, context);
+  const direction = DIRECTIONS[event.code as keyof typeof DIRECTIONS] as Direction | undefined;
+  const { collisionRect, droppableRects } = context;
+  if (!direction || !collisionRect) return undefined;
+  event.preventDefault();
+  const place = nextPlace(drag.groups, drag.carried, drag.place, direction);
+  if (place.group === drag.place.group && place.index === drag.place.index) return undefined;
+  drag.place = place;
+  drag.moved(place);
+  const id = aimAt(drag.groups, drag.carried, place);
+  const rect = droppableRects.get(id);
+  if (!rect) return { x: collisionRect.left, y: collisionRect.top };
+  // Past the last card of another column (over that card, with nothing below the place): just below it.
+  const group = drag.groups[place.group]!;
+  const below =
+    !group.keys.includes(drag.carried) &&
+    id !== group.id &&
+    neighboursAt(drag.groups, drag.carried, place).before === undefined;
+  return {
+    x: rect.left + rect.width / 2 - collisionRect.width / 2,
+    y: rect.top + rect.height / 2 - collisionRect.height / 2 + (below ? rect.height / 2 : 0),
+  };
+};
+
+/** The arrow keys carry a lifted card to the nearest drop area in that direction (the Swimlanes' cells). */
+function nearestInDirection(
+  event: KeyboardEvent,
+  { droppableRects, droppableContainers, collisionRect }: SensorContext,
+) {
   const direction = {
     ArrowRight: [1, 0],
     ArrowLeft: [-1, 0],
@@ -294,14 +355,21 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (
       };
     }
   }
-  const onCard = over?.data.current?.issue ? droppableRects.get(over.id) : undefined;
-  if (!best && event.code === "ArrowDown" && onCard) {
-    const middle = onCard.top + onCard.height / 2;
-    if (Math.abs(middle - here.y) < 1) {
-      return { x: collisionRect.left, y: collisionRect.top + collisionRect.height / 4 };
-    }
-  }
   return best && { x: best.x, y: best.y };
+}
+
+/** What screen readers say about lifting a card, read with each card. */
+const instructions = {
+  draggable:
+    "To move this Issue, press Space. Up and Down move it one place in its column, Left and Right to the next column. Press Space to drop it, or Escape to put it back.",
+};
+
+/** dnd-kit's own announcements are off: the Board says where the card is in its own live region. */
+const silent = {
+  onDragStart: () => undefined,
+  onDragOver: () => undefined,
+  onDragEnd: () => undefined,
+  onDragCancel: () => undefined,
 };
 
 /**
@@ -310,13 +378,13 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (
  * where it landed among the cards; in the Swimlanes (`onMove`) a drop only changes the Status.
  */
 function DragBoard({
-  issues,
+  columns,
   onMove,
   onDrop,
   canMove,
   children,
 }: {
-  issues: Issue[];
+  columns: Column[];
   onMove?: MoveIssue;
   onDrop?: DropIssue;
   canMove: CanMove;
@@ -325,13 +393,16 @@ function DragBoard({
   const [lifted, setLifted] = useState<Issue | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
+  // What the live region says: where a card carried by keyboard is, and where it was dropped.
+  const [announcement, setAnnouncement] = useState("");
+  const issues = columns.flatMap((column) => column.items);
   // Each Status's cards in column order, worked out once a render rather than on every pointer move.
-  const byStatus = new Map<string, Issue[]>();
-  for (const issue of issues) {
-    const column = byStatus.get(issue.status.id);
-    if (column) column.push(issue);
-    else byStatus.set(issue.status.id, [issue]);
-  }
+  const byStatus = new Map(columns.map((column) => [column.status.id, column.items]));
+  const groups: Group[] = columns.map((column) => ({
+    id: column.status.id,
+    name: column.status.name,
+    keys: column.items.map((issue) => issue.key),
+  }));
   const dropKey = drop && `${drop.key}:${drop.status}`;
   useEffect(() => {
     if (!dropKey) return;
@@ -350,19 +421,41 @@ function DragBoard({
     // A short drag, so a plain click still opens the Issue.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinates }),
+    // Enter is left to the card's link, which it opens.
+    useSensor(KeyboardSensor, {
+      coordinateGetter: keyboardCoordinates,
+      keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space", "Enter"] },
+    }),
   );
 
   function start(event: DragStartEvent) {
     dropping = false;
     clearRevealed();
     setDrop(null);
-    setLifted(issues.find((issue) => issue.key === event.active.id) ?? null);
+    const issue = issues.find((item) => item.key === event.active.id) ?? null;
+    setLifted(issue);
+    keyboardDrag.current = null;
+    const place = issue && placeOf(groups, issue.key);
+    if (!onDrop || !issue || !place || !(event.activatorEvent instanceof KeyboardEvent)) return;
+    const height = event.active.rect.current.initial?.height;
+    keyboardDrag.current = {
+      groups,
+      carried: issue.key,
+      place,
+      moved: (next) => {
+        const status = columns[next.group]!.status;
+        setTarget({ issue, status: status.id, height, index: next.index });
+        setAnnouncement(describePlace(groups, issue.key, next));
+      },
+    };
+    setAnnouncement(`Picked up ${issue.key}, ${describeWhere(groups, issue.key, place)}.`);
   }
 
   // On every move, since the half of a card the carried one is over decides where it lands; the state only changes
   // when the target does, so the drop areas don't re-render on every pointer move.
   function over(event: DragOverEvent | DragMoveEvent) {
+    // A keyboard drag sets its target itself, as its place moves.
+    if (keyboardDrag.current) return;
     const status = event.over?.data.current?.status as ProjectStatus | undefined;
     const issue = event.active.data.current?.issue as Issue | undefined;
     const next: Target | null =
@@ -391,17 +484,33 @@ function DragBoard({
     // Only an animation clears these, and with reduced motion there is none.
     const animated = !prefersReducedMotion();
     dropping = animated;
-    const status = event.over?.data.current?.status as ProjectStatus | undefined;
+    const drag = keyboardDrag.current;
+    keyboardDrag.current = null;
     const issue = issues.find((item) => item.key === event.active.id);
-    const moved = status !== undefined && issue !== undefined && issue.status.id !== status.id;
-    // Dropped on a card of its own column: it takes that card's place, and the cards between shift by one. In another
-    // column: where the gap was, between the cards around it.
-    const overKey = (event.over?.data.current?.issue as Issue | undefined)?.key;
+    let status: ProjectStatus | undefined;
     let reorder: { after: string | undefined; before: string | undefined } | undefined;
-    if (onDrop && issue && status) {
-      if (moved) reorder = landingIndex(byStatus.get(status.id) ?? [], event);
-      else if (overKey !== undefined) reorder = reorderedBetween(issues, issue, overKey);
+    if (drag) {
+      // By keyboard: where its place is, wherever the boxes put the carried card.
+      status = columns[drag.place.group]!.status;
+      const from = placeOf(drag.groups, drag.carried);
+      const stayed = from?.group === drag.place.group && from.index === drag.place.index;
+      if (!stayed) reorder = neighboursAt(drag.groups, drag.carried, drag.place);
+      setAnnouncement(
+        `Dropped ${drag.carried} at ${describeWhere(drag.groups, drag.carried, drag.place)}`,
+      );
+    } else {
+      status = event.over?.data.current?.status as ProjectStatus | undefined;
+      // Dropped on a card of its own column: it takes that card's place, and the cards between shift by one. In
+      // another column: where the gap was, between the cards around it.
+      const overKey = (event.over?.data.current?.issue as Issue | undefined)?.key;
+      const movedHere =
+        status !== undefined && issue !== undefined && issue.status.id !== status.id;
+      if (onDrop && issue && status) {
+        if (movedHere) reorder = landingIndex(byStatus.get(status.id) ?? [], event);
+        else if (overKey !== undefined) reorder = reorderedBetween(issues, issue, overKey);
+      }
     }
+    const moved = status !== undefined && issue !== undefined && issue.status.id !== status.id;
     landing.current =
       moved && animated
         ? (document.querySelector("[data-drop-slot]")?.getBoundingClientRect() ?? null)
@@ -426,6 +535,14 @@ function DragBoard({
 
   function cancel() {
     dropping = false;
+    const drag = keyboardDrag.current;
+    keyboardDrag.current = null;
+    const from = drag && placeOf(drag.groups, drag.carried);
+    if (drag && from) {
+      setAnnouncement(
+        `${drag.carried} was put back at ${describeWhere(drag.groups, drag.carried, from)}`,
+      );
+    }
     setLifted(null);
     setTarget(null);
   }
@@ -436,6 +553,7 @@ function DragBoard({
         <TargetContext value={target}>
           <DndContext
             sensors={sensors}
+            accessibility={{ announcements: silent, screenReaderInstructions: instructions }}
             collisionDetection={collisionDetection}
             autoScroll={autoScroll}
             measuring={measuring}
@@ -450,6 +568,9 @@ function DragBoard({
               {lifted && <CardBody issue={lifted} lifted />}
             </DragOverlay>
           </DndContext>
+          <VisuallyHidden role="status" aria-live="assertive" aria-label="Moving cards">
+            {announcement}
+          </VisuallyHidden>
         </TargetContext>
       </DropContext>
     </CanMoveContext>
@@ -661,7 +782,7 @@ export function IssueBoard({
   const crowded = useCrowded(scroller, columns.length);
 
   return (
-    <DragBoard issues={columns.flatMap((column) => column.items)} onDrop={onDrop} canMove={canMove}>
+    <DragBoard columns={columns} onDrop={onDrop} canMove={canMove}>
       <div ref={setFrame} className={classes.boardFrame} style={{ height }}>
         <div
           ref={setScroller}
@@ -1050,7 +1171,7 @@ export function IssueSwimlanes({
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   useScrollbarWhileScrolling(scroller);
   return (
-    <DragBoard issues={columns.flatMap((column) => column.items)} onMove={onMove} canMove={canMove}>
+    <DragBoard columns={columns} onMove={onMove} canMove={canMove}>
       <div
         ref={setScroller}
         className={classes.lanes}

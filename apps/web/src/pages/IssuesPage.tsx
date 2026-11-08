@@ -112,7 +112,12 @@ export default function IssuesPage() {
     VIEWS.find((option) => option.value === params.get("view"))?.value ?? storedView(key) ?? "list";
   const grouped = view !== "table";
   const statuses = useProjectStatuses(project?.key);
-  const query = useIssues(key, { ...search, size: PAGE_SIZE }, !grouped);
+  // The Table is in Rank order unless the address names another sort.
+  const query = useIssues(
+    key,
+    { ...search, sort: search.sort ?? "rank", size: PAGE_SIZE },
+    !grouped,
+  );
   const columnQueries = useStatusColumns(
     key,
     statuses.data ?? [],
@@ -265,6 +270,23 @@ export default function IssuesPage() {
     }
   }
 
+  /** A row dropped in the Table (in Rank order): between `after` and `before`, of any Status; its Status stays. */
+  async function reorderRow(
+    issueKey: string,
+    after: string | undefined,
+    before: string | undefined,
+  ) {
+    const issue = data?.items.find((item) => item.key === issueKey);
+    if (!issue) return;
+    try {
+      await reorderIssue(issue, after, before, undefined, true);
+    } catch (error) {
+      const reason =
+        error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
+      toast.error(`Couldn't reorder ${issue.key}: ${reason}`);
+    }
+  }
+
   /** The menu filters and the quick filters, not the search (state 4's Clear filters). */
   const clearFilters = () => remove([...FILTER_FIELDS, "assignee"]);
   const clearSearch = () => {
@@ -387,8 +409,10 @@ export default function IssuesPage() {
                 {data && data.items.length > 0 ? (
                   <IssueTable
                     issues={data.items}
-                    sort={search.sort ?? "updated"}
-                    onSort={(sort) => change("sort", sort === "updated" ? null : sort)}
+                    sort={search.sort ?? "rank"}
+                    onSort={(sort) => change("sort", sort === "rank" ? null : sort)}
+                    onReorder={(key, after, before) => void reorderRow(key, after, before)}
+                    canMove={canMove}
                   />
                 ) : (
                   <p className={classes.empty}>This page has no Issues.</p>

@@ -121,6 +121,48 @@ class ReorderIssueTests {
 	}
 
 	@Test
+	void anyStatusUsesNeighboursOfOtherStatusesForTheTable() {
+		var dana = register("Dana");
+		var key = project(dana);
+		var a = create(dana, key, "A");
+		var b = create(dana, key, "B");
+		var c = create(dana, key, "C");
+		var d = create(dana, key, "D");
+		moveTo(dana, b, statusId(dana, key, "Done"));
+		moveTo(dana, c, statusId(dana, key, "Done"));
+
+		// In the Table, D (To do) dropped between B and C (both Done): placed there, its Status kept.
+		reorderAnyStatus(dana, d, b, c).expectStatus().isOk().expectBody()
+			.jsonPath("$.status.name").isEqualTo("To do");
+		assertThat(order(dana, key)).containsExactly("A", "B", "D", "C");
+
+		// Only `before` given, in another Status: directly before it.
+		reorderAnyStatus(dana, a, null, c).expectStatus().isOk();
+		assertThat(order(dana, key)).containsExactly("B", "D", "A", "C");
+	}
+
+	@Test
+	void anyStatusIsSilentAndNotTakenWithAStatusChange() {
+		var dana = register("Dana");
+		var key = project(dana);
+		var a = create(dana, key, "A");
+		var b = create(dana, key, "B");
+		moveTo(dana, b, statusId(dana, key, "Done"));
+		var version = JsonPath.read(open(dana, a), "$.version");
+
+		reorderAnyStatus(dana, a, b, null).expectStatus().isOk();
+		assertThat((Object) JsonPath.read(open(dana, a), "$.version")).isEqualTo(version);
+
+		var body = new HashMap<String, Object>();
+		body.put("statusId", statusId(dana, key, "Done"));
+		body.put("after", b);
+		body.put("anyStatus", true);
+		client.put().uri("/api/issues/{key}/rank", a).header("Authorization", "Bearer " + dana.token()).body(body)
+			.exchange().expectStatus().isBadRequest().expectBody().jsonPath("$.errors.anyStatus").exists();
+		assertThat((String) JsonPath.read(open(dana, a), "$.status.name")).isEqualTo("To do");
+	}
+
+	@Test
 	void aNeighbourDeletedMeanwhileIsIgnored() {
 		var dana = register("Dana");
 		var key = project(dana);
@@ -411,6 +453,16 @@ class ReorderIssueTests {
 		var body = new HashMap<String, Object>();
 		if (after != null) body.put("after", after);
 		if (before != null) body.put("before", before);
+		return client.put().uri("/api/issues/{key}/rank", issueKey).header("Authorization", "Bearer " + who.token())
+			.body(body).exchange();
+	}
+
+	/** A reorder from the Table, whose rows are of every Status. */
+	private RestTestClient.ResponseSpec reorderAnyStatus(Person who, String issueKey, String after, String before) {
+		var body = new HashMap<String, Object>();
+		if (after != null) body.put("after", after);
+		if (before != null) body.put("before", before);
+		body.put("anyStatus", true);
 		return client.put().uri("/api/issues/{key}/rank", issueKey).header("Authorization", "Bearer " + who.token())
 			.body(body).exchange();
 	}

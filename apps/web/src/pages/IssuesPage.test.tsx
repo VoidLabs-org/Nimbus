@@ -206,7 +206,12 @@ describe("IssuesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
 
     await waitFor(() =>
-      expect(issues).toHaveBeenLastCalledWith("NIM", { assignee: "me", q: "login", size: 50 }),
+      expect(issues).toHaveBeenLastCalledWith("NIM", {
+        assignee: "me",
+        q: "login",
+        sort: "rank",
+        size: 50,
+      }),
     );
   });
 
@@ -1078,6 +1083,117 @@ describe("IssuesPage", () => {
     );
   });
 
+  describe("reordering the Table", () => {
+    const rows = () => [
+      issue(1, "Plan sprint"),
+      issue(2, "Fix login", { status: inProgress }),
+      issue(3, "Ship it"),
+    ];
+    const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const press = async (code: string, target: Element = document.body) => {
+      await act(async () => {
+        fireEvent.keyDown(target, { code, key: code });
+      });
+      await tick();
+    };
+    const said = () => screen.getByLabelText("Moving rows").textContent;
+
+    it("opens in Rank order when the address names no sort, with its Rank header in use", async () => {
+      const issues = vi.spyOn(api, "issues").mockResolvedValue(page(rows()));
+      show("/projects/NIM/issues?view=table");
+      await screen.findByText("Plan sprint");
+
+      expect(issues).toHaveBeenLastCalledWith("NIM", expect.objectContaining({ sort: "rank" }));
+      expect(screen.getByRole("button", { name: /^Rank/ }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      expect(screen.getByRole("button", { name: "Reorder NIM-1" })).toBeTruthy();
+      expect(screen.queryByText("Sort by Rank to reorder")).toBeNull();
+    });
+
+    it.each(["priority", "updated"])(
+      "hides the grips under %s and says how to reorder",
+      async (sort) => {
+        const issues = vi.spyOn(api, "issues").mockResolvedValue(page(rows()));
+        show(`/projects/NIM/issues?view=table&sort=${sort}`);
+        await screen.findByText("Plan sprint");
+
+        expect(issues).toHaveBeenLastCalledWith("NIM", expect.objectContaining({ sort }));
+        expect(screen.queryByRole("button", { name: "Reorder NIM-1" })).toBeNull();
+        expect(screen.getByText("Sort by Rank to reorder")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Rank" }));
+        await waitFor(() =>
+          expect(issues).toHaveBeenLastCalledWith("NIM", expect.objectContaining({ sort: "rank" })),
+        );
+      },
+    );
+
+    it("sends the rows it was dropped between, of any Status, and no Status", async () => {
+      vi.spyOn(api, "issues").mockResolvedValue(page(rows()));
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=table");
+      await screen.findByText("Ship it");
+
+      // NIM-1 dropped on NIM-3, the last row: after it.
+      await act(async () => dragEnd?.({ active: { id: "NIM-1" }, over: { id: "NIM-3" } }));
+
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-3", undefined, undefined, true),
+      );
+      // Shown in its new place before the server answers.
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole("table"))
+            .getAllByRole("link")
+            .map((link) => link.textContent),
+        ).toEqual(["Fix login", "Ship it", "Plan sprint"]),
+      );
+    });
+
+    it("moves a row by keyboard from its grip, Up and Down, and drops it with Space", async () => {
+      vi.spyOn(api, "issues").mockResolvedValue(page(rows()));
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=table");
+      const grip = await screen.findByRole("button", { name: "Reorder NIM-1" });
+
+      await press("Space", grip);
+      expect(said()).toBe("Picked up NIM-1 at position 1 of 3 in the Table.");
+      await press("ArrowUp");
+      expect(said()).toBe("NIM-1 is already first in the Table");
+      await press("ArrowDown");
+      expect(said()).toBe("NIM-1, position 2 of 3 in the Table");
+      await press("Space");
+
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3", undefined, true),
+      );
+      expect(said()).toBe("Dropped NIM-1 at position 2 of 3 in the Table");
+    });
+
+    it("puts a row back with Escape and sends nothing", async () => {
+      vi.spyOn(api, "issues").mockResolvedValue(page(rows()));
+      const reorder = vi.spyOn(api, "reorderIssue");
+      show("/projects/NIM/issues?view=table");
+      const grip = await screen.findByRole("button", { name: "Reorder NIM-1" });
+
+      await press("Space", grip);
+      await press("ArrowDown");
+      await press("Escape");
+
+      expect(said()).toBe("NIM-1 was put back at position 1 of 3 in the Table");
+      expect(reorder).not.toHaveBeenCalled();
+    });
+
+    it("gives rows the User may not move no grip, and no hint", async () => {
+      vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+      vi.spyOn(api, "issues").mockResolvedValue(page(rows()));
+      show("/projects/NIM/issues?view=table");
+      await screen.findByText("Plan sprint");
+
+      expect(screen.queryByRole("button", { name: /^Reorder/ })).toBeNull();
+    });
+  });
+
   it("switches views, keeps the filters and remembers the view for the project", async () => {
     const issues = byStatus([issue(1, "Plan sprint")]);
     show("/projects/NIM/issues?type=Bug");
@@ -1131,7 +1247,7 @@ describe("IssuesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove Type filter" }));
 
     await waitFor(() =>
-      expect(issues).toHaveBeenLastCalledWith("NIM", { priority: "High", size: 50 }),
+      expect(issues).toHaveBeenLastCalledWith("NIM", { priority: "High", sort: "rank", size: 50 }),
     );
   });
 
@@ -1164,7 +1280,7 @@ describe("IssuesPage", () => {
     expect(await screen.findByText("No issues match “zzz”")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
 
-    await waitFor(() => expect(issues).toHaveBeenLastCalledWith("NIM", { size: 50 }));
+    await waitFor(() => expect(issues).toHaveBeenLastCalledWith("NIM", { sort: "rank", size: 50 }));
   });
 
   it("adds an Issue straight into a Board column's Status", async () => {

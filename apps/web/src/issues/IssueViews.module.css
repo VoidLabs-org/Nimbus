@@ -584,6 +584,78 @@
   color: var(--color-text);
 }
 
+/* The Table's first column: the Rank header, and each row's grip in Rank order. */
+.gripCell {
+  width: 1%;
+}
+
+.table td.gripCell {
+  padding-right: 0;
+}
+
+/* The grip a row is dragged by: only shown on hover and focus, so it doesn't clutter the Table. Touch screens have no
+   hover, so there it always shows. */
+.grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-accent-2-700);
+  font-size: 13px;
+  letter-spacing: -2px;
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.table tbody tr:hover .grip,
+.grip:focus-visible {
+  opacity: 1;
+}
+
+.grip:hover {
+  background: var(--row-hover);
+  color: var(--color-text);
+}
+
+.grip:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 1px;
+}
+
+@media (hover: none) {
+  .grip {
+    opacity: 1;
+  }
+}
+
+/* The row being carried: lifted over the others as they slide apart. */
+.rowCarried {
+  position: relative;
+  z-index: 1;
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--color-accent-500),
+    var(--shadow-lg);
+}
+
+.rowCarried .grip {
+  opacity: 1;
+  cursor: grabbing;
+}
+
+/* Under Priority or Updated: why there are no grips. */
+.rankHint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--color-accent-2-700);
+}
+
 .titleLink {
   display: block;
   max-width: 360px;

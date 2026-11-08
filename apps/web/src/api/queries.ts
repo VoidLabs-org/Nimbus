@@ -424,7 +424,8 @@ export function placeIssue<T extends { key: string }>(
  * server answers, and goes back if that fails. With a `status` other than its own (a drop in another column) the
  * same request moves it there too: the card leaves its column and lands between those cards in the new one. Shares
  * the bookkeeping of Board changes: the last of several quick drops, moves and reorders, once answered, refreshes
- * the lists (only the column, for a drop that kept the Status).
+ * the lists (only the column, for a drop that kept the Status). With `anyStatus` (a drop in the Table) the neighbours
+ * are rows of any Status and the Status never changes.
  */
 export function useReorderIssue() {
   const client = useQueryClient();
@@ -433,8 +434,10 @@ export function useReorderIssue() {
     after: string | undefined,
     before: string | undefined,
     status?: ProjectStatus,
+    /** A drop in the Table: the neighbours may be of any Status, and the Status stays. */
+    anyStatus = false,
   ) => {
-    const moving = status !== undefined && status.id !== issue.status.id;
+    const moving = !anyStatus && status !== undefined && status.id !== issue.status.id;
     const lists = { queryKey: projectIssueLists(issue.key) };
     // Silently: a refresh cut short is not a failed refresh, which would show "Couldn't refresh these Issues".
     void client.cancelQueries(lists, { revert: false, silent: true });
@@ -485,7 +488,9 @@ export function useReorderIssue() {
     const settle = startBoardChange(client);
     try {
       const saved = await inOrder(client, issue.key, () =>
-        api.reorderIssue(issue.key, after, before, moving ? status.id : undefined),
+        anyStatus
+          ? api.reorderIssue(issue.key, after, before, undefined, true)
+          : api.reorderIssue(issue.key, after, before, moving ? status.id : undefined),
       );
       client.setQueryData(queryKeys.issue(saved.key), saved);
       if (moving) {

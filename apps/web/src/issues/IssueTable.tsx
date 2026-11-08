@@ -1,7 +1,6 @@
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { Link } from "react-router";
 import type { Issue, IssueSearch } from "../api/client";
-import { AssigneeMark, type Column } from "./IssueBoard";
 import { PriorityMark, StatusPill, TypeBadge } from "./IssueMarks";
 import { timeAgo } from "./timeAgo";
 import classes from "./IssueViews.module.css";
@@ -91,48 +90,6 @@ export function IssueTable({
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-/** The List of the Issues grouped under their Status, a Status with none left out. */
-export function IssueGroups({ columns }: { columns: Column[] }) {
-  return (
-    <div className={classes.groups}>
-      {columns
-        .filter((column) => column.items.length > 0)
-        .map((column) => (
-          <section key={column.status.id} aria-label={column.status.name}>
-            <div className={classes.groupHead}>
-              <StatusPill status={column.status} />
-              <span>{column.total}</span>
-            </div>
-            <ul className={classes.groupRows}>
-              {column.items.map((issue) => (
-                <li key={issue.id}>
-                  <Link
-                    to={`/issues/${encodeURIComponent(issue.key)}`}
-                    className={classes.groupRow}
-                  >
-                    <TypeBadge type={issue.type} />
-                    <span className={classes.rowKey}>{issue.key}</span>
-                    <span className={classes.rowTitle}>{issue.title}</span>
-                    <span className={classes.rowStatus}>
-                      <StatusPill status={issue.status} />
-                    </span>
-                    <PriorityMark priority={issue.priority} />
-                    <AssigneeMark issue={issue} size={24} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            {column.total > column.items.length && (
-              <div className={classes.more}>
-                Showing {column.items.length} of {column.total}
-              </div>
-            )}
-          </section>
-        ))}
     </div>
   );
 }

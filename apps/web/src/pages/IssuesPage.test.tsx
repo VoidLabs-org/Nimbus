@@ -515,7 +515,9 @@ describe("IssuesPage", () => {
 
       const card = await screen.findByRole("link", { name: /Plan sprint/ });
 
-      expect(card.getAttribute("aria-disabled")).toBe("true");
+      // A plain link: it still opens the Issue, so it isn't announced as disabled or as draggable.
+      expect(card.getAttribute("aria-disabled")).toBeNull();
+      expect(card.getAttribute("aria-roledescription")).toBeNull();
     });
   });
 
@@ -889,6 +891,168 @@ describe("IssuesPage", () => {
       await press("Space");
 
       await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-3", "NIM-4", undefined, "s2"));
+    });
+  });
+
+  describe("dragging in the List", () => {
+    const rows = () => [
+      issue(1, "Plan sprint"),
+      issue(2, "Fix login"),
+      issue(3, "Ship it"),
+      issue(4, "Write docs", { status: inProgress }),
+    ];
+    const box = (top: number) => ({
+      top,
+      height: 40,
+      left: 0,
+      width: 200,
+      bottom: top + 40,
+      right: 200,
+    });
+    /** NIM-1 carried over the row `over`, as dnd-kit hands a drop. */
+    const carried = (over: Issue, overTop: number, top: number) => ({
+      active: {
+        id: "NIM-1",
+        data: { current: { issue: rows()[0] } },
+        rect: { current: { initial: box(0), translated: box(top) } },
+      },
+      over: {
+        id: over.key,
+        data: { current: { status: over.status, issue: over } },
+        rect: box(overTop),
+      },
+    });
+    const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const press = async (code: string, target: Element = document.body) => {
+      await act(async () => {
+        fireEvent.keyDown(target, { code, key: code });
+      });
+      await tick();
+    };
+    const said = () => screen.getByLabelText("Moving cards").textContent;
+
+    it("sends the neighbours for a row dropped between two rows of its group", async () => {
+      byStatus(rows());
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=list");
+      await screen.findByRole("link", { name: /Ship it/ });
+
+      // Over NIM-2: NIM-1 takes its place, so it lands between NIM-2 and NIM-3.
+      await act(async () => dragEnd?.(carried(rows()[1]!, 100, 100)));
+
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3", undefined),
+      );
+    });
+
+    it("sends the Status and the neighbours for a row dropped in another group", async () => {
+      byStatus([...rows(), issue(5, "More work", { status: inProgress })]);
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=list");
+      await screen.findByRole("link", { name: /More work/ });
+
+      // Below the middle of NIM-4: between NIM-4 and NIM-5.
+      await act(async () => dragEnd?.(carried(rows()[3]!, 100, 125)));
+
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-4", "NIM-5", "s2"));
+    });
+
+    it("shows every Status in order, an empty one as a heading saying so, and a drop there sends no neighbours", async () => {
+      byStatus([issue(1, "Plan sprint")]);
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=list");
+      await screen.findByRole("link", { name: /Plan sprint/ });
+
+      const regions = screen
+        .getAllByRole("region")
+        .map((region) => region.getAttribute("aria-label"));
+      expect(regions).toEqual(["To do", "In progress"]);
+      expect(
+        within(screen.getByRole("region", { name: "In progress" })).getByText("No issues"),
+      ).toBeTruthy();
+
+      act(() =>
+        dragEnd?.({
+          active: { id: "NIM-1" },
+          over: { data: { current: { status: statuses[1] } } },
+        }),
+      );
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", undefined, undefined, "s2"),
+      );
+    });
+
+    it("opens the gap under an empty Status's heading while a row is carried there", async () => {
+      byStatus([issue(1, "Plan sprint")]);
+      show("/projects/NIM/issues?view=list");
+      const row = await screen.findByRole("link", { name: /Plan sprint/ });
+      const area = screen.getByRole("region", { name: "In progress" });
+
+      await press("Space", row);
+      expect(area.querySelector("[data-drop-slot]")).toBeNull();
+      // Down carries the row past the end of To do, into the empty Status.
+      await press("ArrowDown");
+      expect(area.querySelector("[data-drop-slot]")).toBeTruthy();
+      await press("Escape");
+    });
+
+    it("carries a row by keyboard, across the end of its group into the next one, and drops it there", async () => {
+      byStatus(rows());
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=list");
+      const row = await screen.findByRole("link", { name: /Ship it/ });
+
+      await press("Space", row);
+      expect(said()).toBe("Picked up NIM-3 at position 3 of 3 in To do.");
+      await press("ArrowDown");
+      expect(said()).toBe("NIM-3, position 1 of 2 in In progress");
+      await press("ArrowDown");
+      expect(said()).toBe("NIM-3, position 2 of 2 in In progress");
+      await press("ArrowUp");
+      await press("ArrowUp");
+      expect(said()).toBe("NIM-3, position 3 of 3 in To do");
+      await press("ArrowDown");
+      await press("Space");
+
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-3", undefined, "NIM-4", "s2"));
+      expect(said()).toBe("Dropped NIM-3 at position 1 of 2 in In progress");
+    });
+
+    it("puts a row back with Escape and sends nothing", async () => {
+      byStatus(rows());
+      const reorder = vi.spyOn(api, "reorderIssue");
+      show("/projects/NIM/issues?view=list");
+      const row = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      await press("Space", row);
+      await press("ArrowDown");
+      await press("Escape");
+
+      expect(said()).toBe("NIM-1 was put back at position 1 of 3 in To do");
+      expect(reorder).not.toHaveBeenCalled();
+    });
+
+    it("still opens the Issue when a row is clicked", async () => {
+      byStatus(rows());
+      show("/projects/NIM/issues?view=list");
+      const row = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      expect(row.getAttribute("href")).toBe("/issues/NIM-1");
+    });
+
+    it("can't drag a row the User may not move", async () => {
+      vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+      byStatus(rows());
+      const reorder = vi.spyOn(api, "reorderIssue");
+      show("/projects/NIM/issues?view=list");
+      const row = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      expect(row.getAttribute("aria-disabled")).toBeNull();
+      expect(row.getAttribute("aria-roledescription")).toBeNull();
+      await press("Space", row);
+      await press("ArrowDown");
+      await press("Space");
+      expect(reorder).not.toHaveBeenCalled();
     });
   });
 

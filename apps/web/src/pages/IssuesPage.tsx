@@ -20,7 +20,8 @@ import {
   useStatusColumns,
 } from "../api/queries";
 import { IssueBoard, IssueSwimlanes, type Column } from "../issues/IssueBoard";
-import { IssueGroups, IssueTable } from "../issues/IssueTable";
+import { IssueGroups } from "../issues/IssueList";
+import { IssueTable } from "../issues/IssueTable";
 import {
   appliedFields,
   CATEGORIES,
@@ -375,7 +376,11 @@ export default function IssuesPage() {
           ) : nothing ? (
             nothing
           ) : view === "list" ? (
-            <IssueGroups columns={columns.filter((column) => columnShown(search, column.status))} />
+            <IssueGroups
+              columns={columns.filter((column) => columnShown(search, column.status))}
+              onDrop={(key, after, before, status) => void reorder(key, after, before, status)}
+              canMove={canMove}
+            />
           ) : (
             <>
               <Panel p={8}>

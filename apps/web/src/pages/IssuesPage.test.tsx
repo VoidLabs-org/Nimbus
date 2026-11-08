@@ -1170,6 +1170,33 @@ describe("IssuesPage", () => {
       expect(said()).toBe("Dropped NIM-1 at position 2 of 3 in the Table");
     });
 
+    it("counts places in the whole order on a later page, and says when there is more beyond it", async () => {
+      vi.spyOn(api, "issues").mockResolvedValue({ ...page(rows(), 120), page: 1 });
+      show("/projects/NIM/issues?view=table&page=1");
+      const grip = await screen.findByRole("button", { name: "Reorder NIM-1" });
+
+      await press("Space", grip);
+      expect(said()).toBe("Picked up NIM-1 at position 51 of 120 in the Table.");
+      await press("ArrowUp");
+      expect(said()).toBe("NIM-1 is already first on this page");
+      await press("Escape");
+    });
+
+    it("says the row went back when the server refuses the drop", async () => {
+      vi.spyOn(api, "issues").mockResolvedValue(page(rows()));
+      vi.spyOn(api, "reorderIssue").mockRejectedValue(new Error("Archived"));
+      show("/projects/NIM/issues?view=table");
+      const grip = await screen.findByRole("button", { name: "Reorder NIM-1" });
+
+      await press("Space", grip);
+      await press("ArrowDown");
+      await press("Space");
+
+      await waitFor(() =>
+        expect(said()).toBe("Couldn't reorder NIM-1. It is back at position 1 of 3 in the Table"),
+      );
+    });
+
     it("puts a row back with Escape and sends nothing", async () => {
       vi.spyOn(api, "issues").mockResolvedValue(page(rows()));
       const reorder = vi.spyOn(api, "reorderIssue");

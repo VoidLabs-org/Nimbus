@@ -275,15 +275,18 @@ export default function IssuesPage() {
     issueKey: string,
     after: string | undefined,
     before: string | undefined,
-  ) {
+  ): Promise<boolean> {
     const issue = data?.items.find((item) => item.key === issueKey);
-    if (!issue) return;
+    if (!issue) return false;
     try {
       await reorderIssue(issue, after, before, undefined, true);
+      return true;
     } catch (error) {
       const reason =
         error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
       toast.error(`Couldn't reorder ${issue.key}: ${reason}`);
+      // The Table says so in its live region too.
+      return false;
     }
   }
 
@@ -411,8 +414,12 @@ export default function IssuesPage() {
                     issues={data.items}
                     sort={search.sort ?? "rank"}
                     onSort={(sort) => change("sort", sort === "rank" ? null : sort)}
-                    onReorder={(key, after, before) => void reorderRow(key, after, before)}
+                    // Not while the rows shown are the last answer's (another sort, page or filter), kept until
+                    // the new one comes: a drop would send neighbours from a list the server doesn't order that way.
+                    onReorder={query.isPlaceholderData ? undefined : reorderRow}
                     canMove={canMove}
+                    offset={page * PAGE_SIZE}
+                    total={data.total}
                   />
                 ) : (
                   <p className={classes.empty}>This page has no Issues.</p>

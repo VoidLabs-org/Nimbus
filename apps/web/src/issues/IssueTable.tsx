@@ -18,19 +18,9 @@ import { ProfilePicture } from "@repo/ui/profile-picture";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import type { Issue, IssueSearch } from "../api/client";
-import type { CanMove } from "./dragContext";
+import { SILENT, type CanMove } from "./dragContext";
 import { PriorityMark, StatusPill, TypeBadge } from "./IssueMarks";
-import {
-  aimAt,
-  describeEdge,
-  describePlace,
-  describeWhere,
-  neighboursAt,
-  nextPlace,
-  placeOf,
-  type Group,
-  type Place,
-} from "./keyboardDrag";
+import { aimAt, neighboursAt, nextPlace, placeOf, type Group, type Place } from "./keyboardDrag";
 import { timeAgo } from "./timeAgo";
 import classes from "./IssueViews.module.css";
 
@@ -41,11 +31,12 @@ export type ReorderRow = (
   issueKey: string,
   after: string | undefined,
   before: string | undefined,
-) => void;
+) => Promise<boolean> | void;
 
 /**
  * The Issues as a dense table. Rank, Priority and Updated sort on the server, so the arrow marks the one in use. In
- * Rank order (`onReorder`) each row the User may move has a grip at its start, shown on hover and focus: dragging it,
+ * Rank order (`onReorder`, left out while the rows shown are not yet the ones asked for) each row the User may move
+ * (`canMove`; none unless given) has a grip at its start, shown on hover and focus: dragging it,
  * or lifting it with the keyboard, moves the row within the page shown and changes the Issue's Rank only, never its
  * Status. Only the grip drags, so the cells' text can still be selected and copied. Under the other sorts there are no
  * grips, and a hint says how to reorder.
@@ -55,13 +46,18 @@ export function IssueTable({
   sort,
   onSort,
   onReorder,
-  canMove = () => true,
+  canMove = () => false,
+  offset = 0,
+  total = issues.length,
 }: {
   issues: Issue[];
   sort: Sort;
   onSort: (sort: Sort) => void;
   onReorder?: ReorderRow;
   canMove?: CanMove;
+  /** The first row's place in the whole order (the rows on the pages before), and how many Issues there are. */
+  offset?: number;
+  total?: number;
 }) {
   const ranked = sort === "rank" && onReorder !== undefined;
   const sortable = (name: Sort, label: string) => (
@@ -110,7 +106,7 @@ export function IssueTable({
   if (!ranked) {
     return (
       <>
-        {onReorder && issues.some(canMove) && (
+        {sort !== "rank" && onReorder && issues.some(canMove) && (
           <p className={classes.rankHint}>Sort by Rank to reorder</p>
         )}
         {table}
@@ -118,7 +114,7 @@ export function IssueTable({
     );
   }
   return (
-    <TableDrag issues={issues} onReorder={onReorder}>
+    <TableDrag issues={issues} offset={offset} total={total} onReorder={onReorder}>
       {table}
     </TableDrag>
   );
@@ -214,75 +210,105 @@ const INSTRUCTIONS = {
     "To reorder this Issue, press Space. Up and Down move it one row. Press Space to drop it, or Escape to put it back.",
 };
 
-/** dnd-kit's own announcements are off: the Table says what happens in its own live region. */
-const SILENT = {
-  onDragStart: () => undefined,
-  onDragOver: () => undefined,
-  onDragEnd: () => undefined,
-  onDragCancel: () => undefined,
-};
-
 /** The Table's rows as the one group of places a carried row moves among (see keyboardDrag). */
 function groupOf(keys: string[]): Group[] {
   return [{ id: "table", name: "the Table", keys }];
 }
 
 /**
- * Drag and drop for the Table's rows, by pointer from a grip or by keyboard on a focused grip. As on the Board, a
- * keyboard drag is kept as an index among the other rows (keyboardDrag), not worked out from boxes, and a drop sends
- * the rows directly above and below its place.
+ * A keyboard drag: the row, and its place kept as the rows it is between (`after`, `before`) as well as its index, so
+ * a refresh while it is carried (an earlier drop settling, say) keeps it between the same rows rather than at the
+ * same index among different ones.
+ */
+type KeyboardDrag = { key: string; index: number; after?: string; before?: string };
+
+/** The drag's index among the other rows as they are now: next to the rows it was between, if still there. */
+function indexNow(keys: string[], drag: KeyboardDrag) {
+  const others = keys.filter((key) => key !== drag.key);
+  if (drag.before !== undefined && others.includes(drag.before)) return others.indexOf(drag.before);
+  if (drag.after !== undefined && others.includes(drag.after))
+    return others.indexOf(drag.after) + 1;
+  return Math.min(drag.index, others.length);
+}
+
+/**
+ * Drag and drop for the Table's rows, by pointer from a grip or by keyboard on a focused grip. A keyboard drag is
+ * kept as a place among the other rows (keyboardDrag), not worked out from boxes, and a drop sends the rows directly
+ * above and below its place. The live region counts places in the whole Rank order (`offset` is the first row's
+ * place, `total` all of the Issues), since a page is only part of it.
  */
 function TableDrag({
   issues,
+  offset,
+  total,
   onReorder,
   children,
 }: {
   issues: Issue[];
+  offset: number;
+  total: number;
   onReorder: ReorderRow;
   children: ReactNode;
 }) {
   const keys = issues.map((issue) => issue.key);
   const [announcement, setAnnouncement] = useState("");
-  // The rows as last rendered, for what dnd-kit calls between renders, and the keyboard drag's place.
-  const latest = useRef(keys);
-  const keyboard = useRef<{ key: string; index: number } | null>(null);
+  // The rows as last rendered and the counting, for what dnd-kit calls between renders, and the keyboard drag.
+  const latest = useRef({ keys, offset, total });
+  const keyboard = useRef<KeyboardDrag | null>(null);
   useLayoutEffect(() => {
-    latest.current = keys;
+    latest.current = { keys, offset, total };
   });
 
   // Made once, reading the drag and the rows when called.
-  const [handlers] = useState(() => ({
-    /** A keyboard drag is over the row its place names, whatever the boxes say. */
-    collisions: ((args) => {
-      const drag = keyboard.current;
-      if (drag) {
-        const id = aimAt(groupOf(latest.current), drag.key, { group: 0, index: drag.index });
-        const container = args.droppableContainers.find((c) => c.id === id);
-        if (container) return [{ id, data: { droppableContainer: container, value: 0 } }];
-      }
-      return closestCenter(args);
-    }) as CollisionDetection,
-    /** Up and Down move the row one place; a key that can't move it further says so. */
-    coordinates: ((event, { context }) => {
-      const drag = keyboard.current;
-      const direction =
-        event.code === "ArrowUp" ? "up" : event.code === "ArrowDown" ? "down" : undefined;
-      const { collisionRect, droppableRects } = context;
-      if (!drag || !direction || !collisionRect) return undefined;
-      event.preventDefault();
-      const groups = groupOf(latest.current);
-      const place = { group: 0, index: drag.index };
-      const next = nextPlace(groups, drag.key, place, direction);
-      if (next.index === place.index) {
-        setAnnouncement(describeEdge(groups, drag.key, place, direction));
-        return undefined;
-      }
-      drag.index = next.index;
-      setAnnouncement(describePlace(groups, drag.key, next));
-      const rect = droppableRects.get(aimAt(groups, drag.key, next));
-      return { x: collisionRect.left, y: rect ? rect.top : collisionRect.top };
-    }) as KeyboardCoordinateGetter,
-  }));
+  const [handlers] = useState(() => {
+    /** "position 52 of 120 in the Table", counting the whole order. */
+    const where = (index: number) => {
+      const { keys, offset, total } = latest.current;
+      return `position ${offset + index + 1} of ${Math.max(total, offset + keys.length)} in the Table`;
+    };
+    return {
+      where,
+      /** A keyboard drag is over the row its place names, whatever the boxes say. */
+      collisions: ((args) => {
+        const drag = keyboard.current;
+        if (drag) {
+          const keys = latest.current.keys;
+          const index = indexNow(keys, drag);
+          const id = aimAt(groupOf(keys), drag.key, { group: 0, index });
+          const container = args.droppableContainers.find((c) => c.id === id);
+          if (container) return [{ id, data: { droppableContainer: container, value: 0 } }];
+        }
+        return closestCenter(args);
+      }) as CollisionDetection,
+      /** Up and Down move the row one place; a key that can't move it further says so. */
+      coordinates: ((event, { context }) => {
+        const drag = keyboard.current;
+        const direction =
+          event.code === "ArrowUp" ? "up" : event.code === "ArrowDown" ? "down" : undefined;
+        const { collisionRect, droppableRects } = context;
+        if (!drag || !direction || !collisionRect) return undefined;
+        event.preventDefault();
+        const { keys, offset, total } = latest.current;
+        const groups = groupOf(keys);
+        const place = { group: 0, index: indexNow(keys, drag) };
+        const next = nextPlace(groups, drag.key, place, direction);
+        if (next.index === place.index) {
+          // The first or last row of a page that isn't the whole order: there is more beyond it.
+          const more =
+            direction === "up" ? offset > 0 : offset + keys.length < Math.max(total, keys.length);
+          const end = direction === "up" ? "first" : "last";
+          setAnnouncement(
+            `${drag.key} is already ${end} ${more ? "on this page" : "in the Table"}`,
+          );
+          return undefined;
+        }
+        Object.assign(drag, { index: next.index }, neighboursAt(groups, drag.key, next));
+        setAnnouncement(`${drag.key}, ${where(next.index)}`);
+        const rect = droppableRects.get(aimAt(groups, drag.key, next));
+        return { x: collisionRect.left, y: rect ? rect.top : collisionRect.top };
+      }) as KeyboardCoordinateGetter,
+    };
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -292,7 +318,7 @@ function TableDrag({
     }),
   );
 
-  const at = (key: string, place: Place) => `at ${describeWhere(groupOf(keys), key, place)}`;
+  const at = (index: number) => `at ${handlers.where(index)}`;
 
   /** Where a pointer drag would land: the place of the row under it (the row takes that row's place). */
   function pointerPlace(event: Pick<DragEndEvent, "over">): Place | null {
@@ -305,15 +331,16 @@ function TableDrag({
     const from = placeOf(groupOf(keys), key);
     keyboard.current = null;
     if (!from) return;
-    setAnnouncement(`Picked up ${key} ${at(key, from)}.`);
-    if (event.activatorEvent instanceof KeyboardEvent)
-      keyboard.current = { key, index: from.index };
+    setAnnouncement(`Picked up ${key} ${at(from.index)}.`);
+    if (event.activatorEvent instanceof KeyboardEvent) {
+      keyboard.current = { key, index: from.index, ...neighboursAt(groupOf(keys), key, from) };
+    }
   }
 
   function over(event: DragOverEvent) {
     if (keyboard.current) return;
     const place = pointerPlace(event);
-    if (place) setAnnouncement(describePlace(groupOf(keys), String(event.active.id), place));
+    if (place) setAnnouncement(`${String(event.active.id)}, ${handlers.where(place.index)}`);
   }
 
   function end(event: DragEndEvent) {
@@ -322,23 +349,28 @@ function TableDrag({
     keyboard.current = null;
     const groups = groupOf(keys);
     const from = placeOf(groups, key);
-    const place = drag ? { group: 0, index: drag.index } : pointerPlace(event);
+    const place = drag ? { group: 0, index: indexNow(keys, drag) } : pointerPlace(event);
     if (!from) return;
     if (!place) {
-      setAnnouncement(`${key} was put back ${at(key, from)}`);
+      setAnnouncement(`${key} was put back ${at(from.index)}`);
       return;
     }
-    setAnnouncement(`Dropped ${key} ${at(key, place)}`);
+    setAnnouncement(`Dropped ${key} ${at(place.index)}`);
     if (place.index === from.index) return;
     const { after, before } = neighboursAt(groups, key, place);
-    onReorder(key, after, before);
+    // If the server refuses, the row goes back: say so, or the live region would still say it was dropped.
+    void Promise.resolve(onReorder(key, after, before)).then((saved) => {
+      if (saved === false) {
+        setAnnouncement(`Couldn't reorder ${key}. It is back ${at(from.index)}`);
+      }
+    });
   }
 
   function cancel(event: { active: { id: string | number } }) {
     keyboard.current = null;
     const key = String(event.active.id);
     const from = placeOf(groupOf(keys), key);
-    if (from) setAnnouncement(`${key} was put back ${at(key, from)}`);
+    if (from) setAnnouncement(`${key} was put back ${at(from.index)}`);
   }
 
   return (

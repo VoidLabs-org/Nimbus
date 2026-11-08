@@ -38,6 +38,7 @@ import { Link } from "react-router";
 import type { Issue, ProjectStatus } from "../api/client";
 import {
   CanMoveContext,
+  SILENT,
   DropContext,
   laneIdOf,
   TargetContext,
@@ -274,14 +275,6 @@ const MODES = {
   swimlanes: { instructions: SWIMLANES_INSTRUCTIONS, stacked: false, autoScroll },
   list: { instructions: LIST_INSTRUCTIONS, stacked: true, autoScroll: true as const },
 } satisfies Record<string, { instructions: object; stacked: boolean; autoScroll: unknown }>;
-
-/** dnd-kit's own announcements are off: the Board and the Swimlanes say what happens in their own live region. */
-const SILENT = {
-  onDragStart: () => undefined,
-  onDragOver: () => undefined,
-  onDragEnd: () => undefined,
-  onDragCancel: () => undefined,
-};
 
 /** A place for cards (see keyboardDrag) with the Status it stands for and, in the Swimlanes, its lane. */
 type StatusGroup = Group & { status: ProjectStatus; lane?: string };

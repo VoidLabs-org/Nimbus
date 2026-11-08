@@ -24,6 +24,21 @@ describe("placeOf", () => {
 });
 
 describe("nextPlace", () => {
+  it("with wrapping, carries the card across a group's end into the next or previous group", () => {
+    const wrap = (carried: string, group: number, index: number, direction: "up" | "down") =>
+      nextPlace(groups, carried, { group, index }, direction, () => index, true);
+    // Down past the last of To do (2 others, so index 2): first in In progress.
+    expect(wrap("NIM-2", 0, 2, "down")).toEqual({ group: 1, index: 0 });
+    // Up from the first of In progress: after the last of To do's other cards.
+    expect(wrap("NIM-4", 1, 0, "up")).toEqual({ group: 0, index: 3 });
+    // Into an empty group, and out of it again.
+    expect(wrap("NIM-5", 1, 1, "down")).toEqual({ group: 2, index: 0 });
+    expect(wrap("NIM-5", 2, 0, "up")).toEqual({ group: 1, index: 1 });
+    // The first and last groups still stop.
+    expect(wrap("NIM-1", 0, 0, "up")).toEqual({ group: 0, index: 0 });
+    expect(wrap("NIM-5", 2, 0, "down")).toEqual({ group: 2, index: 0 });
+  });
+
   it("moves one place up or down within the group, and stops at its ends", () => {
     expect(nextPlace(groups, "NIM-2", { group: 0, index: 1 }, "down")).toEqual({
       group: 0,

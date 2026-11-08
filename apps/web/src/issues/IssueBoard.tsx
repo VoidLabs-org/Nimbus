@@ -7,7 +7,6 @@ import {
   PointerSensor,
   TouchSensor,
   pointerWithin,
-  useDroppable,
   useSensor,
   useSensors,
   type Collision,
@@ -25,7 +24,6 @@ import { VisuallyHidden } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import {
-  createContext,
   Fragment,
   useContext,
   useEffect,
@@ -38,6 +36,18 @@ import {
 } from "react";
 import { Link } from "react-router";
 import type { Issue, ProjectStatus } from "../api/client";
+import {
+  CanMoveContext,
+  DropContext,
+  laneIdOf,
+  TargetContext,
+  useCardDrop,
+  useDropSlot,
+  useStatusArea,
+  type CanMove,
+  type Drop,
+  type Target,
+} from "./dragContext";
 import { PriorityMark, StatusPill, TypeBadge } from "./IssueMarks";
 import {
   aimAt,
@@ -66,31 +76,6 @@ export type DropIssue = (
   before: string | undefined,
   status?: ProjectStatus,
 ) => void;
-
-/** Whether the User may move an Issue; a card they can't move is not draggable. Everything is allowed by default. */
-export type CanMove = (issue: Issue) => boolean;
-
-const CanMoveContext = createContext<CanMove>(() => true);
-
-/**
- * The Issue just dropped and the Status it was dropped in (its own, for a drop that moves nothing). While `moving`,
- * its card is hidden wherever it is: in its old column until the Board shows the move (a moment later: TanStack Query
- * tells React on its next tick), and in its new place until the carried card has glided there, which then shows it
- * (see dropAnimation), so there are never two at once. Without animation (`animated` false) only the old place is
- * hidden. A card that `moved` and is in that Status gets its outline traced; if the move fails it is back where it
- * was, untraced.
- */
-type Drop = { key: string; status: string; moved: boolean; animated: boolean; moving: boolean };
-
-const DropContext = createContext<Drop | null>(null);
-
-/**
- * Where a carried card would land if dropped now: its Issue, the Status under it, the card's height and, on the
- * Board or Swimlanes cell, its place among that column's (or cell's) cards (`index`).
- */
-type Target = { issue: Issue; status: string; height: number | undefined; index?: number };
-
-const TargetContext = createContext<Target | null>(null);
 
 /**
  * On a drop, the carried card glides into the place where the Issue now is (the move is optimistic, so that is its new
@@ -269,6 +254,10 @@ const BOARD_INSTRUCTIONS = {
   draggable:
     "To move this Issue, press Space. Up and Down move it one place in its column, Left and Right to the next column. Press Space to drop it, or Escape to put it back.",
 };
+const LIST_INSTRUCTIONS = {
+  draggable:
+    "To move this Issue, press Space. Up and Down move it one place, past the end of a Status to the next one. Press Space to drop it, or Escape to put it back.",
+};
 const SWIMLANES_INSTRUCTIONS = {
   draggable:
     "To move this Issue, press Space. Up and Down move it one place in its cell, Left and Right to the next column of the same Assignee. Press Space to drop it, or Escape to put it back.",
@@ -350,9 +339,11 @@ function placeIn(groups: Group[], drag: KeyboardDrag): Place | null {
  * the next column; see keyboardDrag). The Swimlanes never change the Assignee: a card stays in its lane, and a drop in
  * another lane is put back. A live region says what happens.
  */
-function DragBoard({
+export function DragBoard({
   columns,
   lanes,
+  list = false,
+  overlay,
   onDrop,
   canMove,
   children,
@@ -360,6 +351,10 @@ function DragBoard({
   columns: Column[];
   /** The Swimlanes' lanes; none on the Board. */
   lanes?: Lane[];
+  /** The List: its Statuses are stacked, so Up and Down carry a row across them and Left and Right do nothing. */
+  list?: boolean;
+  /** What the carried Issue looks like; a card by default. */
+  overlay?: (issue: Issue) => ReactNode;
   onDrop: DropIssue;
   canMove: CanMove;
   children: ReactNode;
@@ -445,7 +440,8 @@ function DragBoard({
       const groups = inLane(latest.current, drag.lane);
       const place = placeIn(groups, drag);
       if (!place) return undefined;
-      const next = nextPlace(groups, drag.issue.key, place, direction);
+      if (list && (direction === "left" || direction === "right")) return undefined;
+      const next = nextPlace(groups, drag.issue.key, place, direction, undefined, list);
       if (next.group === place.group && next.index === place.index) {
         setAnnouncement(describeEdge(groups, drag.issue.key, place, direction));
         return undefined;
@@ -640,10 +636,14 @@ function DragBoard({
             sensors={sensors}
             accessibility={{
               announcements: SILENT,
-              screenReaderInstructions: swimlanes ? SWIMLANES_INSTRUCTIONS : BOARD_INSTRUCTIONS,
+              screenReaderInstructions: list
+                ? LIST_INSTRUCTIONS
+                : swimlanes
+                  ? SWIMLANES_INSTRUCTIONS
+                  : BOARD_INSTRUCTIONS,
             }}
             collisionDetection={keys.collisions}
-            autoScroll={autoScroll}
+            autoScroll={list ? undefined : autoScroll}
             measuring={measuring}
             onDragStart={start}
             onDragOver={over}
@@ -653,7 +653,7 @@ function DragBoard({
           >
             {children}
             <DragOverlay dropAnimation={prefersReducedMotion() ? null : dropAnimation}>
-              {lifted && <CardBody issue={lifted} lifted />}
+              {lifted && (overlay ? overlay(lifted) : <CardBody issue={lifted} lifted />)}
             </DragOverlay>
           </DndContext>
           {/* Assertive, so each move is said at once rather than queued behind other speech. */}
@@ -718,16 +718,6 @@ function CardBody({ issue, lifted = false }: { issue: Issue; lifted?: boolean })
   );
 }
 
-/** The classes that show a card's part in a drop (see Drop). */
-function useCardDrop(issue: Issue) {
-  const drop = useContext(DropContext);
-  const dropped = drop?.key === issue.key;
-  const there = dropped && issue.status.id === drop.status;
-  const landed = there && drop.moved;
-  const leaving = dropped && drop.moving && (drop.animated || !there);
-  return { landed, leaving };
-}
-
 function CardLink({
   issue,
   dragging,
@@ -786,23 +776,7 @@ function SortableIssueCard({ issue, swimlanes = false }: { issue: Issue; swimlan
   );
 }
 
-function useStatusArea(id: string, status: ProjectStatus, lane?: string) {
-  return useDroppable({ id, data: { status, lane } });
-}
-
-/**
- * The gap `status`'s column (or, with `lane`, that lane's cell) shows, if any: its place among the cards (`at`) and
- * height. Read once per column, so a gap that moves re-renders the columns, not every card. The gap is for a card
- * carried in from another column, and in the Swimlanes only from the same lane.
- */
-function useDropSlot(status: ProjectStatus, lane?: string) {
-  const target = useContext(TargetContext);
-  if (!target || target.status !== status.id || target.issue.status.id === status.id) return null;
-  if (lane !== undefined && lane !== laneIdOf(target.issue)) return null;
-  return { at: target.index ?? 0, height: target.height };
-}
-
-function Gap({ height }: { height: number | undefined }) {
+export function Gap({ height }: { height: number | undefined }) {
   return <div className={classes.dropSlot} data-drop-slot style={{ height }} aria-hidden />;
 }
 
@@ -1203,10 +1177,6 @@ type Lane = {
   cells: Cell[];
 };
 
-function laneIdOf(issue: Issue) {
-  return issue.assignee?.id ?? "none";
-}
-
 /** Lanes by Assignee, in the order they first appear, with Unassigned last. */
 function lanesOf(columns: Column[]): Lane[] {
   const lanes = new Map<string, Lane>();
@@ -1334,3 +1304,5 @@ function LaneCell({ laneId, cell }: { laneId: string; cell: Cell }) {
     </div>
   );
 }
+
+export type { CanMove };

@@ -458,6 +458,52 @@
   background: var(--seg);
 }
 
+.group {
+  border: 1px solid transparent;
+  border-radius: 24px;
+}
+
+/* A row's link: the whole row is what is dragged. */
+.groupRowLink {
+  display: block;
+  color: var(--color-text);
+  text-decoration: none;
+  touch-action: manipulation;
+  cursor: grab;
+}
+
+.groupRowLink:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: -2px;
+  border-radius: 14px;
+}
+
+/* Where the row was, while it is being carried. */
+.groupRowLink.placeholder .groupRow {
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--color-accent-500);
+  opacity: 0.4;
+}
+
+/* The row on its way (the .lifted tilt and shadow, on a row's own background). */
+.groupRow.lifted {
+  background: var(--card);
+}
+
+/* A Status with no Issues, while a row is carried: a place to drop it. */
+.emptyDrop {
+  padding: 18px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 18px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--color-accent-2-700);
+}
+
+.emptyDrop.over {
+  border-style: solid;
+}
+
 .groupRow {
   display: grid;
   grid-template-columns: 20px 64px minmax(0, 1fr) 96px 28px 28px;

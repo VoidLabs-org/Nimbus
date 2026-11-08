@@ -32,7 +32,9 @@ export function placeOf(groups: Group[], carried: string): Place | null {
 /**
  * The place an arrow key carries the card to. Up and Down move it one place in its group, stopping at the ends. Left
  * and Right move it to the neighbouring group, at the index `across` gives for it (its own index by default, about
- * the same height when cards are alike), kept within that group; past the first or last group it stays.
+ * the same height when cards are alike), kept within that group; past the first or last group it stays. With `wrap`
+ * (the List, whose groups are stacked), Down past a group's last card carries it to the first place of the next
+ * group and Up past the first to the end of the previous one.
  */
 export function nextPlace(
   groups: Group[],
@@ -40,11 +42,19 @@ export function nextPlace(
   place: Place,
   direction: Direction,
   across: (group: number) => number = () => place.index,
+  wrap = false,
 ): Place {
   const last = (group: number) => others(groups[group]!, carried).length;
-  if (direction === "up") return { ...place, index: Math.max(0, place.index - 1) };
-  if (direction === "down")
+  if (direction === "up") {
+    if (wrap && place.index === 0 && place.group > 0)
+      return { group: place.group - 1, index: last(place.group - 1) };
+    return { ...place, index: Math.max(0, place.index - 1) };
+  }
+  if (direction === "down") {
+    if (wrap && place.index >= last(place.group) && place.group < groups.length - 1)
+      return { group: place.group + 1, index: 0 };
     return { ...place, index: Math.min(last(place.group), place.index + 1) };
+  }
   const group = place.group + (direction === "left" ? -1 : 1);
   if (group < 0 || group >= groups.length) return place;
   return { group, index: Math.min(Math.max(0, across(group)), last(group)) };

@@ -649,7 +649,7 @@ describe("IssuesPage", () => {
       });
       await tick();
     };
-    const said = () => screen.getByRole("status", { name: "Moving cards" }).textContent;
+    const said = () => screen.getByLabelText("Moving cards").textContent;
 
     it("lifts a card with Space, moves it one place with Down, and drops it there with Space", async () => {
       byStatus(board());
@@ -658,7 +658,7 @@ describe("IssuesPage", () => {
       const card = await screen.findByRole("link", { name: /Plan sprint/ });
 
       await press("Space", card);
-      expect(said()).toMatch(/Picked up NIM-1, position 1 of 3 in To do/);
+      expect(said()).toBe("Picked up NIM-1 at position 1 of 3 in To do.");
       await press("ArrowDown");
       expect(said()).toBe("NIM-1, position 2 of 3 in To do");
       await press("ArrowUp");
@@ -719,6 +719,48 @@ describe("IssuesPage", () => {
 
       expect(said()).toBe("");
       expect(reorder).not.toHaveBeenCalled();
+    });
+
+    it("says when a key can't move the card further", async () => {
+      byStatus(board());
+      show("/projects/NIM/issues?view=board");
+      const card = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      await press("Space", card);
+      await press("ArrowUp");
+      expect(said()).toBe("NIM-1 is already first in To do");
+      await press("ArrowLeft");
+      expect(said()).toBe("NIM-1 is already in the first column, To do");
+      await press("Escape");
+    });
+
+    it("keeps the focus on the card in its new column after a drop", async () => {
+      byStatus(board());
+      vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=board");
+      const card = await screen.findByRole("link", { name: /Ship it/ });
+      card.focus();
+
+      await press("Space", card);
+      await press("ArrowRight");
+      await press("Space");
+
+      const doing = screen.getByRole("region", { name: "In progress" });
+      await waitFor(() => {
+        expect(doing.contains(document.activeElement)).toBe(true);
+        expect(document.activeElement?.textContent).toMatch(/Ship it/);
+      });
+    });
+
+    it("says what happens in the Swimlanes too", async () => {
+      byStatus(board());
+      show("/projects/NIM/issues?view=swimlanes");
+      const card = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      await press("Space", card);
+      expect(said()).toBe("Picked up NIM-1 in To do.");
+      await press("Escape");
+      expect(said()).toBe("NIM-1 was put back in To do");
     });
   });
 

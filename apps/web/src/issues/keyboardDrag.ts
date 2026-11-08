@@ -4,8 +4,11 @@
  * Left and Right reach (`across`), and moves its drag to the place this gives.
  */
 
-/** A group of cards in their order, its key list possibly holding the carried card itself. */
-export type Group = { id: string; name: string; keys: string[] };
+/**
+ * A group of cards in their order, its key list possibly holding the carried card itself. `total` counts all of the
+ * group's cards when only some are shown (a Board column shows the first 100), the carried one included if it is in it.
+ */
+export type Group = { id: string; name: string; keys: string[]; total?: number };
 
 /** Where the carried card would land: a group, and its index among that group's other cards. */
 export type Place = { group: number; index: number };
@@ -53,15 +56,25 @@ export function neighboursAt(groups: Group[], carried: string, place: Place) {
   return { after: rest[place.index - 1], before: rest[place.index] };
 }
 
-/** "position 3 of 8 in In progress": the place, counting the carried card in its group. */
+/** "position 3 of 8 in In progress": the place, counting the carried card and every card of the group, shown or not. */
 export function describeWhere(groups: Group[], carried: string, place: Place) {
   const group = groups[place.group]!;
-  return `position ${place.index + 1} of ${others(group, carried).length + 1} in ${group.name}`;
+  const own = group.keys.includes(carried);
+  const rest = Math.max(others(group, carried).length, (group.total ?? 0) - (own ? 1 : 0));
+  return `position ${place.index + 1} of ${rest + 1} in ${group.name}`;
 }
 
 /** "NIM-12, position 3 of 8 in In progress", as the live region says it while the card moves. */
 export function describePlace(groups: Group[], carried: string, place: Place) {
   return `${carried}, ${describeWhere(groups, carried, place)}`;
+}
+
+/** What an arrow key that can't move the card further says, so it isn't taken for a missed keypress. */
+export function describeEdge(groups: Group[], carried: string, place: Place, direction: Direction) {
+  const name = groups[place.group]!.name;
+  if (direction === "up") return `${carried} is already first in ${name}`;
+  if (direction === "down") return `${carried} is already last in ${name}`;
+  return `${carried} is already in the ${direction === "left" ? "first" : "last"} column, ${name}`;
 }
 
 /** The key of the card (or group) a drag should be over to stand at the place (see the Board's keyboard drag). */

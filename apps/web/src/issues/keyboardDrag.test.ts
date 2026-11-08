@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { aimAt, describePlace, neighboursAt, nextPlace, placeOf, type Group } from "./keyboardDrag";
+import {
+  aimAt,
+  describeEdge,
+  describePlace,
+  neighboursAt,
+  nextPlace,
+  placeOf,
+  type Group,
+} from "./keyboardDrag";
 
 const groups: Group[] = [
   { id: "s1", name: "To do", keys: ["NIM-1", "NIM-2", "NIM-3"] },
@@ -119,6 +127,35 @@ describe("describePlace", () => {
     );
     expect(describePlace(groups, "NIM-2", { group: 2, index: 0 })).toBe(
       "NIM-2, position 1 of 1 in Done",
+    );
+  });
+});
+
+describe("describePlace with cards not shown", () => {
+  it("counts the group's total, not only the cards shown", () => {
+    const partial: Group[] = [
+      { id: "s1", name: "To do", keys: ["NIM-1", "NIM-2"], total: 250 },
+      { id: "s2", name: "Done", keys: ["NIM-3"], total: 40 },
+    ];
+    expect(describePlace(partial, "NIM-1", { group: 0, index: 1 })).toBe(
+      "NIM-1, position 2 of 250 in To do",
+    );
+    expect(describePlace(partial, "NIM-1", { group: 1, index: 1 })).toBe(
+      "NIM-1, position 2 of 41 in Done",
+    );
+  });
+});
+
+describe("describeEdge", () => {
+  it("says the card can't go further that way", () => {
+    expect(describeEdge(groups, "NIM-1", { group: 0, index: 0 }, "up")).toBe(
+      "NIM-1 is already first in To do",
+    );
+    expect(describeEdge(groups, "NIM-3", { group: 0, index: 2 }, "down")).toBe(
+      "NIM-3 is already last in To do",
+    );
+    expect(describeEdge(groups, "NIM-1", { group: 0, index: 0 }, "left")).toBe(
+      "NIM-1 is already in the first column, To do",
     );
   });
 });

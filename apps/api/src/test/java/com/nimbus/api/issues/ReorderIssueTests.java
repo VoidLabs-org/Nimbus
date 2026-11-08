@@ -296,7 +296,116 @@ class ReorderIssueTests {
 		assertThat(ranks(key)).doesNotHaveDuplicates();
 	}
 
+	@Test
+	void aDropBetweenTwoCardsOfAnotherStatusChangesTheStatusAndThePlaceInOneRequest() {
+		var dana = register("Dana");
+		var key = project(dana);
+		var a = create(dana, key, "A");
+		var b = create(dana, key, "B");
+		create(dana, key, "C");
+		var d = create(dana, key, "D");
+		var done = statusId(dana, key, "Done");
+		moveTo(dana, a, done);
+		moveTo(dana, b, done);
+		var openedBefore = open(dana, d);
+
+		// Dropped in the Done column between A and B, which are not in its old column.
+		reorder(dana, d, done, a, b).expectStatus().isOk().expectBody().jsonPath("$.status.name").isEqualTo("Done");
+
+		assertThat(order(dana, key)).containsExactly("A", "D", "B", "C");
+		var after = open(dana, d);
+		assertThat((String) JsonPath.read(after, "$.status.id")).isEqualTo(done);
+		assertThat((String) JsonPath.read(after, "$.updatedAt")).isNotEqualTo(JsonPath.read(openedBefore, "$.updatedAt"));
+		// Like PUT .../status: one history entry, and the version (kept for text edits) stays.
+		assertThat((Integer) JsonPath.read(after, "$.version")).isEqualTo(JsonPath.read(openedBefore, "$.version"));
+		var history = history(dana, d);
+		assertThat((Integer) JsonPath.read(history, "$.length()")).isEqualTo(2);
+		assertThat((String) JsonPath.read(history, "$[0].field")).isEqualTo("status");
+		assertThat((String) JsonPath.read(history, "$[0].before")).isEqualTo("To do");
+		assertThat((String) JsonPath.read(history, "$[0].after")).isEqualTo("Done");
+	}
+
+	@Test
+	void aDropIntoAnEmptyColumnChangesTheStatusAndKeepsTheRank() {
+		var dana = register("Dana");
+		var key = project(dana);
+		create(dana, key, "A");
+		var b = create(dana, key, "B");
+		create(dana, key, "C");
+		var ranks = ranks(key);
+
+		reorder(dana, b, statusId(dana, key, "In progress"), null, null).expectStatus().isOk().expectBody()
+			.jsonPath("$.status.name").isEqualTo("In progress");
+
+		assertThat(ranks(key)).isEqualTo(ranks);
+		assertThat(order(dana, key)).containsExactly("A", "B", "C");
+	}
+
+	@Test
+	void theStatusItIsAlreadyInChangesNothingButThePlace() {
+		var dana = register("Dana");
+		var key = project(dana);
+		var a = create(dana, key, "A");
+		create(dana, key, "B");
+		var c = create(dana, key, "C");
+		var historyBefore = history(dana, c);
+
+		reorder(dana, c, statusId(dana, key, "To do"), null, a).expectStatus().isOk();
+
+		assertThat(order(dana, key)).containsExactly("C", "A", "B");
+		assertThat(history(dana, c)).isEqualTo(historyBefore);
+	}
+
+	@Test
+	void aStatusOfAnotherProjectOrABadNeighbourIsRefusedAndChangesNothing() {
+		var dana = register("Dana");
+		var key = project(dana);
+		var a = create(dana, key, "A");
+		var b = create(dana, key, "B");
+		var otherKey = project(dana);
+		create(dana, otherKey, "Foreign");
+		var foreignStatus = statusId(dana, otherKey, "Done");
+		var ranks = ranks(key);
+		var historyBefore = history(dana, b);
+
+		reorder(dana, b, foreignStatus, null, a).expectStatus().isBadRequest().expectBody()
+			.jsonPath("$.errors.statusId").exists();
+		reorder(dana, b, UUID.randomUUID().toString(), null, a).expectStatus().isBadRequest();
+		// Every field is checked before anything is written, and the errors come back together.
+		reorder(dana, b, foreignStatus, key + "-999", null).expectStatus().isBadRequest().expectBody()
+			.jsonPath("$.errors.statusId").exists().jsonPath("$.errors.after").exists();
+		// A good Status with a neighbour that never existed: the Status change is undone with the rest.
+		reorder(dana, b, statusId(dana, key, "Done"), key + "-999", null).expectStatus().isBadRequest();
+
+		assertThat(ranks(key)).isEqualTo(ranks);
+		assertThat((String) JsonPath.read(open(dana, b), "$.status.name")).isEqualTo("To do");
+		assertThat(history(dana, b)).isEqualTo(historyBefore);
+	}
+
+	@Test
+	void whoMayNotMoveAnIssueMayNotDropItInAnotherStatus() {
+		var admin = register("Ada");
+		var viewer = register("Vic");
+		var key = project(admin);
+		member(key, viewer, "viewer");
+		var a = create(admin, key, "A");
+
+		reorder(viewer, a, statusId(admin, key, "Done"), null, null).expectStatus().isForbidden();
+
+		assertThat((String) JsonPath.read(open(admin, a), "$.status.name")).isEqualTo("To do");
+	}
+
 	// helpers
+
+	private RestTestClient.ResponseSpec reorder(Person who, String issueKey, String statusId, String after,
+			String before) {
+		var body = new HashMap<String, Object>();
+		body.put("statusId", statusId);
+		if (after != null) body.put("after", after);
+		if (before != null) body.put("before", before);
+		return client.put().uri("/api/issues/{key}/rank", issueKey).header("Authorization", "Bearer " + who.token())
+			.body(body).exchange();
+	}
 
 	private RestTestClient.ResponseSpec reorder(Person who, String issueKey, String after, String before) {
 		var body = new HashMap<String, Object>();

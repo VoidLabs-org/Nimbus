@@ -152,15 +152,25 @@ class IssueService implements Issues {
 	/** Also hands back the Status moved to (with its position) in {@code moved[0]}, found in the one read of them. */
 	private IssueView move(UUID actor, String issueKey, UUID statusId, ProjectStatus[] moved) {
 		return change(actor, issueKey, null, current -> {
-			var target = statusId == null ? null : statusesOf(current.projectId()).stream()
-				.filter(status -> status.id().equals(statusId)).findFirst().orElse(null);
-			if (target == null) throw new InvalidField("statusId", "Choose a Status of the Issue's project");
+			var target = statusId == null ? null : statusOf(current.projectId(), statusId);
+			if (target == null) throw new InvalidField("statusId", STATUS_RULE);
 			moved[0] = target;
-			// Compared by id, so only a move to another Status counts as a change, whatever the names are.
-			if (target.id().equals(current.statusId())) return List.of();
-			return List.of(new Change(Field.STATUS, current.statusName(), target.name(), target.id(),
-					current.statusCategory(), target.category()));
+			return statusChange(current, target);
 		});
+	}
+
+	private static final String STATUS_RULE = "Choose a Status of the Issue's project";
+
+	/** The project's Status with that id, or {@code null}. */
+	private ProjectStatus statusOf(UUID projectId, UUID statusId) {
+		return statusesOf(projectId).stream().filter(status -> status.id().equals(statusId)).findFirst().orElse(null);
+	}
+
+	/** The change a move to {@code status} makes: none for the Status it is in (by id, whatever the names are). */
+	private static List<Change> statusChange(Current current, ProjectStatus status) {
+		if (status.id().equals(current.statusId())) return List.of();
+		return List.of(new Change(Field.STATUS, current.statusName(), status.name(), status.id(),
+				current.statusCategory(), status.category()));
 	}
 
 	/**
@@ -169,23 +179,38 @@ class IssueService implements Issues {
 	 * it is ignored, and with no usable neighbour the Rank is kept. A neighbour that never existed, or belongs to
 	 * another project, is a {@code 400}. Silent: no history, no event, and {@code updated_at} and {@code version}
 	 * stay. Everything happens under the project's lock, so two drops never get the same key.
+	 * <p>
+	 * With a {@code statusId} (a drop in another Board column) the Issue also moves to that Status, written like
+	 * {@link #move} writes it (the same history, {@code updated_at} and event), and the neighbours are looked for in
+	 * that Status. A Status of another project is a {@code 400}, reported with any neighbour errors; nothing is written
+	 * until every field has been checked.
 	 */
 	@Transactional
-	IssueView reorder(UUID actor, String issueKey, String afterKey, String beforeKey) {
+	IssueView reorder(UUID actor, String issueKey, UUID statusId, String afterKey, String beforeKey) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
 		var project = target.project();
 		lockProject(project.id());
 		// The Issue row is locked like every edit does (after the project: that order everywhere), so a delete or a move
 		// that runs at the same time is waited for and then seen, not raced.
-		var current = findRanked(project.id(), target.number(), true).orElseThrow(() -> new NotFound("Issue not found"));
-		access.requireOwn(target.scope(), IssueAccess.Action.EDIT, actor, current.reporterId(), current.assigneeId());
-		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
-		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
+		var current = lockEditable(actor, target);
 
 		var errors = new java.util.TreeMap<String, String>();
-		var after = neighbour("after", afterKey, project, current, errors);
-		var before = neighbour("before", beforeKey, project, current, errors);
+		ProjectStatus status = null;
+		if (statusId != null) {
+			status = statusOf(project.id(), statusId);
+			if (status == null) errors.put("statusId", STATUS_RULE);
+		}
+		var after = neighbour("after", afterKey, project, errors);
+		var before = neighbour("before", beforeKey, project, errors);
 		if (!errors.isEmpty()) throw new InvalidFields(errors);
+
+		var statusNow = current.statusId();
+		if (status != null) {
+			write(actor, target, current, statusChange(current, status));
+			statusNow = status.id();
+		}
+		after = usable(after, current.id(), statusNow);
+		before = usable(before, current.id(), statusNow);
 
 		String newRank = null;
 		if (after != null) {
@@ -204,7 +229,9 @@ class IssueService implements Issues {
 			if (!inPlace) newRank = RankKeys.between(previous, before.rank());
 		}
 		if (newRank != null) {
-			if (newRank.length() > MAX_RANK_LENGTH) renumber(project.id(), current, after != null ? after : before, after != null);
+			if (newRank.length() > MAX_RANK_LENGTH) {
+				renumber(project.id(), current.id(), (after != null ? after : before).id(), after != null);
+			}
 			else jdbc.sql("UPDATE issues SET rank = :rank WHERE id = :id").param("rank", newRank)
 				.param("id", current.id()).update();
 		}
@@ -214,27 +241,22 @@ class IssueService implements Issues {
 	/** A Rank key longer than this makes the project's keys be rewritten evenly (ADR 0012). */
 	private static final int MAX_RANK_LENGTH = 50;
 
-	private java.util.Optional<Ranked> findRanked(UUID projectId, int number, boolean lock) {
-		return jdbc.sql("SELECT id, reporter_id, assignee_id, status_id, rank FROM issues WHERE project_id = :project AND number = :number"
-				+ (lock ? " FOR UPDATE" : ""))
-			.param("project", projectId).param("number", number)
-			.query((row, index) -> new Ranked(row.getObject("id", UUID.class), row.getObject("reporter_id", UUID.class),
-					row.getObject("assignee_id", UUID.class), row.getObject("status_id", UUID.class), row.getString("rank")))
-			.optional();
-	}
-
 	/**
-	 * The usable neighbour for a drop, or {@code null} to ignore it (absent, the Issue itself, deleted since, or in
-	 * another Status than the Issue). One that never existed or is of another project adds to {@code errors}.
+	 * The neighbour named by {@code key}, or {@code null} when none is named or it was deleted since. One that never
+	 * existed or is of another project adds to {@code errors}. Whether it can be used is {@link #usable}'s to say.
 	 */
-	private Ranked neighbour(String field, String key, ProjectSummary project, Ranked self, Map<String, String> errors) {
+	private Ranked neighbour(String field, String key, ProjectSummary project, Map<String, String> errors) {
 		if (key == null) return null;
 		var parsed = IssueKeys.parse(key).filter(k -> k.projectKey().equals(project.key()));
 		if (parsed.isEmpty()) {
 			errors.put(field, "Choose an Issue of the same project");
 			return null;
 		}
-		var found = findRanked(project.id(), parsed.get().number(), false);
+		var found = jdbc.sql("SELECT id, status_id, rank FROM issues WHERE project_id = :project AND number = :number")
+			.param("project", project.id()).param("number", parsed.get().number())
+			.query((row, index) -> new Ranked(row.getObject("id", UUID.class), row.getObject("status_id", UUID.class),
+					row.getString("rank")))
+			.optional();
 		if (found.isEmpty()) {
 			// Numbers are never reused, so one that was taken once belongs to an Issue deleted meanwhile.
 			var last = jdbc.sql("SELECT last_number FROM issue_counters WHERE project_id = :project")
@@ -242,8 +264,12 @@ class IssueService implements Issues {
 			if (parsed.get().number() > last) errors.put(field, "Choose an Issue of the same project");
 			return null;
 		}
-		var neighbour = found.get();
-		if (neighbour.id().equals(self.id()) || !neighbour.statusId().equals(self.statusId())) return null;
+		return found.get();
+	}
+
+	/** The neighbour, or {@code null} to ignore it: absent, the Issue itself, or in another Status than the Issue's. */
+	private static Ranked usable(Ranked neighbour, UUID self, UUID statusId) {
+		if (neighbour == null || neighbour.id().equals(self) || !neighbour.statusId().equals(statusId)) return null;
 		return neighbour;
 	}
 
@@ -251,11 +277,11 @@ class IssueService implements Issues {
 	 * Rewrites every key of the project evenly, keeping the order, with the Issue placed next to {@code anchor}. Keys
 	 * go through temporary unique values first, since {@code (project_id, rank)} is checked row by row.
 	 */
-	private void renumber(UUID projectId, Ranked moving, Ranked anchor, boolean after) {
+	private void renumber(UUID projectId, UUID moving, UUID anchor, boolean after) {
 		var ids = new ArrayList<>(jdbc.sql("SELECT id FROM issues WHERE project_id = :project AND id <> :self ORDER BY rank")
-			.param("project", projectId).param("self", moving.id()).query(UUID.class).list());
-		int at = ids.indexOf(anchor.id());
-		ids.add(after ? at + 1 : at, moving.id());
+			.param("project", projectId).param("self", moving).query(UUID.class).list());
+		int at = ids.indexOf(anchor);
+		ids.add(after ? at + 1 : at, moving);
 		var keys = RankKeys.sequence(ids.size());
 		jdbc.sql("UPDATE issues SET rank = id::text WHERE project_id = :project").param("project", projectId).update();
 		jdbc.sql("""
@@ -392,9 +418,27 @@ class IssueService implements Issues {
 	 */
 	private IssueView change(UUID actor, String issueKey, Long version, Function<Current, List<Change>> changes) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
+		var current = lockEditable(actor, target);
+		var differing = changes.apply(current).stream().filter(c -> !Objects.equals(c.before(), c.after())).toList();
+		var versioned = differing.stream().anyMatch(c -> c.field().versioned());
+		if (versioned) {
+			if (version == null) throw new InvalidField("version", "Send the version you opened");
+			if (version != current.version()) {
+				throw new Conflict("This Issue changed since you opened it", "issue_changed");
+			}
+		}
+		write(actor, target, current, differing);
+		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), target.project()).getFirst();
+	}
+
+	/**
+	 * Locks the Issue row and checks it may be edited: not found, the actor's Own, then archived (read again under the
+	 * lock, so an archive that committed meanwhile is seen).
+	 */
+	private Current lockEditable(UUID actor, Target target) {
 		var project = target.project();
 		var current = jdbc.sql("""
-				SELECT i.id, i.project_id, i.reporter_id, i.title, i.description, i.type, i.priority, i.assignee_id, i.version, i.status_id,
+				SELECT i.id, i.project_id, i.reporter_id, i.title, i.description, i.type, i.priority, i.assignee_id, i.version, i.status_id, i.rank,
 				       (SELECT s.name FROM issue_statuses s WHERE s.id = i.status_id) AS status_name,
 				       (SELECT s.category FROM issue_statuses s WHERE s.id = i.status_id) AS status_category
 				FROM issues i WHERE i.project_id = :project AND i.number = :number FOR UPDATE
@@ -404,20 +448,22 @@ class IssueService implements Issues {
 					row.getObject("reporter_id", UUID.class),
 					row.getString("title"), row.getString("description"), row.getString("type"),
 					row.getString("priority"), row.getObject("assignee_id", UUID.class), row.getLong("version"),
-					row.getObject("status_id", UUID.class), row.getString("status_name"), row.getString("status_category")))
+					row.getObject("status_id", UUID.class), row.getString("status_name"), row.getString("status_category"),
+					row.getString("rank")))
 			.optional().orElseThrow(() -> new NotFound("Issue not found"));
 		access.requireOwn(target.scope(), IssueAccess.Action.EDIT, actor, current.reporterId(), current.assigneeId());
 		var fresh = projects.findByKey(project.key()).orElseThrow(() -> new NotFound("Issue not found"));
 		if (fresh.archived()) throw new Conflict("This project is archived, so its Issues can't be changed", null);
+		return current;
+	}
 
-		var differing = changes.apply(current).stream().filter(c -> !Objects.equals(c.before(), c.after())).toList();
+	/**
+	 * Writes the changes that really differ ({@code differing}; none writes nothing), each with a history entry, and
+	 * publishes them as one event. A title or description change raises the version.
+	 */
+	private void write(UUID actor, Target target, Current current, List<Change> differing) {
+		var project = target.project();
 		var versioned = differing.stream().anyMatch(c -> c.field().versioned());
-		if (versioned) {
-			if (version == null) throw new InvalidField("version", "Send the version you opened");
-			if (version != current.version()) {
-				throw new Conflict("This Issue changed since you opened it", "issue_changed");
-			}
-		}
 		if (!differing.isEmpty()) {
 			var now = Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS));
 			var update = new StringBuilder("UPDATE issues SET updated_at = :at");
@@ -454,7 +500,6 @@ class IssueService implements Issues {
 								: new IssueChanged.Change.Categories(c.beforeCategory(), c.afterCategory()))).toList(),
 					now.toInstant()));
 		}
-		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), project).getFirst();
 	}
 
 	/** One page of the project's Issues that match the filters. Unknown and non-Member projects are both "not found". */
@@ -725,14 +770,14 @@ class IssueService implements Issues {
 	private record Target(ProjectSummary project, int number, Scope scope) {
 	}
 
-	private record Ranked(UUID id, UUID reporterId, UUID assigneeId, UUID statusId, String rank) {
+	private record Ranked(UUID id, UUID statusId, String rank) {
 	}
 
 	private record Deletable(UUID id, String title, UUID reporterId, UUID assigneeId) {
 	}
 
 	private record Current(UUID id, UUID projectId, UUID reporterId, String title, String description, String type, String priority,
-			UUID assigneeId, long version, UUID statusId, String statusName, String statusCategory) {
+			UUID assigneeId, long version, UUID statusId, String statusName, String statusCategory, String rank) {
 	}
 
 	/** {@code value} is what the column is set to when it isn't {@code after}: a Status keeps its name in history. */

@@ -115,5 +115,14 @@ class IssueChangedEventTests {
 			assertThat(e.title()).isEqualTo("After");
 			assertThat(e.actorId()).isEqualTo(creator);
 		});
+
+		// A drop in another Board column (PUT .../rank with a statusId) publishes the same event as a move.
+		client.put().uri("/api/issues/ICH-2/rank").header("Authorization", "Bearer " + token)
+			.body(Map.of("statusId", done, "after", "ICH-1")).exchange().expectStatus().isOk();
+		assertThat(events.ofType(IssueChanged.class)).hasSize(5).last().satisfies(e -> {
+			assertThat(e.issueKey()).isEqualTo("ICH-2");
+			assertThat(e.changes()).containsExactly(new IssueChanged.Change("status", "To do", "Done",
+					new IssueChanged.Change.Categories("TODO", "DONE")));
+		});
 	}
 }

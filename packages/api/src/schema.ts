@@ -662,8 +662,8 @@ export interface paths {
         };
         get?: never;
         /**
-         * Reorder an Issue, by the Issues it was dropped between
-         * @description Best effort. Places the Issue directly after `after` when given, else directly before `before`, else keeps its Rank. A neighbour that is the Issue itself, was deleted, or has since moved to another Status is ignored. A reorder is silent: no history entry, no event, and `updatedAt` and `version` stay as they are.
+         * Reorder an Issue, by the Issues it was dropped between, and move it when dropped in another Status
+         * @description Best effort. With `statusId` (sent only when the drop changes the Status) the Issue first moves to that Status exactly as `PUT /api/issues/{issueKey}/status` does (history entry, event, `updatedAt`), in the same transaction. Then it is placed directly after `after` when given, else directly before `before`, else keeps its Rank. A neighbour that is the Issue itself, was deleted, or is in another Status than the Issue (its new one) is ignored. Without a Status change a reorder is silent: no history entry, no event, and `updatedAt` and `version` stay as they are. A Status of another project is a `400` (`errors.statusId`) and changes nothing.
          */
         put: {
             parameters: {
@@ -677,6 +677,11 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
+                        /**
+                         * Format: uuid
+                         * @description The Status of the column dropped in, sent only when it is not the Issue's own
+                         */
+                        statusId?: string;
                         /** @description Key of the Issue directly above the drop, as the client saw it */
                         after?: string;
                         /** @description Key of the Issue directly below the drop, as the client saw it */

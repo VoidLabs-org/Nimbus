@@ -10,12 +10,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The drag itself needs a real layout; the tests end it by hand with the handler the Board gave dnd-kit.
 let dragEnd: ((event: unknown) => void) | undefined;
+let dragMove: ((event: unknown) => void) | undefined;
 vi.mock("@dnd-kit/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@dnd-kit/core")>();
   return {
     ...actual,
     DndContext: (props: React.ComponentProps<typeof actual.DndContext>) => {
       dragEnd = props.onDragEnd as (event: unknown) => void;
+      dragMove = props.onDragMove as (event: unknown) => void;
       return <actual.DndContext {...props} />;
     },
   };
@@ -251,7 +253,7 @@ describe("IssuesPage", () => {
   it("shows a column for each Status on the Board and moves an Issue dropped on another", async () => {
     byStatus([issue(1, "Plan sprint")]);
     const move = vi
-      .spyOn(api, "moveIssue")
+      .spyOn(api, "reorderIssue")
       .mockResolvedValue(issue(1, "Plan sprint", { status: inProgress }));
     show("/projects/NIM/issues?view=board");
 
@@ -262,13 +264,13 @@ describe("IssuesPage", () => {
       dragEnd?.({ active: { id: "NIM-1" }, over: { data: { current: { status: statuses[1] } } } }),
     );
 
-    await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", "s2"));
+    await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", undefined, undefined, "s2"));
   });
 
   it("shows a dropped card in its new column, and never back where it was, before the server answers", async () => {
     byStatus([issue(1, "Plan sprint")]);
     // Never answers, so only the Board's own update can have moved the card.
-    vi.spyOn(api, "moveIssue").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
     show("/projects/NIM/issues?view=board");
     await screen.findByRole("link", { name: /Plan sprint/ });
 
@@ -290,7 +292,7 @@ describe("IssuesPage", () => {
     const all = [issue(1, "Plan sprint"), issue(2, "Fix login")];
     const issues = byStatus(all);
     const answers: ((moved: Issue) => void)[] = [];
-    vi.spyOn(api, "moveIssue").mockImplementation(
+    vi.spyOn(api, "reorderIssue").mockImplementation(
       () => new Promise((resolve) => answers.push(resolve)),
     );
     show("/projects/NIM/issues?view=board");
@@ -325,7 +327,7 @@ describe("IssuesPage", () => {
     const all = [issue(1, "Plan sprint"), issue(2, "Fix login")];
     const issues = byStatus(all);
     const answers: { resolve: (moved: Issue) => void; reject: (error: Error) => void }[] = [];
-    vi.spyOn(api, "moveIssue").mockImplementation(
+    vi.spyOn(api, "reorderIssue").mockImplementation(
       () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
     );
     show("/projects/NIM/issues?view=board");
@@ -350,7 +352,9 @@ describe("IssuesPage", () => {
 
   it("says when the Board couldn't be refreshed, keeps the cards, and Try again asks again", async () => {
     const issues = byStatus([issue(1, "Plan sprint")]);
-    vi.spyOn(api, "moveIssue").mockResolvedValue(issue(1, "Plan sprint", { status: inProgress }));
+    vi.spyOn(api, "reorderIssue").mockResolvedValue(
+      issue(1, "Plan sprint", { status: inProgress }),
+    );
     show("/projects/NIM/issues?view=board");
     await screen.findByRole("link", { name: /Plan sprint/ });
 
@@ -369,7 +373,7 @@ describe("IssuesPage", () => {
 
   it("does nothing when a card is dropped on the Status it is already in", async () => {
     byStatus([issue(1, "Plan sprint")]);
-    const move = vi.spyOn(api, "moveIssue");
+    const move = vi.spyOn(api, "reorderIssue");
     show("/projects/NIM/issues?view=board");
     await screen.findByRole("link", { name: /Plan sprint/ });
 
@@ -406,7 +410,9 @@ describe("IssuesPage", () => {
 
       // NIM-3 dropped on NIM-1 (the top): before NIM-1, nothing above.
       await dropOn("NIM-3", all[0]!);
-      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-3", undefined, "NIM-1"));
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-3", undefined, "NIM-1", undefined),
+      );
       await waitFor(() =>
         expect(
           titles("To do").map((text) => /Ship it|Plan sprint|Fix login/.exec(text)?.[0]),
@@ -424,10 +430,14 @@ describe("IssuesPage", () => {
 
       // NIM-1 dropped on NIM-2: it takes NIM-2's place, between NIM-2 and NIM-3.
       await dropOn("NIM-1", all[1]!);
-      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3"));
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3", undefined),
+      );
       // Now NIM-2, NIM-1, NIM-3: NIM-2 dropped on the last card goes to the bottom.
       await dropOn("NIM-2", all[2]!);
-      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-2", "NIM-3", undefined));
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-2", "NIM-3", undefined, undefined),
+      );
     });
 
     it("sends quick drops one after another, in the order they were made", async () => {
@@ -448,7 +458,7 @@ describe("IssuesPage", () => {
       expect(reorder).toHaveBeenCalledTimes(1);
       await act(async () => answers[0]!(issue(3, "Ship it")));
       await waitFor(() => expect(reorder).toHaveBeenCalledTimes(2));
-      expect(reorder).toHaveBeenNthCalledWith(1, "NIM-3", undefined, "NIM-1");
+      expect(reorder).toHaveBeenNthCalledWith(1, "NIM-3", undefined, "NIM-1", undefined);
     });
 
     it("puts the card back, with a message, when the server refuses", async () => {
@@ -481,20 +491,21 @@ describe("IssuesPage", () => {
       expect(reorder).not.toHaveBeenCalled();
     });
 
-    it("still moves a card dropped on a card of another column", async () => {
+    it("moves a card dropped on a card of another column, in the same request, without a box to measure", async () => {
       const all = [issue(1, "Plan sprint"), issue(2, "Fix login", { status: inProgress })];
       byStatus(all);
-      const reorder = vi.spyOn(api, "reorderIssue");
-      const move = vi
-        .spyOn(api, "moveIssue")
+      const move = vi.spyOn(api, "moveIssue");
+      const reorder = vi
+        .spyOn(api, "reorderIssue")
         .mockResolvedValue(issue(1, "Plan sprint", { status: inProgress }));
       show("/projects/NIM/issues?view=board");
       await screen.findByRole("link", { name: /Fix login/ });
 
       await dropOn("NIM-1", all[1]!);
 
-      await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", "s2"));
-      expect(reorder).not.toHaveBeenCalled();
+      // With no boxes to compare, it takes the card's place: above it.
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-1", undefined, "NIM-2", "s2"));
+      expect(move).not.toHaveBeenCalled();
     });
 
     it("keeps cards the User may not move from being dragged", async () => {
@@ -506,6 +517,138 @@ describe("IssuesPage", () => {
 
       expect(card.getAttribute("aria-disabled")).toBe("true");
     });
+  });
+
+  describe("dropping between cards of another column", () => {
+    const board = () => [
+      issue(1, "Plan sprint"),
+      issue(2, "Fix login", { status: inProgress }),
+      issue(3, "Ship it", { status: inProgress }),
+    ];
+    /** A card 40px high whose top is at `top`, as dnd-kit measures droppables. */
+    const box = (top: number) => ({
+      top,
+      height: 40,
+      left: 0,
+      width: 200,
+      bottom: top + 40,
+      right: 200,
+    });
+    /** The carried NIM-1 over the card `over`, its own box's top at `top`: what dnd-kit hands a move or a drop. */
+    const carried = (over: Issue, overTop: number, top: number) => ({
+      active: {
+        id: "NIM-1",
+        data: { current: { issue: board()[0] } },
+        rect: { current: { initial: box(0), translated: box(top) } },
+      },
+      over: {
+        id: over.key,
+        data: { current: { status: over.status, issue: over } },
+        rect: box(overTop),
+      },
+    });
+    const titles = (column: string) =>
+      within(screen.getByRole("region", { name: column }))
+        .getAllByRole("link")
+        .map((link) => /Ship it|Plan sprint|Fix login/.exec(link.textContent ?? "")?.[0]);
+
+    it("sends the Status and the cards it landed between, and shows it there before the server answers", async () => {
+      const all = board();
+      byStatus(all);
+      const move = vi.spyOn(api, "moveIssue");
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Ship it/ });
+
+      // Its middle below the middle of NIM-2 (top 100): after NIM-2, so between NIM-2 and NIM-3.
+      await act(async () => dragEnd?.(carried(all[1]!, 100, 125)));
+
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3", "s2"));
+      await waitFor(() =>
+        expect(titles("In progress")).toEqual(["Fix login", "Plan sprint", "Ship it"]),
+      );
+      expect(move).not.toHaveBeenCalled();
+    });
+
+    it("opens the gap where the card will land, not at the top", async () => {
+      const all = board();
+      byStatus(all);
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Ship it/ });
+      const doing = screen.getByRole("region", { name: "In progress" });
+      const slotBefore = () =>
+        doing.querySelector("[data-drop-slot]")?.nextElementSibling?.textContent ?? "end";
+
+      // Over the top half of NIM-3 (top 150): above it, between NIM-2 and NIM-3.
+      act(() => dragMove?.(carried(all[2]!, 150, 140)));
+      expect(slotBefore()).toMatch(/Ship it/);
+      // Over the bottom half of NIM-3: below it, the end of the column.
+      act(() => dragMove?.(carried(all[2]!, 150, 165)));
+      expect(doing.querySelectorAll("[data-drop-slot]")).toHaveLength(1);
+      expect(slotBefore()).not.toMatch(/Ship it|Fix login/);
+      // Over the top half of NIM-2: first.
+      act(() => dragMove?.(carried(all[1]!, 100, 90)));
+      expect(slotBefore()).toMatch(/Fix login/);
+      // Its own column shows no gap.
+      expect(
+        screen.getByRole("region", { name: "To do" }).querySelector("[data-drop-slot]"),
+      ).toBeNull();
+    });
+
+    it("drops in an empty column with no neighbours, so the server keeps its place", async () => {
+      const all = [issue(1, "Plan sprint")];
+      byStatus(all);
+      const reorder = vi
+        .spyOn(api, "reorderIssue")
+        .mockResolvedValue(issue(1, "Plan sprint", { status: inProgress }));
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Plan sprint/ });
+
+      act(() =>
+        dragEnd?.({
+          active: { id: "NIM-1" },
+          over: { data: { current: { status: statuses[1] } } },
+        }),
+      );
+
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", undefined, undefined, "s2"),
+      );
+    });
+
+    it("puts the card back, saying it couldn't be moved, when the server refuses", async () => {
+      const all = board();
+      byStatus(all);
+      const error = vi.spyOn(toast, "error");
+      vi.spyOn(api, "reorderIssue").mockRejectedValue(new Error("Archived"));
+      show("/projects/NIM/issues?view=board");
+      await screen.findByRole("link", { name: /Ship it/ });
+
+      await act(async () => dragEnd?.(carried(all[1]!, 100, 125)));
+
+      await waitFor(() =>
+        expect(error).toHaveBeenCalledWith("Couldn't move NIM-1 to In progress: Archived"),
+      );
+      await waitFor(() => expect(titles("In progress")).toEqual(["Fix login", "Ship it"]));
+      expect(titles("To do")).toEqual(["Plan sprint"]);
+    });
+  });
+
+  it("still moves an Issue dropped on another Status in the Swimlanes, by its Status only", async () => {
+    byStatus([issue(1, "Plan sprint")]);
+    const reorder = vi.spyOn(api, "reorderIssue");
+    const move = vi
+      .spyOn(api, "moveIssue")
+      .mockResolvedValue(issue(1, "Plan sprint", { status: inProgress }));
+    show("/projects/NIM/issues?view=swimlanes");
+    await screen.findByRole("link", { name: /Plan sprint/ });
+
+    act(() =>
+      dragEnd?.({ active: { id: "NIM-1" }, over: { data: { current: { status: statuses[1] } } } }),
+    );
+
+    await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", "s2"));
+    expect(reorder).not.toHaveBeenCalled();
   });
 
   it("puts each Assignee in a lane on the Swimlanes", async () => {

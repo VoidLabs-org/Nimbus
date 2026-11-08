@@ -462,13 +462,19 @@ export function createApiClient(
       }),
 
     /**
-     * Drops the Issue directly after `after`, else directly before `before` (keys of the cards it landed between).
-     * Silent on the server: no history, and the Issue's `updatedAt` and `version` stay.
+     * Drops the Issue directly after `after`, else directly before `before` (keys of the cards it landed between),
+     * and, with `statusId`, in that Status first: one request for a drop in another Board column. Without a Status
+     * change it is silent on the server: no history, and the Issue's `updatedAt` and `version` stay.
      */
-    reorderIssue: (issueKey: string, after: string | undefined, before: string | undefined) =>
+    reorderIssue: (
+      issueKey: string,
+      after: string | undefined,
+      before: string | undefined,
+      statusId?: string,
+    ) =>
       request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}/rank`, {
         method: "PUT",
-        body: JSON.stringify({ after, before }),
+        body: JSON.stringify({ statusId, after, before }),
       }),
 
     /** Deletes the Issue for good. */

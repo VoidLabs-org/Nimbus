@@ -14,6 +14,7 @@ import {
   type Collision,
   type CollisionDetection,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragOverEvent,
   type DragStartEvent,
   type DropAnimationFunction,
@@ -31,6 +32,7 @@ import { IconPlus } from "@tabler/icons-react";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import {
   createContext,
+  Fragment,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -49,11 +51,15 @@ export type Column = { status: ProjectStatus; items: Issue[]; total: number };
 
 export type MoveIssue = (issueKey: string, status: ProjectStatus) => void;
 
-/** An Issue dropped between two cards of its own column: the keys of the cards directly above and below it. */
-export type ReorderIssue = (
+/**
+ * An Issue dropped on the Board: the keys of the cards directly above and below where it landed, and `status` when
+ * it landed in another column than its own (none of them for a drop in an empty column).
+ */
+export type DropIssue = (
   issueKey: string,
   after: string | undefined,
   before: string | undefined,
+  status?: ProjectStatus,
 ) => void;
 
 /** Whether the User may move an Issue; a card they can't move is not draggable. Everything is allowed by default. */
@@ -73,8 +79,11 @@ type Drop = { key: string; status: string; moved: boolean; animated: boolean; mo
 
 const DropContext = createContext<Drop | null>(null);
 
-/** Where a carried card would land if dropped now: its Issue, the Status under it and the card's height. */
-type Target = { issue: Issue; status: string; height: number | undefined };
+/**
+ * Where a carried card would land if dropped now: its Issue, the Status under it, the card's height and, on the
+ * Board, its place among that column's cards (`index`; none in the Swimlanes, which put it first).
+ */
+type Target = { issue: Issue; status: string; height: number | undefined; index?: number };
 
 const TargetContext = createContext<Target | null>(null);
 
@@ -245,10 +254,14 @@ const collisionDetection: CollisionDetection = (args) => {
 /**
  * The arrow keys carry a lifted card to the nearest drop area in that direction: the next card of its column (a
  * drop there is a reorder), or another column's card or bare space (a drop there changes the Status).
+ *
+ * Carried onto a card, the card's middle is on that card's, which lands it above that card (see landingIndex). So
+ * Down on the last card of a column, with nowhere further down, moves it a little lower instead, to land below it;
+ * Up then goes back onto the card.
  */
 const keyboardCoordinates: KeyboardCoordinateGetter = (
   event,
-  { context: { droppableRects, droppableContainers, collisionRect } },
+  { context: { droppableRects, droppableContainers, collisionRect, over } },
 ) => {
   const direction = {
     ArrowRight: [1, 0],
@@ -281,29 +294,44 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (
       };
     }
   }
+  const onCard = over?.data.current?.issue ? droppableRects.get(over.id) : undefined;
+  if (!best && event.code === "ArrowDown" && onCard) {
+    const middle = onCard.top + onCard.height / 2;
+    if (Math.abs(middle - here.y) < 1) {
+      return { x: collisionRect.left, y: collisionRect.top + collisionRect.height / 4 };
+    }
+  }
   return best && { x: best.x, y: best.y };
 };
 
 /**
  * Drag and drop for the Board and the Swimlanes: a mouse, a finger or the keyboard (Space lifts a card, the arrows
- * carry it, Space drops it). The drop areas say which Status they stand for; dropping calls `onMove`.
+ * carry it, Space drops it). The drop areas say which Status they stand for. On the Board (`onDrop`) every drop says
+ * where it landed among the cards; in the Swimlanes (`onMove`) a drop only changes the Status.
  */
 function DragBoard({
   issues,
   onMove,
-  onReorder,
+  onDrop,
   canMove,
   children,
 }: {
   issues: Issue[];
-  onMove: MoveIssue;
-  onReorder?: ReorderIssue;
+  onMove?: MoveIssue;
+  onDrop?: DropIssue;
   canMove: CanMove;
   children: ReactNode;
 }) {
   const [lifted, setLifted] = useState<Issue | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
+  // Each Status's cards in column order, worked out once a render rather than on every pointer move.
+  const byStatus = new Map<string, Issue[]>();
+  for (const issue of issues) {
+    const column = byStatus.get(issue.status.id);
+    if (column) column.push(issue);
+    else byStatus.set(issue.status.id, [issue]);
+  }
   const dropKey = drop && `${drop.key}:${drop.status}`;
   useEffect(() => {
     if (!dropKey) return;
@@ -332,14 +360,30 @@ function DragBoard({
     setLifted(issues.find((issue) => issue.key === event.active.id) ?? null);
   }
 
-  // Only when the area under the card changes, so the drop areas don't re-render on every pointer move.
-  function over(event: DragOverEvent) {
+  // On every move, since the half of a card the carried one is over decides where it lands; the state only changes
+  // when the target does, so the drop areas don't re-render on every pointer move.
+  function over(event: DragOverEvent | DragMoveEvent) {
     const status = event.over?.data.current?.status as ProjectStatus | undefined;
     const issue = event.active.data.current?.issue as Issue | undefined;
-    setTarget(
+    const next: Target | null =
       status && issue
-        ? { issue, status: status.id, height: event.active.rect.current.initial?.height }
-        : null,
+        ? {
+            issue,
+            status: status.id,
+            height: event.active.rect.current.initial?.height,
+            index:
+              onDrop && issue.status.id !== status.id
+                ? landingIndex(byStatus.get(status.id) ?? [], event).index
+                : undefined,
+          }
+        : null;
+    setTarget((now) =>
+      now?.issue.key === next?.issue.key &&
+      now?.status === next?.status &&
+      now?.index === next?.index &&
+      now?.height === next?.height
+        ? now
+        : next,
     );
   }
 
@@ -350,12 +394,14 @@ function DragBoard({
     const status = event.over?.data.current?.status as ProjectStatus | undefined;
     const issue = issues.find((item) => item.key === event.active.id);
     const moved = status !== undefined && issue !== undefined && issue.status.id !== status.id;
-    // Dropped on a card of its own column: it takes that card's place, and the cards between shift by one.
+    // Dropped on a card of its own column: it takes that card's place, and the cards between shift by one. In another
+    // column: where the gap was, between the cards around it.
     const overKey = (event.over?.data.current?.issue as Issue | undefined)?.key;
-    const reorder =
-      onReorder && issue && status && !moved && overKey !== undefined
-        ? reorderedBetween(issues, issue, overKey)
-        : undefined;
+    let reorder: { after: string | undefined; before: string | undefined } | undefined;
+    if (onDrop && issue && status) {
+      if (moved) reorder = landingIndex(byStatus.get(status.id) ?? [], event);
+      else if (overKey !== undefined) reorder = reorderedBetween(issues, issue, overKey);
+    }
     landing.current =
       moved && animated
         ? (document.querySelector("[data-drop-slot]")?.getBoundingClientRect() ?? null)
@@ -371,8 +417,11 @@ function DragBoard({
     }
     setLifted(null);
     setTarget(null);
-    if (reorder && issue) onReorder?.(issue.key, reorder.after, reorder.before);
-    else if (status) onMove(String(event.active.id), status);
+    if (!status) return;
+    if (onDrop) {
+      if (reorder && issue)
+        onDrop(issue.key, reorder.after, reorder.before, moved ? status : undefined);
+    } else onMove?.(String(event.active.id), status);
   }
 
   function cancel() {
@@ -392,6 +441,7 @@ function DragBoard({
             measuring={measuring}
             onDragStart={start}
             onDragOver={over}
+            onDragMove={over}
             onDragEnd={end}
             onDragCancel={cancel}
           >
@@ -417,6 +467,24 @@ function reorderedBetween(issues: Issue[], issue: Issue, overKey: string) {
   if (from < 0 || to < 0 || from === to) return undefined;
   const placed = arrayMove(column, from, to);
   return { after: placed[to - 1]?.key, before: placed[to + 1]?.key };
+}
+
+/**
+ * Where a card carried into another column lands: over a card, above it when the carried card's middle is above that
+ * card's middle and below it otherwise (above, when there are no boxes to compare); over the column itself (empty, or
+ * no card near), first. `index` is its place among the column's cards, `after` and `before` the cards around it.
+ */
+function landingIndex(column: Issue[], event: Pick<DragEndEvent, "active" | "over">) {
+  const overKey = (event.over?.data.current?.issue as Issue | undefined)?.key;
+  let index = overKey === undefined ? 0 : column.findIndex((item) => item.key === overKey);
+  if (index < 0) index = 0;
+  else if (overKey !== undefined) {
+    const carried = event.active.rect?.current?.translated;
+    const card = event.over?.rect;
+    if (carried && card && carried.top + carried.height / 2 > card.top + card.height / 2)
+      index += 1;
+  }
+  return { index, after: column[index - 1]?.key, before: column[index]?.key };
 }
 
 /** The Assignee as a picture, or an empty ring; the name is there for screen readers. */
@@ -545,37 +613,43 @@ function useStatusArea(id: string, status: ProjectStatus) {
 }
 
 /**
- * Where a carried card will land if dropped now: a card-sized gap at the top of `status` (moves put the Issue first),
- * shown only when the drop would change its Status and, in the Swimlanes, only in the card's own lane (`lane`).
+ * Where a carried card will land if dropped now, in the Swimlanes: a card-sized gap at the top of the card's own lane
+ * (`lane`), since a move there puts the Issue first; shown only when the drop would change its Status. The Board's
+ * columns place theirs among their cards (BoardColumn).
  */
 function DropSlot({ status, lane }: { status: ProjectStatus; lane?: string }) {
-  const target = useContext(TargetContext);
-  if (!target || target.status !== status.id || target.issue.status.id === status.id) return null;
-  if (lane !== undefined && lane !== laneIdOf(target.issue)) return null;
-  return (
-    <div
-      className={classes.dropSlot}
-      data-drop-slot
-      style={{ height: target.height }}
-      aria-hidden
-    />
-  );
+  const slot = useDropSlot(status, lane);
+  return slot && <Gap height={slot.height} />;
 }
 
 /**
- * The Board: a column for each Status, in order. Dropping a card on a column moves the Issue to that Status. With
- * `onAdd`, each column ends with "Add issue", which creates an Issue straight in that Status.
+ * The gap `status`'s column (or, with `lane`, that lane's cell) shows, if any: its place among the cards (`at`) and
+ * height. Read once per column, so a gap that moves re-renders the columns, not every card.
+ */
+function useDropSlot(status: ProjectStatus, lane?: string) {
+  const target = useContext(TargetContext);
+  if (!target || target.status !== status.id || target.issue.status.id === status.id) return null;
+  if (lane !== undefined && lane !== laneIdOf(target.issue)) return null;
+  return { at: target.index ?? 0, height: target.height };
+}
+
+function Gap({ height }: { height: number | undefined }) {
+  return <div className={classes.dropSlot} data-drop-slot style={{ height }} aria-hidden />;
+}
+
+/**
+ * The Board: a column for each Status, in order. Dropping a card between two cards puts the Issue there, in that
+ * column's Status (`onDrop`). With `onAdd`, each column ends with "Add issue", which creates an Issue straight in that
+ * Status.
  */
 export function IssueBoard({
   columns,
-  onMove,
-  onReorder,
+  onDrop,
   canMove = () => true,
   onAdd,
 }: {
   columns: Column[];
-  onMove: MoveIssue;
-  onReorder?: ReorderIssue;
+  onDrop: DropIssue;
   canMove?: CanMove;
   onAdd?: (status: ProjectStatus) => void;
 }) {
@@ -587,12 +661,7 @@ export function IssueBoard({
   const crowded = useCrowded(scroller, columns.length);
 
   return (
-    <DragBoard
-      issues={columns.flatMap((column) => column.items)}
-      onMove={onMove}
-      onReorder={onReorder}
-      canMove={canMove}
-    >
+    <DragBoard issues={columns.flatMap((column) => column.items)} onDrop={onDrop} canMove={canMove}>
       <div ref={setFrame} className={classes.boardFrame} style={{ height }}>
         <div
           ref={setScroller}
@@ -887,6 +956,9 @@ function BoardColumn({
   const { setNodeRef, isOver } = useStatusArea(column.status.id, column.status);
   const [cards, setCards] = useState<HTMLDivElement | null>(null);
   useEndFades(cards);
+  // The gap for a card carried in from another column opens where it will land, between the cards.
+  const slot = useDropSlot(column.status);
+  const gap = (at: number) => slot?.at === at && <Gap height={slot.height} />;
   return (
     <section
       ref={setNodeRef}
@@ -899,7 +971,7 @@ function BoardColumn({
       </div>
       {/* The cards scroll on their own; the head above and "Add issue" below stay put. */}
       <div ref={setCards} className={classes.cards}>
-        <DropSlot status={column.status} />
+        {column.items.length === 0 && gap(0)}
         {column.items.length === 0 && column.total === 0 && (
           <div className={classes.emptyColumn}>No issues</div>
         )}
@@ -907,9 +979,13 @@ function BoardColumn({
           items={column.items.map((issue) => issue.key)}
           strategy={verticalListSortingStrategy}
         >
-          {column.items.map((issue) => (
-            <SortableIssueCard key={issue.id} issue={issue} />
+          {column.items.map((issue, index) => (
+            <Fragment key={issue.id}>
+              {gap(index)}
+              <SortableIssueCard issue={issue} />
+            </Fragment>
           ))}
+          {column.items.length > 0 && gap(column.items.length)}
         </SortableContext>
         {column.total > column.items.length && (
           <div className={classes.more}>

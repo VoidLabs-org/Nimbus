@@ -169,12 +169,19 @@ class IssueService implements Issues {
 	 * it is ignored, and with no usable neighbour the Rank is kept. A neighbour that never existed, or belongs to
 	 * another project, is a {@code 400}. Silent: no history, no event, and {@code updated_at} and {@code version}
 	 * stay. Everything happens under the project's lock, so two drops never get the same key.
+	 * <p>
+	 * With a {@code statusId} (a drop in another Board column) the Issue first moves to that Status through
+	 * {@link #move}, so with the same history, {@code updated_at} and event, and the neighbours are then looked for in
+	 * that Status. Both happen in this one transaction: a refused neighbour undoes the move too. A Status of another
+	 * project is a {@code 400}.
 	 */
 	@Transactional
-	IssueView reorder(UUID actor, String issueKey, String afterKey, String beforeKey) {
+	IssueView reorder(UUID actor, String issueKey, UUID statusId, String afterKey, String beforeKey) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
 		var project = target.project();
 		lockProject(project.id());
+		// After the project's lock, as below: the move locks the Issue row.
+		if (statusId != null) move(actor, issueKey, statusId);
 		// The Issue row is locked like every edit does (after the project: that order everywhere), so a delete or a move
 		// that runs at the same time is waited for and then seen, not raced.
 		var current = findRanked(project.id(), target.number(), true).orElseThrow(() -> new NotFound("Issue not found"));

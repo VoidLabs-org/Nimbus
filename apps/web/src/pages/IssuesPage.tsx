@@ -256,15 +256,27 @@ export default function IssuesPage() {
     }
   }
 
-  async function reorder(issueKey: string, after: string | undefined, before: string | undefined) {
+  /** A drop on the Board: between `after` and `before`, in `status` when it dropped in another column. */
+  async function reorder(
+    issueKey: string,
+    after: string | undefined,
+    before: string | undefined,
+    status?: ProjectStatus,
+  ) {
     const issue = columns.flatMap((column) => column.items).find((item) => item.key === issueKey);
     if (!issue) return;
+    const moving = status !== undefined && status.id !== issue.status.id;
     try {
-      await reorderIssue(issue, after, before);
+      if (moving) await reorderIssue(issue, after, before, status);
+      else await reorderIssue(issue, after, before);
     } catch (error) {
       const reason =
         error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
-      toast.error(`Couldn't reorder ${issue.key}: ${reason}`);
+      toast.error(
+        moving
+          ? `Couldn't move ${issue.key} to ${status.name}: ${reason}`
+          : `Couldn't reorder ${issue.key}: ${reason}`,
+      );
     }
   }
 
@@ -363,8 +375,7 @@ export default function IssuesPage() {
               {view === "board" ? (
                 <IssueBoard
                   columns={columns}
-                  onMove={(key, status) => void move(key, status)}
-                  onReorder={(key, after, before) => void reorder(key, after, before)}
+                  onDrop={(key, after, before, status) => void reorder(key, after, before, status)}
                   canMove={canMove}
                   onAdd={addTo}
                 />

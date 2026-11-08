@@ -409,33 +409,96 @@ export function placeIssue<T extends { key: string }>(
 }
 
 /**
- * Reorder an Issue within its Board column with the Board updated at once: the card goes between the cards it was
- * dropped between before the server answers, and goes back if that fails. Shares {@link useMoveIssue}'s bookkeeping:
- * the last of several quick drops, moves and reorders, once answered, refreshes the lists.
+ * The items with `issue` put directly after `after`, else directly before `before`, else first: where a card dropped
+ * in another column lands. An Issue already in the items is taken out first.
+ */
+export function insertIssue<T extends { key: string }>(
+  items: T[],
+  issue: T,
+  after: string | undefined,
+  before: string | undefined,
+): T[] {
+  const rest = items.filter((item) => item.key !== issue.key);
+  const afterAt = after === undefined ? -1 : rest.findIndex((item) => item.key === after);
+  const beforeAt = before === undefined ? -1 : rest.findIndex((item) => item.key === before);
+  const at = afterAt >= 0 ? afterAt + 1 : Math.max(beforeAt, 0);
+  return [...rest.slice(0, at), issue, ...rest.slice(at)];
+}
+
+/**
+ * Reorder an Issue with the Board updated at once: the card goes between the cards it was dropped between before the
+ * server answers, and goes back if that fails. With a `status` other than its own (a drop in another column) the
+ * same request moves it there too: the card leaves its column and lands between those cards in the new one. Shares
+ * {@link useMoveIssue}'s bookkeeping: the last of several quick drops, moves and reorders, once answered, refreshes
+ * the lists (only the column, for a drop that kept the Status).
  */
 export function useReorderIssue() {
   const client = useQueryClient();
-  return async (issue: Issue, after: string | undefined, before: string | undefined) => {
+  return async (
+    issue: Issue,
+    after: string | undefined,
+    before: string | undefined,
+    status?: ProjectStatus,
+  ) => {
+    const moving = status !== undefined && status.id !== issue.status.id;
     const lists = { queryKey: projectIssueLists(issue.key) };
     // Silently: a refresh cut short is not a failed refresh, which would show "Couldn't refresh these Issues".
     void client.cancelQueries(lists, { revert: false, silent: true });
     const snapshot = client.getQueriesData<{ items: Issue[]; total: number }>(lists);
+    const moved = moving ? { ...issue, status } : issue;
     for (const [key, data] of snapshot) {
+      if (!data) continue;
       const search = key[key.length - 1] as IssueSearch | undefined;
-      // Only lists in Rank order show the new place; the Table's sorts don't.
-      if (!data || search?.sort !== "rank") continue;
-      const items = placeIssue(data.items, issue.key, after, before);
-      if (items !== data.items) client.setQueryData(key, { ...data, items });
+      // Status filters match names ignoring case, as the server does.
+      const filtered = search?.status?.toLowerCase();
+      const here = data.items.some((item) => item.key === issue.key);
+      if (moving && filtered === issue.status.name.toLowerCase()) {
+        // The column it left.
+        if (here) {
+          client.setQueryData(key, {
+            ...data,
+            items: data.items.filter((item) => item.key !== issue.key),
+            total: data.total - 1,
+          });
+        }
+      } else if (moving && filtered === status.name.toLowerCase()) {
+        // The column it was dropped in: between the cards it landed between, else (an empty column) first.
+        if (!here) {
+          client.setQueryData(key, {
+            ...data,
+            items: insertIssue(data.items, moved, after, before),
+            total: data.total + 1,
+          });
+        }
+      } else if (search?.sort === "rank" && (!moving || filtered === undefined)) {
+        // Its own column, for a reorder, and lists of every Status in Rank order (the Table sorted by Rank); other
+        // columns don't have it, and the Table's other sorts show no new place.
+        const items = moving
+          ? placeIssue(
+              data.items.map((item) => (item.key === issue.key ? moved : item)),
+              issue.key,
+              after,
+              before,
+            )
+          : placeIssue(data.items, issue.key, after, before);
+        if (items !== data.items) client.setQueryData(key, { ...data, items });
+      }
     }
     const settle = startBoardChange(client);
     try {
       const saved = await inOrder(client, issue.key, () =>
-        api.reorderIssue(issue.key, after, before),
+        moving
+          ? api.reorderIssue(issue.key, after, before, status.id)
+          : api.reorderIssue(issue.key, after, before),
       );
       client.setQueryData(queryKeys.issue(saved.key), saved);
-      settle.done(saved.key, issue.status.name);
+      if (moving) {
+        void client.invalidateQueries({ queryKey: queryKeys.issueHistory(saved.key) });
+        settle.done(saved.key);
+      } else settle.done(saved.key, issue.status.name);
     } catch (error) {
-      settle.failed(issue.key, snapshot, issue.status.name);
+      if (moving) settle.failed(issue.key, snapshot);
+      else settle.failed(issue.key, snapshot, issue.status.name);
       throw error;
     }
   };

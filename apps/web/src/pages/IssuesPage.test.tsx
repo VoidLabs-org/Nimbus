@@ -1221,6 +1221,61 @@ describe("IssuesPage", () => {
     });
   });
 
+  describe("Move to top and Move to bottom", () => {
+    const issues = () => [issue(1, "Plan sprint"), issue(2, "Fix login"), issue(3, "Ship it")];
+
+    it("opens on a right-click on a Board card, and Move to top puts it first at once", async () => {
+      byStatus(issues());
+      const move = vi.spyOn(api, "moveIssueToEnd").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=board");
+      const card = await screen.findByRole("link", { name: /Ship it/ });
+
+      fireEvent.contextMenu(card);
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Move to top" }));
+
+      await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-3", "top"));
+      const todo = screen.getByRole("region", { name: "To do" });
+      await waitFor(() =>
+        expect(within(todo).getAllByRole("link")[0]?.textContent).toMatch(/Ship it/),
+      );
+    });
+
+    it("opens with Shift+F10 on a Table row, and Escape gives focus back", async () => {
+      vi.spyOn(api, "issues").mockResolvedValue(page(issues()));
+      const move = vi.spyOn(api, "moveIssueToEnd").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=table");
+      const link = await screen.findByRole("link", { name: "Plan sprint" });
+      link.focus();
+
+      fireEvent.keyDown(link, { key: "F10", shiftKey: true });
+      expect(await screen.findByRole("menuitem", { name: "Move to bottom" })).toBeTruthy();
+      fireEvent.keyDown(screen.getByRole("menuitem", { name: "Move to bottom" }), {
+        key: "Escape",
+      });
+
+      await waitFor(() =>
+        expect(screen.queryByRole("menuitem", { name: "Move to bottom" })).toBeNull(),
+      );
+      expect(document.activeElement).toBe(link);
+      expect(move).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(link, { key: "ContextMenu" });
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Move to bottom" }));
+      await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", "bottom"));
+    });
+
+    it("has no menu for an Issue the User may not move", async () => {
+      vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+      byStatus(issues());
+      show("/projects/NIM/issues?view=list");
+      const row = await screen.findByRole("link", { name: /Ship it/ });
+
+      fireEvent.contextMenu(row);
+
+      expect(screen.queryByRole("menuitem", { name: "Move to bottom" })).toBeNull();
+    });
+  });
+
   it("switches views, keeps the filters and remembers the view for the project", async () => {
     const issues = byStatus([issue(1, "Plan sprint")]);
     show("/projects/NIM/issues?type=Bug");

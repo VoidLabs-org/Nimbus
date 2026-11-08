@@ -4,13 +4,14 @@ import {
   Button,
   Container,
   Group,
+  Menu,
   Select,
   Stack,
   Text,
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconCheck, IconPencil } from "@tabler/icons-react";
+import { IconCheck, IconDots, IconPencil } from "@tabler/icons-react";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { Bone, Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
@@ -22,10 +23,13 @@ import {
   refreshFailed,
   useIssue,
   useIssueChanged,
+  useMoveToEnd,
+  useProject,
   useProjectStatuses,
 } from "../api/queries";
 import { useSession } from "../auth/useSession";
 import { DeleteIssueDialog } from "../issues/DeleteIssueDialog";
+import { MoveToEndItems } from "../issues/IssueMenu";
 import { useIssuePermissions } from "../issues/useIssuePermissions";
 import { IssueHistory } from "../issues/IssueHistory";
 import { NobodyMark, PriorityMark, StatusDot, StatusPill, TypeBadge } from "../issues/IssueMarks";
@@ -127,6 +131,20 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
   const permissions = useIssuePermissions(projectKey);
   const canEdit = issue !== undefined && permissions.canEdit(issue);
   const canDelete = issue !== undefined && permissions.canDelete(issue);
+  // Move to top and Move to bottom: only for a User who may move the Issue, and not in an Archived project.
+  const project = useProject(projectKey ?? "", projectKey !== undefined);
+  const canMove = canEdit && project.data !== undefined && !project.data.archived;
+  const moveToEnd = useMoveToEnd();
+  async function sendToEnd(issue: Issue, to: "top" | "bottom") {
+    try {
+      await moveToEnd(issue, to);
+      toast.success(`Moved ${issue.key} to the ${to} of ${issue.status.name}.`);
+    } catch (error) {
+      toast.error(
+        `Couldn't move ${issue.key} to the ${to}: ${error instanceof Error ? error.message : "Unknown error."}`,
+      );
+    }
+  }
   const changeField = (input: EditIssueInput) =>
     issue && quickChange(() => api.editIssue(issue.key, input));
   // Until the project's Members can be listed, the choices are the User themself and no one.
@@ -203,18 +221,35 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                     <TypeBadge type={issue.type} />
                     <span>{issue.key}</span>
                   </div>
-                  <Button
-                    variant="subtle"
-                    radius="xl"
-                    size="compact-sm"
-                    onClick={() =>
-                      void navigator.clipboard
-                        ?.writeText(window.location.href)
-                        .then(() => toast.success("Link copied."))
-                    }
-                  >
-                    Copy link
-                  </Button>
+                  <Group gap={4} wrap="nowrap">
+                    <Button
+                      variant="subtle"
+                      radius="xl"
+                      size="compact-sm"
+                      onClick={() =>
+                        void navigator.clipboard
+                          ?.writeText(window.location.href)
+                          .then(() => toast.success("Link copied."))
+                      }
+                    >
+                      Copy link
+                    </Button>
+                    {canMove && (
+                      <Menu position="bottom-end" shadow="md" radius="lg">
+                        <Menu.Target>
+                          <ActionIcon variant="subtle" radius="xl" aria-label="More actions">
+                            <IconDots size={18} aria-hidden />
+                          </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <MoveToEndItems
+                            issue={issue}
+                            onMove={(issue, to) => void sendToEnd(issue, to)}
+                          />
+                        </Menu.Dropdown>
+                      </Menu>
+                    )}
+                  </Group>
                 </Group>
                 {editing?.field === "title" ? (
                   <Stack gap="xs">

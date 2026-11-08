@@ -49,6 +49,7 @@ import {
   type Drop,
   type Target,
 } from "./dragContext";
+import { useIssueMenu } from "./issueMenuContext";
 import { PriorityMark, StatusPill, TypeBadge } from "./IssueMarks";
 import {
   aimAt,
@@ -760,6 +761,7 @@ function CardLink({
   row?: boolean;
 }) {
   const { landed, leaving } = useCardDrop(issue);
+  const menu = useIssueMenu(issue);
   return (
     <Link
       ref={nodeRef}
@@ -769,6 +771,7 @@ function CardLink({
       // The browser's own link dragging would fight the drag.
       draggable={false}
       data-issue={issue.key}
+      {...menu}
       {...handles}
       role="link"
     >

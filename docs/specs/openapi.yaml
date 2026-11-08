@@ -517,7 +517,10 @@ paths:
         Rank. A neighbour that is the Issue itself, was deleted, or is in another Status than the Issue (its new one)
         is ignored, unless `anyStatus` is sent (the Table, whose rows are of every Status). Without a Status change a reorder is silent: no history entry, no event, and `updatedAt` and
         `version` stay as they are. A Status of another project is a `400` (`errors.statusId`) and changes nothing;
-        `anyStatus` with `statusId` is a `400` (`errors.anyStatus`).
+        `anyStatus` with `statusId` is a `400` (`errors.anyStatus`). With `to` (`top` or `bottom`; Move to top, Move to
+        bottom) instead of neighbours, the Issue goes directly before the first, or after the last, other Issue of its
+        Status, or stays when it is already there; also silent. `to` with `after`, `before`, `statusId` or `anyStatus`,
+        or any other value, is a `400` (`errors.to`).
       parameters:
         - name: issueKey
           in: path
@@ -544,6 +547,10 @@ paths:
                 anyStatus:
                   type: boolean
                   description: Use neighbours of any Status (the Table); never with `statusId`
+                to:
+                  type: string
+                  enum: [top, bottom]
+                  description: The top or bottom of its Status, instead of neighbours
       responses:
         "200":
           description: The Issue after the reorder

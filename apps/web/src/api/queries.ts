@@ -397,6 +397,60 @@ function startBoardChange(client: QueryClient) {
 }
 
 /**
+ * The items with the Issue moved before the first, or after the last, other item of its Status (Move to top, Move to
+ * bottom), as the server does in the project's order; unchanged when it is already there, has no other of its Status
+ * here, or isn't shown.
+ */
+export function toEndOfStatus<T extends { key: string; status: { id: string } }>(
+  items: T[],
+  issueKey: string,
+  to: "top" | "bottom",
+): T[] {
+  const index = items.findIndex((item) => item.key === issueKey);
+  const placed = items[index];
+  if (!placed) return items;
+  const same = items.flatMap((item, at) =>
+    item.key !== issueKey && item.status.id === placed.status.id ? [at] : [],
+  );
+  if (same.length === 0) return items;
+  const end = to === "top" ? same[0]! : same.at(-1)!;
+  if (to === "top" ? index < end : index > end) return items;
+  const rest = items.filter((item) => item.key !== issueKey);
+  const at = rest.indexOf(items[end]!) + (to === "top" ? 0 : 1);
+  return [...rest.slice(0, at), placed, ...rest.slice(at)];
+}
+
+/**
+ * Move to top or Move to bottom of its Status, with the lists in Rank order updated at once and put back if the server
+ * refuses. A Rank change only, like a reorder: it shares the reorders' bookkeeping, and refreshes the lists of its
+ * Status in Rank order (and the Table's) once the last change on its way is answered.
+ */
+export function useMoveToEnd() {
+  const client = useQueryClient();
+  return async (issue: Issue, to: "top" | "bottom") => {
+    const lists = { queryKey: projectIssueLists(issue.key) };
+    void client.cancelQueries(lists, { revert: false, silent: true });
+    const snapshot = client.getQueriesData<{ items: Issue[]; total: number }>(lists);
+    for (const [key, data] of snapshot) {
+      const search = key[key.length - 1] as IssueSearch | undefined;
+      if (!data || search?.sort !== "rank") continue;
+      const items = toEndOfStatus(data.items, issue.key, to);
+      if (items !== data.items) client.setQueryData(key, { ...data, items });
+    }
+    const settle = startBoardChange(client);
+    try {
+      const saved = await inOrder(client, issue.key, () => api.moveIssueToEnd(issue.key, to));
+      client.setQueryData(queryKeys.issue(saved.key), saved);
+      settle.done(saved.key, issue.status.name);
+      return saved;
+    } catch (error) {
+      settle.failed(issue.key, snapshot, issue.status.name);
+      throw error;
+    }
+  };
+}
+
+/**
  * The items with the Issue put directly after `after`, else directly before `before`; unchanged when neither is shown.
  * `issue` is the key of one of the items (a reorder), or an Issue to add (a drop from another column), which goes
  * first when no neighbour was named at all (an empty column).

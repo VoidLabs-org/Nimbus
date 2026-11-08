@@ -137,6 +137,44 @@ describe("an Issue's page", () => {
     );
   });
 
+  it("offers Move to top and Move to bottom in its ⋯ menu", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    const move = vi.spyOn(api, "moveIssueToEnd").mockResolvedValue(issue);
+    showAt("/issues/nim-12");
+    await screen.findByRole("heading", { name: "Crash on save" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Move to bottom" }));
+
+    await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-12", "bottom"));
+  });
+
+  it("has no Move items for a User who may not move the Issue, or in an Archived project", async () => {
+    vi.spyOn(api, "issue").mockResolvedValue(issue);
+    vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
+    const { unmount } = showAt("/issues/nim-12");
+    await screen.findByRole("heading", { name: "Crash on save" });
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    unmount();
+
+    vi.spyOn(api, "myProjectPermissions").mockResolvedValue(fullAccess);
+    vi.spyOn(api, "project").mockResolvedValue({
+      id: "p1",
+      key: "NIM",
+      name: "Nimbus",
+      description: null,
+      archived: true,
+      createdAt: "2026-10-19T00:00:00Z",
+      createdBy: null,
+      memberCount: 1,
+      members: [],
+    });
+    showAt("/issues/nim-12");
+    await screen.findByRole("heading", { name: "Crash on save" });
+    await waitFor(() => expect(api.project).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+  });
+
   it("hides editing and deleting from a Viewer and keeps the details read-only", async () => {
     vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
     vi.spyOn(api, "issue").mockResolvedValue(issue);

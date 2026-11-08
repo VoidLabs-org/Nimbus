@@ -13,6 +13,7 @@ import {
   loadFailure,
   refreshFailed,
   useIssueCounts,
+  useMoveToEnd,
   useReorderIssue,
   useIssues,
   useProject,
@@ -21,6 +22,7 @@ import {
 } from "../api/queries";
 import { IssueBoard, IssueSwimlanes, type Column } from "../issues/IssueBoard";
 import { IssueGroups } from "../issues/IssueList";
+import { IssueMenuHost } from "../issues/IssueMenu";
 import { IssueTable } from "../issues/IssueTable";
 import {
   appliedFields,
@@ -131,6 +133,7 @@ export default function IssuesPage() {
     return { status, items: shown?.items ?? [], total: shown?.total ?? 0 };
   });
   const reorderIssue = useReorderIssue();
+  const moveToEnd = useMoveToEnd();
   const failure =
     loadFailure(projectQuery) ??
     (grouped
@@ -290,6 +293,17 @@ export default function IssuesPage() {
     }
   }
 
+  /** Move to top or Move to bottom, from an Issue's menu. */
+  async function sendToEnd(issue: Issue, to: "top" | "bottom") {
+    try {
+      await moveToEnd(issue, to);
+    } catch (error) {
+      const reason =
+        error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
+      toast.error(`Couldn't move ${issue.key} to the ${to}: ${reason}`);
+    }
+  }
+
   /** The menu filters and the quick filters, not the search (state 4's Clear filters). */
   const clearFilters = () => remove([...FILTER_FIELDS, "assignee"]);
   const clearSearch = () => {
@@ -362,102 +376,108 @@ export default function IssuesPage() {
       )}
       {/* Keyed by the view, so switching views fades the new one in instead of swapping it at once. The frame
           keeps the last view's height while the next one loads, so the page doesn't get shorter and scroll up. */}
-      <div ref={viewFrame} style={{ minHeight: loaded ? undefined : heldHeight }}>
-        <div key={view} className={classes.viewIn}>
-          {!loaded ? (
-            <Loading>
-              <ViewSkeleton view={view} />
-            </Loading>
-          ) : total === 0 && page === 0 && !filtered && !searching ? (
-            <div className={classes.blank}>
-              <div className={classes.bar} style={{ width: 200 }} />
-              <div className={classes.bar} style={{ width: 144 }} />
-              <div className={classes.bar} style={{ width: 88 }} />
-              <Title order={2} fz={24} mt="sm">
-                No Issues yet
-              </Title>
-              <Text c="dimmed">Create the first one. Statuses are set up with it.</Text>
-              {createButton}
-            </div>
-          ) : view === "board" || view === "swimlanes" ? (
-            // The columns stay, with 0 in each, under a message when nothing matches, so the layout doesn't jump.
-            <div className={classes.over}>
-              {view === "board" ? (
-                <IssueBoard
-                  columns={columns}
-                  onDrop={(key, after, before, status) => void reorder(key, after, before, status)}
-                  canMove={canMove}
-                  onAdd={addTo}
-                />
-              ) : (
-                <IssueSwimlanes
-                  columns={columns}
-                  onDrop={(key, after, before, status) => void reorder(key, after, before, status)}
-                  canMove={canMove}
-                />
-              )}
-              {nothing}
-            </div>
-          ) : nothing ? (
-            nothing
-          ) : view === "list" ? (
-            <IssueGroups
-              columns={columns.filter((column) => columnShown(search, column.status))}
-              onDrop={(key, after, before, status) => void reorder(key, after, before, status)}
-              canMove={canMove}
-            />
-          ) : (
-            <>
-              <Panel p={8}>
-                {data && data.items.length > 0 ? (
-                  <IssueTable
-                    issues={data.items}
-                    sort={search.sort ?? "rank"}
-                    onSort={(sort) => change("sort", sort === "rank" ? null : sort)}
-                    // Not while the rows shown are the last answer's (another sort, page or filter), kept until
-                    // the new one comes: a drop would send neighbours from a list the server doesn't order that way.
-                    onReorder={query.isPlaceholderData ? undefined : reorderRow}
+      <IssueMenuHost has={canMove} onMove={(issue, to) => void sendToEnd(issue, to)}>
+        <div ref={viewFrame} style={{ minHeight: loaded ? undefined : heldHeight }}>
+          <div key={view} className={classes.viewIn}>
+            {!loaded ? (
+              <Loading>
+                <ViewSkeleton view={view} />
+              </Loading>
+            ) : total === 0 && page === 0 && !filtered && !searching ? (
+              <div className={classes.blank}>
+                <div className={classes.bar} style={{ width: 200 }} />
+                <div className={classes.bar} style={{ width: 144 }} />
+                <div className={classes.bar} style={{ width: 88 }} />
+                <Title order={2} fz={24} mt="sm">
+                  No Issues yet
+                </Title>
+                <Text c="dimmed">Create the first one. Statuses are set up with it.</Text>
+                {createButton}
+              </div>
+            ) : view === "board" || view === "swimlanes" ? (
+              // The columns stay, with 0 in each, under a message when nothing matches, so the layout doesn't jump.
+              <div className={classes.over}>
+                {view === "board" ? (
+                  <IssueBoard
+                    columns={columns}
+                    onDrop={(key, after, before, status) =>
+                      void reorder(key, after, before, status)
+                    }
                     canMove={canMove}
-                    offset={page * PAGE_SIZE}
-                    total={data.total}
+                    onAdd={addTo}
                   />
                 ) : (
-                  <p className={classes.empty}>This page has no Issues.</p>
+                  <IssueSwimlanes
+                    columns={columns}
+                    onDrop={(key, after, before, status) =>
+                      void reorder(key, after, before, status)
+                    }
+                    canMove={canMove}
+                  />
                 )}
-              </Panel>
-              <div className={classes.footer}>
-                <span aria-live="polite">
-                  {!data || data.items.length === 0
-                    ? `${total} Issues`
-                    : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + data.items.length} of ${data.total}`}
-                </span>
-                {(pages > 1 || page > 0) && (
-                  <Group gap="xs">
-                    <Button
-                      variant="default"
-                      radius="xl"
-                      size="compact-md"
-                      disabled={page === 0}
-                      onClick={() => change("page", page > 1 ? String(page - 1) : null)}
-                    >
-                      ← Prev
-                    </Button>
-                    <Button
-                      variant="default"
-                      radius="xl"
-                      size="compact-md"
-                      disabled={page + 1 >= pages}
-                      onClick={() => change("page", String(page + 1))}
-                    >
-                      Next →
-                    </Button>
-                  </Group>
-                )}
+                {nothing}
               </div>
-            </>
-          )}
+            ) : nothing ? (
+              nothing
+            ) : view === "list" ? (
+              <IssueGroups
+                columns={columns.filter((column) => columnShown(search, column.status))}
+                onDrop={(key, after, before, status) => void reorder(key, after, before, status)}
+                canMove={canMove}
+              />
+            ) : (
+              <>
+                <Panel p={8}>
+                  {data && data.items.length > 0 ? (
+                    <IssueTable
+                      issues={data.items}
+                      sort={search.sort ?? "rank"}
+                      onSort={(sort) => change("sort", sort === "rank" ? null : sort)}
+                      // Not while the rows shown are the last answer's (another sort, page or filter), kept until
+                      // the new one comes: a drop would send neighbours from a list the server doesn't order that way.
+                      onReorder={query.isPlaceholderData ? undefined : reorderRow}
+                      canMove={canMove}
+                      offset={page * PAGE_SIZE}
+                      total={data.total}
+                    />
+                  ) : (
+                    <p className={classes.empty}>This page has no Issues.</p>
+                  )}
+                </Panel>
+                <div className={classes.footer}>
+                  <span aria-live="polite">
+                    {!data || data.items.length === 0
+                      ? `${total} Issues`
+                      : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + data.items.length} of ${data.total}`}
+                  </span>
+                  {(pages > 1 || page > 0) && (
+                    <Group gap="xs">
+                      <Button
+                        variant="default"
+                        radius="xl"
+                        size="compact-md"
+                        disabled={page === 0}
+                        onClick={() => change("page", page > 1 ? String(page - 1) : null)}
+                      >
+                        ← Prev
+                      </Button>
+                      <Button
+                        variant="default"
+                        radius="xl"
+                        size="compact-md"
+                        disabled={page + 1 >= pages}
+                        onClick={() => change("page", String(page + 1))}
+                      >
+                        Next →
+                      </Button>
+                    </Group>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      </IssueMenuHost>
     </>
   );
 }

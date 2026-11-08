@@ -187,10 +187,14 @@ class IssueService implements Issues {
 	 * <p>
 	 * With {@code anyStatus} (a drop in the Table, whose rows are of every Status) a neighbour in another Status is used
 	 * too, and the Status never changes: together with a {@code statusId} it is a {@code 400}.
+	 * <p>
+	 * With {@code to} ("top" or "bottom"; Move to top, Move to bottom) the Issue goes directly before the first, or
+	 * after the last, other Issue of its Status in the project's order, so Issues of other Statuses keep their places.
+	 * It takes no neighbours, {@code statusId} or {@code anyStatus} ({@code 400} with {@code errors.to}).
 	 */
 	@Transactional
 	IssueView reorder(UUID actor, String issueKey, UUID statusId, String afterKey, String beforeKey,
-			boolean anyStatus) {
+			boolean anyStatus, String to) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
 		var project = target.project();
 		lockProject(project.id());
@@ -205,6 +209,10 @@ class IssueService implements Issues {
 			if (status == null) errors.put("statusId", STATUS_RULE);
 		}
 		if (anyStatus && statusId != null) errors.put("anyStatus", "Can't be sent with statusId");
+		if (to != null && !to.equals("top") && !to.equals("bottom")) errors.put("to", "Choose top or bottom");
+		else if (to != null && (afterKey != null || beforeKey != null || statusId != null || anyStatus)) {
+			errors.put("to", "Can't be sent with after, before, statusId or anyStatus");
+		}
 		var after = neighbour("after", afterKey, project, errors);
 		var before = neighbour("before", beforeKey, project, errors);
 		if (!errors.isEmpty()) throw new InvalidFields(errors);
@@ -216,6 +224,14 @@ class IssueService implements Issues {
 		}
 		after = usable(after, current.id(), anyStatus ? null : statusNow);
 		before = usable(before, current.id(), anyStatus ? null : statusNow);
+		if (to != null) {
+			// Already first (or last) in its Status: it stays, wherever Issues of other Statuses are around it.
+			var end = endOfStatus(project.id(), current, to.equals("top"));
+			var there = end == null || (to.equals("top") ? current.rank().compareTo(end.rank()) < 0
+					: current.rank().compareTo(end.rank()) > 0);
+			if (!there && to.equals("top")) before = end;
+			if (!there && to.equals("bottom")) after = end;
+		}
 
 		String newRank = null;
 		if (after != null) {
@@ -241,6 +257,16 @@ class IssueService implements Issues {
 				.param("id", current.id()).update();
 		}
 		return load(SELECT + "WHERE i.id = :id", Map.of("id", current.id()), project).getFirst();
+	}
+
+	/** The first ({@code first}) or last other Issue of the Issue's Status in Rank order, or {@code null} if none. */
+	private Ranked endOfStatus(UUID projectId, Current current, boolean first) {
+		return jdbc.sql("SELECT id, status_id, rank FROM issues WHERE project_id = :project AND status_id = :status"
+				+ " AND id <> :self ORDER BY rank " + (first ? "ASC" : "DESC") + " LIMIT 1")
+			.param("project", projectId).param("status", current.statusId()).param("self", current.id())
+			.query((row, index) -> new Ranked(row.getObject("id", UUID.class), row.getObject("status_id", UUID.class),
+					row.getString("rank")))
+			.optional().orElse(null);
 	}
 
 	/** A Rank key longer than this makes the project's keys be rewritten evenly (ADR 0012). */

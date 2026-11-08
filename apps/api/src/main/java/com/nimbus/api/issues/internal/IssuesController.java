@@ -150,12 +150,13 @@ class IssuesController {
 	/**
 	 * Drops the Issue where the client saw it land: in {@code statusId} when the drop changes the Status, and directly
 	 * after {@code after}, else directly before {@code before} (Issue keys of its neighbours there), else nowhere new.
-	 * Best effort; see {@link IssueService#reorder}.
+	 * Or, with {@code to} ("top" or "bottom"), to the top or bottom of its Status. Best effort; see
+	 * {@link IssueService#reorder}.
 	 */
 	@PutMapping("/api/issues/{issueKey}/rank")
 	IssueService.IssueView reorder(@PathVariable String issueKey, @RequestBody RankIssue request) {
 		return issues.reorder(currentUser.id(), issueKey, request.statusId(), request.after(), request.before(),
-				Boolean.TRUE.equals(request.anyStatus()));
+				Boolean.TRUE.equals(request.anyStatus()), request.to());
 	}
 
 	@GetMapping("/api/projects/{key}/statuses")
@@ -256,8 +257,11 @@ class IssuesController {
 	record MoveIssue(UUID statusId) {
 	}
 
-	/** {@code anyStatus}: the neighbours may be of any Status (the Table, whose rows are of every Status). */
-	record RankIssue(UUID statusId, String after, String before, Boolean anyStatus) {
+	/**
+	 * {@code anyStatus}: the neighbours may be of any Status (the Table, whose rows are of every Status). {@code to}:
+	 * "top" or "bottom" of its Status, instead of neighbours (Move to top, Move to bottom).
+	 */
+	record RankIssue(UUID statusId, String after, String before, Boolean anyStatus, String to) {
 	}
 
 	/** The title is trimmed before it is checked, so pasted surrounding whitespace is not an error. */

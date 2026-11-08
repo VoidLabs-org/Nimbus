@@ -19,6 +19,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import type { Issue, IssueSearch } from "../api/client";
 import { SILENT, type CanMove } from "./dragContext";
+import { useIssueMenu } from "./issueMenuContext";
 import { PriorityMark, StatusPill, TypeBadge } from "./IssueMarks";
 import { aimAt, neighboursAt, nextPlace, placeOf, type Group, type Place } from "./keyboardDrag";
 import { timeAgo } from "./timeAgo";
@@ -93,10 +94,7 @@ export function IssueTable({
             ranked ? (
               <SortableRow key={issue.id} issue={issue} movable={canMove(issue)} />
             ) : (
-              <tr key={issue.id}>
-                <td className={classes.gripCell} />
-                <Cells issue={issue} />
-              </tr>
+              <PlainRow key={issue.id} issue={issue} />
             ),
           )}
         </tbody>
@@ -168,6 +166,16 @@ function Cells({ issue }: { issue: Issue }) {
   );
 }
 
+/** A row under Priority or Updated: no grip, but the Issue menu on a right-click. */
+function PlainRow({ issue }: { issue: Issue }) {
+  return (
+    <tr data-issue={issue.key} {...useIssueMenu(issue)}>
+      <td className={classes.gripCell} />
+      <Cells issue={issue} />
+    </tr>
+  );
+}
+
 /** A row in Rank order: the rows slide apart around a carried one, which is moved by its grip only. */
 function SortableRow({ issue, movable }: { issue: Issue; movable: boolean }) {
   const {
@@ -179,12 +187,14 @@ function SortableRow({ issue, movable }: { issue: Issue; movable: boolean }) {
     transition,
     isDragging,
   } = useSortable({ id: issue.key, disabled: { draggable: !movable, droppable: false } });
+  const menu = useIssueMenu(issue, isDragging);
   return (
     <tr
       ref={setNodeRef}
       className={isDragging ? classes.rowCarried : undefined}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       data-issue={issue.key}
+      {...menu}
     >
       <td className={classes.gripCell}>
         {movable && (

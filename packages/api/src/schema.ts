@@ -663,7 +663,7 @@ export interface paths {
         get?: never;
         /**
          * Reorder an Issue, by the Issues it was dropped between, and move it when dropped in another Status
-         * @description Best effort. With `statusId` (sent only when the drop changes the Status) the Issue first moves to that Status exactly as `PUT /api/issues/{issueKey}/status` does (history entry, event, `updatedAt`), in the same transaction. Then it is placed directly after `after` when given, else directly before `before`, else keeps its Rank. A neighbour that is the Issue itself, was deleted, or is in another Status than the Issue (its new one) is ignored, unless `anyStatus` is sent (the Table, whose rows are of every Status). Without a Status change a reorder is silent: no history entry, no event, and `updatedAt` and `version` stay as they are. A Status of another project is a `400` (`errors.statusId`) and changes nothing; `anyStatus` with `statusId` is a `400` (`errors.anyStatus`).
+         * @description Best effort. With `statusId` (sent only when the drop changes the Status) the Issue first moves to that Status exactly as `PUT /api/issues/{issueKey}/status` does (history entry, event, `updatedAt`), in the same transaction. Then it is placed directly after `after` when given, else directly before `before`, else keeps its Rank. A neighbour that is the Issue itself, was deleted, or is in another Status than the Issue (its new one) is ignored, unless `anyStatus` is sent (the Table, whose rows are of every Status). Without a Status change a reorder is silent: no history entry, no event, and `updatedAt` and `version` stay as they are. A Status of another project is a `400` (`errors.statusId`) and changes nothing; `anyStatus` with `statusId` is a `400` (`errors.anyStatus`). With `to` (`top` or `bottom`; Move to top, Move to bottom) instead of neighbours, the Issue goes directly before the first, or after the last, other Issue of its Status, or stays when it is already there; also silent. `to` with `after`, `before`, `statusId` or `anyStatus`, or any other value, is a `400` (`errors.to`).
          */
         put: {
             parameters: {
@@ -688,6 +688,11 @@ export interface paths {
                         before?: string;
                         /** @description Use neighbours of any Status (the Table); never with `statusId` */
                         anyStatus?: boolean;
+                        /**
+                         * @description The top or bottom of its Status, instead of neighbours
+                         * @enum {string}
+                         */
+                        to?: "top" | "bottom";
                     };
                 };
             };

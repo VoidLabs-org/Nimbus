@@ -461,6 +461,12 @@ export function createApiClient(
         body: JSON.stringify({ statusId }),
       }),
 
+    /** Move to top or Move to bottom of its Status (a Rank change only, like a reorder). */
+    moveIssueToEnd: (issueKey: string, to: "top" | "bottom") =>
+      request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}/rank`, {
+        method: "PUT",
+        body: JSON.stringify({ to }),
+      }),
     /**
      * Drops the Issue directly after `after`, else directly before `before` (keys of the cards it landed between),
      * and, with `statusId`, in that Status first: one request for a drop in another Board column. Without a Status

@@ -163,6 +163,69 @@ class ReorderIssueTests {
 	}
 
 	@Test
+	void toTopAndBottomMoveWithinItsStatusOnly() {
+		var dana = register("Dana");
+		var key = project(dana);
+		var a = create(dana, key, "A");
+		var b = create(dana, key, "B");
+		create(dana, key, "C");
+		var d = create(dana, key, "D");
+		moveTo(dana, b, statusId(dana, key, "Done"));
+
+		// Before the first Issue of its Status (A); B, in Done, keeps its place.
+		moveToEnd(dana, d, "top").expectStatus().isOk().expectBody().jsonPath("$.key").isEqualTo(d);
+		assertThat(order(dana, key)).containsExactly("D", "A", "B", "C");
+
+		// After the last Issue of its Status (C).
+		moveToEnd(dana, a, "bottom").expectStatus().isOk();
+		assertThat(order(dana, key)).containsExactly("D", "B", "C", "A");
+
+		// Already there: nothing changes.
+		var kept = ranks(key);
+		moveToEnd(dana, a, "bottom").expectStatus().isOk();
+		moveToEnd(dana, d, "top").expectStatus().isOk();
+		assertThat(ranks(key)).isEqualTo(kept);
+
+		// Alone in its Status: nothing to go before or after.
+		moveToEnd(dana, b, "top").expectStatus().isOk();
+		assertThat(ranks(key)).isEqualTo(kept);
+	}
+
+	@Test
+	void toIsSilent() {
+		var dana = register("Dana");
+		var key = project(dana);
+		create(dana, key, "A");
+		var b = create(dana, key, "B");
+		var before = open(dana, b);
+
+		moveToEnd(dana, b, "top").expectStatus().isOk();
+
+		var after = open(dana, b);
+		assertThat((Object) JsonPath.read(after, "$.version")).isEqualTo(JsonPath.read(before, "$.version"));
+		assertThat((Object) JsonPath.read(after, "$.updatedAt")).isEqualTo(JsonPath.read(before, "$.updatedAt"));
+		assertThat(order(dana, key)).containsExactly("B", "A");
+	}
+
+	@Test
+	void toWithNeighboursOrAnUnknownValueIsRefused() {
+		var dana = register("Dana");
+		var key = project(dana);
+		var a = create(dana, key, "A");
+		var b = create(dana, key, "B");
+		var kept = ranks(key);
+
+		var body = new HashMap<String, Object>();
+		body.put("to", "top");
+		body.put("after", a);
+		client.put().uri("/api/issues/{key}/rank", b).header("Authorization", "Bearer " + dana.token()).body(body)
+			.exchange().expectStatus().isBadRequest().expectBody().jsonPath("$.errors.to").exists();
+
+		moveToEnd(dana, b, "middle").expectStatus().isBadRequest().expectBody().jsonPath("$.errors.to").exists();
+		assertThat(ranks(key)).isEqualTo(kept);
+	}
+
+	@Test
 	void aNeighbourDeletedMeanwhileIsIgnored() {
 		var dana = register("Dana");
 		var key = project(dana);
@@ -455,6 +518,12 @@ class ReorderIssueTests {
 		if (before != null) body.put("before", before);
 		return client.put().uri("/api/issues/{key}/rank", issueKey).header("Authorization", "Bearer " + who.token())
 			.body(body).exchange();
+	}
+
+	/** Move to top or Move to bottom: {@code to} is "top" or "bottom". */
+	private RestTestClient.ResponseSpec moveToEnd(Person who, String issueKey, String to) {
+		return client.put().uri("/api/issues/{key}/rank", issueKey).header("Authorization", "Bearer " + who.token())
+			.body(Map.of("to", to)).exchange();
 	}
 
 	/** A reorder from the Table, whose rows are of every Status. */

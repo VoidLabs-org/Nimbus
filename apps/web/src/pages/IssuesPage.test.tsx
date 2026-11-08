@@ -410,7 +410,9 @@ describe("IssuesPage", () => {
 
       // NIM-3 dropped on NIM-1 (the top): before NIM-1, nothing above.
       await dropOn("NIM-3", all[0]!);
-      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-3", undefined, "NIM-1"));
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-3", undefined, "NIM-1", undefined),
+      );
       await waitFor(() =>
         expect(
           titles("To do").map((text) => /Ship it|Plan sprint|Fix login/.exec(text)?.[0]),
@@ -428,10 +430,14 @@ describe("IssuesPage", () => {
 
       // NIM-1 dropped on NIM-2: it takes NIM-2's place, between NIM-2 and NIM-3.
       await dropOn("NIM-1", all[1]!);
-      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3"));
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3", undefined),
+      );
       // Now NIM-2, NIM-1, NIM-3: NIM-2 dropped on the last card goes to the bottom.
       await dropOn("NIM-2", all[2]!);
-      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-2", "NIM-3", undefined));
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-2", "NIM-3", undefined, undefined),
+      );
     });
 
     it("sends quick drops one after another, in the order they were made", async () => {
@@ -452,7 +458,7 @@ describe("IssuesPage", () => {
       expect(reorder).toHaveBeenCalledTimes(1);
       await act(async () => answers[0]!(issue(3, "Ship it")));
       await waitFor(() => expect(reorder).toHaveBeenCalledTimes(2));
-      expect(reorder).toHaveBeenNthCalledWith(1, "NIM-3", undefined, "NIM-1");
+      expect(reorder).toHaveBeenNthCalledWith(1, "NIM-3", undefined, "NIM-1", undefined);
     });
 
     it("puts the card back, with a message, when the server refuses", async () => {

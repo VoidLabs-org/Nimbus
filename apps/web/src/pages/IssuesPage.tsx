@@ -256,7 +256,7 @@ export default function IssuesPage() {
     }
   }
 
-  /** A drop on the Board: between `after` and `before`, in `status` when it dropped in another column. */
+  /** A drop on the Board: between `after` and `before`, and in `status` when it dropped in another column. */
   async function reorder(
     issueKey: string,
     after: string | undefined,
@@ -265,15 +265,13 @@ export default function IssuesPage() {
   ) {
     const issue = columns.flatMap((column) => column.items).find((item) => item.key === issueKey);
     if (!issue) return;
-    const moving = status !== undefined && status.id !== issue.status.id;
     try {
-      if (moving) await reorderIssue(issue, after, before, status);
-      else await reorderIssue(issue, after, before);
+      await reorderIssue(issue, after, before, status);
     } catch (error) {
       const reason =
         error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
       toast.error(
-        moving
+        status
           ? `Couldn't move ${issue.key} to ${status.name}: ${reason}`
           : `Couldn't reorder ${issue.key}: ${reason}`,
       );

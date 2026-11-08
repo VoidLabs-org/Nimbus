@@ -12,6 +12,7 @@ import {
   type Issue,
   type IssueSearch,
   type Project,
+  type ProjectIssueStats,
   type ProjectStatus,
   type Role,
 } from "./client";
@@ -144,11 +145,21 @@ export function useIssues(projectKey: string, search: IssueSearch, enabled = tru
 /**
  * The Issue totals of all the User's projects, for the Projects table's Open issues, Progress and Updated: one request
  * however many projects there are. Under "issues", so creating, moving or deleting an Issue refreshes it with the rest.
+ *
+ * A Board move counts in these totals at once (countStatusChange). Coming back to Projects before the server has
+ * answered it, a fetch then would bring the totals from before the move and show them for a moment, so it waits
+ * until the Board changes on their way have finished (the page shows the counted totals meanwhile).
  */
 export function useProjectIssueStats() {
+  const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.projectIssueStats,
-    queryFn: () => api.projectIssueStats(),
+    queryFn: async ({ signal }) => {
+      await boardChangesFinished(client);
+      // Cancelled meanwhile: the refresh the last change started asks instead.
+      signal.throwIfAborted();
+      return api.projectIssueStats();
+    },
   });
 }
 
@@ -227,6 +238,29 @@ function refreshProjectIssues(client: QueryClient, issueKey: string) {
   void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
 }
 
+/**
+ * Count a Status change in the Projects table's totals at once (Progress counts Done Issues, and Updated), so going
+ * back to Projects shows it straight away instead of the cached totals until the refresh comes back. The refresh that
+ * follows every change puts the server's numbers in.
+ */
+function countStatusChange(
+  client: QueryClient,
+  issueKey: string,
+  from: Issue["status"]["category"],
+  to: Issue["status"]["category"],
+) {
+  if (from === to) return;
+  const project = projectKeyOf(issueKey).toLowerCase();
+  const done = (to === "DONE" ? 1 : 0) - (from === "DONE" ? 1 : 0);
+  client.setQueryData<ProjectIssueStats[]>(queryKeys.projectIssueStats, (stats) =>
+    stats?.map((row) =>
+      row.projectKey.toLowerCase() === project
+        ? { ...row, done: row.done + done, updatedAt: new Date().toISOString() }
+        : row,
+    ),
+  );
+}
+
 /** Keep the server's created Issue, so opening it right after shows it at once (it is then refreshed). */
 export function useIssueCreated() {
   const client = useQueryClient();
@@ -250,6 +284,8 @@ export function useIssueDeleted() {
 export function useIssueChanged() {
   const client = useQueryClient();
   return (issue: Issue) => {
+    const before = client.getQueryData<Issue>(queryKeys.issue(issue.key));
+    if (before) countStatusChange(client, issue.key, before.status.category, issue.status.category);
     client.setQueryData(queryKeys.issue(issue.key), issue);
     void client.invalidateQueries({ queryKey: queryKeys.issueHistory(issue.key) });
     refreshProjectIssues(client, issue.key);
@@ -262,8 +298,21 @@ export function useIssueChanged() {
  */
 const movesInFlight = new WeakMap<
   QueryClient,
-  { count: number; changed: Set<string>; reordered: Map<string, string> }
+  {
+    count: number;
+    changed: Set<string>;
+    reordered: Map<string, string>;
+    /** Called when the last change on its way has finished. */
+    waiting: (() => void)[];
+  }
 >();
+
+/** Resolves once no Board change is on its way (at once when none is). */
+function boardChangesFinished(client: QueryClient): Promise<void> {
+  const moves = movesInFlight.get(client);
+  if (!moves || moves.count === 0) return Promise.resolve();
+  return new Promise((resolve) => moves.waiting.push(resolve));
+}
 
 /**
  * Move an Issue to a Status with the Board updated at once: the card is taken out of its column and put at the top
@@ -300,6 +349,7 @@ export function useMoveIssue() {
         });
       }
     }
+    countStatusChange(client, issue.key, issue.status.category, status.category);
     const settle = startBoardChange(client);
     try {
       const saved = await inOrder(client, issue.key, () => api.moveIssue(issue.key, status.id));
@@ -307,6 +357,8 @@ export function useMoveIssue() {
       void client.invalidateQueries({ queryKey: queryKeys.issueHistory(saved.key) });
       settle.done(saved.key);
     } catch (error) {
+      // The totals were counted at the drop: ask the server for them again.
+      void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
       settle.failed(issue.key, snapshot);
       throw error;
     }
@@ -342,6 +394,7 @@ function startBoardChange(client: QueryClient) {
     count: 0,
     changed: new Set<string>(),
     reordered: new Map<string, string>(),
+    waiting: [],
   };
   movesInFlight.set(client, moves);
   moves.count += 1;
@@ -374,6 +427,8 @@ function startBoardChange(client: QueryClient) {
     }
     moves.changed.clear();
     moves.reordered.clear();
+    // After the refresh above, which cancels a totals fetch that was waiting, so that one never asks the server.
+    for (const resolve of moves.waiting.splice(0)) resolve();
   };
   return {
     /** A move changed the Issue's project; a reorder (`reorderedIn`: its Status's name) only that column. */
@@ -392,37 +447,27 @@ function startBoardChange(client: QueryClient) {
   };
 }
 
-/** The items with `issueKey` taken out and put directly after `after`, else directly before `before`, if shown. */
+/**
+ * The items with the Issue put directly after `after`, else directly before `before`; unchanged when neither is shown.
+ * `issue` is the key of one of the items (a reorder), or an Issue to add (a drop from another column), which goes
+ * first when no neighbour was named at all (an empty column).
+ */
 export function placeIssue<T extends { key: string }>(
   items: T[],
-  issueKey: string,
+  issue: T | string,
   after: string | undefined,
   before: string | undefined,
 ): T[] {
-  const issue = items.find((item) => item.key === issueKey);
-  const rest = items.filter((item) => item.key !== issueKey);
+  const adding = typeof issue !== "string";
+  const key = adding ? issue.key : issue;
+  const placed = adding ? issue : items.find((item) => item.key === key);
+  const rest = items.filter((item) => item.key !== key);
   const afterAt = after === undefined ? -1 : rest.findIndex((item) => item.key === after);
   const beforeAt = before === undefined ? -1 : rest.findIndex((item) => item.key === before);
-  const anchor = afterAt >= 0 ? afterAt + 1 : beforeAt;
-  if (!issue || anchor < 0) return items;
-  return [...rest.slice(0, anchor), issue, ...rest.slice(anchor)];
-}
-
-/**
- * The items with `issue` put directly after `after`, else directly before `before`, else first: where a card dropped
- * in another column lands. An Issue already in the items is taken out first.
- */
-export function insertIssue<T extends { key: string }>(
-  items: T[],
-  issue: T,
-  after: string | undefined,
-  before: string | undefined,
-): T[] {
-  const rest = items.filter((item) => item.key !== issue.key);
-  const afterAt = after === undefined ? -1 : rest.findIndex((item) => item.key === after);
-  const beforeAt = before === undefined ? -1 : rest.findIndex((item) => item.key === before);
-  const at = afterAt >= 0 ? afterAt + 1 : Math.max(beforeAt, 0);
-  return [...rest.slice(0, at), issue, ...rest.slice(at)];
+  let anchor = afterAt >= 0 ? afterAt + 1 : beforeAt;
+  if (anchor < 0 && adding && after === undefined && before === undefined) anchor = 0;
+  if (!placed || anchor < 0) return items;
+  return [...rest.slice(0, anchor), placed, ...rest.slice(anchor)];
 }
 
 /**
@@ -462,13 +507,16 @@ export function useReorderIssue() {
           });
         }
       } else if (moving && filtered === status.name.toLowerCase()) {
-        // The column it was dropped in: between the cards it landed between, else (an empty column) first.
-        if (!here) {
-          client.setQueryData(key, {
-            ...data,
-            items: insertIssue(data.items, moved, after, before),
-            total: data.total + 1,
-          });
+        if (here) continue;
+        // The column it was dropped in: between the cards it landed between, or first in an empty one. A list of
+        // that Status that doesn't show them (another filter) gets it from the refresh; one in another sort (the
+        // Table) shows it first until then.
+        const items =
+          search?.sort === "rank"
+            ? placeIssue(data.items, moved, after, before)
+            : [moved, ...data.items];
+        if (items !== data.items) {
+          client.setQueryData(key, { ...data, items, total: data.total + 1 });
         }
       } else if (search?.sort === "rank" && (!moving || filtered === undefined)) {
         // Its own column, for a reorder, and lists of every Status in Rank order (the Table sorted by Rank); other
@@ -484,12 +532,11 @@ export function useReorderIssue() {
         if (items !== data.items) client.setQueryData(key, { ...data, items });
       }
     }
+    if (moving) countStatusChange(client, issue.key, issue.status.category, status.category);
     const settle = startBoardChange(client);
     try {
       const saved = await inOrder(client, issue.key, () =>
-        moving
-          ? api.reorderIssue(issue.key, after, before, status.id)
-          : api.reorderIssue(issue.key, after, before),
+        api.reorderIssue(issue.key, after, before, moving ? status.id : undefined),
       );
       client.setQueryData(queryKeys.issue(saved.key), saved);
       if (moving) {
@@ -497,8 +544,9 @@ export function useReorderIssue() {
         settle.done(saved.key);
       } else settle.done(saved.key, issue.status.name);
     } catch (error) {
-      if (moving) settle.failed(issue.key, snapshot);
-      else settle.failed(issue.key, snapshot, issue.status.name);
+      // The totals were counted at the drop: ask the server for them again.
+      if (moving) void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
+      settle.failed(issue.key, snapshot, moving ? undefined : issue.status.name);
       throw error;
     }
   };

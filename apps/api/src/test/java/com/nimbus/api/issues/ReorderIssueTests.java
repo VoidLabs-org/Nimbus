@@ -371,6 +371,9 @@ class ReorderIssueTests {
 		reorder(dana, b, foreignStatus, null, a).expectStatus().isBadRequest().expectBody()
 			.jsonPath("$.errors.statusId").exists();
 		reorder(dana, b, UUID.randomUUID().toString(), null, a).expectStatus().isBadRequest();
+		// Every field is checked before anything is written, and the errors come back together.
+		reorder(dana, b, foreignStatus, key + "-999", null).expectStatus().isBadRequest().expectBody()
+			.jsonPath("$.errors.statusId").exists().jsonPath("$.errors.after").exists();
 		// A good Status with a neighbour that never existed: the Status change is undone with the rest.
 		reorder(dana, b, statusId(dana, key, "Done"), key + "-999", null).expectStatus().isBadRequest();
 

@@ -13,7 +13,6 @@ import {
   loadFailure,
   refreshFailed,
   useIssueCounts,
-  useMoveIssue,
   useReorderIssue,
   useIssues,
   useProject,
@@ -125,7 +124,6 @@ export default function IssuesPage() {
     const shown = columnShown(search, status) ? columnQueries[index]?.data : undefined;
     return { status, items: shown?.items ?? [], total: shown?.total ?? 0 };
   });
-  const moveIssue = useMoveIssue();
   const reorderIssue = useReorderIssue();
   const failure =
     loadFailure(projectQuery) ??
@@ -244,19 +242,7 @@ export default function IssuesPage() {
     ? columns.reduce((sum, column) => sum + column.total, 0)
     : (data?.total ?? 0);
 
-  async function move(issueKey: string, status: ProjectStatus) {
-    const issue = columns.flatMap((column) => column.items).find((item) => item.key === issueKey);
-    if (!issue || issue.status.id === status.id) return;
-    try {
-      await moveIssue(issue, status);
-    } catch (error) {
-      const reason =
-        error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
-      toast.error(`Couldn't move ${issue.key} to ${status.name}: ${reason}`);
-    }
-  }
-
-  /** A drop on the Board: between `after` and `before`, and in `status` when it dropped in another column. */
+  /** A drop on the Board or in a Swimlanes cell: between `after` and `before`, and in `status` when it dropped in another column. */
   async function reorder(
     issueKey: string,
     after: string | undefined,
@@ -380,7 +366,7 @@ export default function IssuesPage() {
               ) : (
                 <IssueSwimlanes
                   columns={columns}
-                  onMove={(key, status) => void move(key, status)}
+                  onDrop={(key, after, before, status) => void reorder(key, after, before, status)}
                   canMove={canMove}
                 />
               )}

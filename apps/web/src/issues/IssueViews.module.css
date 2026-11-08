@@ -89,6 +89,13 @@
   background: color-mix(in srgb, var(--color-text) 14%, transparent);
 }
 
+/* The Swimlanes' Assignee column, ahead of the Statuses (140px against the columns' 200px). */
+.minimapLabel {
+  width: 11px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+}
+
 .minimapColumn[data-seen] {
   background: color-mix(in srgb, var(--color-text) 45%, transparent);
 }

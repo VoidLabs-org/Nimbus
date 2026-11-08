@@ -18,7 +18,6 @@ import {
   type DragStartEvent,
   type DropAnimationFunction,
   type KeyboardCoordinateGetter,
-  type SensorContext,
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -265,45 +264,6 @@ const DIRECTIONS = {
   ArrowRight: "right",
 } as const satisfies Record<string, Direction>;
 
-/** The arrow keys carry a lifted card to the nearest drop area in that direction (the Swimlanes' cells). */
-function nearestInDirection(
-  event: KeyboardEvent,
-  { droppableRects, droppableContainers, collisionRect }: SensorContext,
-) {
-  const direction = {
-    ArrowRight: [1, 0],
-    ArrowLeft: [-1, 0],
-    ArrowDown: [0, 1],
-    ArrowUp: [0, -1],
-  }[event.code];
-  if (!direction || !collisionRect) return undefined;
-  event.preventDefault();
-  const here = {
-    x: collisionRect.left + collisionRect.width / 2,
-    y: collisionRect.top + collisionRect.height / 2,
-  };
-  let best: { x: number; y: number; distance: number } | undefined;
-  for (const container of droppableContainers.getEnabled()) {
-    const rect = droppableRects.get(container.id);
-    if (!rect) continue;
-    const dx = rect.left + rect.width / 2 - here.x;
-    const dy = rect.top + rect.height / 2 - here.y;
-    // Only areas further along the pressed direction, and mostly along it.
-    const along = dx * direction[0]! + dy * direction[1]!;
-    const across = Math.abs(dx * direction[1]! + dy * direction[0]!);
-    if (along <= 1 || across > along) continue;
-    const distance = Math.hypot(dx, dy);
-    if (!best || distance < best.distance) {
-      best = {
-        x: here.x + dx - collisionRect.width / 2,
-        y: here.y + dy - collisionRect.height / 2,
-        distance,
-      };
-    }
-  }
-  return best && { x: best.x, y: best.y };
-}
-
 /** What screen readers say about moving a card, read with each card. */
 const BOARD_INSTRUCTIONS = {
   draggable:
@@ -322,41 +282,42 @@ const SILENT = {
   onDragCancel: () => undefined,
 };
 
+/** A place for cards (see keyboardDrag) with the Status it stands for and, in the Swimlanes, its lane. */
+type StatusGroup = Group & { status: ProjectStatus; lane?: string };
+
 /**
- * The places for cards (see keyboardDrag), with each column's total: the Board's columns, or the Swimlanes' cells
- * (a lane's cell for each column, named like the cell's label) of every lane, or of `lane` alone.
+ * The places for cards, with each column's total: the Board's columns, or (with `lanes`) the Swimlanes' cells, a lane
+ * after another and a cell for each column in each.
  */
-function groupsOf(columns: Column[], swimlanes: boolean, lane?: string): Group[] {
-  if (!swimlanes) {
+function groupsOf(columns: Column[], lanes?: Lane[]): StatusGroup[] {
+  if (!lanes) {
     return columns.map((column) => ({
       id: column.status.id,
       name: column.status.name,
       keys: column.items.map((issue) => issue.key),
       total: column.total,
+      status: column.status,
     }));
   }
-  return lanesOf(columns)
-    .filter((candidate) => lane === undefined || candidate.id === lane)
-    .flatMap((candidate) =>
-      columns.map((column) => ({
-        id: cellId(candidate.id, column.status.id),
-        name: `${candidate.name ?? "Unassigned"}, ${column.status.name}`,
-        keys: column.items
-          .filter((issue) => laneIdOf(issue) === candidate.id)
-          .map((issue) => issue.key),
-      })),
-    );
+  return lanes.flatMap((lane) =>
+    lane.cells.map((cell) => ({
+      id: cell.id,
+      name: cell.label,
+      keys: cell.issues.map((issue) => issue.key),
+      status: cell.status,
+      lane: lane.id,
+    })),
+  );
+}
+
+/** The groups of one lane (its cells, one for each column), or all of them without one. */
+function inLane(groups: StatusGroup[], lane: string | undefined) {
+  return lane === undefined ? groups : groups.filter((group) => group.lane === lane);
 }
 
 /** The id of the Swimlanes cell of a lane and a Status; on the Board a place is just its Status's id. */
 function cellId(lane: string, status: string) {
   return `${lane}:${status}`;
-}
-
-/** The Status a drop area stands for, and in the Swimlanes its lane. */
-function areaOf(data: { status?: ProjectStatus; lane?: string } | undefined) {
-  if (!data?.status) return undefined;
-  return { status: data.status, lane: data.lane };
 }
 
 /**
@@ -391,13 +352,14 @@ function placeIn(groups: Group[], drag: KeyboardDrag): Place | null {
  */
 function DragBoard({
   columns,
-  swimlanes,
+  lanes,
   onDrop,
   canMove,
   children,
 }: {
   columns: Column[];
-  swimlanes: boolean;
+  /** The Swimlanes' lanes; none on the Board. */
+  lanes?: Lane[];
   onDrop: DropIssue;
   canMove: CanMove;
   children: ReactNode;
@@ -410,16 +372,17 @@ function DragBoard({
   // The card a keyboard drop moved, to focus in its new column once it shows there (its old element is gone).
   const refocus = useRef<{ key: string; status: string } | null>(null);
   // The columns as last rendered, for what dnd-kit calls between renders, and this Board's keyboard drag.
-  const latest = useRef(columns);
+  const swimlanes = lanes !== undefined;
+  const latest = useRef<StatusGroup[]>([]);
   const keyboard = useRef<KeyboardDrag | null>(null);
   // Where a pointer drag was last said to be (a Status, and a place on the Board), so each place is said once.
   const said = useRef("");
+  // Remade only when the columns change (React Compiler), not on every pointer move.
+  const groups = groupsOf(columns, lanes);
   useLayoutEffect(() => {
-    latest.current = columns;
+    latest.current = groups;
   });
   const issues = columns.flatMap((column) => column.items);
-  // Remade only when the columns change (React Compiler), not on every pointer move.
-  const groups = groupsOf(columns, swimlanes);
   const dropKey = drop && `${drop.key}:${drop.status}`;
   useEffect(() => {
     if (!dropKey) return;
@@ -446,8 +409,8 @@ function DragBoard({
   }, [columns]);
 
   /** Shows a keyboard drag at its place: the gap there, and the live region says where it is. */
-  function showPlace(drag: KeyboardDrag, groups: Group[], place: Place) {
-    const status = latest.current[place.group]?.status.id ?? drag.issue.status.id;
+  function showPlace(drag: KeyboardDrag, groups: StatusGroup[], place: Place) {
+    const status = groups[place.group]!.status.id;
     setTarget({ issue: drag.issue, status, height: drag.height, index: place.index });
     setAnnouncement(describePlace(groups, drag.issue.key, place));
   }
@@ -458,7 +421,7 @@ function DragBoard({
     collisions: ((args) => {
       const drag = keyboard.current;
       if (drag) {
-        const groups = groupsOf(latest.current, swimlanes, drag.lane);
+        const groups = inLane(latest.current, drag.lane);
         const place = placeIn(groups, drag);
         const id = place && aimAt(groups, drag.issue.key, place);
         const container = args.droppableContainers.find((c) => c.id === id);
@@ -474,12 +437,12 @@ function DragBoard({
      */
     coordinates: ((event, { context }) => {
       const drag = keyboard.current;
-      if (!drag) return nearestInDirection(event, context);
+      if (!drag) return undefined;
       const direction = DIRECTIONS[event.code as keyof typeof DIRECTIONS] as Direction | undefined;
       const { collisionRect, droppableRects } = context;
       if (!direction || !collisionRect) return undefined;
       event.preventDefault();
-      const groups = groupsOf(latest.current, swimlanes, drag.lane);
+      const groups = inLane(latest.current, drag.lane);
       const place = placeIn(groups, drag);
       if (!place) return undefined;
       const next = nextPlace(groups, drag.issue.key, place, direction);
@@ -541,10 +504,9 @@ function DragBoard({
    * another lane's, which never changes the Assignee.
    */
   function overStatus(issue: Issue, event: Pick<DragEndEvent, "over">) {
-    const area = areaOf(event.over?.data.current);
-    if (!area) return undefined;
-    if (swimlanes && area.lane !== undefined && area.lane !== laneIdOf(issue)) return undefined;
-    return area.status;
+    const area = event.over?.data.current as { status?: ProjectStatus; lane?: string } | undefined;
+    if (swimlanes && area?.lane !== undefined && area.lane !== laneIdOf(issue)) return undefined;
+    return area?.status;
   }
 
   /** "at position 2 of 5 in To do" (in the Swimlanes, "in Dana, To do"), or just "in To do" without a place. */
@@ -618,11 +580,11 @@ function DragBoard({
     let place: Place | null = null;
     let status: ProjectStatus | undefined;
     // A keyboard drag's places are its lane's cells, one for each column.
-    const places = drag ? groupsOf(columns, swimlanes, drag.lane) : groups;
+    const places = drag ? inLane(groups, drag.lane) : groups;
     if (drag) {
       // By keyboard: where its place is now, wherever the boxes put the carried card.
       place = placeIn(places, drag);
-      status = place ? columns[place.group]?.status : undefined;
+      status = place ? places[place.group]?.status : undefined;
     } else if (issue) {
       status = overStatus(issue, event);
       place = pointerPlace(groups, issue, event);
@@ -868,7 +830,7 @@ export function IssueBoard({
   const crowded = useCrowded(scroller, columns.length);
 
   return (
-    <DragBoard columns={columns} swimlanes={false} onDrop={onDrop} canMove={canMove}>
+    <DragBoard columns={columns} onDrop={onDrop} canMove={canMove}>
       <div ref={setFrame} className={classes.boardFrame} style={{ height }}>
         <div
           ref={setScroller}
@@ -889,6 +851,9 @@ export function IssueBoard({
 /** The part of the Board in view, as fractions of its whole width. */
 type View = { start: number; size: number };
 
+/** In the Swimlanes' minimap, the bar for the Assignee column ahead of the Statuses, in columns (140px of 200px). */
+const LABEL_BAR = 0.7;
+
 function viewOf(scroller: HTMLElement): View {
   return {
     start: scroller.scrollLeft / scroller.scrollWidth,
@@ -901,7 +866,16 @@ function viewOf(scroller: HTMLElement): View {
  * view. Pressing or dragging on it scrolls the Board there. It is for the pointer only: the keyboard reaches every card
  * by Tab, which scrolls it into view anyway.
  */
-function Minimap({ scroller, columns }: { scroller: HTMLElement; columns: Column[] }) {
+function Minimap({
+  scroller,
+  columns,
+  labelled = false,
+}: {
+  scroller: HTMLElement;
+  columns: Column[];
+  /** The Swimlanes: the row also has the Assignee column ahead of the Statuses, drawn as a bar of its own. */
+  labelled?: boolean;
+}) {
   const [view, setView] = useState<View>(() => viewOf(scroller));
 
   useLayoutEffect(() => {
@@ -935,10 +909,12 @@ function Minimap({ scroller, columns }: { scroller: HTMLElement; columns: Column
           if (event.currentTarget.hasPointerCapture(event.pointerId)) jump(event);
         }}
       >
+        {labelled && <span className={classes.minimapLabel} />}
         {columns.map((column, index) => {
           // In view when most of its share of the width is inside the frame.
-          const start = index / columns.length;
-          const end = (index + 1) / columns.length;
+          const lead = labelled ? LABEL_BAR : 0;
+          const start = (lead + index) / (lead + columns.length);
+          const end = (lead + index + 1) / (lead + columns.length);
           const seen =
             Math.min(end, view.start + view.size) - Math.max(start, view.start) > (end - start) / 2;
           return (
@@ -1215,8 +1191,17 @@ function BoardColumn({
   );
 }
 
-/** One row of the Swimlanes: who it is for, and their Issues. */
-type Lane = { id: string; name: string | null; avatarUrl: string | null; issues: Issue[] };
+/** One place for cards in the Swimlanes: a lane's Issues in one Status. */
+type Cell = { id: string; label: string; status: ProjectStatus; issues: Issue[] };
+
+/** One row of the Swimlanes: who it is for, their Issues, and those in a cell for each column. */
+type Lane = {
+  id: string;
+  name: string | null;
+  avatarUrl: string | null;
+  issues: Issue[];
+  cells: Cell[];
+};
 
 function laneIdOf(issue: Issue) {
   return issue.assignee?.id ?? "none";
@@ -1225,7 +1210,7 @@ function laneIdOf(issue: Issue) {
 /** Lanes by Assignee, in the order they first appear, with Unassigned last. */
 function lanesOf(columns: Column[]): Lane[] {
   const lanes = new Map<string, Lane>();
-  const unassigned: Lane = { id: "none", name: null, avatarUrl: null, issues: [] };
+  const unassigned: Lane = { id: "none", name: null, avatarUrl: null, issues: [], cells: [] };
   for (const issue of columns.flatMap((column) => column.items)) {
     if (!issue.assignee) {
       unassigned.issues.push(issue);
@@ -1236,11 +1221,22 @@ function lanesOf(columns: Column[]): Lane[] {
       name: issue.assignee.displayName,
       avatarUrl: issue.assignee.avatarUrl,
       issues: [],
+      cells: [],
     };
     lane.issues.push(issue);
     lanes.set(issue.assignee.id, lane);
   }
-  return [...lanes.values(), ...(unassigned.issues.length > 0 ? [unassigned] : [])];
+  const all = [...lanes.values(), ...(unassigned.issues.length > 0 ? [unassigned] : [])];
+  // The one place the cells are made: what each shows, what a drop sends and what is announced all come from them.
+  for (const lane of all) {
+    lane.cells = columns.map((column) => ({
+      id: cellId(lane.id, column.status.id),
+      label: `${lane.name ?? "Unassigned"}, ${column.status.name}`,
+      status: column.status,
+      issues: lane.issues.filter((issue) => issue.status.id === column.status.id),
+    }));
+  }
+  return all;
 }
 
 /**
@@ -1259,29 +1255,33 @@ export function IssueSwimlanes({
 }) {
   const lanes = lanesOf(columns);
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const more = useHiddenSides(scroller);
   useScrollbarWhileScrolling(scroller);
   return (
-    <DragBoard columns={columns} swimlanes onDrop={onDrop} canMove={canMove}>
-      <div
-        ref={setScroller}
-        className={classes.lanes}
-        style={{ gridTemplateColumns: `140px repeat(${columns.length}, minmax(200px, 1fr))` }}
-      >
-        <div className={`${classes.columnHead} ${classes.laneLabel}`}>Assignee</div>
-        {columns.map((column) => (
-          <div key={column.status.id} className={`${classes.columnHead} ${classes.statusHead}`}>
-            <StatusPill status={column.status} />
-          </div>
-        ))}
-        {lanes.map((lane) => (
-          <LaneRow key={lane.id} lane={lane} columns={columns} />
-        ))}
+    <DragBoard columns={columns} lanes={lanes} onDrop={onDrop} canMove={canMove}>
+      <div className={classes.boardFrame}>
+        <div
+          ref={setScroller}
+          className={classes.lanes}
+          style={{ gridTemplateColumns: `140px repeat(${columns.length}, minmax(200px, 1fr))` }}
+        >
+          <div className={`${classes.columnHead} ${classes.laneLabel}`}>Assignee</div>
+          {columns.map((column) => (
+            <div key={column.status.id} className={`${classes.columnHead} ${classes.statusHead}`}>
+              <StatusPill status={column.status} />
+            </div>
+          ))}
+          {lanes.map((lane) => (
+            <LaneRow key={lane.id} lane={lane} />
+          ))}
+        </div>
+        {more && scroller && <Minimap scroller={scroller} columns={columns} labelled />}
       </div>
     </DragBoard>
   );
 }
 
-function LaneRow({ lane, columns }: { lane: Lane; columns: Column[] }) {
+function LaneRow({ lane }: { lane: Lane }) {
   return (
     <>
       <div className={classes.laneHead}>
@@ -1295,38 +1295,26 @@ function LaneRow({ lane, columns }: { lane: Lane; columns: Column[] }) {
           <span className={classes.laneCount}>{lane.issues.length}</span>
         </span>
       </div>
-      {columns.map((column) => (
-        <LaneCell
-          key={column.status.id}
-          laneId={lane.id}
-          status={column.status}
-          issues={lane.issues.filter((issue) => issue.status.id === column.status.id)}
-          label={`${lane.name ?? "Unassigned"}, ${column.status.name}`}
-        />
+      {lane.cells.map((cell) => (
+        <LaneCell key={cell.id} laneId={lane.id} cell={cell} />
       ))}
     </>
   );
 }
 
-function LaneCell({
-  laneId,
-  status,
-  issues,
-  label,
-}: {
-  laneId: string;
-  status: ProjectStatus;
-  issues: Issue[];
-  label: string;
-}) {
-  const { setNodeRef, isOver } = useStatusArea(cellId(laneId, status.id), status, laneId);
+function LaneCell({ laneId, cell }: { laneId: string; cell: Cell }) {
+  const { status, issues, label } = cell;
+  const { setNodeRef, isOver, active } = useStatusArea(cell.id, status, laneId);
+  // Another lane's cell isn't a place to drop: a drop there is refused, so it isn't lit as one.
+  const carried = active?.data.current?.issue as Issue | undefined;
+  const over = isOver && (!carried || laneIdOf(carried) === laneId);
   // The gap for a card carried in from another column of the lane opens where it will land, between the cards.
   const slot = useDropSlot(status, laneId);
   const gap = (at: number) => slot?.at === at && <Gap height={slot.height} />;
   return (
     <div
       ref={setNodeRef}
-      className={`${classes.cell} ${isOver ? classes.over : ""}`}
+      className={`${classes.cell} ${over ? classes.over : ""}`}
       role="group"
       aria-label={label}
     >

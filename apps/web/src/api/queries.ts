@@ -315,57 +315,6 @@ function boardChangesFinished(client: QueryClient): Promise<void> {
 }
 
 /**
- * Move an Issue to a Status with the Board updated at once: the card is taken out of its column and put at the top
- * of the new one before the server answers, and put back if the move fails.
- *
- * Two things keep a moved card from flashing back to its old column. The Board changes in the same moment as the
- * drop: a refresh already on its way is cancelled without awaiting it, and without putting back the data it started
- * from (its default), which would undo the move. And while other moves are still on their way, a finished move doesn't
- * refresh the lists: a refresh then could come back before the server has the later moves and show their cards where
- * they were. The last move to finish refreshes the lists of every project a move changed (moves on several projects'
- * Boards share the count), when the server has every move, also when that last move failed.
- */
-export function useMoveIssue() {
-  const client = useQueryClient();
-  return async (issue: Issue, status: ProjectStatus) => {
-    const lists = { queryKey: projectIssueLists(issue.key) };
-    // Silently: a refresh cut short is not a failed refresh, which would show "Couldn't refresh these Issues".
-    void client.cancelQueries(lists, { revert: false, silent: true });
-    const snapshot = client.getQueriesData<{ items: Issue[]; total: number }>(lists);
-    const moved = { ...issue, status };
-    for (const [key, data] of snapshot) {
-      if (!data) continue;
-      const search = key[key.length - 1] as IssueSearch | undefined;
-      const here = data.items.some((item) => item.key === issue.key);
-      // Status filters match names ignoring case, as the server does.
-      const filtered = search?.status?.toLowerCase();
-      if (filtered === status.name.toLowerCase() && !here) {
-        client.setQueryData(key, { ...data, items: [moved, ...data.items], total: data.total + 1 });
-      } else if (filtered === issue.status.name.toLowerCase() && here) {
-        client.setQueryData(key, {
-          ...data,
-          items: data.items.filter((item) => item.key !== issue.key),
-          total: data.total - 1,
-        });
-      }
-    }
-    countStatusChange(client, issue.key, issue.status.category, status.category);
-    const settle = startBoardChange(client);
-    try {
-      const saved = await inOrder(client, issue.key, () => api.moveIssue(issue.key, status.id));
-      client.setQueryData(queryKeys.issue(saved.key), saved);
-      void client.invalidateQueries({ queryKey: queryKeys.issueHistory(saved.key) });
-      settle.done(saved.key);
-    } catch (error) {
-      // The totals were counted at the drop: ask the server for them again.
-      void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
-      settle.failed(issue.key, snapshot);
-      throw error;
-    }
-  };
-}
-
-/**
  * Board changes go to the server one at a time per project, in the order they were made: a drop's neighbours are the cards the
  * Board showed, which already include the drops before it, so a later one must not be applied first. (Sent together
  * over separate connections, they could arrive either way round.) An earlier one failing doesn't hold the rest back.
@@ -474,7 +423,7 @@ export function placeIssue<T extends { key: string }>(
  * Reorder an Issue with the Board updated at once: the card goes between the cards it was dropped between before the
  * server answers, and goes back if that fails. With a `status` other than its own (a drop in another column) the
  * same request moves it there too: the card leaves its column and lands between those cards in the new one. Shares
- * {@link useMoveIssue}'s bookkeeping: the last of several quick drops, moves and reorders, once answered, refreshes
+ * the bookkeeping of Board changes: the last of several quick drops, moves and reorders, once answered, refreshes
  * the lists (only the column, for a drop that kept the Status).
  */
 export function useReorderIssue() {

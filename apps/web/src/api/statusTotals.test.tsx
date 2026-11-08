@@ -4,13 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, type Issue, type ProjectIssueStats, type ProjectStatus } from "./client";
-import {
-  queryKeys,
-  useIssueChanged,
-  useMoveIssue,
-  useProjectIssueStats,
-  useReorderIssue,
-} from "./queries";
+import { queryKeys, useIssueChanged, useProjectIssueStats, useReorderIssue } from "./queries";
 import { createQueryClient } from "./queryClient";
 
 const dana = { id: "u1", displayName: "Dana", avatarUrl: null };
@@ -69,14 +63,18 @@ describe("the Projects totals after a Status change", () => {
   });
 
   it("count a move out of Done, and ask the server again when it fails", async () => {
-    vi.spyOn(api, "moveIssue").mockRejectedValue(new Error("Archived"));
+    vi.spyOn(api, "reorderIssue").mockRejectedValue(new Error("Archived"));
     const { client, wrapper, shown } = setup();
     const refresh = vi.spyOn(client, "invalidateQueries");
-    const { result } = renderHook(() => useMoveIssue(), { wrapper });
+    const { result } = renderHook(() => useReorderIssue(), { wrapper });
 
     await act(async () => {
       await result
-        .current({ ...issue, status: done }, { ...todo, position: 0, isDefault: true })
+        .current({ ...issue, status: done }, undefined, undefined, {
+          ...todo,
+          position: 0,
+          isDefault: true,
+        })
         .catch(() => {});
     });
 

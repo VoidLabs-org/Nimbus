@@ -761,7 +761,7 @@ function CardLink({
   row?: boolean;
 }) {
   const { landed, leaving } = useCardDrop(issue);
-  const menu = useIssueMenu(issue);
+  const menu = useIssueMenu(issue, dragging);
   return (
     <Link
       ref={nodeRef}

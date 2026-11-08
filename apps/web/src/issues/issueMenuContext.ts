@@ -18,18 +18,23 @@ function returnTo(event: { target: EventTarget; currentTarget: EventTarget }) {
 
 /**
  * The handlers that open an Issue's menu from a card or row: a right-click (instead of the browser's menu), or the
- * context-menu key or Shift+F10 on it. Nothing, and the browser's own menu, when it has none.
+ * context-menu key or Shift+F10 on it; not while it is being carried (`dragging`). Nothing, and the browser's own
+ * menu, when it has none.
  */
-export function useIssueMenu(issue: Issue) {
+export function useIssueMenu(issue: Issue, dragging = false) {
   const menu = useContext(IssueMenuContext);
   if (!menu || !menu.has(issue)) return {};
   return {
     onContextMenu(event: MouseEvent<HTMLElement>) {
       event.preventDefault();
+      // While it is carried (a long press on a touch screen lifts it before the browser asks for a menu), no menu.
+      if (dragging) return;
       menu.open(issue, { x: event.clientX, y: event.clientY }, returnTo(event));
     },
     onKeyDownCapture(event: KeyboardEvent<HTMLElement>) {
       if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+      // Lifted by keyboard: the drag keeps the keys (Escape puts it back), and a menu would take them.
+      if (dragging) return;
       event.preventDefault();
       event.stopPropagation();
       const box = event.currentTarget.getBoundingClientRect();

@@ -13,6 +13,11 @@ export type IssuePermissions = {
   canEdit: (issue: Issue) => boolean;
   /** Scope Own covers the Reporter only. */
   canDelete: (issue: Issue) => boolean;
+  /**
+   * Moving it on the Board, reordering it and Move to top / bottom: editing it, in a project that isn't Archived (and
+   * is loaded, so nothing is offered before that's known).
+   */
+  canMove: (issue: Issue) => boolean;
 };
 
 /**
@@ -33,15 +38,18 @@ export function useIssuePermissions(projectKey: string | undefined): IssuePermis
   });
   const held = query.data ?? {};
   const unknown = query.isError;
+  const canEdit = (issue: Issue) =>
+    unknown ||
+    (held["issues:issue:edit"] === "own"
+      ? issue.reporter.id === userId || issue.assignee?.id === userId
+      : held["issues:issue:edit"] !== undefined);
+  const archived = project.data?.archived ?? true;
   return {
     loaded: query.isSuccess || unknown,
     canCreate: unknown || held["issues:issue:create"] !== undefined,
     canManageStatuses: unknown || held["issues:status:manage"] !== undefined,
-    canEdit: (issue) =>
-      unknown ||
-      (held["issues:issue:edit"] === "own"
-        ? issue.reporter.id === userId || issue.assignee?.id === userId
-        : held["issues:issue:edit"] !== undefined),
+    canEdit,
+    canMove: (issue) => !archived && canEdit(issue),
     canDelete: (issue) =>
       unknown ||
       (held["issues:issue:delete"] === "own"

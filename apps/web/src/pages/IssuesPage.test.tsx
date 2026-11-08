@@ -1264,6 +1264,69 @@ describe("IssuesPage", () => {
       await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", "bottom"));
     });
 
+    it("disables the end an Issue is already at, as its whole column shows", async () => {
+      byStatus(issues());
+      show("/projects/NIM/issues?view=board");
+      const disabled = async (name: string) =>
+        (await screen.findByRole("menuitem", { name })).hasAttribute("data-disabled");
+
+      fireEvent.contextMenu(await screen.findByRole("link", { name: /Ship it/ }));
+      expect(await disabled("Move to bottom")).toBe(true);
+      expect(await disabled("Move to top")).toBe(false);
+      fireEvent.keyDown(screen.getByRole("menuitem", { name: "Move to top" }), { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.queryByRole("menuitem", { name: "Move to top" })).toBeNull(),
+      );
+
+      fireEvent.contextMenu(screen.getByRole("link", { name: /Plan sprint/ }));
+      expect(await disabled("Move to top")).toBe(true);
+      expect(await disabled("Move to bottom")).toBe(false);
+    });
+
+    it("disables both for an Issue alone in its Status, in the Table too", async () => {
+      vi.spyOn(api, "issues").mockResolvedValue(page([issue(1, "Plan sprint")]));
+      vi.spyOn(api, "issueCounts").mockResolvedValue({
+        ...noCounts,
+        total: 1,
+        statuses: { s1: 1 },
+      });
+      show("/projects/NIM/issues?view=table");
+      const link = await screen.findByRole("link", { name: "Plan sprint" });
+      await waitFor(() => expect(api.issueCounts).toHaveBeenCalled());
+
+      fireEvent.contextMenu(link);
+
+      await waitFor(async () =>
+        expect(
+          (await screen.findByRole("menuitem", { name: "Move to top" })).hasAttribute(
+            "data-disabled",
+          ),
+        ).toBe(true),
+      );
+      expect(
+        screen.getByRole("menuitem", { name: "Move to bottom" }).hasAttribute("data-disabled"),
+      ).toBe(true);
+    });
+
+    it("doesn't open while a card is carried by keyboard", async () => {
+      byStatus(issues());
+      show("/projects/NIM/issues?view=board");
+      const card = await screen.findByRole("link", { name: /Plan sprint/ });
+      const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      await act(async () => {
+        fireEvent.keyDown(card, { code: "Space", key: " " });
+      });
+      await tick();
+      fireEvent.keyDown(card, { key: "F10", shiftKey: true });
+      fireEvent.contextMenu(card);
+
+      expect(screen.queryByRole("menuitem", { name: "Move to top" })).toBeNull();
+      await act(async () => {
+        fireEvent.keyDown(document.body, { code: "Escape", key: "Escape" });
+      });
+    });
+
     it("has no menu for an Issue the User may not move", async () => {
       vi.spyOn(api, "myProjectPermissions").mockResolvedValue({});
       byStatus(issues());

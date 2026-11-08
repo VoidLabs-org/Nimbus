@@ -23,8 +23,8 @@ import {
   refreshFailed,
   useIssue,
   useIssueChanged,
+  useIssueCounts,
   useMoveToEnd,
-  useProject,
   useProjectStatuses,
 } from "../api/queries";
 import { useSession } from "../auth/useSession";
@@ -131,14 +131,16 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
   const permissions = useIssuePermissions(projectKey);
   const canEdit = issue !== undefined && permissions.canEdit(issue);
   const canDelete = issue !== undefined && permissions.canDelete(issue);
-  // Move to top and Move to bottom: only for a User who may move the Issue, and not in an Archived project.
-  const project = useProject(projectKey ?? "", projectKey !== undefined);
-  const canMove = canEdit && project.data !== undefined && !project.data.archived;
+  const canMove = issue !== undefined && permissions.canMove(issue);
+  // Alone in its Status: Move to top and Move to bottom would do nothing. (Whether it is first or last isn't known here.)
+  const counts = useIssueCounts(projectKey ?? "", {}, canMove);
+  const alone = issue !== undefined && counts.data?.statuses[issue.status.id] === 1;
   const moveToEnd = useMoveToEnd();
   async function sendToEnd(issue: Issue, to: "top" | "bottom") {
     try {
       await moveToEnd(issue, to);
-      toast.success(`Moved ${issue.key} to the ${to} of ${issue.status.name}.`);
+      // Also true when it was already there, which the server doesn't say.
+      toast.success(`${issue.key} is at the ${to} of ${issue.status.name}.`);
     } catch (error) {
       toast.error(
         `Couldn't move ${issue.key} to the ${to}: ${error instanceof Error ? error.message : "Unknown error."}`,
@@ -245,6 +247,7 @@ function IssueDetails({ issueKey }: { issueKey: string }) {
                           <MoveToEndItems
                             issue={issue}
                             onMove={(issue, to) => void sendToEnd(issue, to)}
+                            atEnd={{ top: alone, bottom: alone }}
                           />
                         </Menu.Dropdown>
                       </Menu>

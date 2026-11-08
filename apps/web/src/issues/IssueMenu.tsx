@@ -6,18 +6,31 @@ import { IssueMenuContext } from "./issueMenuContext";
 
 export type MoveToEnd = (issue: Issue, to: "top" | "bottom") => void;
 
-/** The Move items of an Issue's menu, here and on the Issue page. */
-export function MoveToEndItems({ issue, onMove }: { issue: Issue; onMove: MoveToEnd }) {
+/** Whether the Issue is known to be first (`top`) or last (`bottom`) in its Status already, so that item does nothing. */
+export type AtEnd = { top: boolean; bottom: boolean };
+
+/** The Move items of an Issue's menu, here and on the Issue page; one it is already at is disabled. */
+export function MoveToEndItems({
+  issue,
+  onMove,
+  atEnd = { top: false, bottom: false },
+}: {
+  issue: Issue;
+  onMove: MoveToEnd;
+  atEnd?: AtEnd;
+}) {
   return (
     <>
       <Menu.Item
         leftSection={<IconArrowBarToUp size={16} aria-hidden />}
+        disabled={atEnd.top}
         onClick={() => onMove(issue, "top")}
       >
         Move to top
       </Menu.Item>
       <Menu.Item
         leftSection={<IconArrowBarToDown size={16} aria-hidden />}
+        disabled={atEnd.bottom}
         onClick={() => onMove(issue, "bottom")}
       >
         Move to bottom
@@ -34,10 +47,13 @@ export function MoveToEndItems({ issue, onMove }: { issue: Issue; onMove: MoveTo
 export function IssueMenuHost({
   has,
   onMove,
+  atEnd,
   children,
 }: {
   has: (issue: Issue) => boolean;
   onMove: MoveToEnd;
+  /** What the view can tell about where the Issue is in its Status; an item it is already at is disabled. */
+  atEnd?: (issue: Issue) => AtEnd;
   children: ReactNode;
 }) {
   const [opened, setOpened] = useState<{
@@ -49,7 +65,15 @@ export function IssueMenuHost({
   const open = (issue: Issue, at: { x: number; y: number }, from: HTMLElement) =>
     setOpened({ issue, ...at, from });
   function close() {
-    opened?.from.focus({ preventScroll: true });
+    // The element it opened from, or, if a move re-drew it, the Issue's card or row now (its link, for a row).
+    let from = opened?.from.isConnected ? opened.from : null;
+    if (opened && !from) {
+      const now = document.querySelector<HTMLElement>(
+        `[data-issue="${CSS.escape(opened.issue.key)}"]`,
+      );
+      from = now?.tagName === "TR" ? now.querySelector<HTMLElement>("a") : now;
+    }
+    from?.focus({ preventScroll: true });
     setOpened(null);
   }
   return (
@@ -79,7 +103,9 @@ export function IssueMenuHost({
           />
         </Menu.Target>
         <Menu.Dropdown aria-label={opened ? `Actions for ${opened.issue.key}` : undefined}>
-          {opened && <MoveToEndItems issue={opened.issue} onMove={onMove} />}
+          {opened && (
+            <MoveToEndItems issue={opened.issue} onMove={onMove} atEnd={atEnd?.(opened.issue)} />
+          )}
         </Menu.Dropdown>
       </Menu>
     </IssueMenuContext>

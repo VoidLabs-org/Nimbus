@@ -434,19 +434,15 @@ export function useMoveToEnd() {
     for (const [key, data] of snapshot) {
       const search = key[key.length - 1] as IssueSearch | undefined;
       if (!data || search?.sort !== "rank") continue;
+      // Only a list that reaches that end of the order can show where the server puts it: the first page for the
+      // top, a list showing all of its Issues for the bottom. Others (a later Table page, a Board column showing
+      // 100 of 120) keep it where it was until the refresh.
+      const first = !search.page;
+      if (!first || (to === "bottom" && data.items.length < data.total)) continue;
       const items = toEndOfStatus(data.items, issue.key, to);
       if (items !== data.items) client.setQueryData(key, { ...data, items });
     }
-    const settle = startBoardChange(client);
-    try {
-      const saved = await inOrder(client, issue.key, () => api.moveIssueToEnd(issue.key, to));
-      client.setQueryData(queryKeys.issue(saved.key), saved);
-      settle.done(saved.key, issue.status.name);
-      return saved;
-    } catch (error) {
-      settle.failed(issue.key, snapshot, issue.status.name);
-      throw error;
-    }
+    return sendBoardChange(client, issue, snapshot, false, () => api.moveIssueToEnd(issue.key, to));
   };
 }
 
@@ -539,25 +535,41 @@ export function useReorderIssue() {
       }
     }
     if (moving) countStatusChange(client, issue.key, issue.status.category, status.category);
-    const settle = startBoardChange(client);
-    try {
-      const saved = await inOrder(client, issue.key, () =>
-        anyStatus
-          ? api.reorderIssue(issue.key, after, before, undefined, true)
-          : api.reorderIssue(issue.key, after, before, moving ? status.id : undefined),
-      );
-      client.setQueryData(queryKeys.issue(saved.key), saved);
-      if (moving) {
-        void client.invalidateQueries({ queryKey: queryKeys.issueHistory(saved.key) });
-        settle.done(saved.key);
-      } else settle.done(saved.key, issue.status.name);
-    } catch (error) {
-      // The totals were counted at the drop: ask the server for them again.
-      if (moving) void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
-      settle.failed(issue.key, snapshot, moving ? undefined : issue.status.name);
-      throw error;
-    }
+    await sendBoardChange(client, issue, snapshot, moving, () =>
+      anyStatus
+        ? api.reorderIssue(issue.key, after, before, undefined, true)
+        : api.reorderIssue(issue.key, after, before, moving ? status.id : undefined),
+    );
   };
+}
+
+/**
+ * Sends a Board change made at once on screen (the lists were `snapshot` before it) and settles it: the saved Issue
+ * replaces its cached one, and the last change on its way refreshes what they changed. A change that `moved` the
+ * Issue to another Status also refreshes its history and, if it fails, the Projects totals counted at the drop; one
+ * that only changed the Rank refreshes the lists of its Status in Rank order. If it fails, the lists go back.
+ */
+async function sendBoardChange(
+  client: QueryClient,
+  issue: Issue,
+  snapshot: [QueryKey, unknown][],
+  moved: boolean,
+  send: () => Promise<Issue>,
+): Promise<Issue> {
+  const settle = startBoardChange(client);
+  try {
+    const saved = await inOrder(client, issue.key, send);
+    client.setQueryData(queryKeys.issue(saved.key), saved);
+    if (moved) {
+      void client.invalidateQueries({ queryKey: queryKeys.issueHistory(saved.key) });
+      settle.done(saved.key);
+    } else settle.done(saved.key, issue.status.name);
+    return saved;
+  } catch (error) {
+    if (moved) void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
+    settle.failed(issue.key, snapshot, moved ? undefined : issue.status.name);
+    throw error;
+  }
 }
 
 /** A refresh failed while older data is still on screen: say so, since the data may be out of date. */

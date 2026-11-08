@@ -246,7 +246,25 @@ export default function IssuesPage() {
   // An Archived project takes no new Issues and no moves.
   const archived = project?.archived ?? false;
   const canCreate = project !== undefined && !archived && permissions.canCreate;
-  const canMove = (issue: Issue) => !archived && permissions.canEdit(issue);
+  const canMove = permissions.canMove;
+  /**
+   * Whether an Issue is already first or last in its Status, so Move to top or Move to bottom would do nothing. Only
+   * without filters or a search, which change what the columns and counts hold: then alone in its Status (the
+   * counts), or first or last of its whole column (the Board, Swimlanes and List). Otherwise not known: both offered.
+   */
+  function atEnd(issue: Issue) {
+    if (filtered || searching) return { top: false, bottom: false };
+    const alone = counts.data?.statuses[issue.status.id] === 1;
+    const column = grouped
+      ? columns.find((candidate) => candidate.status.id === issue.status.id)
+      : undefined;
+    const items = column?.items ?? [];
+    const whole = column !== undefined && items.length === column.total;
+    return {
+      top: alone || items[0]?.key === issue.key,
+      bottom: alone || (whole && items.at(-1)?.key === issue.key),
+    };
+  }
   const total = grouped
     ? columns.reduce((sum, column) => sum + column.total, 0)
     : (data?.total ?? 0);
@@ -376,7 +394,7 @@ export default function IssuesPage() {
       )}
       {/* Keyed by the view, so switching views fades the new one in instead of swapping it at once. The frame
           keeps the last view's height while the next one loads, so the page doesn't get shorter and scroll up. */}
-      <IssueMenuHost has={canMove} onMove={(issue, to) => void sendToEnd(issue, to)}>
+      <IssueMenuHost has={canMove} atEnd={atEnd} onMove={(issue, to) => void sendToEnd(issue, to)}>
         <div ref={viewFrame} style={{ minHeight: loaded ? undefined : heldHeight }}>
           <div key={view} className={classes.viewIn}>
             {!loaded ? (

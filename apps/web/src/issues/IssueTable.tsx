@@ -169,7 +169,7 @@ function Cells({ issue }: { issue: Issue }) {
 /** A row under Priority or Updated: no grip, but the Issue menu on a right-click. */
 function PlainRow({ issue }: { issue: Issue }) {
   return (
-    <tr {...useIssueMenu(issue)}>
+    <tr data-issue={issue.key} {...useIssueMenu(issue)}>
       <td className={classes.gripCell} />
       <Cells issue={issue} />
     </tr>
@@ -187,7 +187,7 @@ function SortableRow({ issue, movable }: { issue: Issue; movable: boolean }) {
     transition,
     isDragging,
   } = useSortable({ id: issue.key, disabled: { draggable: !movable, droppable: false } });
-  const menu = useIssueMenu(issue);
+  const menu = useIssueMenu(issue, isDragging);
   return (
     <tr
       ref={setNodeRef}

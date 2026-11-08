@@ -752,33 +752,144 @@ describe("IssuesPage", () => {
       });
     });
 
-    it("says what happens in the Swimlanes too", async () => {
+    it("says what happens in the Swimlanes too, by lane cell", async () => {
       byStatus(board());
       show("/projects/NIM/issues?view=swimlanes");
       const card = await screen.findByRole("link", { name: /Plan sprint/ });
 
       await press("Space", card);
-      expect(said()).toBe("Picked up NIM-1 in To do.");
+      expect(said()).toBe("Picked up NIM-1 at position 1 of 3 in Unassigned, To do.");
       await press("Escape");
-      expect(said()).toBe("NIM-1 was put back in To do");
+      expect(said()).toBe("NIM-1 was put back at position 1 of 3 in Unassigned, To do");
     });
   });
 
-  it("still moves an Issue dropped on another Status in the Swimlanes, by its Status only", async () => {
-    byStatus([issue(1, "Plan sprint")]);
-    const reorder = vi.spyOn(api, "reorderIssue");
-    const move = vi
-      .spyOn(api, "moveIssue")
-      .mockResolvedValue(issue(1, "Plan sprint", { status: inProgress }));
-    show("/projects/NIM/issues?view=swimlanes");
-    await screen.findByRole("link", { name: /Plan sprint/ });
+  describe("reordering in the Swimlanes", () => {
+    const lane = () => [
+      issue(1, "Plan sprint", { assignee: dana }),
+      issue(2, "Fix login", { assignee: dana }),
+      issue(3, "Ship it", { assignee: dana }),
+      issue(4, "Write docs", { assignee: dana, status: inProgress }),
+      issue(5, "Other lane", { status: inProgress }),
+    ];
+    const box = (top: number) => ({
+      top,
+      height: 40,
+      left: 0,
+      width: 200,
+      bottom: top + 40,
+      right: 200,
+    });
+    /** NIM-1 carried over `over`, a card of the cell `laneId`:status, as dnd-kit hands a drop. */
+    const carried = (over: Issue, laneId: string, overTop: number, top: number) => ({
+      active: {
+        id: "NIM-1",
+        data: { current: { issue: lane()[0] } },
+        rect: { current: { initial: box(0), translated: box(top) } },
+      },
+      over: {
+        id: over.key,
+        data: { current: { status: over.status, issue: over, lane: laneId } },
+        rect: box(overTop),
+      },
+    });
+    const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const press = async (code: string, target: Element = document.body) => {
+      await act(async () => {
+        fireEvent.keyDown(target, { code, key: code });
+      });
+      await tick();
+    };
 
-    act(() =>
-      dragEnd?.({ active: { id: "NIM-1" }, over: { data: { current: { status: statuses[1] } } } }),
-    );
+    it("sends the cell's two neighbours for a drop between its cards", async () => {
+      byStatus(lane());
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      const move = vi.spyOn(api, "moveIssue");
+      show("/projects/NIM/issues?view=swimlanes");
+      await screen.findByRole("link", { name: /Ship it/ });
 
-    await waitFor(() => expect(move).toHaveBeenCalledWith("NIM-1", "s2"));
-    expect(reorder).not.toHaveBeenCalled();
+      // Below the middle of NIM-2 (top 100): between NIM-2 and NIM-3.
+      await act(async () => dragEnd?.(carried(lane()[1]!, "u1", 100, 125)));
+
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3", undefined),
+      );
+      expect(move).not.toHaveBeenCalled();
+    });
+
+    describe("between cards in another column of the lane", () => {
+      const all = () => [...lane(), issue(6, "More work", { assignee: dana, status: inProgress })];
+      it.each([
+        ["above the middle of the first card", 0, -10, undefined, "NIM-4"],
+        ["below the middle of the first card", 100, 125, "NIM-4", "NIM-6"],
+      ])(
+        "sends the Status and neighbours for a drop %s",
+        async (_, overTop, top, after, before) => {
+          byStatus(all());
+          const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+          show("/projects/NIM/issues?view=swimlanes");
+          await screen.findByRole("link", { name: /More work/ });
+
+          await act(async () => dragEnd?.(carried(lane()[3]!, "u1", overTop, top)));
+
+          await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-1", after, before, "s2"));
+        },
+      );
+    });
+
+    it("does nothing for a drop in another lane", async () => {
+      byStatus(lane());
+      const reorder = vi.spyOn(api, "reorderIssue");
+      const move = vi.spyOn(api, "moveIssue");
+      show("/projects/NIM/issues?view=swimlanes");
+      await screen.findByRole("link", { name: /Other lane/ });
+
+      await act(async () => dragEnd?.(carried(lane()[4]!, "none", 100, 125)));
+
+      expect(reorder).not.toHaveBeenCalled();
+      expect(move).not.toHaveBeenCalled();
+      expect(screen.getByLabelText("Moving cards").textContent).toMatch(/put back/);
+    });
+
+    it("moves by keyboard within the lane, and sends the neighbours", async () => {
+      byStatus(lane());
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=swimlanes");
+      const card = await screen.findByRole("link", { name: /Plan sprint/ });
+
+      await press("Space", card);
+      await press("ArrowDown");
+      expect(screen.getByLabelText("Moving cards").textContent).toBe(
+        "NIM-1, position 2 of 3 in Dana, To do",
+      );
+      await press("Space");
+
+      await waitFor(() =>
+        expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-2", "NIM-3", undefined),
+      );
+    });
+
+    it("carries a card to the next column of its lane with Right, never to another lane", async () => {
+      byStatus(lane());
+      const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
+      show("/projects/NIM/issues?view=swimlanes");
+      const card = await screen.findByRole("link", { name: /Ship it/ });
+
+      await press("Space", card);
+      await press("ArrowRight");
+      expect(screen.getByLabelText("Moving cards").textContent).toBe(
+        "NIM-3, position 2 of 2 in Dana, In progress",
+      );
+      await press("ArrowRight");
+      expect(screen.getByLabelText("Moving cards").textContent).toMatch(
+        /already in the last column/,
+      );
+      await press("ArrowDown");
+      expect(screen.getByLabelText("Moving cards").textContent).toMatch(/already last/);
+      await press("Space");
+
+      await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-3", "NIM-4", undefined, "s2"));
+    });
   });
 
   it("puts each Assignee in a lane on the Swimlanes", async () => {

@@ -4,7 +4,7 @@ import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { toast } from "@repo/ui/toast";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type Project, type ProjectIssueStats } from "../api/client";
@@ -174,6 +174,14 @@ describe("the Projects page: the list", () => {
 });
 
 describe("the Projects page: New project", () => {
+  // The window's open or close transition ends on a timer; one still pending when the test file finishes fires
+  // after jsdom is gone ("window is not defined", most often on a slow CI machine). Let it end first.
+  afterEach(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+  });
+
   it("is offered only once the list has loaded", async () => {
     let finish: (projects: Project[]) => void = () => {};
     vi.spyOn(api, "projects").mockReturnValue(new Promise((resolve) => (finish = resolve)));

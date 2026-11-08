@@ -515,7 +515,9 @@ describe("IssuesPage", () => {
 
       const card = await screen.findByRole("link", { name: /Plan sprint/ });
 
-      expect(card.getAttribute("aria-disabled")).toBe("true");
+      // A plain link: it still opens the Issue, so it isn't announced as disabled or as draggable.
+      expect(card.getAttribute("aria-disabled")).toBeNull();
+      expect(card.getAttribute("aria-roledescription")).toBeNull();
     });
   });
 
@@ -955,19 +957,19 @@ describe("IssuesPage", () => {
       await waitFor(() => expect(reorder).toHaveBeenCalledWith("NIM-1", "NIM-4", "NIM-5", "s2"));
     });
 
-    it("shows an empty Status as a drop area only while a row is carried, and a drop there sends no neighbours", async () => {
+    it("shows every Status in order, an empty one as a heading saying so, and a drop there sends no neighbours", async () => {
       byStatus([issue(1, "Plan sprint")]);
       const reorder = vi.spyOn(api, "reorderIssue").mockReturnValue(new Promise(() => {}));
       show("/projects/NIM/issues?view=list");
-      const row = await screen.findByRole("link", { name: /Plan sprint/ });
-      expect(screen.queryByText("Drop here to move to In progress")).toBeNull();
+      await screen.findByRole("link", { name: /Plan sprint/ });
 
-      await press("Space", row);
-      expect(screen.getByText("Drop here to move to In progress")).toBeTruthy();
-      await press("Escape");
-      await waitFor(() =>
-        expect(screen.queryByText("Drop here to move to In progress")).toBeNull(),
-      );
+      const regions = screen
+        .getAllByRole("region")
+        .map((region) => region.getAttribute("aria-label"));
+      expect(regions).toEqual(["To do", "In progress"]);
+      expect(
+        within(screen.getByRole("region", { name: "In progress" })).getByText("No issues"),
+      ).toBeTruthy();
 
       act(() =>
         dragEnd?.({
@@ -978,6 +980,20 @@ describe("IssuesPage", () => {
       await waitFor(() =>
         expect(reorder).toHaveBeenCalledWith("NIM-1", undefined, undefined, "s2"),
       );
+    });
+
+    it("opens the gap under an empty Status's heading while a row is carried there", async () => {
+      byStatus([issue(1, "Plan sprint")]);
+      show("/projects/NIM/issues?view=list");
+      const row = await screen.findByRole("link", { name: /Plan sprint/ });
+      const area = screen.getByRole("region", { name: "In progress" });
+
+      await press("Space", row);
+      expect(area.querySelector("[data-drop-slot]")).toBeNull();
+      // Down carries the row past the end of To do, into the empty Status.
+      await press("ArrowDown");
+      expect(area.querySelector("[data-drop-slot]")).toBeTruthy();
+      await press("Escape");
     });
 
     it("carries a row by keyboard, across the end of its group into the next one, and drops it there", async () => {
@@ -1031,7 +1047,8 @@ describe("IssuesPage", () => {
       show("/projects/NIM/issues?view=list");
       const row = await screen.findByRole("link", { name: /Plan sprint/ });
 
-      expect(row.getAttribute("aria-disabled")).toBe("true");
+      expect(row.getAttribute("aria-disabled")).toBeNull();
+      expect(row.getAttribute("aria-roledescription")).toBeNull();
       await press("Space", row);
       await press("ArrowDown");
       await press("Space");

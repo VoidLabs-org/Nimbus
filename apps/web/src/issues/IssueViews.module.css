@@ -223,12 +223,12 @@
   border-radius: 16px;
 }
 
-/* The card on its way: lifted, outlined in orange, a little tilted. */
+/* The card on its way: lifted and outlined in orange, straight. */
 .lifted {
   box-shadow:
     0 0 0 1px var(--color-accent-500),
     var(--shadow-lg);
-  transform: rotate(2deg) scale(1.02);
+  transform: scale(1.02);
   transition:
     transform 220ms cubic-bezier(0.2, 0, 0, 1),
     box-shadow 220ms cubic-bezier(0.2, 0, 0, 1);
@@ -271,11 +271,13 @@
   initial-value: 0%;
 }
 
-.landed .card {
+.landed .card,
+.landed .groupRow {
   position: relative;
 }
 
-.landed .card::after {
+.landed .card::after,
+.landed .groupRow::after {
   content: "";
   position: absolute;
   inset: -1px;
@@ -310,7 +312,8 @@
 @media (prefers-reduced-motion: reduce) {
   .lifted,
   .dropSlot,
-  .landed .card::after {
+  .landed .card::after,
+  .landed .groupRow::after {
     transition: none;
     animation: none;
   }
@@ -488,25 +491,26 @@
 /* The row on its way (the .lifted tilt and shadow, on a row's own background). */
 .groupRow.lifted {
   background: var(--card);
+  /* A full-width row doesn't grow: scaled, its ends would stick out past the List. */
+  transform: none;
 }
 
-/* A Status with no Issues, while a row is carried: a place to drop it. */
-.emptyDrop {
-  padding: 18px 14px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 18px;
-  font-size: 13px;
-  text-align: center;
-  color: var(--color-accent-2-700);
+/* A Status with no Issues: just its heading, saying so; a row dropped on it moves there, its gap under the heading. */
+.emptyGroup .groupHead {
+  margin-bottom: 0;
 }
 
-.emptyDrop.over {
-  border-style: solid;
+.emptyGroup .dropSlot {
+  margin-top: 6px;
+}
+
+.noIssues {
+  margin-left: 4px;
 }
 
 .groupRow {
   display: grid;
-  grid-template-columns: 20px 64px minmax(0, 1fr) 96px 28px 28px;
+  grid-template-columns: 20px 64px minmax(0, 1fr) 28px 28px;
   gap: 12px;
   align-items: center;
   padding: 10px 14px;
@@ -633,8 +637,7 @@
     grid-template-columns: 20px minmax(0, 1fr) 28px 28px;
   }
 
-  .rowKey,
-  .rowStatus {
+  .rowKey {
     display: none;
   }
 }

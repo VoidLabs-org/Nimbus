@@ -263,6 +263,18 @@ const SWIMLANES_INSTRUCTIONS = {
     "To move this Issue, press Space. Up and Down move it one place in its cell, Left and Right to the next column of the same Assignee. Press Space to drop it, or Escape to put it back.",
 };
 
+/**
+ * What differs between the views that share DragBoard: what screen readers are told, whether Up and Down carry a
+ * card across the end of its group (the List's groups are stacked, so Left and Right don't apply there either), and
+ * what scrolls while a card is near an edge. The List is as long as its page, which then has to scroll too; the Board
+ * and Swimlanes only scroll their own scrollers (see autoScroll).
+ */
+const MODES = {
+  board: { instructions: BOARD_INSTRUCTIONS, stacked: false, autoScroll },
+  swimlanes: { instructions: SWIMLANES_INSTRUCTIONS, stacked: false, autoScroll },
+  list: { instructions: LIST_INSTRUCTIONS, stacked: true, autoScroll: true as const },
+} satisfies Record<string, { instructions: object; stacked: boolean; autoScroll: unknown }>;
+
 /** dnd-kit's own announcements are off: the Board and the Swimlanes say what happens in their own live region. */
 const SILENT = {
   onDragStart: () => undefined,
@@ -342,7 +354,7 @@ function placeIn(groups: Group[], drag: KeyboardDrag): Place | null {
 export function DragBoard({
   columns,
   lanes,
-  list = false,
+  mode,
   overlay,
   onDrop,
   canMove,
@@ -351,8 +363,8 @@ export function DragBoard({
   columns: Column[];
   /** The Swimlanes' lanes; none on the Board. */
   lanes?: Lane[];
-  /** The List: its Statuses are stacked, so Up and Down carry a row across them and Left and Right do nothing. */
-  list?: boolean;
+  /** The view (see MODES); the Swimlanes when there are `lanes`, the Board otherwise. */
+  mode?: keyof typeof MODES;
   /** What the carried Issue looks like; a card by default. */
   overlay?: (issue: Issue) => ReactNode;
   onDrop: DropIssue;
@@ -368,6 +380,7 @@ export function DragBoard({
   const refocus = useRef<{ key: string; status: string } | null>(null);
   // The columns as last rendered, for what dnd-kit calls between renders, and this Board's keyboard drag.
   const swimlanes = lanes !== undefined;
+  const behaviour = MODES[mode ?? (swimlanes ? "swimlanes" : "board")];
   const latest = useRef<StatusGroup[]>([]);
   const keyboard = useRef<KeyboardDrag | null>(null);
   // Where a pointer drag was last said to be (a Status, and a place on the Board), so each place is said once.
@@ -440,8 +453,15 @@ export function DragBoard({
       const groups = inLane(latest.current, drag.lane);
       const place = placeIn(groups, drag);
       if (!place) return undefined;
-      if (list && (direction === "left" || direction === "right")) return undefined;
-      const next = nextPlace(groups, drag.issue.key, place, direction, undefined, list);
+      if (behaviour.stacked && (direction === "left" || direction === "right")) return undefined;
+      const next = nextPlace(
+        groups,
+        drag.issue.key,
+        place,
+        direction,
+        undefined,
+        behaviour.stacked,
+      );
       if (next.group === place.group && next.index === place.index) {
         setAnnouncement(describeEdge(groups, drag.issue.key, place, direction));
         return undefined;
@@ -636,14 +656,10 @@ export function DragBoard({
             sensors={sensors}
             accessibility={{
               announcements: SILENT,
-              screenReaderInstructions: list
-                ? LIST_INSTRUCTIONS
-                : swimlanes
-                  ? SWIMLANES_INSTRUCTIONS
-                  : BOARD_INSTRUCTIONS,
+              screenReaderInstructions: behaviour.instructions,
             }}
             collisionDetection={keys.collisions}
-            autoScroll={list ? undefined : autoScroll}
+            autoScroll={behaviour.autoScroll}
             measuring={measuring}
             onDragStart={start}
             onDragOver={over}
@@ -718,25 +734,44 @@ function CardBody({ issue, lifted = false }: { issue: Issue; lifted?: boolean })
   );
 }
 
+/**
+ * A row of the List: the Status is the group's, so it isn't repeated here (it would also be stale while a carried row
+ * glides into another group). The carried one is `lifted`.
+ */
+export function RowBody({ issue, lifted = false }: { issue: Issue; lifted?: boolean }) {
+  return (
+    <div className={`${classes.groupRow} ${lifted ? classes.lifted : ""}`}>
+      <TypeBadge type={issue.type} />
+      <span className={classes.rowKey}>{issue.key}</span>
+      <span className={classes.rowTitle}>{issue.title}</span>
+      <PriorityMark priority={issue.priority} />
+      <AssigneeMark issue={issue} size={24} />
+    </div>
+  );
+}
+
 function CardLink({
   issue,
   dragging,
   handles,
   nodeRef,
   style,
+  row = false,
 }: {
   issue: Issue;
   dragging: boolean;
   handles: object;
   nodeRef: (node: HTMLElement | null) => void;
   style?: CSSProperties;
+  /** A row of the List rather than a card. */
+  row?: boolean;
 }) {
   const { landed, leaving } = useCardDrop(issue);
   return (
     <Link
       ref={nodeRef}
       to={`/issues/${encodeURIComponent(issue.key)}`}
-      className={`${classes.cardLink} ${dragging ? classes.placeholder : ""} ${landed ? classes.landed : ""} ${leaving ? classes.leaving : ""}`}
+      className={`${row ? classes.groupRowLink : classes.cardLink} ${dragging ? classes.placeholder : ""} ${landed ? classes.landed : ""} ${leaving ? classes.leaving : ""}`}
       style={style}
       // The browser's own link dragging would fight the drag.
       draggable={false}
@@ -744,18 +779,26 @@ function CardLink({
       {...handles}
       role="link"
     >
-      <CardBody issue={issue} />
+      {row ? <RowBody issue={issue} /> : <CardBody issue={issue} />}
     </Link>
   );
 }
 
 /**
- * A card in a Board column or Swimlanes cell: it opens the Issue, is dragged (where it was shows as a dashed outline,
+ * A card in a Board column or Swimlanes cell, or (`row`) a row of the List: it opens the Issue, is dragged (where it was shows as a dashed outline,
  * and its outline is traced once when it lands in a new Status; see Drop) and is dropped on, so the cards of its
  * column slide apart to open a gap where the carried card would land. A card the User may not move can't be dragged
  * but still takes drops.
  */
-function SortableIssueCard({ issue, swimlanes = false }: { issue: Issue; swimlanes?: boolean }) {
+export function SortableIssueCard({
+  issue,
+  swimlanes = false,
+  row = false,
+}: {
+  issue: Issue;
+  swimlanes?: boolean;
+  row?: boolean;
+}) {
   const canMove = useContext(CanMoveContext);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: issue.key,
@@ -770,8 +813,10 @@ function SortableIssueCard({ issue, swimlanes = false }: { issue: Issue; swimlan
       issue={issue}
       dragging={isDragging}
       nodeRef={setNodeRef}
-      handles={{ ...attributes, ...listeners }}
+      // A card the User may not move is a plain link: dnd-kit would mark it aria-disabled, yet it still opens the Issue.
+      handles={canMove(issue) ? { ...attributes, ...listeners } : {}}
       style={{ transform: CSS.Translate.toString(transform), transition }}
+      row={row}
     />
   );
 }

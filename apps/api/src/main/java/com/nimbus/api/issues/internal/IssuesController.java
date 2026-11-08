@@ -154,7 +154,8 @@ class IssuesController {
 	 */
 	@PutMapping("/api/issues/{issueKey}/rank")
 	IssueService.IssueView reorder(@PathVariable String issueKey, @RequestBody RankIssue request) {
-		return issues.reorder(currentUser.id(), issueKey, request.statusId(), request.after(), request.before());
+		return issues.reorder(currentUser.id(), issueKey, request.statusId(), request.after(), request.before(),
+				Boolean.TRUE.equals(request.anyStatus()));
 	}
 
 	@GetMapping("/api/projects/{key}/statuses")
@@ -255,7 +256,8 @@ class IssuesController {
 	record MoveIssue(UUID statusId) {
 	}
 
-	record RankIssue(UUID statusId, String after, String before) {
+	/** {@code anyStatus}: the neighbours may be of any Status (the Table, whose rows are of every Status). */
+	record RankIssue(UUID statusId, String after, String before, Boolean anyStatus) {
 	}
 
 	/** The title is trimmed before it is checked, so pasted surrounding whitespace is not an error. */

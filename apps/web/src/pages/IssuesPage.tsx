@@ -112,7 +112,12 @@ export default function IssuesPage() {
     VIEWS.find((option) => option.value === params.get("view"))?.value ?? storedView(key) ?? "list";
   const grouped = view !== "table";
   const statuses = useProjectStatuses(project?.key);
-  const query = useIssues(key, { ...search, size: PAGE_SIZE }, !grouped);
+  // The Table is in Rank order unless the address names another sort.
+  const query = useIssues(
+    key,
+    { ...search, sort: search.sort ?? "rank", size: PAGE_SIZE },
+    !grouped,
+  );
   const columnQueries = useStatusColumns(
     key,
     statuses.data ?? [],
@@ -265,6 +270,26 @@ export default function IssuesPage() {
     }
   }
 
+  /** A row dropped in the Table (in Rank order): between `after` and `before`, of any Status; its Status stays. */
+  async function reorderRow(
+    issueKey: string,
+    after: string | undefined,
+    before: string | undefined,
+  ): Promise<boolean> {
+    const issue = data?.items.find((item) => item.key === issueKey);
+    if (!issue) return false;
+    try {
+      await reorderIssue(issue, after, before, undefined, true);
+      return true;
+    } catch (error) {
+      const reason =
+        error instanceof ApiError || error instanceof Error ? error.message : "Unknown error.";
+      toast.error(`Couldn't reorder ${issue.key}: ${reason}`);
+      // The Table says so in its live region too.
+      return false;
+    }
+  }
+
   /** The menu filters and the quick filters, not the search (state 4's Clear filters). */
   const clearFilters = () => remove([...FILTER_FIELDS, "assignee"]);
   const clearSearch = () => {
@@ -387,8 +412,14 @@ export default function IssuesPage() {
                 {data && data.items.length > 0 ? (
                   <IssueTable
                     issues={data.items}
-                    sort={search.sort ?? "updated"}
-                    onSort={(sort) => change("sort", sort === "updated" ? null : sort)}
+                    sort={search.sort ?? "rank"}
+                    onSort={(sort) => change("sort", sort === "rank" ? null : sort)}
+                    // Not while the rows shown are the last answer's (another sort, page or filter), kept until
+                    // the new one comes: a drop would send neighbours from a list the server doesn't order that way.
+                    onReorder={query.isPlaceholderData ? undefined : reorderRow}
+                    canMove={canMove}
+                    offset={page * PAGE_SIZE}
+                    total={data.total}
                   />
                 ) : (
                   <p className={classes.empty}>This page has no Issues.</p>

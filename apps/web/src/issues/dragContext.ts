@@ -64,3 +64,11 @@ export function useDropSlot(status: ProjectStatus, lane?: string) {
 export function laneIdOf(issue: Issue) {
   return issue.assignee?.id ?? "none";
 }
+
+/** dnd-kit's own announcements are off: each view says what happens in its own live region. */
+export const SILENT = {
+  onDragStart: () => undefined,
+  onDragOver: () => undefined,
+  onDragEnd: () => undefined,
+  onDragCancel: () => undefined,
+};

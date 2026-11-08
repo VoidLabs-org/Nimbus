@@ -184,9 +184,13 @@ class IssueService implements Issues {
 	 * {@link #move} writes it (the same history, {@code updated_at} and event), and the neighbours are looked for in
 	 * that Status. A Status of another project is a {@code 400}, reported with any neighbour errors; nothing is written
 	 * until every field has been checked.
+	 * <p>
+	 * With {@code anyStatus} (a drop in the Table, whose rows are of every Status) a neighbour in another Status is used
+	 * too, and the Status never changes: together with a {@code statusId} it is a {@code 400}.
 	 */
 	@Transactional
-	IssueView reorder(UUID actor, String issueKey, UUID statusId, String afterKey, String beforeKey) {
+	IssueView reorder(UUID actor, String issueKey, UUID statusId, String afterKey, String beforeKey,
+			boolean anyStatus) {
 		var target = resolve(actor, issueKey, IssueAccess.Action.EDIT);
 		var project = target.project();
 		lockProject(project.id());
@@ -200,6 +204,7 @@ class IssueService implements Issues {
 			status = statusOf(project.id(), statusId);
 			if (status == null) errors.put("statusId", STATUS_RULE);
 		}
+		if (anyStatus && statusId != null) errors.put("anyStatus", "Can't be sent with statusId");
 		var after = neighbour("after", afterKey, project, errors);
 		var before = neighbour("before", beforeKey, project, errors);
 		if (!errors.isEmpty()) throw new InvalidFields(errors);
@@ -209,8 +214,8 @@ class IssueService implements Issues {
 			write(actor, target, current, statusChange(current, status));
 			statusNow = status.id();
 		}
-		after = usable(after, current.id(), statusNow);
-		before = usable(before, current.id(), statusNow);
+		after = usable(after, current.id(), anyStatus ? null : statusNow);
+		before = usable(before, current.id(), anyStatus ? null : statusNow);
 
 		String newRank = null;
 		if (after != null) {
@@ -267,9 +272,13 @@ class IssueService implements Issues {
 		return found.get();
 	}
 
-	/** The neighbour, or {@code null} to ignore it: absent, the Issue itself, or in another Status than the Issue's. */
+	/**
+	 * The neighbour, or {@code null} to ignore it: absent, the Issue itself, or in another Status than {@code statusId}
+	 * (the Issue's; {@code null} for any Status).
+	 */
 	private static Ranked usable(Ranked neighbour, UUID self, UUID statusId) {
-		if (neighbour == null || neighbour.id().equals(self) || !neighbour.statusId().equals(statusId)) return null;
+		if (neighbour == null || neighbour.id().equals(self)) return null;
+		if (statusId != null && !neighbour.statusId().equals(statusId)) return null;
 		return neighbour;
 	}
 

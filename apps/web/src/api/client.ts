@@ -471,10 +471,12 @@ export function createApiClient(
       after: string | undefined,
       before: string | undefined,
       statusId?: string,
+      /** Neighbours of any Status count (the Table); never with `statusId`. */
+      anyStatus?: boolean,
     ) =>
       request<Issue>(`/api/issues/${encodeURIComponent(issueKey)}/rank`, {
         method: "PUT",
-        body: JSON.stringify({ statusId, after, before }),
+        body: JSON.stringify({ statusId, after, before, anyStatus }),
       }),
 
     /** Deletes the Issue for good. */

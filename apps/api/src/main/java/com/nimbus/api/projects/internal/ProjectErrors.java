@@ -5,6 +5,7 @@ import java.util.TreeMap;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -16,6 +17,21 @@ class ProjectErrors {
 	@ExceptionHandler
 	ProblemDetail keyTaken(ProjectService.KeyTaken e) {
 		return invalid(HttpStatus.CONFLICT, e.getMessage(), Map.of("key", e.getMessage()));
+	}
+
+	@ExceptionHandler
+	ProblemDetail invalidFields(ProjectService.InvalidFields e) {
+		return invalid(HttpStatus.BAD_REQUEST, e.getMessage(), e.errors);
+	}
+
+	@ExceptionHandler
+	ProblemDetail archived(ProjectService.ProjectArchived e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+	}
+
+	@ExceptionHandler
+	ProblemDetail unreadableBody(HttpMessageNotReadableException e) {
+		return invalid(HttpStatus.BAD_REQUEST, "Some fields are invalid", Map.of("body", "Send a valid JSON body"));
 	}
 
 	@ExceptionHandler

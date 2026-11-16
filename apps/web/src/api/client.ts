@@ -17,6 +17,7 @@ export type RegisterInput = Schemas["RegisterRequest"];
 export type Project = Schemas["Project"];
 
 export type CreateProjectInput = Schemas["CreateProjectRequest"];
+export type UpdateProjectInput = Schemas["UpdateProjectRequest"];
 
 export type Issue = Schemas["Issue"];
 
@@ -398,6 +399,13 @@ export function createApiClient(
     /** Creates a project and adds the signed-in User as its first Member. */
     createProject: (input: CreateProjectInput) =>
       request<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
+
+    /** Renames a project or changes its description; the key can't change. `description: null` clears it. */
+    updateProject: (key: string, input: UpdateProjectInput) =>
+      request<Project>(`/api/projects/${encodeURIComponent(key)}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
 
     /** Opens a project by key. Unknown and non-Member projects both return 404. */
     project: (key: string) => request<Project>(`/api/projects/${encodeURIComponent(key)}`),

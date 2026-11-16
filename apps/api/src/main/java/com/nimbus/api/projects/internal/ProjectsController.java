@@ -2,12 +2,14 @@ package com.nimbus.api.projects.internal;
 
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonSetter;
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,6 +46,52 @@ class ProjectsController {
 	}
 
 	/**
+	 * Only the fields sent change; {@code "description": null} clears it. The Project key can't be changed, so sending
+	 * one is refused. {@link UpdateProject} remembers which fields were sent, because "not sent" and "null" differ
+	 * for the description.
+	 */
+	@PatchMapping("/{key}")
+	ProjectService.ProjectView edit(@PathVariable String key, @RequestBody UpdateProject body) {
+		return projects.edit(currentUser.id(), key, body);
+	}
+
+	/** A change to a project: what was sent, as sent. Other unknown fields are ignored; {@code key} is refused. */
+	static final class UpdateProject {
+		private String name;
+		private String description;
+		private boolean nameSent;
+		private boolean descriptionSent;
+		private boolean keySent;
+
+		@JsonSetter("name")
+		void setName(String name) {
+			this.name = name;
+			this.nameSent = true;
+		}
+
+		@JsonSetter("description")
+		void setDescription(String description) {
+			this.description = description;
+			this.descriptionSent = true;
+		}
+
+		@JsonSetter("key")
+		void setKey(Object ignored) {
+			this.keySent = true;
+		}
+
+		boolean nameSent() { return nameSent; }
+
+		boolean descriptionSent() { return descriptionSent; }
+
+		boolean keySent() { return keySent; }
+
+		String name() { return name; }
+
+		String description() { return description; }
+	}
+
+	/**
 	 * The name and the description are cleaned at both ends before they are checked, so pasted surrounding whitespace
 	 * is not an error, and neither are the invisible characters that look like it (non-breaking and other Unicode
 	 * spaces, zero-width characters). A name of only those is empty; a description of only those is none. Patterns
@@ -65,12 +113,22 @@ class ProjectsController {
 
 		/** The name and the description are cleaned at both ends; a description with nothing left is none. */
 		CreateProject {
-			name = name == null ? null : clean(name);
-			description = description == null || clean(description).isEmpty() ? null : clean(description);
+			name = cleanName(name);
+			description = cleanDescription(description);
 		}
 
 		private static String clean(String text) {
 			return EDGES.matcher(text).replaceAll("");
+		}
+
+		/** A name as the rules see it, for checking one field alone. */
+		static String cleanName(String name) {
+			return name == null ? null : clean(name);
+		}
+
+		/** A description as the rules see it: cleaned, and none when nothing is left. */
+		static String cleanDescription(String description) {
+			return description == null || clean(description).isEmpty() ? null : clean(description);
 		}
 	}
 }

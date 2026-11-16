@@ -99,6 +99,19 @@ export function useProjectCreated() {
   };
 }
 
+/**
+ * Keep the server's edited project, so the header, the breadcrumb and the page change at once, and refresh the list,
+ * which shows the name and the description (a change invalidates and doesn't patch, as for a created project).
+ */
+export function useProjectUpdated() {
+  const client = useQueryClient();
+  return async (project: Project) => {
+    await client.cancelQueries({ queryKey: queryKeys.project(project.key), exact: true });
+    client.setQueryData(queryKeys.project(project.key), project);
+    void client.invalidateQueries({ queryKey: queryKeys.projects, exact: true });
+  };
+}
+
 /** One Issue, for its page. */
 export function useIssue(key: string) {
   return useQuery({ queryKey: queryKeys.issue(key), queryFn: () => api.issue(key) });

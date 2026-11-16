@@ -37,12 +37,15 @@ class ProjectService implements Projects {
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
 	private final Users users;
+	private final jakarta.validation.Validator validator;
 
-	ProjectService(JdbcClient jdbc, ApplicationEventPublisher events, Clock clock, Users users) {
+	ProjectService(JdbcClient jdbc, ApplicationEventPublisher events, Clock clock, Users users,
+			jakarta.validation.Validator validator) {
 		this.jdbc = jdbc;
 		this.events = events;
 		this.clock = clock;
 		this.users = users;
+		this.validator = validator;
 	}
 
 	/** The controller has already checked the fields against the rules in {@code docs/specs/projects.md}. */
@@ -85,6 +88,45 @@ class ProjectService implements Projects {
 			.sorted(Comparator.comparing((Row project) -> project.name().toLowerCase(Locale.ROOT))
 				.thenComparing(Row::key))
 			.toList();
+	}
+
+	/**
+	 * Renames and re-describes a project, by the fields {@code changes} holds: a field not sent is left as it is, a
+	 * {@code null} description clears it. Fields follow the rules of creating (see CreateProject), checked by the same
+	 * annotations, and the key is never changed. Who may is decided by {@link #requireCanChange}, before the body is
+	 * looked at; an Archived project can't be changed at all.
+	 */
+	@Transactional
+	public ProjectView edit(UUID actor, String key, ProjectsController.UpdateProject changes) {
+		var stored = ProjectKeys.normalize(key).orElseThrow(ProjectNotFound::new);
+		var found = jdbc.sql("SELECT id, archived_at IS NOT NULL AS archived FROM projects WHERE key = :key")
+			.param("key", stored)
+			.query((row, index) -> Map.entry(row.getObject("id", UUID.class), row.getBoolean("archived")))
+			.optional().orElseThrow(ProjectNotFound::new);
+		var id = found.getKey();
+		requireCanChange(actor, id);
+		if (found.getValue()) throw new ProjectArchived();
+		var errors = new java.util.TreeMap<String, String>();
+		if (changes.keySent()) errors.put("key", "The Project key can't be changed");
+		var name = ProjectsController.CreateProject.cleanName(changes.name());
+		var description = ProjectsController.CreateProject.cleanDescription(changes.description());
+		if (changes.nameSent()) check("name", name, errors);
+		if (changes.descriptionSent()) check("description", description, errors);
+		if (!errors.isEmpty()) throw new InvalidFields(errors);
+		if (changes.nameSent()) {
+			jdbc.sql("UPDATE projects SET name = :name WHERE id = :id").param("name", name).param("id", id).update();
+		}
+		if (changes.descriptionSent()) {
+			jdbc.sql("UPDATE projects SET description = :description WHERE id = :id")
+				.param("description", description).param("id", id).update();
+		}
+		return open(actor, key);
+	}
+
+	/** Checks one field against the annotations of CreateProject, so the rules and messages stay in one place. */
+	private void check(String field, String value, Map<String, String> errors) {
+		for (var violation : validator.validateValue(ProjectsController.CreateProject.class, field, value))
+			errors.putIfAbsent(field, violation.getMessage());
 	}
 
 	@Override
@@ -174,6 +216,22 @@ class ProjectService implements Projects {
 		return new Row(row.getObject("id", UUID.class), row.getString("key"), row.getString("name"),
 				row.getString("description"), row.getTimestamp("archived_at") != null,
 				row.getTimestamp("created_at").toInstant(), row.getObject("created_by", UUID.class));
+	}
+
+	/** Fields of a change that break the rules, by field name. */
+	static class InvalidFields extends RuntimeException {
+		final Map<String, String> errors;
+
+		InvalidFields(Map<String, String> errors) {
+			super("Some fields are invalid");
+			this.errors = errors;
+		}
+	}
+
+	static class ProjectArchived extends RuntimeException {
+		ProjectArchived() {
+			super("An Archived project can't be changed");
+		}
 	}
 
 	static class KeyTaken extends RuntimeException {

@@ -153,7 +153,65 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename a project or change its description
+         * @description Only the fields sent change; `description: null` clears it. The name and description follow the rules of creating a project. The Project key can never be changed: sending `key`, even the current one, is refused with `400`. Who may change a project is the single check `requireCanChange` (a Member for now).
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateProjectRequest"];
+                };
+            };
+            responses: {
+                /** @description The updated project */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Project"];
+                    };
+                };
+                /** @description Invalid fields, or a key was sent (`errors` keyed by field) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Email not verified (code: email_unverified) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Project not found (also returned for a non-Member) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/api/projects/{key}/issues": {
@@ -4342,6 +4400,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Only the fields sent change. `key` is never accepted. */
+        UpdateProjectRequest: {
+            /** @description Trimmed, 1–100 Unicode code points, no ISO control characters; need not be unique */
+            name?: string;
+            /** @description Cleaned like the name; null, or nothing left, clears it */
+            description?: string | null;
+        };
         CreateProjectRequest: {
             /** @description Stored uppercase; cannot be changed or reused */
             key: string;

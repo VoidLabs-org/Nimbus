@@ -17,3 +17,7 @@
 .description[data-empty] {
   color: var(--color-accent-2-700);
 }
+
+.edit {
+  margin-top: 12px;
+}

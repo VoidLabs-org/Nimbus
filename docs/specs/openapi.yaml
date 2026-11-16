@@ -132,7 +132,7 @@ paths:
       description: >-
         Only the fields sent change; `description: null` clears it. The name and description follow the rules of
         creating a project. The Project key can never be changed: sending `key`, even the current one, is refused with
-        `400`. Needs `projects:project:archive`. An Archived
+        `400`. Needs `projects:project:update`. An Archived
         project is refused with `409`.
       parameters:
         - name: key

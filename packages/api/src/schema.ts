@@ -10,8 +10,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The projects the User is a Member of
-         * @description Active projects only: Archived ones are left out, unless `archived=true`, which returns only the User's Archived projects. Sorted by lower-cased name, then by key, in code, so the order is the same on every database. No paging. Requires a verified email.
+         * The projects the User can see
+         * @description Active projects only: Archived ones are left out, unless `archived=true`, which returns only the User's Archived projects. Sorted by lower-cased name, then by key, in code, so the order is the same on every database. No paging. Requires a verified email. A User holding `projects:project:view` with Scope All (a Platform admin) gets every project, not only the ones they are a Member of.
          */
         get: {
             parameters: {
@@ -25,7 +25,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description The projects, empty when the User is not a Member of any */
+                /** @description The projects, empty when the User can see none */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -48,8 +48,8 @@ export interface paths {
         };
         put?: never;
         /**
-         * Create a project and become its first Member
-         * @description Requires a verified email. The project and membership are saved together.
+         * Create a project and become its first Member and Project admin
+         * @description Requires a verified email and `projects:project:create` (Everyone has it by default). The project, the membership and the creator's Project admin role are saved together.
          */
         post: {
             parameters: {
@@ -75,7 +75,7 @@ export interface paths {
                 };
                 400: components["responses"]["InvalidFields"];
                 401: components["responses"]["Unauthorized"];
-                /** @description Email not verified (code: email_unverified) */
+                /** @description Email not verified (code: email_unverified), or the User lacks `projects:project:create` */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -108,7 +108,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Open a project the User is a Member of */
+        /** Open a project the User can see */
         get: {
             parameters: {
                 query?: never;
@@ -140,7 +140,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Project not found (also returned for a non-Member) */
+                /** @description Project not found (also returned for a User who may not see it) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -158,7 +158,7 @@ export interface paths {
         head?: never;
         /**
          * Rename a project or change its description
-         * @description Only the fields sent change; `description: null` clears it. The name and description follow the rules of creating a project. The Project key can never be changed: sending `key`, even the current one, is refused with `400`. Who may change a project is the single check `requireCanChange` (a Member for now). An Archived project is refused with `409`.
+         * @description Only the fields sent change; `description: null` clears it. The name and description follow the rules of creating a project. The Project key can never be changed: sending `key`, even the current one, is refused with `400`. Needs `projects:project:update`. An Archived project is refused with `409`.
          */
         patch: {
             parameters: {
@@ -195,7 +195,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                /** @description Email not verified (code: email_unverified) */
+                /** @description Email not verified (code: email_unverified), or the User can see the project but lacks `projects:project:update` */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -204,7 +204,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Project not found (also returned for a non-Member) */
+                /** @description Project not found (also returned for a User who may not see it) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -237,7 +237,7 @@ export interface paths {
         put?: never;
         /**
          * Archive a project
-         * @description An Archived project leaves the list, refuses every change (`PATCH` is `409`) and keeps its key taken. Repeating it changes nothing and still returns `200`. Who may change a project is the single check `requireCanChange` (a Member for now).
+         * @description An Archived project leaves the list, refuses every change (`PATCH` is `409`) and keeps its key taken. Repeating it changes nothing and still returns `200`. Needs `projects:project:archive`.
          */
         post: {
             parameters: {
@@ -261,7 +261,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                /** @description Email not verified (code: email_unverified) */
+                /** @description Email not verified (code: email_unverified), or the User can see the project but lacks `projects:project:archive` */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -270,7 +270,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Project not found (also returned for a non-Member) */
+                /** @description Project not found (also returned for a User who may not see it) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -298,7 +298,7 @@ export interface paths {
         put?: never;
         /**
          * Restore an Archived project
-         * @description The project returns to the list and can be changed again. Repeating it changes nothing and still returns `200`. Who may change a project is the single check `requireCanChange` (a Member for now).
+         * @description The project returns to the list and can be changed again. Repeating it changes nothing and still returns `200`. Needs `projects:project:archive`.
          */
         post: {
             parameters: {
@@ -322,7 +322,7 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
-                /** @description Email not verified (code: email_unverified) */
+                /** @description Email not verified (code: email_unverified), or the User can see the project but lacks `projects:project:archive` */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -331,7 +331,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Project not found (also returned for a non-Member) */
+                /** @description Project not found (also returned for a User who may not see it) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -397,7 +397,7 @@ export interface paths {
                 };
                 400: components["responses"]["InvalidFields"];
                 401: components["responses"]["Unauthorized"];
-                /** @description Project not found (also returned for a non-Member) */
+                /** @description Project not found (also returned for a User who may not see it) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -440,7 +440,7 @@ export interface paths {
                 };
                 400: components["responses"]["InvalidFields"];
                 401: components["responses"]["Unauthorized"];
-                /** @description Project not found (also returned for a non-Member) */
+                /** @description Project not found (also returned for a User who may not see it) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -510,7 +510,7 @@ export interface paths {
                 };
                 400: components["responses"]["InvalidFields"];
                 401: components["responses"]["Unauthorized"];
-                /** @description Project not found (also returned for a non-Member) */
+                /** @description Project not found (also returned for a User who may not see it) */
                 404: {
                     headers: {
                         [name: string]: unknown;

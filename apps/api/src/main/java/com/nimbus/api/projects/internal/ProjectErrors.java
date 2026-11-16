@@ -19,6 +19,11 @@ class ProjectErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail invalidFields(ProjectService.InvalidFields e) {
+		return invalid(HttpStatus.BAD_REQUEST, e.getMessage(), e.errors);
+	}
+
+	@ExceptionHandler
 	ProblemDetail invalidRequest(MethodArgumentNotValidException e) {
 		Map<String, String> errors = new TreeMap<>();
 		e.getBindingResult().getFieldErrors().forEach(error -> errors.putIfAbsent(error.getField(), error.getDefaultMessage()));

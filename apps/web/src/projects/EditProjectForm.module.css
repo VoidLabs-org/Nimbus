@@ -1,0 +1,13 @@
+/* The Overview's edit form. Colours come only from the theme variables. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

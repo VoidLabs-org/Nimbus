@@ -3,7 +3,7 @@ import { ApiError } from "@repo/api";
 import { NimbusThemeProvider } from "@repo/ui/nimbus-theme";
 import { stubMatchMedia } from "@repo/ui/test-support";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type Project } from "../api/client";
@@ -160,5 +160,91 @@ describe("a project's Overview", () => {
 
     // "ſap" is not "SAP", let alone "APP": nothing shows until the server answers.
     expect(screen.queryByText("Fruit stand")).toBeNull();
+  });
+});
+
+describe("editing a project", () => {
+  it("renames it and changes its description, and the header follows", async () => {
+    vi.spyOn(api, "project").mockResolvedValue(apple);
+    const update = vi
+      .spyOn(api, "updateProject")
+      .mockResolvedValue({ ...apple, name: "Apple Stand", description: "Fresh fruit" });
+    showAt("/projects/APP/overview");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Apple Stand" } });
+    fireEvent.change(screen.getByLabelText(/Description/), { target: { value: "Fresh fruit" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("heading", { name: "Apple Stand" })).toBeTruthy();
+    expect(update).toHaveBeenCalledWith("APP", { name: "Apple Stand", description: "Fresh fruit" });
+    expect(screen.getByText("Fresh fruit")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("sends only what changed, and null for a cleared description", async () => {
+    vi.spyOn(api, "project").mockResolvedValue(apple);
+    const update = vi
+      .spyOn(api, "updateProject")
+      .mockResolvedValue({ ...apple, description: null });
+    showAt("/projects/APP/overview");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText(/Description/), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("No description yet.")).toBeTruthy();
+    expect(update).toHaveBeenCalledWith("APP", { description: "" });
+  });
+
+  it("says an empty name on the field without asking the server", async () => {
+    vi.spyOn(api, "project").mockResolvedValue(apple);
+    const update = vi.spyOn(api, "updateProject");
+    showAt("/projects/APP/overview");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Enter a name.")).toBeTruthy();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's field errors on their fields and stays open", async () => {
+    vi.spyOn(api, "project").mockResolvedValue(apple);
+    vi.spyOn(api, "updateProject").mockRejectedValue(
+      new ApiError(400, "Some fields are invalid", { name: "Use 1 to 100 characters" }),
+    );
+    showAt("/projects/APP/overview");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Other" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Use 1 to 100 characters")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+  });
+
+  it("drops what was typed on Cancel, and never lets the key be edited", async () => {
+    vi.spyOn(api, "project").mockResolvedValue(apple);
+    const update = vi.spyOn(api, "updateProject");
+    showAt("/projects/APP/overview");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    expect((screen.getByLabelText("Project key") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Other" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).toBeNull());
+    expect(screen.getByRole("heading", { name: "apple" })).toBeTruthy();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("has no Edit button for an Archived project", async () => {
+    vi.spyOn(api, "project").mockResolvedValue({ ...apple, archived: true });
+    showAt("/projects/APP/overview");
+
+    await screen.findByText("Fruit stand");
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
   });
 });

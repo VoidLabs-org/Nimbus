@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -41,6 +42,15 @@ class ProjectsController {
 	@GetMapping("/{key}")
 	ProjectService.ProjectView open(@PathVariable String key) {
 		return projects.open(currentUser.id(), key);
+	}
+
+	/**
+	 * Only the fields sent change; {@code "description": null} clears it. The Project key can't be changed, so sending
+	 * one is refused. The body is read as it came, because "not sent" and "null" differ for the description.
+	 */
+	@PatchMapping("/{key}")
+	ProjectService.ProjectView edit(@PathVariable String key, @RequestBody java.util.Map<String, Object> body) {
+		return projects.edit(currentUser.id(), key, body);
 	}
 
 	/**

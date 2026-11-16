@@ -37,12 +37,15 @@ class ProjectService implements Projects {
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
 	private final Users users;
+	private final jakarta.validation.Validator validator;
 
-	ProjectService(JdbcClient jdbc, ApplicationEventPublisher events, Clock clock, Users users) {
+	ProjectService(JdbcClient jdbc, ApplicationEventPublisher events, Clock clock, Users users,
+			jakarta.validation.Validator validator) {
 		this.jdbc = jdbc;
 		this.events = events;
 		this.clock = clock;
 		this.users = users;
+		this.validator = validator;
 	}
 
 	/** The controller has already checked the fields against the rules in {@code docs/specs/projects.md}. */
@@ -85,6 +88,46 @@ class ProjectService implements Projects {
 			.sorted(Comparator.comparing((Row project) -> project.name().toLowerCase(Locale.ROOT))
 				.thenComparing(Row::key))
 			.toList();
+	}
+
+	/**
+	 * Renames and re-describes a project, by the fields {@code body} holds: a missing field is left as it is, a
+	 * {@code null} description clears it. Fields follow the rules of creating (see CreateProject), and the key is never
+	 * changed. Who may is decided by {@link #requireCanChange}, before the body is looked at.
+	 */
+	@Transactional
+	public ProjectView edit(UUID actor, String key, Map<String, Object> body) {
+		var stored = ProjectKeys.normalize(key).orElseThrow(ProjectNotFound::new);
+		var id = jdbc.sql("SELECT id FROM projects WHERE key = :key").param("key", stored).query(UUID.class)
+			.optional().orElseThrow(ProjectNotFound::new);
+		requireCanChange(actor, id);
+		var errors = new java.util.TreeMap<String, String>();
+		if (body.containsKey("key")) errors.put("key", "The Project key can't be changed");
+		var name = body.get("name");
+		var description = body.get("description");
+		if (body.containsKey("name") && !(name instanceof String)) errors.put("name", ProjectsController.CreateProject.NAME_RULE);
+		if (description != null && !(description instanceof String))
+			errors.put("description", "Use at most 1000 characters without control characters");
+		if (errors.isEmpty()) {
+			// Checked as a new project's fields are; the key is a stand-in that passes its own rule.
+			var fields = new ProjectsController.CreateProject("ABC", (String) name, (String) description);
+			for (var violation : validator.validate(fields)) {
+				var field = violation.getPropertyPath().toString();
+				if (!field.equals("name") || body.containsKey("name")) errors.putIfAbsent(field, violation.getMessage());
+			}
+			if (errors.isEmpty()) {
+				if (body.containsKey("name")) {
+					jdbc.sql("UPDATE projects SET name = :name WHERE id = :id").param("name", fields.name())
+						.param("id", id).update();
+				}
+				if (body.containsKey("description")) {
+					jdbc.sql("UPDATE projects SET description = :description WHERE id = :id")
+						.param("description", fields.description()).param("id", id).update();
+				}
+			}
+		}
+		if (!errors.isEmpty()) throw new InvalidFields(errors);
+		return open(actor, key);
 	}
 
 	@Override
@@ -174,6 +217,16 @@ class ProjectService implements Projects {
 		return new Row(row.getObject("id", UUID.class), row.getString("key"), row.getString("name"),
 				row.getString("description"), row.getTimestamp("archived_at") != null,
 				row.getTimestamp("created_at").toInstant(), row.getObject("created_by", UUID.class));
+	}
+
+	/** Fields of a change that break the rules, by field name. */
+	static class InvalidFields extends RuntimeException {
+		final Map<String, String> errors;
+
+		InvalidFields(Map<String, String> errors) {
+			super("Some fields are invalid");
+			this.errors = errors;
+		}
 	}
 
 	static class KeyTaken extends RuntimeException {

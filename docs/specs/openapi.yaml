@@ -28,11 +28,12 @@ paths:
   /api/projects:
     get:
       tags: [projects]
-      summary: The projects the User is a Member of
+      summary: The projects the User can see
       description: >-
         Active projects only: Archived ones are left out, unless `archived=true`, which returns only the User's
         Archived projects. Sorted by lower-cased name, then by key, in code, so the order is the same on every
-        database. No paging. Requires a verified email.
+        database. No paging. Requires a verified email. A User holding `projects:project:view` with Scope All (a
+        Platform admin) gets every project, not only the ones they are a Member of.
       parameters:
         - name: archived
           in: query
@@ -43,7 +44,7 @@ paths:
             default: false
       responses:
         "200":
-          description: The projects, empty when the User is not a Member of any
+          description: The projects, empty when the User can see none
           content:
             application/json:
               schema:
@@ -60,8 +61,10 @@ paths:
                 $ref: "#/components/schemas/Problem"
     post:
       tags: [projects]
-      summary: Create a project and become its first Member
-      description: Requires a verified email. The project and membership are saved together.
+      summary: Create a project and become its first Member and Project admin
+      description: >-
+        Requires a verified email and `projects:project:create` (Everyone has it by default). The project, the
+        membership and the creator's Project admin role are saved together.
       requestBody:
         required: true
         content:
@@ -80,7 +83,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: "Email not verified (code: email_unverified)"
+          description: "Email not verified (code: email_unverified), or the User lacks `projects:project:create`"
           content:
             application/problem+json:
               schema:
@@ -94,7 +97,7 @@ paths:
   /api/projects/{key}:
     get:
       tags: [projects]
-      summary: Open a project the User is a Member of
+      summary: Open a project the User can see
       parameters:
         - name: key
           in: path
@@ -118,7 +121,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
         "404":
-          description: Project not found (also returned for a non-Member)
+          description: Project not found (also returned for a User who may not see it)
           content:
             application/problem+json:
               schema:
@@ -129,7 +132,7 @@ paths:
       description: >-
         Only the fields sent change; `description: null` clears it. The name and description follow the rules of
         creating a project. The Project key can never be changed: sending `key`, even the current one, is refused with
-        `400`. Who may change a project is the single check `requireCanChange` (a Member for now). An Archived
+        `400`. Needs `projects:project:archive`. An Archived
         project is refused with `409`.
       parameters:
         - name: key
@@ -160,13 +163,13 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: "Email not verified (code: email_unverified)"
+          description: "Email not verified (code: email_unverified), or the User can see the project but lacks `projects:project:update`"
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
         "404":
-          description: Project not found (also returned for a non-Member)
+          description: Project not found (also returned for a User who may not see it)
           content:
             application/problem+json:
               schema:
@@ -183,8 +186,7 @@ paths:
       summary: Archive a project
       description: >-
         An Archived project leaves the list, refuses every change (`PATCH` is `409`) and keeps its key taken.
-        Repeating it changes nothing and still returns `200`. Who may change a project is the single check
-        `requireCanChange` (a Member for now).
+        Repeating it changes nothing and still returns `200`. Needs `projects:project:archive`.
       parameters:
         - name: key
           in: path
@@ -202,13 +204,13 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: "Email not verified (code: email_unverified)"
+          description: "Email not verified (code: email_unverified), or the User can see the project but lacks `projects:project:archive`"
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
         "404":
-          description: Project not found (also returned for a non-Member)
+          description: Project not found (also returned for a User who may not see it)
           content:
             application/problem+json:
               schema:
@@ -219,7 +221,7 @@ paths:
       summary: Restore an Archived project
       description: >-
         The project returns to the list and can be changed again. Repeating it changes nothing and still returns
-        `200`. Who may change a project is the single check `requireCanChange` (a Member for now).
+        `200`. Needs `projects:project:archive`.
       parameters:
         - name: key
           in: path
@@ -237,13 +239,13 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: "Email not verified (code: email_unverified)"
+          description: "Email not verified (code: email_unverified), or the User can see the project but lacks `projects:project:archive`"
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
         "404":
-          description: Project not found (also returned for a non-Member)
+          description: Project not found (also returned for a User who may not see it)
           content:
             application/problem+json:
               schema:
@@ -324,7 +326,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Project not found (also returned for a non-Member)
+          description: Project not found (also returned for a User who may not see it)
           content:
             application/problem+json:
               schema:
@@ -361,7 +363,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Project not found (also returned for a non-Member)
+          description: Project not found (also returned for a User who may not see it)
           content:
             application/problem+json:
               schema:
@@ -427,7 +429,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Project not found (also returned for a non-Member)
+          description: Project not found (also returned for a User who may not see it)
           content:
             application/problem+json:
               schema:

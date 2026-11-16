@@ -43,7 +43,7 @@ class ProjectRoleBackfillTests {
 	}
 
 	@Test
-	void aProjectThatAlreadyHasAProjectAdminIsLeftAlone() {
+	void aProjectThatAlreadyHasAProjectAdminKeepsItAndRolelessMembersBecomeDevelopers() {
 		var admin = user();
 		var other = user();
 		var project = project(other, admin);
@@ -52,7 +52,7 @@ class ProjectRoleBackfillTests {
 		backfill.run();
 
 		assertThat(roles.roleOf(project, admin)).contains("project_admin");
-		assertThat(roles.roleOf(project, other)).isEmpty();
+		assertThat(roles.roleOf(project, other)).contains("developer");
 	}
 
 	@Test

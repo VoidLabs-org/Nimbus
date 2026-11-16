@@ -1,6 +1,9 @@
 package com.nimbus.api.projects.internal;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.nimbus.api.access.BuiltInRole;
@@ -14,10 +17,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Gives projects made before project roles existed a Project admin, at startup after {@code access} has stored the
- * built-in Roles: a project with no Project admin gives it to its earliest Member, and every other Member without a
- * project role becomes Developer. A project that already has a Project admin is left alone, so later runs change
- * nothing.
+ * Gives projects made before project roles existed their roles, at startup. {@code access} has stored the built-in
+ * Roles by then ({@code StartupSync} runs when the singletons are ready, before any runner): a project with no Project
+ * admin gives it to its earliest Member, and every Member without a project role becomes Developer. Later runs change
+ * nothing for a Member who has a role.
  */
 @Component
 class ProjectRoleBackfill implements ApplicationRunner {
@@ -46,25 +49,28 @@ class ProjectRoleBackfill implements ApplicationRunner {
 		transaction.executeWithoutResult(status -> {
 			jdbc.sql("SELECT pg_advisory_xact_lock(:lock)").param("lock", LOCK).query((rs, n) -> 1).list();
 			var admin = BuiltInRole.PROJECT_ADMIN.key();
-			var projects = jdbc.sql("SELECT id FROM projects").query(UUID.class).list();
-			for (var project : projects) {
-				var members = jdbc.sql("SELECT user_id FROM project_members WHERE project_id = :project ORDER BY added_at, user_id")
-					.param("project", project).query(UUID.class).list();
-				if (members.isEmpty() || hasAdmin(project, members, admin)) continue;
+			// One query for every Member, earliest first; each Member's role is then read once.
+			var membersByProject = new LinkedHashMap<UUID, List<UUID>>();
+			jdbc.sql("SELECT project_id, user_id FROM project_members ORDER BY project_id, added_at, user_id")
+				.query((rs, n) -> membersByProject
+					.computeIfAbsent(rs.getObject("project_id", UUID.class), project -> new ArrayList<>())
+					.add(rs.getObject("user_id", UUID.class)))
+				.list();
+			membersByProject.forEach((project, members) -> {
+				var held = new LinkedHashMap<UUID, Optional<String>>();
+				members.forEach(member -> held.put(member, roles.roleOf(project, member)));
+				var hasAdmin = held.values().stream().anyMatch(role -> role.filter(admin::equals).isPresent());
 				var first = members.getFirst();
-				if (roles.roleOf(project, first).isPresent()) roles.change(null, project, first, admin);
-				else roles.give(null, project, first, admin);
-				for (var member : members.subList(1, members.size())) {
-					if (roles.roleOf(project, member).isEmpty()) {
-						roles.give(null, project, member, BuiltInRole.DEVELOPER.key());
-					}
+				if (!hasAdmin) {
+					if (held.get(first).isPresent()) roles.change(null, project, first, admin);
+					else roles.give(null, project, first, admin);
+					held.put(first, Optional.of(admin));
+					log.info("Gave project {} its first Project admin", project);
 				}
-				log.info("Gave project {} its first Project admin", project);
-			}
+				held.forEach((member, role) -> {
+					if (role.isEmpty()) roles.give(null, project, member, BuiltInRole.DEVELOPER.key());
+				});
+			});
 		});
-	}
-
-	private boolean hasAdmin(UUID project, List<UUID> members, String admin) {
-		return members.stream().anyMatch(member -> roles.roleOf(project, member).filter(admin::equals).isPresent());
 	}
 }

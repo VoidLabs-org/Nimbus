@@ -37,6 +37,14 @@ class ProjectService implements Projects {
 
 	private static final String SELECT = "SELECT id, key, name, description, archived_at, created_at, created_by FROM projects ";
 
+	private static final String MEMBER_OF = """
+			 AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
+			""";
+
+	static final String VIEW = "projects:project:view";
+	static final String UPDATE = "projects:project:update";
+	static final String ARCHIVE = "projects:project:archive";
+
 	private final JdbcClient jdbc;
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
@@ -93,7 +101,14 @@ class ProjectService implements Projects {
 		return withPeople(visibleTo(actor, true));
 	}
 
-	/** The projects the User is a Member of that are Archived or not, in the list's order (see listFor). */
+	private static String state(boolean archived) {
+		return archived ? "archived_at IS NOT NULL" : "archived_at IS NULL";
+	}
+
+	/**
+	 * The projects the User is a Member of that are Archived or not, in the list's order (see listFor); what a User
+	 * without view at Scope All sees, since only Members hold project roles.
+	 */
 	private List<Row> membersOf(UUID user, boolean archived) {
 		return sorted(jdbc.sql(SELECT + "WHERE " + state(archived) + MEMBER_OF).param("user", user)
 			.query(ProjectService::row).list());
@@ -104,14 +119,6 @@ class ProjectService implements Projects {
 		if (!scopes.filter(user, VIEW).allProjects()) return membersOf(user, archived);
 		return sorted(jdbc.sql(SELECT + "WHERE " + state(archived)).query(ProjectService::row).list());
 	}
-
-	private static String state(boolean archived) {
-		return archived ? "archived_at IS NOT NULL" : "archived_at IS NULL";
-	}
-
-	private static final String MEMBER_OF = """
-			 AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
-			""";
 
 	private static List<Row> sorted(List<Row> rows) {
 		return rows.stream()
@@ -216,10 +223,6 @@ class ProjectService implements Projects {
 		return jdbc.sql("SELECT EXISTS (SELECT 1 FROM project_members WHERE project_id = :project AND user_id = :user)")
 			.param("project", projectId).param("user", userId).query(Boolean.class).single();
 	}
-
-	static final String VIEW = "projects:project:view";
-	static final String UPDATE = "projects:project:update";
-	static final String ARCHIVE = "projects:project:archive";
 
 	/** A User sees a project as a Member, or with {@code projects:project:view} at Scope All; else "not found". */
 	private void requireVisible(UUID actor, UUID projectId) {

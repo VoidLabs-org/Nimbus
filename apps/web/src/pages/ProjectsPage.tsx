@@ -72,9 +72,14 @@ export default function ProjectsPage() {
         <Toolbar
           text={text}
           onText={setText}
-          count={shown?.length ?? 0}
+          count={shown?.length ?? null}
           archived={showArchived}
-          onArchived={setShowArchived}
+          onArchived={(next) => {
+            setShowArchived(next);
+            // The text was typed for the other list; a filter left on would make this one look empty.
+            setText("");
+          }}
+          switching={showArchived && archivedQuery.isPending && !archivedQuery.isError}
         />
       )}
       {showArchived && archivedQuery.isError && !archivedQuery.data && (
@@ -127,12 +132,16 @@ function Toolbar({
   count,
   archived,
   onArchived,
+  switching,
 }: {
   text: string;
   onText: (text: string) => void;
-  count: number;
+  /** Null while the list is loading, so no wrong count is announced. */
+  count: number | null;
   archived: boolean;
   onArchived: (archived: boolean) => void;
+  /** The Archived list is being fetched: the switch waits for it. */
+  switching: boolean;
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -185,10 +194,11 @@ function Toolbar({
       <Switch
         label="Archived"
         checked={archived}
+        disabled={switching}
         onChange={(event) => onArchived(event.currentTarget.checked)}
       />
       <span className={toolbar.count} aria-live="polite">
-        {count === 1 ? "1 project" : `${count} projects`}
+        {count === null ? "" : count === 1 ? "1 project" : `${count} projects`}
       </span>
     </div>
   );
@@ -226,6 +236,11 @@ function ProjectTable({ projects }: { projects: Project[] }) {
       </table>
     </div>
   );
+}
+
+/** The placeholder for a figure an Archived project doesn't have. */
+function Dash() {
+  return <span className={classes.muted}>–</span>;
 }
 
 function ProjectRow({
@@ -271,7 +286,7 @@ function ProjectRow({
       </td>
       <td className={classes.numberCell}>
         {noStats ? (
-          <span className={classes.muted}>–</span>
+          <Dash />
         ) : open === undefined ? (
           <span className={classes.bone} aria-hidden />
         ) : (
@@ -280,7 +295,7 @@ function ProjectRow({
       </td>
       <td className={classes.wideOnly}>
         {noStats ? (
-          <span className={classes.muted}>–</span>
+          <Dash />
         ) : stats === undefined ? (
           <span className={classes.bone} aria-hidden />
         ) : progress === null ? (
@@ -309,7 +324,7 @@ function ProjectRow({
         title={new Date(updated).toLocaleString()}
       >
         {noStats ? (
-          "–"
+          <Dash />
         ) : stats === undefined ? (
           <span className={classes.bone} aria-hidden />
         ) : (

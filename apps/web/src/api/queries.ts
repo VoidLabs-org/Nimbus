@@ -137,6 +137,7 @@ export function useProjectArchiveChanged() {
     void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
     // Its Issues and permissions may now be read-only or editable again.
     void client.invalidateQueries({ queryKey: ["issues"] });
+    void client.invalidateQueries({ queryKey: queryKeys.permissions });
   };
 }
 

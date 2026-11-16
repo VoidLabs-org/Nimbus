@@ -14,9 +14,15 @@ function useArchiveAction(project: Project, restore: boolean) {
   async function run() {
     setBusy(true);
     try {
-      await changed(
-        await (restore ? api.restoreProject(project.key) : api.archiveProject(project.key)),
-      );
+      const changedProject = await (restore
+        ? api.restoreProject(project.key)
+        : api.archiveProject(project.key));
+      // The server has acted: a failure refreshing the cache is not a failure to archive or restore.
+      try {
+        await changed(changedProject);
+      } catch {
+        // The lists refetch on their own.
+      }
       toast.success(restore ? "Project restored." : "Project archived.");
     } catch (error) {
       toast.error(

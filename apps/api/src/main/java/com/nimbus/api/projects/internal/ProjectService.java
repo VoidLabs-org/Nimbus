@@ -83,14 +83,11 @@ class ProjectService implements Projects {
 		return withPeople(membersOf(actor, true));
 	}
 
-	private List<Row> activeOf(UUID user) {
-		return membersOf(user, false);
-	}
-
 	/** The projects the User is a Member of that are Archived or not, in the list's order (see listFor). */
 	private List<Row> membersOf(UUID user, boolean archived) {
-		return jdbc.sql(SELECT + (archived ? "WHERE archived_at IS NOT NULL " : "WHERE archived_at IS NULL ") + """
-				AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
+		var state = archived ? "archived_at IS NOT NULL" : "archived_at IS NULL";
+		return jdbc.sql(SELECT + "WHERE " + state + """
+				 AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
 				""")
 			.param("user", user).query(ProjectService::row).list().stream()
 			.sorted(Comparator.comparing((Row project) -> project.name().toLowerCase(Locale.ROOT))
@@ -144,7 +141,7 @@ class ProjectService implements Projects {
 	@Transactional
 	public ProjectView restore(UUID actor, String key) {
 		var id = changeableId(actor, key);
-		jdbc.sql("UPDATE projects SET archived_at = NULL WHERE id = :id").param("id", id).update();
+		jdbc.sql("UPDATE projects SET archived_at = NULL WHERE id = :id AND archived_at IS NOT NULL").param("id", id).update();
 		return open(actor, key);
 	}
 
@@ -165,7 +162,7 @@ class ProjectService implements Projects {
 
 	@Override
 	public List<ProjectSummary> memberProjects(UUID userId) {
-		return activeOf(userId).stream().map(Row::summary).toList();
+		return membersOf(userId, false).stream().map(Row::summary).toList();
 	}
 
 	/** Unknown projects and projects the actor is not a Member of are both "not found". */

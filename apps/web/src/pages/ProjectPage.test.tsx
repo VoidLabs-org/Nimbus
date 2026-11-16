@@ -246,5 +246,31 @@ describe("editing a project", () => {
 
     await screen.findByText("Fruit stand");
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Archive project" })).toBeNull();
+  });
+
+  it("archives the project: the banner appears and editing goes", async () => {
+    vi.spyOn(api, "project").mockResolvedValue(apple);
+    const archive = vi.spyOn(api, "archiveProject").mockResolvedValue({ ...apple, archived: true });
+    showAt("/projects/APP/overview");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Archive project" }));
+
+    expect(await screen.findByText("This project is archived")).toBeTruthy();
+    expect(archive).toHaveBeenCalledWith("APP");
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create Issue" })).toBeNull();
+  });
+
+  it("restores an Archived project from its banner", async () => {
+    vi.spyOn(api, "project").mockResolvedValue({ ...apple, archived: true });
+    const restore = vi.spyOn(api, "restoreProject").mockResolvedValue(apple);
+    showAt("/projects/APP/overview");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restore project" }));
+
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(restore).toHaveBeenCalledWith("APP");
+    expect(screen.queryByText("This project is archived")).toBeNull();
   });
 });

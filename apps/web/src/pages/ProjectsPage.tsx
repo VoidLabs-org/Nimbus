@@ -1,4 +1,4 @@
-import { Button, Stack, TextInput, Title, VisuallyHidden } from "@mantine/core";
+import { Button, Stack, Switch, TextInput, Title, VisuallyHidden } from "@mantine/core";
 import { Glyph } from "@repo/ui/glyph";
 import { Panel } from "@repo/ui/panel";
 import { ProfilePicture } from "@repo/ui/profile-picture";
@@ -7,7 +7,13 @@ import { IconChevronRight, IconSearch, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { Project, ProjectIssueStats } from "../api/client";
-import { loadFailure, refreshFailed, useProjectIssueStats, useProjects } from "../api/queries";
+import {
+  loadFailure,
+  refreshFailed,
+  useArchivedProjects,
+  useProjectIssueStats,
+  useProjects,
+} from "../api/queries";
 import toolbar from "../issues/IssueToolbar.module.css";
 import { NewProjectModal } from "../projects/NewProjectModal";
 import { timeAgo } from "../issues/timeAgo";
@@ -31,11 +37,15 @@ export default function ProjectsPage() {
   const failure = loadFailure(query);
   const [creating, setCreating] = useState(false);
   const [text, setText] = useState("");
+  // The Archived toggle swaps the list for the User’s Archived projects, fetched only while it is on.
+  const [showArchived, setShowArchived] = useState(false);
+  const archivedQuery = useArchivedProjects(showArchived);
 
   // Offline or a server error, with nothing cached to show: the status page takes the place of the list.
   if (failure) return <FailedLoadPage failure={failure} onRetry={() => void query.refetch()} />;
 
-  const shown = projects && matching(projects, text);
+  const listed = showArchived ? (archivedQuery.data ?? null) : projects;
+  const shown = listed && matching(listed, text);
 
   return (
     <Stack gap="lg" py="xl">
@@ -58,13 +68,30 @@ export default function ProjectsPage() {
           onRetry={() => void query.refetch()}
         />
       )}
-      {projects && projects.length > 0 && (
-        <Toolbar text={text} onText={setText} count={shown?.length ?? 0} />
+      {projects && (
+        <Toolbar
+          text={text}
+          onText={setText}
+          count={shown?.length ?? 0}
+          archived={showArchived}
+          onArchived={setShowArchived}
+        />
       )}
-      {projects && shown ? (
-        projects.length === 0 ? (
+      {showArchived && archivedQuery.isError && !archivedQuery.data && (
+        <StaleNotice
+          title="Couldn’t load your archived projects"
+          shown="nothing"
+          onRetry={() => void archivedQuery.refetch()}
+        />
+      )}
+      {shown ? (
+        listed && listed.length === 0 ? (
           <Panel p={8}>
-            <p className={classes.empty}>No projects to show yet. Create one to get started.</p>
+            <p className={classes.empty}>
+              {showArchived
+                ? "No archived projects."
+                : "No projects to show yet. Create one to get started."}
+            </p>
           </Panel>
         ) : shown.length === 0 ? (
           <Panel p={8}>
@@ -98,10 +125,14 @@ function Toolbar({
   text,
   onText,
   count,
+  archived,
+  onArchived,
 }: {
   text: string;
   onText: (text: string) => void;
   count: number;
+  archived: boolean;
+  onArchived: (archived: boolean) => void;
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -151,6 +182,11 @@ function Toolbar({
           if (event.key === "Escape" && text) onText("");
         }}
       />
+      <Switch
+        label="Archived"
+        checked={archived}
+        onChange={(event) => onArchived(event.currentTarget.checked)}
+      />
       <span className={toolbar.count} aria-live="polite">
         {count === 1 ? "1 project" : `${count} projects`}
       </span>
@@ -199,6 +235,8 @@ function ProjectRow({
   project: Project;
   stats: ProjectIssueStats | undefined;
 }) {
+  // An Archived project is left out of the totals, so it has none to show.
+  const noStats = project.archived;
   const open = stats ? stats.total - stats.done : undefined;
   const progress = stats && stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : null;
   // Nothing has happened to its Issues yet: the project's own creation is its latest change.
@@ -232,10 +270,18 @@ function ProjectRow({
         )}
       </td>
       <td className={classes.numberCell}>
-        {open === undefined ? <span className={classes.bone} aria-hidden /> : open}
+        {noStats ? (
+          <span className={classes.muted}>–</span>
+        ) : open === undefined ? (
+          <span className={classes.bone} aria-hidden />
+        ) : (
+          open
+        )}
       </td>
       <td className={classes.wideOnly}>
-        {stats === undefined ? (
+        {noStats ? (
+          <span className={classes.muted}>–</span>
+        ) : stats === undefined ? (
           <span className={classes.bone} aria-hidden />
         ) : progress === null ? (
           <span className={classes.muted}>No issues</span>
@@ -262,7 +308,9 @@ function ProjectRow({
         className={`${classes.wideOnly} ${classes.muted}`}
         title={new Date(updated).toLocaleString()}
       >
-        {stats === undefined ? (
+        {noStats ? (
+          "–"
+        ) : stats === undefined ? (
           <span className={classes.bone} aria-hidden />
         ) : (
           `${timeAgo(updated)} ago`

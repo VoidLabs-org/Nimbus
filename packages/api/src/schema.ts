@@ -11,11 +11,14 @@ export interface paths {
         };
         /**
          * The projects the User is a Member of
-         * @description Active projects only: Archived ones are left out. Sorted by lower-cased name, then by key, in code, so the order is the same on every database. No paging. Requires a verified email.
+         * @description Active projects only: Archived ones are left out, unless `archived=true`, which returns only the User's Archived projects. Sorted by lower-cased name, then by key, in code, so the order is the same on every database. No paging. Requires a verified email.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description `true` lists only the User's Archived projects; the default lists only active ones */
+                    archived?: boolean;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -155,7 +158,7 @@ export interface paths {
         head?: never;
         /**
          * Rename a project or change its description
-         * @description Only the fields sent change; `description: null` clears it. The name and description follow the rules of creating a project. The Project key can never be changed: sending `key`, even the current one, is refused with `400`. Who may change a project is the single check `requireCanChange` (a Member for now).
+         * @description Only the fields sent change; `description: null` clears it. The name and description follow the rules of creating a project. The Project key can never be changed: sending `key`, even the current one, is refused with `400`. Who may change a project is the single check `requireCanChange` (a Member for now). An Archived project is refused with `409`.
          */
         patch: {
             parameters: {
@@ -210,8 +213,139 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
+                /** @description The project is Archived */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
             };
         };
+        trace?: never;
+    };
+    "/api/projects/{key}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive a project
+         * @description An Archived project leaves the list, refuses every change (`PATCH` is `409`) and keeps its key taken. Repeating it changes nothing and still returns `200`. Who may change a project is the single check `requireCanChange` (a Member for now).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The project, as it is now */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Project"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Email not verified (code: email_unverified) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Project not found (also returned for a non-Member) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{key}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore an Archived project
+         * @description The project returns to the list and can be changed again. Repeating it changes nothing and still returns `200`. Who may change a project is the single check `requireCanChange` (a Member for now).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The project, as it is now */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Project"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Email not verified (code: email_unverified) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Project not found (also returned for a non-Member) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/projects/{key}/issues": {

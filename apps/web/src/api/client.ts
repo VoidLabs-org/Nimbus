@@ -396,6 +396,17 @@ export function createApiClient(
     /** The projects the signed-in User is a Member of, active ones only, sorted by name by the server. */
     projects: () => request<Project[]>("/api/projects"),
 
+    /** The projects the signed-in User is a Member of that are Archived, sorted like the list. */
+    archivedProjects: () => request<Project[]>("/api/projects?archived=true"),
+
+    /** Archives a project; one already Archived stays so. Returns the project. */
+    archiveProject: (key: string) =>
+      request<Project>(`/api/projects/${encodeURIComponent(key)}/archive`, { method: "POST" }),
+
+    /** Restores an Archived project; one that is not Archived stays so. Returns the project. */
+    restoreProject: (key: string) =>
+      request<Project>(`/api/projects/${encodeURIComponent(key)}/restore`, { method: "POST" }),
+
     /** Creates a project and adds the signed-in User as its first Member. */
     createProject: (input: CreateProjectInput) =>
       request<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),

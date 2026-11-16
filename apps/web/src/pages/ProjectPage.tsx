@@ -6,6 +6,7 @@ import { Navigate, useLocation, useParams } from "react-router";
 import { refreshFailed, useProject } from "../api/queries";
 import classes from "./ProjectPage.module.css";
 import { StaleNotice } from "../shell/StaleNotice";
+import { ArchiveButton } from "../projects/ArchiveControls";
 import { EditProjectForm } from "../projects/EditProjectForm";
 
 /** `/projects/:key`: a project opens on its Issues tab, keeping any query string (`?view=board`). */
@@ -17,8 +18,8 @@ export function ProjectHome() {
 
 /**
  * A project's Overview tab: its description, under the header and tabs that ProjectLayout draws (which also says
- * when the project can't be found), with an Edit button for its name and description (not for an Archived project).
- * Archiving belongs to a following ticket.
+ * when the project can't be found), with Edit (name and description) and Archive buttons, neither for an Archived
+ * project (its banner, drawn by ProjectLayout, offers Restore).
  */
 export default function ProjectPage() {
   const { key = "" } = useParams();
@@ -58,14 +59,16 @@ export default function ProjectPage() {
               {project.description || "No description yet."}
             </p>
             {!project.archived && (
-              <Button
-                variant="subtle"
-                className={classes.edit}
-                leftSection={<IconPencil size={16} aria-hidden />}
-                onClick={() => setEditingIn(project.key)}
-              >
-                Edit
-              </Button>
+              <div className={classes.actions}>
+                <Button
+                  variant="subtle"
+                  leftSection={<IconPencil size={16} aria-hidden />}
+                  onClick={() => setEditingIn(project.key)}
+                >
+                  Edit
+                </Button>
+                <ArchiveButton project={project} />
+              </div>
             )}
           </>
         )}

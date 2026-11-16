@@ -18,6 +18,9 @@
   color: var(--color-accent-2-700);
 }
 
-.edit {
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
 }

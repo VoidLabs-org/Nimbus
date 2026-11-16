@@ -75,14 +75,19 @@ class ProjectService implements Projects {
 	 * whatever its locale: a collation would skip spaces and punctuation, and its {@code lower()} differs from Java's.
 	 */
 	public List<ProjectView> listFor(UUID actor) {
-		return withPeople(activeOf(actor));
+		return withPeople(membersOf(actor, false));
 	}
 
-	/** The active projects the User is a Member of, in the list's order (see listFor). */
-	private List<Row> activeOf(UUID user) {
-		return jdbc.sql(SELECT + """
-				WHERE archived_at IS NULL
-				AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
+	/** The User's Archived projects, in the same order. */
+	public List<ProjectView> listArchivedFor(UUID actor) {
+		return withPeople(membersOf(actor, true));
+	}
+
+	/** The projects the User is a Member of that are Archived or not, in the list's order (see listFor). */
+	private List<Row> membersOf(UUID user, boolean archived) {
+		var state = archived ? "archived_at IS NOT NULL" : "archived_at IS NULL";
+		return jdbc.sql(SELECT + "WHERE " + state + """
+				 AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
 				""")
 			.param("user", user).query(ProjectService::row).list().stream()
 			.sorted(Comparator.comparing((Row project) -> project.name().toLowerCase(Locale.ROOT))
@@ -123,6 +128,32 @@ class ProjectService implements Projects {
 		return open(actor, key);
 	}
 
+	/** Archives a project; one already Archived stays as it is (and keeps its time). */
+	@Transactional
+	public ProjectView archive(UUID actor, String key) {
+		var id = changeableId(actor, key);
+		jdbc.sql("UPDATE projects SET archived_at = :at WHERE id = :id AND archived_at IS NULL")
+			.param("at", Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS))).param("id", id).update();
+		return open(actor, key);
+	}
+
+	/** Restores a project; one that is not Archived stays as it is. */
+	@Transactional
+	public ProjectView restore(UUID actor, String key) {
+		var id = changeableId(actor, key);
+		jdbc.sql("UPDATE projects SET archived_at = NULL WHERE id = :id AND archived_at IS NOT NULL").param("id", id).update();
+		return open(actor, key);
+	}
+
+	/** The project's id, once the single change decision allows the actor to change it. */
+	private UUID changeableId(UUID actor, String key) {
+		var stored = ProjectKeys.normalize(key).orElseThrow(ProjectNotFound::new);
+		var id = jdbc.sql("SELECT id FROM projects WHERE key = :key").param("key", stored)
+			.query(UUID.class).optional().orElseThrow(ProjectNotFound::new);
+		requireCanChange(actor, id);
+		return id;
+	}
+
 	/** Checks one field against the annotations of CreateProject, so the rules and messages stay in one place. */
 	private void check(String field, String value, Map<String, String> errors) {
 		for (var violation : validator.validateValue(ProjectsController.CreateProject.class, field, value))
@@ -131,7 +162,7 @@ class ProjectService implements Projects {
 
 	@Override
 	public List<ProjectSummary> memberProjects(UUID userId) {
-		return activeOf(userId).stream().map(Row::summary).toList();
+		return membersOf(userId, false).stream().map(Row::summary).toList();
 	}
 
 	/** Unknown projects and projects the actor is not a Member of are both "not found". */

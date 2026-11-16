@@ -34,6 +34,8 @@ export const queryKeys = {
   providers: ["providers"] as const,
   // The list, and one project under it (as the Roles are). Refreshing only the list takes `exact`.
   projects: ["projects"] as const,
+  // Not under "projects", where a project whose key is "archived" would share its address.
+  archivedProjects: ["archived-projects"] as const,
   project: (key: string) => ["projects", storedKey(key)] as const,
   // Issue keys match in any case, so the cache holds one entry per Issue, under the uppercase key.
   issue: (key: string) => ["issues", key.toUpperCase()] as const,
@@ -57,6 +59,15 @@ export const queryKeys = {
   myProjectPermissions: (userId: string, projectId: string) =>
     ["permissions", userId, projectId] as const,
 };
+
+/** The User's Archived projects, for the Projects page's Archived toggle. Only fetched while it is on. */
+export function useArchivedProjects(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.archivedProjects,
+    queryFn: () => api.archivedProjects(),
+    enabled,
+  });
+}
 
 /** The projects the signed-in User is a Member of, for the Projects page. */
 export function useProjects() {
@@ -109,6 +120,24 @@ export function useProjectUpdated() {
     await client.cancelQueries({ queryKey: queryKeys.project(project.key), exact: true });
     client.setQueryData(queryKeys.project(project.key), project);
     void client.invalidateQueries({ queryKey: queryKeys.projects, exact: true });
+  };
+}
+
+/**
+ * A project was archived or restored: keep the server's project, so the banner, header and page change at once, and
+ * refresh both lists, since it moves from one to the other.
+ */
+export function useProjectArchiveChanged() {
+  const client = useQueryClient();
+  return async (project: Project) => {
+    await client.cancelQueries({ queryKey: queryKeys.project(project.key), exact: true });
+    client.setQueryData(queryKeys.project(project.key), project);
+    void client.invalidateQueries({ queryKey: queryKeys.projects, exact: true });
+    void client.invalidateQueries({ queryKey: queryKeys.archivedProjects });
+    void client.invalidateQueries({ queryKey: queryKeys.projectIssueStats });
+    // Its Issues and permissions may now be read-only or editable again.
+    void client.invalidateQueries({ queryKey: ["issues"] });
+    void client.invalidateQueries({ queryKey: queryKeys.permissions });
   };
 }
 

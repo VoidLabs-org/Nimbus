@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,8 +37,18 @@ class ProjectsController {
 	}
 
 	@GetMapping
-	List<ProjectService.ProjectView> list() {
-		return projects.listFor(currentUser.id());
+	List<ProjectService.ProjectView> list(@RequestParam(defaultValue = "false") boolean archived) {
+		return archived ? projects.listArchivedFor(currentUser.id()) : projects.listFor(currentUser.id());
+	}
+
+	@PostMapping("/{key}/archive")
+	ProjectService.ProjectView archive(@PathVariable String key) {
+		return projects.archive(currentUser.id(), key);
+	}
+
+	@PostMapping("/{key}/restore")
+	ProjectService.ProjectView restore(@PathVariable String key) {
+		return projects.restore(currentUser.id(), key);
 	}
 
 	@GetMapping("/{key}")

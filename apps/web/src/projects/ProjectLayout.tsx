@@ -12,6 +12,7 @@ import { BreadcrumbTrail } from "../shell/BreadcrumbTrail";
 import type { Crumb } from "../shell/crumbs";
 import { PrimaryAction, StatusPage } from "../shell/StatusPage";
 import { FailedLoadPage } from "../shell/StatusPages";
+import { ArchivedBanner } from "./ArchiveControls";
 import { ProjectBadge } from "./ProjectBadge";
 import type { ProjectOutlet } from "./projectOutlet";
 import { ProjectTabs, type ProjectTab } from "./ProjectTabs";
@@ -149,6 +150,7 @@ export function ProjectLayout() {
             issueCount={counts.data?.total}
           />
         </div>
+        {project?.archived && <ArchivedBanner project={project} />}
         {project && (
           <NewIssueForm
             opened={creatingIn === project.key}

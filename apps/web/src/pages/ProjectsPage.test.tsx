@@ -75,6 +75,49 @@ const openForm = async () => {
 };
 const create = () => fireEvent.click(screen.getByRole("button", { name: /Create project/ }));
 
+describe("the Projects page: the Archived toggle", () => {
+  it("swaps the list for the Archived projects and back", async () => {
+    vi.spyOn(api, "projects").mockResolvedValue([apple]);
+    vi.spyOn(api, "projectIssueStats").mockResolvedValue([]);
+    const archived = vi
+      .spyOn(api, "archivedProjects")
+      .mockResolvedValue([{ ...nimbus, archived: true }]);
+    show();
+
+    await screen.findByText("apple");
+    expect(archived).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("switch", { name: "Archived" }));
+
+    expect(await screen.findByText("Nimbus")).toBeTruthy();
+    expect(screen.queryByText("apple")).toBeNull();
+    fireEvent.click(screen.getByRole("switch", { name: "Archived" }));
+    expect(await screen.findByText("apple")).toBeTruthy();
+  });
+
+  it("still offers the switch when every project is archived", async () => {
+    vi.spyOn(api, "projects").mockResolvedValue([]);
+    vi.spyOn(api, "projectIssueStats").mockResolvedValue([]);
+    vi.spyOn(api, "archivedProjects").mockResolvedValue([{ ...apple, archived: true }]);
+    show();
+
+    fireEvent.click(await screen.findByRole("switch", { name: "Archived" }));
+
+    expect(await screen.findByText("apple")).toBeTruthy();
+  });
+
+  it("says so when nothing is archived", async () => {
+    vi.spyOn(api, "projects").mockResolvedValue([apple]);
+    vi.spyOn(api, "projectIssueStats").mockResolvedValue([]);
+    vi.spyOn(api, "archivedProjects").mockResolvedValue([]);
+    show();
+
+    await screen.findByText("apple");
+    fireEvent.click(screen.getByRole("switch", { name: "Archived" }));
+
+    expect(await screen.findByText("No archived projects.")).toBeTruthy();
+  });
+});
+
 describe("the Projects page: the list", () => {
   it("lists the projects as links to their pages, with their keys and descriptions", async () => {
     vi.spyOn(api, "projects").mockResolvedValue([apple, nimbus]);

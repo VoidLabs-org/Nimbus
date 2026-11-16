@@ -16,6 +16,10 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.nimbus.api.access.BuiltInRole;
+import com.nimbus.api.access.ProjectRoles;
+import com.nimbus.api.access.ProjectScopes;
+import com.nimbus.api.access.Scope;
 import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
 import com.nimbus.api.projects.ProjectSummary;
@@ -33,14 +37,26 @@ class ProjectService implements Projects {
 
 	private static final String SELECT = "SELECT id, key, name, description, archived_at, created_at, created_by FROM projects ";
 
+	private static final String MEMBER_OF = """
+			 AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
+			""";
+
+	static final String VIEW = "projects:project:view";
+	static final String UPDATE = "projects:project:update";
+	static final String ARCHIVE = "projects:project:archive";
+
 	private final JdbcClient jdbc;
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
 	private final Users users;
 	private final jakarta.validation.Validator validator;
+	private final ProjectRoles roles;
+	private final ProjectScopes scopes;
 
 	ProjectService(JdbcClient jdbc, ApplicationEventPublisher events, Clock clock, Users users,
-			jakarta.validation.Validator validator) {
+			jakarta.validation.Validator validator, ProjectRoles roles, ProjectScopes scopes) {
+		this.roles = roles;
+		this.scopes = scopes;
 		this.jdbc = jdbc;
 		this.events = events;
 		this.clock = clock;
@@ -65,6 +81,8 @@ class ProjectService implements Projects {
 		if (inserted == 0) throw new KeyTaken();
 		jdbc.sql("INSERT INTO project_members (project_id, user_id, added_at) VALUES (:project, :user, :at)")
 			.param("project", project.id()).param("user", actor).param("at", Timestamp.from(project.createdAt())).update();
+		// The creator manages the project; saved with the Member in this transaction.
+		roles.give(actor, project.id(), actor, BuiltInRole.PROJECT_ADMIN.key());
 		events.publishEvent(new ProjectCreated(project.id(), project.key(), actor));
 		return withPeople(List.of(project)).getFirst();
 	}
@@ -75,21 +93,35 @@ class ProjectService implements Projects {
 	 * whatever its locale: a collation would skip spaces and punctuation, and its {@code lower()} differs from Java's.
 	 */
 	public List<ProjectView> listFor(UUID actor) {
-		return withPeople(membersOf(actor, false));
+		return withPeople(visibleTo(actor, false));
 	}
 
-	/** The User's Archived projects, in the same order. */
+	/** The User's Archived projects, in the same order (all of them for a holder of view at Scope All). */
 	public List<ProjectView> listArchivedFor(UUID actor) {
-		return withPeople(membersOf(actor, true));
+		return withPeople(visibleTo(actor, true));
 	}
 
-	/** The projects the User is a Member of that are Archived or not, in the list's order (see listFor). */
+	private static String state(boolean archived) {
+		return archived ? "archived_at IS NOT NULL" : "archived_at IS NULL";
+	}
+
+	/**
+	 * The projects the User is a Member of that are Archived or not, in the list's order (see listFor); what a User
+	 * without view at Scope All sees, since only Members hold project roles.
+	 */
 	private List<Row> membersOf(UUID user, boolean archived) {
-		var state = archived ? "archived_at IS NOT NULL" : "archived_at IS NULL";
-		return jdbc.sql(SELECT + "WHERE " + state + """
-				 AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
-				""")
-			.param("user", user).query(ProjectService::row).list().stream()
+		return sorted(jdbc.sql(SELECT + "WHERE " + state(archived) + MEMBER_OF).param("user", user)
+			.query(ProjectService::row).list());
+	}
+
+	/** The projects the User can see, Archived or not: all of them with {@code projects:project:view} at Scope All. */
+	private List<Row> visibleTo(UUID user, boolean archived) {
+		if (!scopes.filter(user, VIEW).allProjects()) return membersOf(user, archived);
+		return sorted(jdbc.sql(SELECT + "WHERE " + state(archived)).query(ProjectService::row).list());
+	}
+
+	private static List<Row> sorted(List<Row> rows) {
+		return rows.stream()
 			.sorted(Comparator.comparing((Row project) -> project.name().toLowerCase(Locale.ROOT))
 				.thenComparing(Row::key))
 			.toList();
@@ -109,7 +141,7 @@ class ProjectService implements Projects {
 			.query((row, index) -> Map.entry(row.getObject("id", UUID.class), row.getBoolean("archived")))
 			.optional().orElseThrow(ProjectNotFound::new);
 		var id = found.getKey();
-		requireCanChange(actor, id);
+		requireCanChange(actor, id, UPDATE);
 		if (found.getValue()) throw new ProjectArchived();
 		var errors = new java.util.TreeMap<String, String>();
 		if (changes.keySent()) errors.put("key", "The Project key can't be changed");
@@ -131,7 +163,7 @@ class ProjectService implements Projects {
 	/** Archives a project; one already Archived stays as it is (and keeps its time). */
 	@Transactional
 	public ProjectView archive(UUID actor, String key) {
-		var id = changeableId(actor, key);
+		var id = changeableId(actor, key, ARCHIVE);
 		jdbc.sql("UPDATE projects SET archived_at = :at WHERE id = :id AND archived_at IS NULL")
 			.param("at", Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS))).param("id", id).update();
 		return open(actor, key);
@@ -140,17 +172,17 @@ class ProjectService implements Projects {
 	/** Restores a project; one that is not Archived stays as it is. */
 	@Transactional
 	public ProjectView restore(UUID actor, String key) {
-		var id = changeableId(actor, key);
+		var id = changeableId(actor, key, ARCHIVE);
 		jdbc.sql("UPDATE projects SET archived_at = NULL WHERE id = :id AND archived_at IS NOT NULL").param("id", id).update();
 		return open(actor, key);
 	}
 
 	/** The project's id, once the single change decision allows the actor to change it. */
-	private UUID changeableId(UUID actor, String key) {
+	private UUID changeableId(UUID actor, String key, String permission) {
 		var stored = ProjectKeys.normalize(key).orElseThrow(ProjectNotFound::new);
 		var id = jdbc.sql("SELECT id FROM projects WHERE key = :key").param("key", stored)
 			.query(UUID.class).optional().orElseThrow(ProjectNotFound::new);
-		requireCanChange(actor, id);
+		requireCanChange(actor, id, permission);
 		return id;
 	}
 
@@ -168,12 +200,9 @@ class ProjectService implements Projects {
 	/** Unknown projects and projects the actor is not a Member of are both "not found". */
 	public ProjectView open(UUID actor, String key) {
 		var stored = ProjectKeys.normalize(key).orElseThrow(ProjectNotFound::new);
-		var project = jdbc.sql(SELECT + """
-				WHERE key = :key
-				AND EXISTS (SELECT 1 FROM project_members WHERE project_id = projects.id AND user_id = :user)
-				""")
-			.param("key", stored).param("user", actor)
+		var project = jdbc.sql(SELECT + "WHERE key = :key").param("key", stored)
 			.query(ProjectService::row).optional().orElseThrow(ProjectNotFound::new);
+		requireVisible(actor, project.id());
 		return withPeople(List.of(project)).getFirst();
 	}
 
@@ -195,13 +224,20 @@ class ProjectService implements Projects {
 			.param("project", projectId).param("user", userId).query(Boolean.class).single();
 	}
 
-	private void requireMember(UUID actor, UUID projectId) {
-		if (!isMember(projectId, actor)) throw new ProjectNotFound();
+	/** A User sees a project as a Member, or with {@code projects:project:view} at Scope All; else "not found". */
+	private void requireVisible(UUID actor, UUID projectId) {
+		var visible = isMember(projectId, actor)
+				|| scopes.scope(actor, projectId, VIEW).filter(scope -> scope == Scope.ALL).isPresent();
+		if (!visible) throw new ProjectNotFound();
 	}
 
-	/** The single change decision for the following tickets; RBAC integration will replace this rule. */
-	public void requireCanChange(UUID actor, UUID projectId) {
-		requireMember(actor, projectId);
+	/**
+	 * The single change decision: a User who can't see the project gets "not found", one who can see it but lacks the
+	 * Permission gets "not allowed" ({@code 403}), whatever Scope it has.
+	 */
+	public void requireCanChange(UUID actor, UUID projectId, String permission) {
+		requireVisible(actor, projectId);
+		scopes.require(actor, projectId, permission);
 	}
 
 	/** How many Members a project shows by name and picture; the rest are only counted. */

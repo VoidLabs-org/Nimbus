@@ -5,7 +5,8 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * Project creation does not give the creator a project role yet (#49), so tests that need one set it up directly.
+ * Creating a project makes its creator Project admin, so tests that need another role set it up directly, replacing
+ * whatever role the User held.
  */
 final class IssueRoles {
 
@@ -13,6 +14,10 @@ final class IssueRoles {
 	}
 
 	static void give(JdbcClient jdbc, String projectKey, String userId, String role) {
+		jdbc.sql("""
+				DELETE FROM access_role_assignments WHERE user_id = :user
+				AND project_id = (SELECT id FROM projects WHERE key = :key)
+				""").param("user", UUID.fromString(userId)).param("key", projectKey).update();
 		jdbc.sql("""
 				INSERT INTO access_role_assignments (id, role_id, user_id, project_id, created_at)
 				SELECT gen_random_uuid(), r.id, :user, p.id, now() FROM access_roles r, projects p

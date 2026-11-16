@@ -3,6 +3,7 @@ package com.nimbus.api.projects.internal;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonSetter;
+import com.nimbus.api.access.Authorize;
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -31,6 +32,7 @@ class ProjectsController {
 	}
 
 	@PostMapping
+	@Authorize("projects:project:create")
 	@ResponseStatus(HttpStatus.CREATED)
 	ProjectService.ProjectView create(@Valid @RequestBody CreateProject request) {
 		return projects.create(currentUser.id(), request.key(), request.name(), request.description());

@@ -91,43 +91,42 @@ class ProjectService implements Projects {
 	}
 
 	/**
-	 * Renames and re-describes a project, by the fields {@code body} holds: a missing field is left as it is, a
-	 * {@code null} description clears it. Fields follow the rules of creating (see CreateProject), and the key is never
-	 * changed. Who may is decided by {@link #requireCanChange}, before the body is looked at.
+	 * Renames and re-describes a project, by the fields {@code changes} holds: a field not sent is left as it is, a
+	 * {@code null} description clears it. Fields follow the rules of creating (see CreateProject), checked by the same
+	 * annotations, and the key is never changed. Who may is decided by {@link #requireCanChange}, before the body is
+	 * looked at; an Archived project can't be changed at all.
 	 */
 	@Transactional
-	public ProjectView edit(UUID actor, String key, Map<String, Object> body) {
+	public ProjectView edit(UUID actor, String key, ProjectsController.UpdateProject changes) {
 		var stored = ProjectKeys.normalize(key).orElseThrow(ProjectNotFound::new);
-		var id = jdbc.sql("SELECT id FROM projects WHERE key = :key").param("key", stored).query(UUID.class)
+		var found = jdbc.sql("SELECT id, archived_at IS NOT NULL AS archived FROM projects WHERE key = :key")
+			.param("key", stored)
+			.query((row, index) -> Map.entry(row.getObject("id", UUID.class), row.getBoolean("archived")))
 			.optional().orElseThrow(ProjectNotFound::new);
+		var id = found.getKey();
 		requireCanChange(actor, id);
+		if (found.getValue()) throw new ProjectArchived();
 		var errors = new java.util.TreeMap<String, String>();
-		if (body.containsKey("key")) errors.put("key", "The Project key can't be changed");
-		var name = body.get("name");
-		var description = body.get("description");
-		if (body.containsKey("name") && !(name instanceof String)) errors.put("name", ProjectsController.CreateProject.NAME_RULE);
-		if (description != null && !(description instanceof String))
-			errors.put("description", "Use at most 1000 characters without control characters");
-		if (errors.isEmpty()) {
-			// Checked as a new project's fields are; the key is a stand-in that passes its own rule.
-			var fields = new ProjectsController.CreateProject("ABC", (String) name, (String) description);
-			for (var violation : validator.validate(fields)) {
-				var field = violation.getPropertyPath().toString();
-				if (!field.equals("name") || body.containsKey("name")) errors.putIfAbsent(field, violation.getMessage());
-			}
-			if (errors.isEmpty()) {
-				if (body.containsKey("name")) {
-					jdbc.sql("UPDATE projects SET name = :name WHERE id = :id").param("name", fields.name())
-						.param("id", id).update();
-				}
-				if (body.containsKey("description")) {
-					jdbc.sql("UPDATE projects SET description = :description WHERE id = :id")
-						.param("description", fields.description()).param("id", id).update();
-				}
-			}
-		}
+		if (changes.keySent()) errors.put("key", "The Project key can't be changed");
+		var name = ProjectsController.CreateProject.cleanName(changes.name());
+		var description = ProjectsController.CreateProject.cleanDescription(changes.description());
+		if (changes.nameSent()) check("name", name, errors);
+		if (changes.descriptionSent()) check("description", description, errors);
 		if (!errors.isEmpty()) throw new InvalidFields(errors);
+		if (changes.nameSent()) {
+			jdbc.sql("UPDATE projects SET name = :name WHERE id = :id").param("name", name).param("id", id).update();
+		}
+		if (changes.descriptionSent()) {
+			jdbc.sql("UPDATE projects SET description = :description WHERE id = :id")
+				.param("description", description).param("id", id).update();
+		}
 		return open(actor, key);
+	}
+
+	/** Checks one field against the annotations of CreateProject, so the rules and messages stay in one place. */
+	private void check(String field, String value, Map<String, String> errors) {
+		for (var violation : validator.validateValue(ProjectsController.CreateProject.class, field, value))
+			errors.putIfAbsent(field, violation.getMessage());
 	}
 
 	@Override
@@ -226,6 +225,12 @@ class ProjectService implements Projects {
 		InvalidFields(Map<String, String> errors) {
 			super("Some fields are invalid");
 			this.errors = errors;
+		}
+	}
+
+	static class ProjectArchived extends RuntimeException {
+		ProjectArchived() {
+			super("An Archived project can't be changed");
 		}
 	}
 

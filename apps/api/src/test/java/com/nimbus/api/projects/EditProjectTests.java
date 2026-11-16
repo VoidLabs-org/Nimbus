@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 /** {@code PATCH /api/projects/{key}}: renaming and describing a project. */
@@ -22,6 +23,9 @@ class EditProjectTests {
 
 	@Autowired
 	RestTestClient client;
+
+	@Autowired
+	JdbcClient jdbc;
 
 	private String register() {
 		var email = UUID.randomUUID() + "@example.com";
@@ -124,5 +128,24 @@ class EditProjectTests {
 		var key = create(register(), null);
 
 		patch(null, key, Map.of("name", "x")).expectStatus().isUnauthorized();
+	}
+
+	@Test
+	void anArchivedProjectCanNotBeChanged() {
+		var token = register();
+		var key = create(token, null);
+		jdbc.sql("UPDATE projects SET archived_at = now() WHERE key = :key").param("key", key).update();
+
+		patch(token, key, Map.of("name", "Renamed")).expectStatus().isEqualTo(409);
+	}
+
+	@Test
+	void aBodyThatIsNotAnObjectIsAFieldErrorNotAGenericOne() {
+		var token = register();
+		var key = create(token, null);
+
+		client.patch().uri("/api/projects/" + key).header("Authorization", "Bearer " + token)
+			.header("Content-Type", "application/json").body("[]").exchange().expectStatus().isBadRequest()
+			.expectBody().jsonPath("$.errors.body").isNotEmpty();
 	}
 }

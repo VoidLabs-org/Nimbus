@@ -7,6 +7,7 @@ import { api, type Project } from "../api/client";
 import { useProjectUpdated } from "../api/queries";
 import classes from "./EditProjectForm.module.css";
 
+const NAME_LIMIT = 100;
 const DESCRIPTION_LIMIT = 1000;
 
 /** Code points, as the server counts them, so an emoji is one character, not two. */
@@ -23,9 +24,14 @@ export function EditProjectForm({ project, onDone }: { project: Project; onDone:
   const form = useForm({
     initialValues: { name: project.name, description: project.description ?? "" },
     validate: {
-      name: (value) => (value.trim() ? null : "Enter a name."),
+      name: (value) => {
+        const name = value.trim();
+        if (!name) return "Enter a name.";
+        return characters(name) > NAME_LIMIT ? `Keep it to ${NAME_LIMIT} characters.` : null;
+      },
+      // The server trims both ends first, so only what is left counts.
       description: (value) =>
-        characters(value) > DESCRIPTION_LIMIT
+        characters(value.trim()) > DESCRIPTION_LIMIT
           ? `Keep it to ${DESCRIPTION_LIMIT} characters.`
           : null,
     },
@@ -70,7 +76,6 @@ export function EditProjectForm({ project, onDone }: { project: Project; onDone:
       <TextInput
         data-autofocus
         label="Name"
-        maxLength={100}
         disabled={form.submitting}
         {...form.getInputProps("name")}
       />

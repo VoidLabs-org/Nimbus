@@ -15,7 +15,7 @@ import { useForm } from "@mantine/form";
 import { ProfilePicture } from "@repo/ui/profile-picture";
 import { Loading } from "@repo/ui/skeleton";
 import { toast } from "@repo/ui/toast";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router";
 import { HoldersSkeleton } from "../access/HoldersSkeleton";
 import { api, type MemberRole, type ProjectMember } from "../api/client";
@@ -90,16 +90,12 @@ export default function MembersPage() {
   const assignable = roles.filter((role) => role.assignable);
   const startRole = (assignable.find((role) => role.key === "developer") ?? assignable[0])?.key;
   const chosen = form.values.role;
-  const setRole = form.setFieldValue;
-  useEffect(() => {
-    if (startRole && !assignable.some((role) => role.key === chosen)) setRole("role", startRole);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startRole, chosen]);
+  const roleToAdd = assignable.some((role) => role.key === chosen) ? chosen : (startRole ?? chosen);
 
   async function add(values: { email: string; role: string }) {
     setError(null);
     try {
-      const added = await api.addMember(key, { email: values.email.trim(), role: values.role });
+      const added = await api.addMember(key, { email: values.email.trim(), role: roleToAdd });
       form.setFieldValue("email", "");
       toast.success(`Added ${added.displayName} as ${nameOf(added.role)}.`);
       changed(key);
@@ -190,6 +186,7 @@ export default function MembersPage() {
               data={options}
               disabled={!members || options.length === 0}
               {...form.getInputProps("role")}
+              value={roleToAdd}
             />
             <Button type="submit" loading={form.submitting} disabled={!members}>
               Add Member

@@ -59,7 +59,7 @@ class ProjectRoleAssignments implements ProjectRoles {
 
 	@Override
 	public void change(UUID actorId, UUID projectId, UUID userId, String role) {
-		var before = roleOf(projectId, userId).orElse(null);
+		var before = roleOf(projectId, userId).orElseThrow(() -> noRole(projectId, userId));
 		var changed = jdbc.sql("""
 				UPDATE access_role_assignments SET role_id = :role WHERE user_id = :user AND project_id = :project""")
 			.param("role", projectRoleId(role))
@@ -76,7 +76,7 @@ class ProjectRoleAssignments implements ProjectRoles {
 
 	@Override
 	public void remove(UUID actorId, UUID projectId, UUID userId) {
-		var before = roleOf(projectId, userId).orElse(null);
+		var before = roleOf(projectId, userId).orElseThrow(() -> noRole(projectId, userId));
 		var removed = jdbc.sql("DELETE FROM access_role_assignments WHERE user_id = :user AND project_id = :project")
 			.param("user", userId)
 			.param("project", projectId)

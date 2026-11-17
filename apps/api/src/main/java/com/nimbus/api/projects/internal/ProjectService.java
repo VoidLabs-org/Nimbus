@@ -6,12 +6,16 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -22,12 +26,13 @@ import com.nimbus.api.access.ProjectScopes;
 import com.nimbus.api.access.Scope;
 import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
-import com.nimbus.api.projects.ProjectSummary;
 import com.nimbus.api.projects.MemberRemoved;
 import com.nimbus.api.projects.ProjectCreated;
-import org.springframework.http.HttpStatus;
+import com.nimbus.api.projects.ProjectSummary;
 import com.nimbus.api.projects.Projects;
+import jakarta.validation.Validator;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,12 +57,12 @@ class ProjectService implements Projects {
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
 	private final Users users;
-	private final jakarta.validation.Validator validator;
+	private final Validator validator;
 	private final ProjectRoles roles;
 	private final ProjectScopes scopes;
 
 	ProjectService(JdbcClient jdbc, ApplicationEventPublisher events, Clock clock, Users users,
-			jakarta.validation.Validator validator, ProjectRoles roles, ProjectScopes scopes) {
+			Validator validator, ProjectRoles roles, ProjectScopes scopes) {
 		this.roles = roles;
 		this.scopes = scopes;
 		this.jdbc = jdbc;
@@ -146,7 +151,7 @@ class ProjectService implements Projects {
 		var id = found.getKey();
 		requireCanChange(actor, id, UPDATE);
 		if (found.getValue()) throw new ProjectArchived();
-		var errors = new java.util.TreeMap<String, String>();
+		var errors = new TreeMap<String, String>();
 		if (changes.keySent()) errors.put("key", "The Project key can't be changed");
 		var name = ProjectsController.CreateProject.cleanName(changes.name());
 		var description = ProjectsController.CreateProject.cleanDescription(changes.description());
@@ -270,7 +275,7 @@ class ProjectService implements Projects {
 	/** The Members, earliest added first, for anyone who can see the project. */
 	public List<MemberView> members(UUID actor, String key) {
 		var project = open(actor, key);
-		var found = new java.util.ArrayList<Map.Entry<UUID, Instant>>();
+		var found = new ArrayList<Map.Entry<UUID, Instant>>();
 		jdbc.sql("SELECT user_id, added_at FROM project_members WHERE project_id = :project ORDER BY added_at, user_id")
 			.param("project", project.id())
 			.query((row, index) -> found.add(Map.entry(row.getObject("user_id", UUID.class),
@@ -321,6 +326,8 @@ class ProjectService implements Projects {
 		requireOthers(actor, userId);
 		requireCanGive(actor, id, role);
 		var current = roles.roleOf(id, userId);
+		// Changing a role takes away the old one, so the actor must be allowed to give that too.
+		if (current.isPresent()) requireCanGive(actor, id, current.get());
 		if (current.filter(role::equals).isEmpty()) {
 			requireNotLastAdmin(id, current);
 			if (current.isPresent()) roles.change(actor, id, userId, role);
@@ -335,6 +342,7 @@ class ProjectService implements Projects {
 		memberSince(id, userId);
 		requireOthers(actor, userId);
 		var current = roles.roleOf(id, userId);
+		if (current.isPresent()) requireCanGive(actor, id, current.get());
 		requireNotLastAdmin(id, current);
 		jdbc.sql("DELETE FROM project_members WHERE project_id = :project AND user_id = :user")
 			.param("project", id).param("user", userId).update();
@@ -398,17 +406,17 @@ class ProjectService implements Projects {
 	 * {@code null}; a Member no longer known is left out of those shown but still counted.
 	 */
 	private List<ProjectView> withPeople(List<Row> rows) {
-		var members = new java.util.HashMap<UUID, List<UUID>>();
+		var members = new HashMap<UUID, List<UUID>>();
 		if (!rows.isEmpty()) {
 			jdbc.sql("""
 					SELECT project_id, user_id FROM project_members WHERE project_id IN (:ids)
 					ORDER BY project_id, added_at, user_id
 					""").param("ids", rows.stream().map(Row::id).toList())
 				.query((row, index) -> members.computeIfAbsent(row.getObject("project_id", UUID.class),
-						project -> new java.util.ArrayList<>()).add(row.getObject("user_id", UUID.class)))
+						project -> new ArrayList<>()).add(row.getObject("user_id", UUID.class)))
 				.list();
 		}
-		var ids = new java.util.HashSet<UUID>();
+		var ids = new HashSet<UUID>();
 		rows.stream().map(Row::createdBy).filter(Objects::nonNull).forEach(ids::add);
 		members.values().forEach(list -> ids.addAll(list.subList(0, Math.min(MEMBERS_SHOWN, list.size()))));
 		var people = ids.isEmpty() ? Map.<UUID, UserSummary>of()

@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -52,7 +53,7 @@ class ProjectErrors {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
 	}
 
-	private static ProblemDetail invalid(org.springframework.http.HttpStatusCode status, String detail, Map<String, String> errors) {
+	private static ProblemDetail invalid(HttpStatusCode status, String detail, Map<String, String> errors) {
 		var problem = ProblemDetail.forStatusAndDetail(status, detail);
 		problem.setProperty("errors", errors);
 		return problem;

@@ -348,6 +348,330 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{key}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A project's Members
+         * @description For any Member (or a holder of `projects:project:view` with Scope All), earliest added first. `role` is the key of the project role the Member holds.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The Members */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectMember"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Project not found (also returned for a User who may not see it) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Add a Member
+         * @description Adds an existing User by email, case-insensitively, with a project role; the Member and the role are saved together. Needs `projects:member:manage`. The role must be one whose every Grant is within the signed-in User's own Scope in the project (`403` otherwise), and nobody adds themselves (`403`). `404` when no User has that email, `409` when they are already a Member or the project is Archived, `400` when the role is not a project role. Recorded in the audit log.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        email: string;
+                        /** @description The key of a project role */
+                        role: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The new Member */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectMember"];
+                    };
+                };
+                /** @description Invalid fields, with `errors` keyed by field */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Email not verified, no `projects:member:manage`, a role beyond the User's own access, or the User themselves */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Project not found, or no User has that email */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Already a Member, or the project is Archived */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{key}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a Member
+         * @description Needs `projects:member:manage`. Removing the Member and their project role happen together, and `MemberRemoved` is published, so the issues module unassigns their Issues in the project. Removing the last Project admin is `409`, and so is any change to an Archived project; nobody removes themselves (`403`). Recorded in the audit log.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Email not verified, no `projects:member:manage`, or the User themselves */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Project not found, or the User is not a Member */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The last Project admin, or the project is Archived */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Change a Member's project role
+         * @description Needs `projects:member:manage`. The same `400`, `403` and Archived `409` as adding; `404` for a User who is not a Member. Demoting the last Project admin is `409`, checked under a lock in the transaction. Nobody changes their own role (`403`). Recorded in the audit log.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description The key of a project role */
+                        role: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The Member, as they are now */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectMember"];
+                    };
+                };
+                /** @description Invalid fields, with `errors` keyed by field */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Email not verified, no `projects:member:manage`, a role beyond the User's own access, or the User themselves */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Project not found, or the User is not a Member */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The last Project admin, or the project is Archived */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/projects/{key}/member-roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The project roles a Member manager can choose from
+         * @description Every project role, each saying whether the signed-in User may give it (every Grant within their own Scope in the project). Needs `projects:member:manage`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key, matched case-insensitively */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The project roles, by name */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MemberRole"][];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Email not verified, or no `projects:member:manage` */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Project not found (also returned for a User who may not see it) */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{key}/issues": {
         parameters: {
             query?: never;
@@ -4564,6 +4888,23 @@ export interface components {
             memberCount: number;
             /** @description The first Members, earliest added first, at most 5 of memberCount */
             members: components["schemas"]["Person"][];
+        };
+        ProjectMember: {
+            /** Format: uuid */
+            id: string;
+            email: string;
+            displayName: string;
+            avatarUrl: string | null;
+            /** @description The key of the project role the Member holds */
+            role: string | null;
+            /** Format: date-time */
+            addedAt: string;
+        };
+        MemberRole: {
+            key: string;
+            name: string;
+            /** @description Whether the signed-in User may give it in this project */
+            assignable: boolean;
         };
         Person: {
             /** Format: uuid */

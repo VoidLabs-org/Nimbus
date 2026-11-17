@@ -48,6 +48,8 @@ export const queryKeys = {
   issueCounts: (projectKey: string, search: IssueSearch) =>
     ["issues", "counts", storedKey(projectKey), search] as const,
   projectIssueStats: ["issues", "stats"] as const,
+  projectMembers: (projectKey: string) => ["projects", storedKey(projectKey), "members"] as const,
+  memberRoles: (projectKey: string) => ["projects", storedKey(projectKey), "member-roles"] as const,
   roles: ["roles"] as const,
   role: (key: string) => ["roles", key] as const,
   holders: (key: string) => ["roles", key, "holders"] as const,
@@ -59,6 +61,38 @@ export const queryKeys = {
   myProjectPermissions: (userId: string, projectId: string) =>
     ["permissions", userId, projectId] as const,
 };
+
+/** A project's Members with their project roles. */
+export function useProjectMembers(projectKey: string) {
+  return useQuery({
+    queryKey: queryKeys.projectMembers(projectKey),
+    queryFn: () => api.projectMembers(projectKey),
+  });
+}
+
+/** The project roles the User may choose from when managing Members; only asked for by a Member manager. */
+export function useMemberRoles(projectKey: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.memberRoles(projectKey),
+    queryFn: () => api.memberRoles(projectKey),
+    enabled,
+  });
+}
+
+/**
+ * Members were added, changed or removed: refresh the list, the project (its Member count and first Members), the
+ * list of projects, the audit log and the Issues, which lose an Assignee when a Member is removed.
+ */
+export function useMembersChanged() {
+  const client = useQueryClient();
+  return (projectKey: string) => {
+    void client.invalidateQueries({ queryKey: queryKeys.projectMembers(projectKey) });
+    void client.invalidateQueries({ queryKey: queryKeys.project(projectKey), exact: true });
+    void client.invalidateQueries({ queryKey: queryKeys.projects, exact: true });
+    void client.invalidateQueries({ queryKey: queryKeys.audit });
+    void client.invalidateQueries({ queryKey: ["issues"] });
+  };
+}
 
 /** The User's Archived projects, for the Projects page's Archived toggle. Only fetched while it is on. */
 export function useArchivedProjects(enabled: boolean) {

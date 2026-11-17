@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -30,6 +31,12 @@ class ProjectErrors {
 	}
 
 	@ExceptionHandler
+	ProblemDetail memberRefused(ProjectService.MemberRefused e) {
+		return e.errors == null ? ProblemDetail.forStatusAndDetail(e.status, e.getMessage())
+				: invalid(e.status, e.getMessage(), e.errors);
+	}
+
+	@ExceptionHandler
 	ProblemDetail unreadableBody(HttpMessageNotReadableException e) {
 		return invalid(HttpStatus.BAD_REQUEST, "Some fields are invalid", Map.of("body", "Send a valid JSON body"));
 	}
@@ -46,7 +53,7 @@ class ProjectErrors {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
 	}
 
-	private static ProblemDetail invalid(HttpStatus status, String detail, Map<String, String> errors) {
+	private static ProblemDetail invalid(HttpStatusCode status, String detail, Map<String, String> errors) {
 		var problem = ProblemDetail.forStatusAndDetail(status, detail);
 		problem.setProperty("errors", errors);
 		return problem;

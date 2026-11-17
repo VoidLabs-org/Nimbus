@@ -111,10 +111,13 @@ describe("a project's Overview", () => {
     expect(screen.getByRole("link", { name: "Issues" }).getAttribute("href")).toBe(
       "/projects/APP/issues",
     );
+    expect(screen.getByRole("link", { name: "Members" }).getAttribute("href")).toBe(
+      "/projects/APP/members",
+    );
     expect((await screen.findByRole("link", { name: "Settings" })).getAttribute("href")).toBe(
       "/projects/APP/settings/statuses",
     );
-    expect(tabs.children).toHaveLength(3);
+    expect(tabs.children).toHaveLength(4);
   });
 
   it("leaves Settings out for a User who may not manage Statuses", async () => {

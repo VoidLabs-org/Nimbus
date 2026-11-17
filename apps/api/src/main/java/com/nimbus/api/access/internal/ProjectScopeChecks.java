@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 
 import com.nimbus.api.access.BuiltInRole;
 import com.nimbus.api.access.Kind;
+import com.nimbus.api.access.NotAProjectRoleException;
 import com.nimbus.api.access.Permission;
 import com.nimbus.api.access.ProjectFilter;
 import com.nimbus.api.access.ProjectScopes;
@@ -90,6 +91,27 @@ class ProjectScopeChecks implements ProjectScopes {
 				.collect(Collectors.toMap(Held::projectId, Held::scope, ProjectScopeChecks::wider));
 			return new ProjectFilter(false, projectsWith(widest, Scope.PROJECT), projectsWith(widest, Scope.OWN));
 		});
+	}
+
+	@Override
+	public boolean canGive(UUID userId, UUID projectId, String role) {
+		Objects.requireNonNull(projectId, "projectId");
+		var exists = jdbc.sql("SELECT EXISTS (SELECT 1 FROM access_roles WHERE key = :role AND kind = 'PROJECT')")
+			.param("role", role).query(Boolean.class).single();
+		if (!exists) {
+			throw new NotAProjectRoleException(role);
+		}
+		var grants = jdbc.sql("""
+				SELECT g.permission_key, g.scope FROM access_role_grants g JOIN access_roles r ON r.id = g.role_id
+				WHERE r.key = :role AND g.scope IS NOT NULL""")
+			.param("role", role)
+			.query((rs, n) -> Map.entry(rs.getString("permission_key"), Scope.valueOf(rs.getString("scope"))))
+			.list();
+		var held = heldIn(userId, projectId);
+		// Grants for keys no longer in the catalog allow nothing, so they give nothing away.
+		return grants.stream()
+			.filter(grant -> catalog.find(grant.getKey(), Kind.PROJECT).isPresent())
+			.allMatch(grant -> held.containsKey(grant.getKey()) && held.get(grant.getKey()).compareTo(grant.getValue()) >= 0);
 	}
 
 	/** Every project permission the User has in the project, with its widest Scope. */

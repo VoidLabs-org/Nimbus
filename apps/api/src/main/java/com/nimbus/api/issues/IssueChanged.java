@@ -16,6 +16,14 @@ public record IssueChanged(UUID projectId, String issueKey, UUID actorId, String
 		UUID assigneeId, List<Change> changes, Instant at) {
 
 	/**
+	 * Whether the system made the change, so there is no {@code actorId}. Listeners that credit or look up the actor
+	 * must check this first.
+	 */
+	public boolean systemMade() {
+		return actorId == null;
+	}
+
+	/**
 	 * One changed field. {@code before} and {@code after} are the values for {@code title}, {@code type},
 	 * {@code priority} and {@code status} (its name), and User ids for {@code assignee} ({@code null} for nobody).
 	 * A {@code description} change is only a flag: both values are {@code null}, as its text is never carried.

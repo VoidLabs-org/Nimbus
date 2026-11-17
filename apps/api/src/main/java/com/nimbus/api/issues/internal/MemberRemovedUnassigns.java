@@ -38,22 +38,26 @@ class MemberRemovedUnassigns {
 	@ApplicationModuleListener
 	void on(MemberRemoved event) {
 		var at = Timestamp.from(clock.instant().truncatedTo(ChronoUnit.MICROS));
-		var project = projects.findById(event.projectId()).orElse(null);
-		if (project == null) return;
+		// The data fix never depends on the project lookup; that is only needed for the event's key.
+		// One statement unassigns every Issue and writes all their history entries.
 		var unassigned = jdbc.sql("""
-				UPDATE issues SET assignee_id = NULL, updated_at = :at
-				WHERE project_id = :project AND assignee_id = :user RETURNING id, number, title, reporter_id""")
+				WITH u AS (
+					UPDATE issues SET assignee_id = NULL, updated_at = :at
+					WHERE project_id = :project AND assignee_id = :user RETURNING id, number, title, reporter_id),
+				h AS (
+					INSERT INTO issue_history (id, issue_id, actor_id, at, field, before_value, after_value)
+					SELECT gen_random_uuid(), id, NULL, :at, 'assignee', :before, NULL FROM u)
+				SELECT id, number, title, reporter_id FROM u ORDER BY number""")
 			.param("at", at).param("project", event.projectId()).param("user", event.userId())
+			.param("before", event.userId().toString())
 			.query((row, i) -> new Unassigned(row.getObject("id", UUID.class), row.getInt("number"),
 					row.getString("title"), row.getObject("reporter_id", UUID.class)))
 			.list();
+		if (unassigned.isEmpty()) return;
+		// A project that is gone took its Issues with it, so there is nothing left to announce.
+		var project = projects.findById(event.projectId()).orElse(null);
+		if (project == null) return;
 		for (var issue : unassigned) {
-			var id = issue.id();
-			jdbc.sql("""
-					INSERT INTO issue_history (id, issue_id, actor_id, at, field, before_value, after_value)
-					VALUES (:id, :issue, NULL, :at, 'assignee', :before, NULL)""")
-				.param("id", UUID.randomUUID()).param("issue", id).param("at", at)
-				.param("before", event.userId().toString()).update();
 			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), issue.number()), null,
 					issue.title(), issue.reporterId(), null,
 					List.of(new IssueChanged.Change("assignee", event.userId().toString(), null)), at.toInstant()));

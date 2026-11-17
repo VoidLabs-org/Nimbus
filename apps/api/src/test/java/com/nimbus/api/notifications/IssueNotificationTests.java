@@ -96,6 +96,19 @@ class IssueNotificationTests {
 	}
 
 	@Test
+	void aChangeMadeByTheSystemNotifiesNobody(Scenario scenario) {
+		var maya = person("Maya");
+		var sam = person("Sam");
+		var leaver = person("Leaver");
+		var unassigned = new IssueChanged(project, "NIM-30", null, "Orphaned", maya.id(), null,
+			List.of(change("assignee", leaver.id().toString(), null)), Instant.now());
+		scenario.publish(unassigned);
+		settle(scenario, sam);
+		assertThat(count(maya)).isZero();
+		assertThat(count(leaver)).isZero();
+	}
+
+	@Test
 	void theAssigneeGetsOneNotificationWithASnapshotAndAnEmailThatLinksToTheIssue(Scenario scenario) {
 		var maya = person("Maya");
 		var sam = person("Sam");

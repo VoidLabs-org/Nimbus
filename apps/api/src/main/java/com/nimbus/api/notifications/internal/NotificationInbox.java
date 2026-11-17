@@ -162,6 +162,12 @@ class NotificationInbox {
 		return "/issues/" + issueKey;
 	}
 
+	/** Deletes the User's Notifications about one project, including any still waiting to be emailed. */
+	void deleteForMember(UUID userId, UUID projectId) {
+		jdbc.sql("DELETE FROM notifications WHERE user_id = :user AND project_id = :project")
+			.param("user", userId).param("project", projectId).update();
+	}
+
 	long unreadCount(UUID userId) {
 		return jdbc.sql("SELECT count(*) FROM notifications WHERE user_id = :user AND read_at IS NULL")
 			.param("user", userId).query(Long.class).single();

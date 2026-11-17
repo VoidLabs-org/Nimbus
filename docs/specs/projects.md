@@ -10,7 +10,7 @@ Owns **Projects** and their **Members**. So far it implements creating a project
 
 `ProjectCreated(projectId, key, creatingUserId)` is published once in the transaction that inserts the project and its first Member. The key is uppercase. Reads, rejected input and conflicting creates publish nothing. Consumers should handle it after commit. `access` does not listen to it: later RBAC integration calls `access` from `projects`, as required by [ADR 0002](../adr/0002-per-project-roles-and-access-as-a-foundation.md).
 
-`MemberRemoved(projectId, userId)` is published in the transaction that removes a Member. Consumers should handle it after commit. The issues module unassigns that User's Issues in the project (a history entry made by the system, no `IssueChanged`). Adding or changing a Member publishes nothing.
+`MemberRemoved(projectId, userId)` is published in the transaction that removes a Member. Consumers should handle it after commit. The issues module unassigns that User's Issues in the project (a history entry made by the system, and an `IssueChanged` with `reason` `MEMBER_REMOVED`), and the notifications module deletes that User's Notifications about the project. Adding or changing a Member publishes nothing.
 
 ## Rules
 

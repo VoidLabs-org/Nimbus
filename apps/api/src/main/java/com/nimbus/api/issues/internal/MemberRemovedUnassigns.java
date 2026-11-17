@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
 /**
  * A User removed from a project can no longer be an Assignee there (the Assignee must be a Member), so their Issues
  * in that project become unassigned, each with a history entry made by the system (no actor) and an
- * {@code IssueChanged} with a {@code null} {@code actorId}. Notifications ignore system-made changes, so nobody is
- * told of a reassignment nobody made.
+ * {@code IssueChanged} with a {@code null} {@code actorId} and the reason {@code MEMBER_REMOVED}, so Notifications
+ * skip the removed User and still tell the Reporter.
  */
 @Component
 class MemberRemovedUnassigns {
@@ -60,7 +60,8 @@ class MemberRemovedUnassigns {
 		for (var issue : unassigned) {
 			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), issue.number()), null,
 					issue.title(), issue.reporterId(), null,
-					List.of(new IssueChanged.Change("assignee", event.userId().toString(), null)), at.toInstant()));
+					List.of(new IssueChanged.Change("assignee", event.userId().toString(), null)), at.toInstant(),
+					IssueChanged.Reason.MEMBER_REMOVED));
 		}
 	}
 

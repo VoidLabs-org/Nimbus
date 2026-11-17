@@ -18,6 +18,7 @@ import com.nimbus.api.mail.Mail;
 import com.nimbus.api.mail.MailAssets;
 import com.nimbus.api.mail.Mailer;
 import com.nimbus.api.mail.NoticeMail;
+import com.nimbus.api.projects.MemberRemoved;
 import com.nimbus.api.projects.Projects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,8 +79,9 @@ class IssueNotifications {
 	 */
 	@ApplicationModuleListener
 	void on(IssueChanged event) {
-		// A change made by the system (a removed Member's Issues being unassigned) has no one to credit.
-		if (event.systemMade()) return;
+		// Other changes made by the system have no one to credit.
+		var memberRemoved = IssueChanged.MEMBER_REMOVED.equals(event.reason());
+		if (event.systemMade() && !memberRemoved) return;
 		var assignee = event.changes().stream().filter(c -> c.field().equals("assignee")).findFirst().orElse(null);
 		var status = event.changes().stream().filter(c -> c.field().equals("status")).findFirst().orElse(null);
 		var edited = event.changes().stream().map(IssueChanged.Change::field)
@@ -93,7 +95,8 @@ class IssueNotifications {
 		if (assignee != null) {
 			var before = assignee.before() == null ? null : UUID.fromString(assignee.before());
 			var after = assignee.after() == null ? null : UUID.fromString(assignee.after());
-			if (before != null && told.add(before)) {
+			// The removed Member is not told of the unassignment their removal caused.
+			if (!memberRemoved && before != null && told.add(before)) {
 				deliver(before, NotificationSettings.IssueType.ISSUE_UNASSIGNED, key("ISSUE_UNASSIGNED", before, event),
 					source, "", Map.of());
 			}
@@ -129,6 +132,12 @@ class IssueNotifications {
 		}
 	}
 
+	/** Leaving a project clears the User's Notifications about it, those still waiting to be emailed included. */
+	@ApplicationModuleListener
+	void on(MemberRemoved event) {
+		inbox.deleteForMember(event.userId(), event.projectId());
+	}
+
 	/**
 	 * The Reporter and the Assignee it had when it was deleted, never the person who deleted it. Every Notification
 	 * about the Issue then links to its project, since the Issue can't be opened.
@@ -159,6 +168,7 @@ class IssueNotifications {
 	}
 
 	private Optional<UserSummary> actor(UUID actorId) {
+		if (actorId == null) return Optional.empty();
 		return users.findAllById(List.of(actorId)).stream().findFirst();
 	}
 

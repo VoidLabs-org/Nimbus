@@ -14,6 +14,7 @@ import com.nimbus.api.identity.MovableClock;
 import com.nimbus.api.issues.IssueChanged;
 import com.nimbus.api.issues.IssueCreated;
 import com.nimbus.api.issues.IssueDeleted;
+import com.nimbus.api.projects.MemberRemoved;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -106,6 +107,59 @@ class IssueNotificationTests {
 		settle(scenario, sam);
 		assertThat(count(maya)).isZero();
 		assertThat(count(leaver)).isZero();
+	}
+
+	IssueChanged memberRemovedUnassign(String key, Person reporter, Person leaver) {
+		return new IssueChanged(project, key, null, "Orphaned", reporter.id(), null,
+			List.of(change("assignee", leaver.id().toString(), null)), Instant.now(), IssueChanged.MEMBER_REMOVED);
+	}
+
+	@Test
+	void unassigningARemovedMembersIssueTellsTheReporterButNotTheRemovedMember(Scenario scenario) {
+		var maya = person("Maya");
+		var leaver = person("Leaver");
+		leave(leaver);
+		scenario.publish(memberRemovedUnassign("NIM-31", maya, leaver)).andWaitForStateChange(() -> count(maya), n -> n == 1);
+		settle(scenario, maya);
+		assertThat(count(leaver)).isZero();
+		var edited = notifications(maya, "ISSUE_EDITED");
+		assertThat(edited).hasSize(1);
+		assertThat(edited.getFirst().get("snapshot").toString()).contains("changed the Assignee");
+	}
+
+	@Test
+	void theRemovedMemberIsNotToldEvenIfTheUnassignmentIsHandledBeforeTheyLeave(Scenario scenario) {
+		var maya = person("Maya");
+		var leaver = person("Leaver");
+		scenario.publish(memberRemovedUnassign("NIM-32", maya, leaver)).andWaitForStateChange(() -> count(maya), n -> n == 1);
+		settle(scenario, maya);
+		assertThat(count(leaver)).isZero();
+		assertThat(notifications(maya, "ISSUE_EDITED")).hasSize(1);
+	}
+
+	@Test
+	void removingAMemberDeletesTheirNotificationsAboutThatProjectOnly(Scenario scenario) {
+		var maya = person("Maya");
+		var leaver = person("Leaver");
+		var otherProject = UUID.randomUUID();
+		jdbc.sql("INSERT INTO projects (id, key, name, created_at) VALUES (:id, :key, 'Other', now())")
+			.param("id", otherProject).param("key", "O" + otherProject.toString().replace("-", "").substring(0, 9).toUpperCase())
+			.update();
+		jdbc.sql("INSERT INTO project_members (project_id, user_id, added_at) VALUES (:project, :user, now())")
+			.param("project", otherProject).param("user", leaver.id()).update();
+		scenario.publish(created("NIM-33", "Mine", maya, leaver)).andWaitForStateChange(() -> count(leaver), n -> n == 1);
+		scenario.publish(new IssueCreated(otherProject, "OTH-1", maya.id(), "Elsewhere", maya.id(), leaver.id()))
+			.andWaitForStateChange(() -> count(leaver), n -> n == 2);
+		// A grouped Notification is waiting to be emailed.
+		scenario.publish(changed("NIM-33", "Mine", maya, maya, leaver, change("priority", "Low", "High")))
+			.andWaitForStateChange(() -> count(leaver), n -> n == 3);
+		leave(leaver);
+		scenario.publish(new MemberRemoved(project, leaver.id()))
+			.andWaitForStateChange(() -> count(leaver), n -> n == 1);
+		assertThat(jdbc.sql("SELECT project_id FROM notifications WHERE user_id = :user").param("user", leaver.id())
+			.query(UUID.class).single()).isEqualTo(otherProject);
+		assertThat(mailsTo(leaver.email()).stream().filter(m -> m.subject().contains("NIM-33")
+			&& m.subject().contains("edited")).toList()).isEmpty();
 	}
 
 	@Test

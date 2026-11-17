@@ -10,10 +10,19 @@ import java.util.UUID;
  * {@code null} when unassigned); {@code actorId} made the change
  * ({@code null} when the system did) and {@code at} is when. {@code changes} has one entry per field that really
  * changed, among {@code title}, {@code description}, {@code type}, {@code priority}, {@code assignee} and
- * {@code status}.
+ * {@code status}. {@code reason} says why the system made a change and is {@code null} for an ordinary edit.
  */
 public record IssueChanged(UUID projectId, String issueKey, UUID actorId, String title, UUID reporterId,
-		UUID assigneeId, List<Change> changes, Instant at) {
+		UUID assigneeId, List<Change> changes, Instant at, String reason) {
+
+	/** The {@code reason} of the unassignment that follows a Member being removed from the project. */
+	public static final String MEMBER_REMOVED = "MEMBER_REMOVED";
+
+	/** An ordinary change, with no {@code reason}. */
+	public IssueChanged(UUID projectId, String issueKey, UUID actorId, String title, UUID reporterId,
+			UUID assigneeId, List<Change> changes, Instant at) {
+		this(projectId, issueKey, actorId, title, reporterId, assigneeId, changes, at, null);
+	}
 
 	/**
 	 * Whether the system made the change, so there is no {@code actorId}. Listeners that credit or look up the actor

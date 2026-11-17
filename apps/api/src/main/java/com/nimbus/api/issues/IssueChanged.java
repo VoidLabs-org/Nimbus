@@ -13,10 +13,13 @@ import java.util.UUID;
  * {@code status}. {@code reason} says why the system made a change and is {@code null} for an ordinary edit.
  */
 public record IssueChanged(UUID projectId, String issueKey, UUID actorId, String title, UUID reporterId,
-		UUID assigneeId, List<Change> changes, Instant at, String reason) {
+		UUID assigneeId, List<Change> changes, Instant at, Reason reason) {
 
-	/** The {@code reason} of the unassignment that follows a Member being removed from the project. */
-	public static final String MEMBER_REMOVED = "MEMBER_REMOVED";
+	/** Why the system made a change. */
+	public enum Reason {
+		/** The unassignment that follows a Member being removed from the project. */
+		MEMBER_REMOVED
+	}
 
 	/** An ordinary change, with no {@code reason}. */
 	public IssueChanged(UUID projectId, String issueKey, UUID actorId, String title, UUID reporterId,

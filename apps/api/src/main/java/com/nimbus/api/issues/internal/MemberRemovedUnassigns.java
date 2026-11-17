@@ -61,7 +61,7 @@ class MemberRemovedUnassigns {
 			events.publishEvent(new IssueChanged(project.id(), IssueKeys.format(project.key(), issue.number()), null,
 					issue.title(), issue.reporterId(), null,
 					List.of(new IssueChanged.Change("assignee", event.userId().toString(), null)), at.toInstant(),
-					IssueChanged.MEMBER_REMOVED));
+					IssueChanged.Reason.MEMBER_REMOVED));
 		}
 	}
 

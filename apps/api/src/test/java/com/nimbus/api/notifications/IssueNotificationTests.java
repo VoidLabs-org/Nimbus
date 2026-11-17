@@ -111,7 +111,7 @@ class IssueNotificationTests {
 
 	IssueChanged memberRemovedUnassign(String key, Person reporter, Person leaver) {
 		return new IssueChanged(project, key, null, "Orphaned", reporter.id(), null,
-			List.of(change("assignee", leaver.id().toString(), null)), Instant.now(), IssueChanged.MEMBER_REMOVED);
+			List.of(change("assignee", leaver.id().toString(), null)), Instant.now(), IssueChanged.Reason.MEMBER_REMOVED);
 	}
 
 	@Test
@@ -157,7 +157,7 @@ class IssueNotificationTests {
 		scenario.publish(new MemberRemoved(project, leaver.id()))
 			.andWaitForStateChange(() -> count(leaver), n -> n == 1);
 		assertThat(jdbc.sql("SELECT project_id FROM notifications WHERE user_id = :user").param("user", leaver.id())
-			.query(UUID.class).single()).isEqualTo(otherProject);
+			.query(UUID.class).list()).containsExactly(otherProject);
 		assertThat(mailsTo(leaver.email()).stream().filter(m -> m.subject().contains("NIM-33")
 			&& m.subject().contains("edited")).toList()).isEmpty();
 	}

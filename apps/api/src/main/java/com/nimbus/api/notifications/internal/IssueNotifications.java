@@ -80,8 +80,7 @@ class IssueNotifications {
 	@ApplicationModuleListener
 	void on(IssueChanged event) {
 		// Other changes made by the system have no one to credit.
-		var memberRemoved = IssueChanged.MEMBER_REMOVED.equals(event.reason());
-		if (event.systemMade() && !memberRemoved) return;
+		if (event.systemMade() && event.reason() != IssueChanged.Reason.MEMBER_REMOVED) return;
 		var assignee = event.changes().stream().filter(c -> c.field().equals("assignee")).findFirst().orElse(null);
 		var status = event.changes().stream().filter(c -> c.field().equals("status")).findFirst().orElse(null);
 		var edited = event.changes().stream().map(IssueChanged.Change::field)
@@ -96,7 +95,8 @@ class IssueNotifications {
 			var before = assignee.before() == null ? null : UUID.fromString(assignee.before());
 			var after = assignee.after() == null ? null : UUID.fromString(assignee.after());
 			// The removed Member is not told of the unassignment their removal caused.
-			if (!memberRemoved && before != null && told.add(before)) {
+			if (event.reason() == IssueChanged.Reason.MEMBER_REMOVED) told.add(before);
+				if (before != null && told.add(before)) {
 				deliver(before, NotificationSettings.IssueType.ISSUE_UNASSIGNED, key("ISSUE_UNASSIGNED", before, event),
 					source, "", Map.of());
 			}
@@ -132,9 +132,13 @@ class IssueNotifications {
 		}
 	}
 
-	/** Leaving a project clears the User's Notifications about it, those still waiting to be emailed included. */
+	/**
+	 * Leaving a project clears the User's Notifications about it, those still waiting to be emailed included. Listeners
+	 * run after commit, so a User who has already been added again keeps what they have received since.
+	 */
 	@ApplicationModuleListener
 	void on(MemberRemoved event) {
+		if (projects.isMember(event.projectId(), event.userId())) return;
 		inbox.deleteForMember(event.userId(), event.projectId());
 	}
 

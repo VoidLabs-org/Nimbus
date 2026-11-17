@@ -7,12 +7,21 @@ import java.util.UUID;
 /**
  * Published in the transaction that changes an Issue, once per edit that changed something. {@code title},
  * {@code reporterId} and {@code assigneeId} are the Issue as it is after the change ({@code assigneeId} is
- * {@code null} when unassigned); {@code actorId} made the change and {@code at} is when. {@code changes} has one
- * entry per field that really changed, among {@code title}, {@code description}, {@code type}, {@code priority},
- * {@code assignee} and {@code status}.
+ * {@code null} when unassigned); {@code actorId} made the change
+ * ({@code null} when the system did) and {@code at} is when. {@code changes} has one entry per field that really
+ * changed, among {@code title}, {@code description}, {@code type}, {@code priority}, {@code assignee} and
+ * {@code status}.
  */
 public record IssueChanged(UUID projectId, String issueKey, UUID actorId, String title, UUID reporterId,
 		UUID assigneeId, List<Change> changes, Instant at) {
+
+	/**
+	 * Whether the system made the change, so there is no {@code actorId}. Listeners that credit or look up the actor
+	 * must check this first.
+	 */
+	public boolean systemMade() {
+		return actorId == null;
+	}
 
 	/**
 	 * One changed field. {@code before} and {@code after} are the values for {@code title}, {@code type},

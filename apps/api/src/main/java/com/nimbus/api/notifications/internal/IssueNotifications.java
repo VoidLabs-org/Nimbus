@@ -78,6 +78,8 @@ class IssueNotifications {
 	 */
 	@ApplicationModuleListener
 	void on(IssueChanged event) {
+		// A change made by the system (a removed Member's Issues being unassigned) has no one to credit.
+		if (event.actorId() == null) return;
 		var assignee = event.changes().stream().filter(c -> c.field().equals("assignee")).findFirst().orElse(null);
 		var status = event.changes().stream().filter(c -> c.field().equals("status")).findFirst().orElse(null);
 		var edited = event.changes().stream().map(IssueChanged.Change::field)

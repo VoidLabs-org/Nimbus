@@ -6,9 +6,11 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import com.nimbus.api.access.Authorize;
 import com.nimbus.api.identity.CurrentUser;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,6 +53,42 @@ class ProjectsController {
 	@PostMapping("/{key}/restore")
 	ProjectService.ProjectView restore(@PathVariable String key) {
 		return projects.restore(currentUser.id(), key);
+	}
+
+	@GetMapping("/{key}/members")
+	List<ProjectService.MemberView> members(@PathVariable String key) {
+		return projects.members(currentUser.id(), key);
+	}
+
+	/** The project roles for the add and change controls; each says whether the User may give it. */
+	@GetMapping("/{key}/member-roles")
+	List<ProjectService.RoleOption> memberRoles(@PathVariable String key) {
+		return projects.memberRoles(currentUser.id(), key);
+	}
+
+	@PostMapping("/{key}/members")
+	@ResponseStatus(HttpStatus.CREATED)
+	ProjectService.MemberView addMember(@PathVariable String key, @Valid @RequestBody AddMember request) {
+		return projects.addMember(currentUser.id(), key, request.email(), request.role());
+	}
+
+	@PatchMapping("/{key}/members/{userId}")
+	ProjectService.MemberView changeMember(@PathVariable String key, @PathVariable java.util.UUID userId,
+			@Valid @RequestBody ChangeMember request) {
+		return projects.changeMember(currentUser.id(), key, userId, request.role());
+	}
+
+	@DeleteMapping("/{key}/members/{userId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	void removeMember(@PathVariable String key, @PathVariable java.util.UUID userId) {
+		projects.removeMember(currentUser.id(), key, userId);
+	}
+
+	record AddMember(@NotBlank(message = "Enter an email") String email,
+			@NotBlank(message = "Choose a project role") String role) {
+	}
+
+	record ChangeMember(@NotBlank(message = "Choose a project role") String role) {
 	}
 
 	@GetMapping("/{key}")

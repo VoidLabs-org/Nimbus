@@ -1,5 +1,7 @@
 package com.nimbus.api.access;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -9,7 +11,7 @@ import java.util.UUID;
  * {@code access} stores only the ids and never checks that the User or project exists.
  *
  * <p>{@code actorId} is who made the change, {@code null} for the system (such as a backfill at startup); it is for
- * the audit log (#50).
+ * the audit log: {@code give}, {@code change} and {@code remove} each write an entry in the caller's transaction.
  */
 public interface ProjectRoles {
 
@@ -30,5 +32,18 @@ public interface ProjectRoles {
 
 	/** The key of the project role the User holds in this project, if any. */
 	Optional<String> roleOf(UUID projectId, UUID userId);
+
+	/** The project role key of every User who holds one in this project. */
+	Map<UUID, String> rolesIn(UUID projectId);
+
+	/** How many Users hold this project role in this project. */
+	long countHolders(UUID projectId, String role);
+
+	/** Every project role, built-in and custom, by name. */
+	List<ProjectRoleSummary> projectRoles();
+
+	/** A project role as a Members page offers it. */
+	record ProjectRoleSummary(String key, String name) {
+	}
 
 }

@@ -250,6 +250,245 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/members:
+    get:
+      tags: [projects]
+      summary: A project's Members
+      description: >-
+        For any Member (or a holder of `projects:project:view` with Scope All), earliest added first. `role` is the key
+        of the project role the Member holds.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectMember"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Project not found (also returned for a User who may not see it)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    post:
+      tags: [projects]
+      summary: Add a Member
+      description: >-
+        Adds an existing User by email, case-insensitively, with a project role; the Member and the role are saved
+        together. Needs `projects:member:manage`. The role must be one whose every Grant is within the signed-in
+        User's own Scope in the project (`403` otherwise), and nobody adds themselves (`403`). `404` when no User has
+        that email, `409` when they are already a Member or the project is Archived, `400` when the role is not a
+        project role. Recorded in the audit log.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email:
+                  type: string
+                role:
+                  type: string
+                  description: The key of a project role
+      responses:
+        "201":
+          description: The new Member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMember"
+        "400":
+          description: Invalid fields, with `errors` keyed by field
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Email not verified, no `projects:member:manage`, a role beyond the User's own access, or the User themselves
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Project not found, or no User has that email
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Already a Member, or the project is Archived
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/members/{userId}:
+    patch:
+      tags: [projects]
+      summary: Change a Member's project role
+      description: >-
+        Needs `projects:member:manage`. The same `400`, `403` and Archived `409` as adding; `404` for a User who is not
+        a Member. Demoting the last Project admin is `409`, checked under a lock in the transaction. Nobody changes
+        their own role (`403`). Recorded in the audit log.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  description: The key of a project role
+      responses:
+        "200":
+          description: The Member, as they are now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMember"
+        "400":
+          description: Invalid fields, with `errors` keyed by field
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Email not verified, no `projects:member:manage`, a role beyond the User's own access, or the User themselves
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Project not found, or the User is not a Member
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The last Project admin, or the project is Archived
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags: [projects]
+      summary: Remove a Member
+      description: >-
+        Needs `projects:member:manage`. Removing the Member and their project role happen together, and `MemberRemoved`
+        is published, so the issues module unassigns their Issues in the project. Removing the last Project admin is
+        `409`, and so is any change to an Archived project; nobody removes themselves (`403`). Recorded in the audit
+        log.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Email not verified, no `projects:member:manage`, or the User themselves
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Project not found, or the User is not a Member
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The last Project admin, or the project is Archived
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/projects/{key}/member-roles:
+    get:
+      tags: [projects]
+      summary: The project roles a Member manager can choose from
+      description: >-
+        Every project role, each saying whether the signed-in User may give it (every Grant within their own Scope in
+        the project). Needs `projects:member:manage`.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Project key, matched case-insensitively
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The project roles, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MemberRole"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Email not verified, or no `projects:member:manage`
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Project not found (also returned for a User who may not see it)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/projects/{key}/issues:
     get:
       tags: [issues]
@@ -3395,6 +3634,36 @@ components:
           description: The first Members, earliest added first, at most 5 of memberCount
           items:
             $ref: "#/components/schemas/Person"
+    ProjectMember:
+      type: object
+      required: [id, email, displayName, avatarUrl, role, addedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: [string, "null"]
+        role:
+          type: [string, "null"]
+          description: The key of the project role the Member holds
+        addedAt:
+          type: string
+          format: date-time
+    MemberRole:
+      type: object
+      required: [key, name, assignable]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        assignable:
+          type: boolean
+          description: Whether the signed-in User may give it in this project
     Person:
       type: object
       required: [id, displayName, avatarUrl]

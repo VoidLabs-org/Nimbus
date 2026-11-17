@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import classes from "./ProjectTabs.module.css";
 
-export type ProjectTab = "overview" | "issues" | "settings";
+export type ProjectTab = "overview" | "issues" | "members" | "settings";
 
 /**
  * A project's tabs (design "Project page layouts", A): Overview, Issues and, for a User who may manage its Statuses,
@@ -23,6 +23,7 @@ export function ProjectTabs({
   const tabs: { id: ProjectTab; label: string; to: string }[] = [
     { id: "overview", label: "Overview", to: `${base}/overview` },
     { id: "issues", label: "Issues", to: `${base}/issues` },
+    { id: "members", label: "Members", to: `${base}/members` },
     ...(showSettings
       ? [{ id: "settings" as const, label: "Settings", to: `${base}/settings/statuses` }]
       : []),

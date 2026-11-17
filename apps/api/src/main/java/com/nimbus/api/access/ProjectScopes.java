@@ -30,4 +30,12 @@ public interface ProjectScopes {
 	 */
 	ProjectFilter filter(UUID userId, String permission);
 
+	/**
+	 * Whether the User may give the project role in the project: every Grant in it is within the Scope they hold in
+	 * that project for the same Permission (a Grant for a Permission they lack is beyond them).
+	 *
+	 * @throws NotAProjectRoleException if {@code role} is not the key of a project role
+	 */
+	boolean canGive(UUID userId, UUID projectId, String role);
+
 }

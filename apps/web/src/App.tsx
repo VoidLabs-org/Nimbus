@@ -26,6 +26,7 @@ import ProfilePage from "./pages/ProfilePage";
 import IssuePage from "./pages/IssuePage";
 import IssuesPage from "./pages/IssuesPage";
 import StatusesPage from "./pages/StatusesPage";
+import MembersPage from "./pages/MembersPage";
 import ProjectPage, { ProjectHome } from "./pages/ProjectPage";
 import { ProjectLayout } from "./projects/ProjectLayout";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -212,6 +213,7 @@ export function AppRoutes() {
               <Route index element={<ProjectHome />} />
               <Route path="overview" element={<ProjectPage />} />
               <Route path="issues" element={<IssuesPage />} />
+              <Route path="members" element={<MembersPage />} />
               <Route path="settings/statuses" element={<StatusesPage />} />
             </Route>
             <Route path="/issues/:issueKey" element={<IssuePage />} />

@@ -23,7 +23,9 @@ import com.nimbus.api.access.Scope;
 import com.nimbus.api.identity.UserSummary;
 import com.nimbus.api.identity.Users;
 import com.nimbus.api.projects.ProjectSummary;
+import com.nimbus.api.projects.MemberRemoved;
 import com.nimbus.api.projects.ProjectCreated;
+import org.springframework.http.HttpStatus;
 import com.nimbus.api.projects.Projects;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -44,6 +46,7 @@ class ProjectService implements Projects {
 	static final String VIEW = "projects:project:view";
 	static final String UPDATE = "projects:project:update";
 	static final String ARCHIVE = "projects:project:archive";
+	static final String MANAGE_MEMBERS = "projects:member:manage";
 
 	private final JdbcClient jdbc;
 	private final ApplicationEventPublisher events;
@@ -238,6 +241,151 @@ class ProjectService implements Projects {
 	public void requireCanChange(UUID actor, UUID projectId, String permission) {
 		requireVisible(actor, projectId);
 		scopes.require(actor, projectId, permission);
+	}
+
+	/** A Member as the Members page shows them. */
+	record MemberView(UUID id, String email, String displayName, String avatarUrl, String role, Instant addedAt) {
+	}
+
+	/** A project role that can be chosen, and whether the actor may give it. */
+	record RoleOption(String key, String name, boolean assignable) {
+	}
+
+	/** A refused Member change: the status, the reason and, for a field, its error. */
+	static class MemberRefused extends RuntimeException {
+		final HttpStatus status;
+		final Map<String, String> errors;
+
+		MemberRefused(HttpStatus status, String message) {
+			this(status, message, null);
+		}
+
+		MemberRefused(HttpStatus status, String message, Map<String, String> errors) {
+			super(message);
+			this.status = status;
+			this.errors = errors;
+		}
+	}
+
+	/** The Members, earliest added first, for anyone who can see the project. */
+	public List<MemberView> members(UUID actor, String key) {
+		var project = open(actor, key);
+		var found = new java.util.ArrayList<Map.Entry<UUID, Instant>>();
+		jdbc.sql("SELECT user_id, added_at FROM project_members WHERE project_id = :project ORDER BY added_at, user_id")
+			.param("project", project.id())
+			.query((row, index) -> found.add(Map.entry(row.getObject("user_id", UUID.class),
+					row.getTimestamp("added_at").toInstant())))
+			.list();
+		return views(project.id(), found);
+	}
+
+	private List<MemberView> views(UUID projectId, List<Map.Entry<UUID, Instant>> found) {
+		var held = roles.rolesIn(projectId);
+		var people = users.findAllById(found.stream().map(Map.Entry::getKey).toList()).stream()
+			.collect(Collectors.toMap(UserSummary::id, Function.identity()));
+		return found.stream().filter(entry -> people.containsKey(entry.getKey())).map(entry -> {
+			var user = people.get(entry.getKey());
+			return new MemberView(user.id(), user.email(), user.displayName(), user.avatarUrl(),
+					held.get(user.id()), entry.getValue());
+		}).toList();
+	}
+
+	/** The project roles, each marked with whether the actor may give it; for a Member who manages Members. */
+	public List<RoleOption> memberRoles(UUID actor, String key) {
+		var id = changeableId(actor, key, MANAGE_MEMBERS);
+		return roles.projectRoles().stream()
+			.map(role -> new RoleOption(role.key(), role.name(), scopes.canGive(actor, id, role.key()))).toList();
+	}
+
+	@Transactional
+	public MemberView addMember(UUID actor, String key, String email, String role) {
+		var id = lockedForMembers(actor, key);
+		requireProjectRole(role);
+		var user = users.findByEmail(email).orElseThrow(() -> new MemberRefused(HttpStatus.NOT_FOUND,
+				"No User has that email", Map.of("email", "No User has that email")));
+		requireOthers(actor, user.id());
+		requireCanGive(actor, id, role);
+		if (isMember(id, user.id())) throw new MemberRefused(HttpStatus.CONFLICT, "This User is already a Member");
+		var at = clock.instant().truncatedTo(ChronoUnit.MICROS);
+		jdbc.sql("INSERT INTO project_members (project_id, user_id, added_at) VALUES (:project, :user, :at)")
+			.param("project", id).param("user", user.id()).param("at", Timestamp.from(at)).update();
+		roles.give(actor, id, user.id(), role);
+		return views(id, List.of(Map.entry(user.id(), at))).getFirst();
+	}
+
+	@Transactional
+	public MemberView changeMember(UUID actor, String key, UUID userId, String role) {
+		var id = lockedForMembers(actor, key);
+		requireProjectRole(role);
+		var added = memberSince(id, userId);
+		requireOthers(actor, userId);
+		requireCanGive(actor, id, role);
+		var current = roles.roleOf(id, userId);
+		if (current.filter(role::equals).isEmpty()) {
+			requireNotLastAdmin(id, current);
+			if (current.isPresent()) roles.change(actor, id, userId, role);
+			else roles.give(actor, id, userId, role);
+		}
+		return views(id, List.of(Map.entry(userId, added))).getFirst();
+	}
+
+	@Transactional
+	public void removeMember(UUID actor, String key, UUID userId) {
+		var id = lockedForMembers(actor, key);
+		memberSince(id, userId);
+		requireOthers(actor, userId);
+		var current = roles.roleOf(id, userId);
+		requireNotLastAdmin(id, current);
+		jdbc.sql("DELETE FROM project_members WHERE project_id = :project AND user_id = :user")
+			.param("project", id).param("user", userId).update();
+		if (current.isPresent()) roles.remove(actor, id, userId);
+		events.publishEvent(new MemberRemoved(id, userId));
+	}
+
+	/**
+	 * The project's id once the actor may manage its Members and it is not Archived. The project row is locked until
+	 * the transaction ends, so concurrent Member changes in one project take turns and the last-admin rule is
+	 * checked against the Members as they really are.
+	 */
+	private UUID lockedForMembers(UUID actor, String key) {
+		var id = changeableId(actor, key, MANAGE_MEMBERS);
+		var archived = jdbc.sql("SELECT archived_at IS NOT NULL FROM projects WHERE id = :id FOR UPDATE")
+			.param("id", id).query(Boolean.class).single();
+		if (archived) throw new ProjectArchived();
+		return id;
+	}
+
+	private void requireProjectRole(String role) {
+		if (role == null || roles.projectRoles().stream().noneMatch(found -> found.key().equals(role))) {
+			throw new InvalidFields(Map.of("role", "Choose a project role"));
+		}
+	}
+
+	private static void requireOthers(UUID actor, UUID target) {
+		if (actor.equals(target)) {
+			throw new MemberRefused(HttpStatus.FORBIDDEN, "You can't change your own project role or membership");
+		}
+	}
+
+	private void requireCanGive(UUID actor, UUID projectId, String role) {
+		if (!scopes.canGive(actor, projectId, role)) {
+			throw new MemberRefused(HttpStatus.FORBIDDEN, "You can't give a role with more access than you have");
+		}
+	}
+
+	/** Removing or demoting the last Project admin leaves a project nobody can manage. */
+	private void requireNotLastAdmin(UUID projectId, Optional<String> current) {
+		var admin = BuiltInRole.PROJECT_ADMIN.key();
+		if (current.filter(admin::equals).isPresent() && roles.countHolders(projectId, admin) <= 1) {
+			throw new MemberRefused(HttpStatus.CONFLICT, "A project needs at least one Project admin");
+		}
+	}
+
+	private Instant memberSince(UUID projectId, UUID userId) {
+		return jdbc.sql("SELECT added_at FROM project_members WHERE project_id = :project AND user_id = :user")
+			.param("project", projectId).param("user", userId)
+			.query((row, index) -> row.getTimestamp("added_at").toInstant()).optional()
+			.orElseThrow(() -> new MemberRefused(HttpStatus.NOT_FOUND, "Member not found"));
 	}
 
 	/** How many Members a project shows by name and picture; the rest are only counted. */

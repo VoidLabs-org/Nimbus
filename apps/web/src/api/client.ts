@@ -19,6 +19,12 @@ export type Project = Schemas["Project"];
 export type CreateProjectInput = Schemas["CreateProjectRequest"];
 export type UpdateProjectInput = Schemas["UpdateProjectRequest"];
 
+/** A Member of a project, with their project role. */
+export type ProjectMember = Schemas["ProjectMember"];
+
+/** A project role a Member manager can choose, and whether they may give it. */
+export type MemberRole = Schemas["MemberRole"];
+
 export type Issue = Schemas["Issue"];
 
 export type IssuePage = Schemas["IssuePage"];
@@ -417,6 +423,35 @@ export function createApiClient(
         method: "PATCH",
         body: JSON.stringify(input),
       }),
+
+    /** A project's Members, earliest added first. */
+    projectMembers: (key: string) =>
+      request<ProjectMember[]>(`/api/projects/${encodeURIComponent(key)}/members`),
+
+    /** The project roles to choose from, each saying whether the User may give it. Needs projects:member:manage. */
+    memberRoles: (key: string) =>
+      request<MemberRole[]>(`/api/projects/${encodeURIComponent(key)}/member-roles`),
+
+    /** Adds an existing User by email with a project role. */
+    addMember: (key: string, input: { email: string; role: string }) =>
+      request<ProjectMember>(`/api/projects/${encodeURIComponent(key)}/members`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    /** Changes a Member's project role. */
+    changeMemberRole: (key: string, userId: string, role: string) =>
+      request<ProjectMember>(
+        `/api/projects/${encodeURIComponent(key)}/members/${encodeURIComponent(userId)}`,
+        { method: "PATCH", body: JSON.stringify({ role }) },
+      ),
+
+    /** Removes a Member. */
+    removeMember: (key: string, userId: string) =>
+      request<void>(
+        `/api/projects/${encodeURIComponent(key)}/members/${encodeURIComponent(userId)}`,
+        { method: "DELETE" },
+      ),
 
     /** Opens a project by key. Unknown and non-Member projects both return 404. */
     project: (key: string) => request<Project>(`/api/projects/${encodeURIComponent(key)}`),

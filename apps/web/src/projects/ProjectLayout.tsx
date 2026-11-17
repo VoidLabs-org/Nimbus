@@ -21,6 +21,7 @@ import classes from "./ProjectLayout.module.css";
 const TAB_LABELS: Record<ProjectTab, string> = {
   overview: "Overview",
   issues: "Issues",
+  members: "Members",
   settings: "Settings",
 };
 
@@ -28,6 +29,7 @@ const TAB_LABELS: Record<ProjectTab, string> = {
 function tabOf(pathname: string): ProjectTab {
   if (matchPath("/projects/:key/settings/*", pathname)) return "settings";
   if (matchPath("/projects/:key/overview", pathname)) return "overview";
+  if (matchPath("/projects/:key/members", pathname)) return "members";
   return "issues";
 }
 

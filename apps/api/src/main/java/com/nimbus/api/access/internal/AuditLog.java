@@ -20,7 +20,7 @@ class AuditLog {
 	/** What an entry is about. */
 	enum TargetType {
 
-		ROLE
+		ROLE, PROJECT_MEMBER
 
 	}
 
